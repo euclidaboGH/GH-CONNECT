@@ -1,0 +1,469 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Premium Light Theme */
+:root {
+  /* Backgrounds & Surfaces */
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: oklch(0.27 0.01 20);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.27 0.01 20);
+  
+  /* Primary - Vibrant Pink */
+  --primary: #7C3AED;
+  --primary-foreground: #ffffff;
+  --primary-light: #8B5CF6;
+  --primary-dark: #6D28D9;
+  
+  /* Secondary - Cyan/Teal */
+  --secondary: oklch(0.6 0.2 200);
+  --secondary-foreground: oklch(0.99 0 0);
+  --secondary-light: oklch(0.68 0.13 205);
+  --secondary-dark: oklch(0.48 0.18 195);
+  
+  /* States */
+  --muted: #F5F3FF;
+  --muted-foreground: #6B7280;
+  --accent: #F5F3FF;
+  --accent-foreground: #7C3AED;
+  --destructive: oklch(0.62 0.23 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  
+  /* Borders & Inputs */
+  --border: #E5E7EB;
+  --input: #F9FAFB;
+  --ring: #7C3AED;
+  
+  /* Success & Info */
+  --success: oklch(0.7 0.16 145);
+  --gold: oklch(0.84 0.16 90);
+  --info: oklch(0.6 0.19 200);
+  
+  /* Charts */
+  --chart-1: oklch(0.62 0.25 5);
+  --chart-2: oklch(0.6 0.2 200);
+  --chart-3: oklch(0.7 0.16 145);
+  --chart-4: oklch(0.84 0.16 90);
+  --chart-5: oklch(0.58 0.18 25);
+  
+  /* Radius & Spacing */
+  --radius: 1rem;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Bottom navigation + safe-area clearance (global layout)
+     Nav sits in normal document flow (flex sibling of main). Content only needs a
+     modest breathing gap — not a second full nav-height pad. When nav auto-hides
+     on scroll, --gh-bottom-content-inset can shrink via [data-nav-hidden].
+     Full-screen overlays (Settings / Wallet / Membership) use a larger screen inset. */
+  --gh-bottom-nav-height: 3.25rem;
+  /* Reserve space for absolute bottom nav so last list items clear the bar */
+  --gh-bottom-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+  --gh-screen-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
+  
+  /* Sidebar */
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.27 0.01 20);
+  --sidebar-primary: oklch(0.62 0.25 5);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.005 0);
+  --sidebar-accent-foreground: oklch(0.27 0.01 20);
+  --sidebar-border: oklch(0.92 0.004 20);
+  --sidebar-ring: oklch(0.62 0.25 5);
+}
+/* IMPORTANT: do NOT shrink --gh-bottom-content-inset when nav hides.
+   Changing padding mid-scroll causes end-of-list bounce / vibration loops. */
+
+/* Smooth, stable scrolling on mobile WebViews */
+.gh-app-shell,
+.gh-app-shell main {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gh-scroll-stable {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Avoid scroll anchoring jumps when images/headers resize */
+  overflow-anchor: none;
+}
+
+/* Premium Dark Theme — true dark surfaces (was incorrectly light) */
+.dark {
+  /* Backgrounds & Surfaces */
+  --background: #0a0f0d;
+  --foreground: #f3f4f6;
+  --card: #111827;
+  --card-foreground: #f9fafb;
+  --popover: #0f172a;
+  --popover-foreground: #f9fafb;
+  
+  /* Primary — emerald by default; ThemeApplier may override */
+  --primary: #34d399;
+  --primary-foreground: #022c22;
+  --primary-light: #6ee7b7;
+  --primary-dark: #059669;
+  
+  /* Secondary - Cyan/Teal */
+  --secondary: #164e63;
+  --secondary-foreground: #ecfeff;
+  --secondary-light: #22d3ee;
+  --secondary-dark: #0e7490;
+  
+  /* States */
+  --muted: #1f2937;
+  --muted-foreground: #9ca3af;
+  --accent: #134e4a;
+  --accent-foreground: #ccfbf1;
+  --destructive: #f87171;
+  --destructive-foreground: #450a0a;
+  
+  /* Borders & Inputs */
+  --border: #1f2937;
+  --input: #111827;
+  --ring: #34d399;
+  
+  /* Success & Info */
+  --success: oklch(0.7 0.16 145);
+  --gold: oklch(0.84 0.16 90);
+  --info: oklch(0.65 0.19 200);
+  
+  /* Charts */
+  --chart-1: oklch(0.66 0.25 5);
+  --chart-2: oklch(0.65 0.2 200);
+  --chart-3: oklch(0.7 0.16 145);
+  --chart-4: oklch(0.84 0.16 90);
+  --chart-5: oklch(0.62 0.18 25);
+  
+  /* Radius & Spacing */
+  --radius: 1rem;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  
+  /* Sidebar */
+  --sidebar: oklch(0.18 0.015 280);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-primary: oklch(0.66 0.25 5);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.27 0.01 20);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(0.3 0.01 20);
+  --sidebar-ring: oklch(0.66 0.25 5);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-success: var(--success);
+  --color-gold: var(--gold);
+  --color-info: var(--info);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4 {
+    letter-spacing: -0.02em;
+  }
+  button, input, textarea, select {
+    font: inherit;
+  }
+}
+
+/* Premium Entrance Animations */
+@keyframes gh-fade-in { 
+  from { opacity: 0; } 
+  to { opacity: 1; } 
+}
+
+@keyframes gh-fade-up { 
+  from { opacity: 0; transform: translateY(12px); } 
+  to { opacity: 1; transform: translateY(0); } 
+}
+
+@keyframes gh-slide-up { 
+  from { transform: translateY(100%); opacity: 0; } 
+  to { transform: translateY(0); opacity: 1; } 
+}
+
+@keyframes gh-slide-down { 
+  from { transform: translateY(-100%); opacity: 0; } 
+  to { transform: translateY(0); opacity: 1; } 
+}
+
+@keyframes gh-scale-in { 
+  from { opacity: 0; transform: scale(0.9); } 
+  to { opacity: 1; transform: scale(1); } 
+}
+
+@keyframes gh-card-enter { 
+  from { 
+    opacity: 0; 
+    transform: scale(0.85) translateY(20px);
+  } 
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  } 
+}
+
+/* Interactive Animations */
+@keyframes gh-pop { 
+  0% { transform: scale(0.85); } 
+  60% { transform: scale(1.12); } 
+  100% { transform: scale(1); } 
+}
+
+@keyframes gh-heart { 
+  0% { transform: scale(1); } 
+  35% { transform: scale(1.4); } 
+  70% { transform: scale(0.9); } 
+  100% { transform: scale(1); } 
+}
+
+@keyframes gh-bounce-chip { 
+  0% { transform: scale(1); } 
+  50% { transform: scale(1.08); } 
+  100% { transform: scale(1); } 
+}
+
+@keyframes gh-pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(236, 72, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+}
+
+/* Loading & Status Animations */
+@keyframes gh-spin { 
+  to { transform: rotate(360deg); } 
+}
+
+@keyframes gh-shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+@keyframes gh-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes fadeIn { 
+  from { opacity: 0; } 
+  to { opacity: 1; } 
+}
+
+/* Animation Classes */
+.gh-fade-in { animation: gh-fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.gh-fade-up { animation: gh-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.gh-slide-up { animation: gh-slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.gh-slide-down { animation: gh-slide-down 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.gh-scale-in { animation: gh-scale-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.gh-pop { animation: gh-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.gh-spin { animation: gh-spin 0.8s linear infinite; }
+.gh-heart { animation: gh-heart 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.gh-bounce-chip { animation: gh-bounce-chip 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.gh-pulse-glow { animation: gh-pulse-glow 2s infinite; }
+.gh-shimmer { animation: gh-shimmer 2s infinite; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); background-size: 1000px 100%; }
+.gh-float { animation: gh-float 3s ease-in-out infinite; }
+.animate-fadeIn { animation: fadeIn 0.25s ease-in-out; }
+.gh-card-enter { animation: gh-card-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.gh-press { transition: transform 0.12s ease; }
+.gh-press:active { transform: scale(0.95); }
+
+.gh-no-scrollbar::-webkit-scrollbar { display: none; }
+.gh-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.gh-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Enhanced engagement button animations */
+@keyframes scale-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+.pulse-scale { animation: scale-pulse 0.3s ease; }
+
+/* Smooth pull-to-refresh indicator */
+@keyframes rotate-refresh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin { animation: rotate-refresh 1s linear infinite; }
+
+/* Floating heart animations for empty state */
+@keyframes float-heart-1 { 0% { transform: translateY(0) translateX(0) scale(1); opacity: 1; } 100% { transform: translateY(-120px) translateX(-30px) scale(0.6); opacity: 0; } }
+@keyframes float-heart-2 { 0% { transform: translateY(0) translateX(0) scale(1); opacity: 1; } 100% { transform: translateY(-140px) translateX(40px) scale(0.5); opacity: 0; } }
+@keyframes float-heart-3 { 0% { transform: translateY(0) translateX(0) scale(1); opacity: 1; } 100% { transform: translateY(-160px) translateX(0) scale(0.4); opacity: 0; } }
+@keyframes float-heart-4 { 0% { transform: translateY(0) translateX(0) scale(1); opacity: 1; } 100% { transform: translateY(-100px) translateX(-50px) scale(0.55); opacity: 0; } }
+
+.float-heart-1 { animation: float-heart-1 3s ease-out infinite; }
+.float-heart-2 { animation: float-heart-2 3.5s ease-out infinite 0.3s; }
+.float-heart-3 { animation: float-heart-3 3.8s ease-out infinite 0.6s; }
+.float-heart-4 { animation: float-heart-4 4s ease-out infinite 0.9s; }
+
+/* Performance-safe scrolling and rendering */
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+img {
+  content-visibility: auto;
+  contain: paint;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+.scrollbar-hide,
+.gh-no-scrollbar {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gh-card-enter,
+  .gh-fade-in,
+  .gh-fade-up,
+  .gh-slide-up,
+  .gh-scale-in {
+    backface-visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Theme wallpaper + app shell (ThemeApplier sets --theme-wallpaper) */
+html {
+  --theme-wallpaper: none;
+  --theme-wallpaper-opacity: 1;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.gh-app-shell {
+  background-color: var(--background);
+  color: var(--foreground);
+  position: relative;
+}
+
+.gh-app-shell::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--theme-wallpaper);
+  background-size: cover;
+  background-position: center;
+  opacity: var(--theme-wallpaper-opacity);
+}
+
+.gh-app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Utility: surfaces that should follow theme tokens */
+.dark .bg-white {
+  background-color: var(--card);
+}
+.dark .text-gray-900,
+.dark .text-stone-900 {
+  color: var(--foreground);
+}
+.dark .text-gray-600,
+.dark .text-stone-600,
+.dark .text-gray-500 {
+  color: var(--muted-foreground);
+}
+.dark .border-gray-100,
+.dark .border-stone-100,
+.dark .border-gray-200 {
+  border-color: var(--border);
+}
+
+
+/* GH Connect design tokens — spacing & type hierarchy */
+.gh-space-y-section > * + * { margin-top: 1rem; }
+.gh-type-title { font-size: 1.125rem; line-height: 1.3; font-weight: 700; color: var(--foreground); }
+.gh-type-body { font-size: 0.875rem; line-height: 1.5; color: var(--foreground); }
+.gh-type-meta { font-size: 0.6875rem; line-height: 1.4; color: var(--muted-foreground); }
+.gh-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  border-radius: 9999px; padding: 0.375rem 0.75rem;
+  font-size: 0.75rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+}
+.gh-chip-active {
+  background: var(--primary); color: var(--primary-foreground); border-color: transparent;
+}
+.gh-card-surface {
+  border-radius: 1rem; border: 1px solid var(--border);
+  background: var(--card); color: var(--card-foreground);
+}

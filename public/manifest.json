@@ -1,0 +1,92 @@
+{
+  "name": "GH Connect - Global Social & Dating Platform",
+  "short_name": "GH Connect",
+  "description": "Connect worldwide for friendships, dating, networking, and meaningful relationships",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#ec4899",
+  "categories": ["social", "dating"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-light-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-dark-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/placeholder.jpg",
+      "sizes": "540x720",
+      "type": "image/jpeg",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/placeholder.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start Chatting",
+      "short_name": "Chat",
+      "description": "Open conversations with your matches",
+      "url": "/?tab=message",
+      "icons": [{"src": "/icon-light-32x32.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Find People",
+      "short_name": "Discover",
+      "description": "Discover and connect with new people",
+      "url": "/?tab=discovery",
+      "icons": [{"src": "/icon-light-32x32.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "My Profile",
+      "short_name": "Profile",
+      "description": "View and manage your profile",
+      "url": "/?tab=profile",
+      "icons": [{"src": "/placeholder-user.jpg", "sizes": "192x192"}]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": ["image/*", "video/*"]
+        }
+      ]
+    }
+  }
+}
