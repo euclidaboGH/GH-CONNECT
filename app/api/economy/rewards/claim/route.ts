@@ -1,7 +1,7 @@
 /**
  * POST /api/economy/rewards/claim — claim pending GHC to available balance.
  * Body: { holdId: string }
- * Server RPC is authoritative when DB configured; otherwise client local claim remains.
+ * Server is authoritative when DB or memory server is configured.
  */
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcClaimPending } from "@/lib/server/economy/db"
@@ -11,7 +11,10 @@ import {
   jsonErr,
   jsonOk,
 } from "@/lib/server/economy/http"
-import { getProcessGhcStore } from "@/lib/server/economy/store"
+import {
+  executeAuthoritativeClaimPending,
+  getProcessGhcStore,
+} from "@/lib/server/economy/store"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -32,7 +35,11 @@ export async function POST(request: Request) {
       const code = result.error || "NOT_CLAIMABLE"
       const status =
         code === "UNDER_REVIEW" ? 403 : code === "NOT_CLAIMABLE" ? 404 : 400
-      return jsonErr(code, code === "UNDER_REVIEW" ? "This credit is under review" : "Not claimable", status)
+      return jsonErr(
+        code,
+        code === "UNDER_REVIEW" ? "This credit is under review" : "Not claimable",
+        status
+      )
     }
     return jsonOk({
       ok: true,
@@ -43,19 +50,18 @@ export async function POST(request: Request) {
   }
 
   if (allowMemoryServer()) {
-    // Studio memory: mark claim via process store if present
-    try {
-      const store = getProcessGhcStore()
-      // Best-effort: no second ledger — client still owns Studio claim via EconomyDomain
-      void store
-    } catch {
-      /* */
-    }
+    const result = await executeAuthoritativeClaimPending(getProcessGhcStore(), {
+      userId: auth.userId,
+      holdId,
+    })
+    if (!result.ok) return jsonErr(result.error, result.error, 404)
     return jsonOk({
       ok: true,
-      mode: "local",
-      message: "Use client EconomyDomain.claimReward in Studio when DB is not configured",
-      holdId,
+      alreadyClaimed: result.alreadyClaimed,
+      transactionId: result.tx.id,
+      amount: result.amount,
+      transaction: result.tx,
+      mode: "memory",
     })
   }
 

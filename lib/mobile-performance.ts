@@ -9,8 +9,8 @@
 /** Default page sizes tuned for lower-end devices */
 export const MOBILE_PAGE_SIZES = {
   /** Initial feed window — grows via infinite scroll */
-  feed: 8,
-  discovery: 10,
+  feed: 5,
+  discovery: 6,
   messages: 24,
   notifications: 16,
   marketplace: 12,

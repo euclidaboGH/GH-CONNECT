@@ -17,7 +17,8 @@ dist/
 .env.production.local
 
 # lockfiles (let Vercel install fresh from package.json)
-package-lock.json
+# package-lock.json is committed for reproducible npm ci
+# package-lock.json
 pnpm-lock.yaml
 yarn.lock
 

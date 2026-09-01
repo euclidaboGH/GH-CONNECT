@@ -2,7 +2,7 @@
  * Local Pi/SDKLite stand-in for App Studio preview and offline development
  * when the remote SDKLite script cannot load.
  *
- * Provides enough of SDKLiteInstance for GH Connect to authenticate and
+ * Provides enough of SDKLiteInstance for GreenHaven to authenticate and
  * persist profile/posts via localStorage-backed state.
  */
 

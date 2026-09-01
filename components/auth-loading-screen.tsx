@@ -65,7 +65,7 @@ export function AuthLoadingScreen() {
             </button>
             <p className="max-w-xs text-center text-xs text-muted-foreground">
               Local preview works on Vercel and desktop browsers without the Pi
-              app. Use Retry when you open GH Connect inside Pi Browser.
+              app. Use Retry when you open GreenHaven inside Pi Browser.
             </p>
           </div>
         ) : (

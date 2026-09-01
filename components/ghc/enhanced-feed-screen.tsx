@@ -5,7 +5,8 @@ import { closeAllActionSheets } from "./action-sheet"
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import type { Post, FeedFilter, PostDraft, SavedPost } from "@/lib/ghc-types"
 import { seedPosts } from "@/lib/ghc-data"
-import { useGHC } from "@/contexts/ghc-context"
+import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
@@ -16,7 +17,6 @@ import { NotificationBell } from "./notification-bell"
 import { GlobalSearchModal } from "./global-search"
 import { EmptyState } from "./empty-state"
 import { FirstSessionTips } from "./first-session-tips"
-import { SetupChecklist } from "./setup-checklist"
 import { SaveToCollectionSheet } from "./save-to-collection"
 import { MediaLightbox } from "./media-lightbox"
 import { PostInsightsSheet } from "./post-insights"
@@ -27,6 +27,7 @@ import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
 import { PostComposer } from "./post-composer"
 import ProfileStorySection from "./profile-story-section"
+import { HomeCommandCentre } from "./home-command-centre"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
@@ -36,8 +37,6 @@ import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
-import { onCloseTransientUI } from "@/lib/transient-ui"
-import { DailyRewardHomeExperience } from "./daily-reward-experience"
 
 const FEED_FILTERS: {
   value: FeedFilter
@@ -63,86 +62,40 @@ interface EnhancedFeedScreenProps {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-3 px-3 py-3" aria-hidden>
+    <div className="space-y-3 px-3 py-3" aria-hidden role="status" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="animate-pulse rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+        <div key={i} className="animate-pulse rounded-2xl border border-border/40 bg-card p-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-stone-200" />
+            <div className="h-10 w-10 rounded-full bg-muted" />
             <div className="flex-1 space-y-2">
-              <div className="h-3 w-28 rounded bg-stone-200" />
-              <div className="h-2 w-16 rounded bg-stone-100" />
+              <div className="h-3 w-28 rounded bg-muted" />
+              <div className="h-2 w-16 rounded bg-muted/70" />
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            <div className="h-3 w-full rounded bg-stone-100" />
-            <div className="h-3 w-4/5 rounded bg-stone-100" />
+            <div className="h-3 w-full rounded bg-muted/80" />
+            <div className="h-3 w-4/5 rounded bg-muted/60" />
           </div>
-          <div className="mt-3 h-40 rounded-xl bg-stone-100" />
+          <div className="mt-3 h-36 rounded-xl bg-muted/50" />
         </div>
       ))}
     </div>
   )
 }
 
-/** Subtle marketplace discovery — max a few items, not an ad wall */
-function MarketplaceDiscoveryStrip({ onOpen }: { onOpen?: () => void }) {
-  const listings = useMemo(() => {
-    try {
-      return getBoundDomainServices()?.marketplace?.listListings?.({ status: "active" })?.slice(0, 4) || []
-    } catch {
-      return []
-    }
-  }, [])
-  if (!listings.length) return null
-  return (
-    <section
-      className="rounded-2xl border border-emerald-100/80 bg-white px-3 py-3 shadow-sm"
-      aria-label="Marketplace picks"
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <ShoppingBag size={14} className="text-emerald-600" aria-hidden />
-          <h2 className="text-xs font-bold tracking-wide text-stone-800">Marketplace</h2>
-        </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
-        >
-          See more
-        </button>
-      </div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-        {listings.map((l: any) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={onOpen}
-            className="min-w-[7.5rem] max-w-[7.5rem] flex-shrink-0 rounded-xl border border-stone-100 bg-stone-50 p-2 text-left transition hover:border-emerald-200 active:scale-[0.98]"
-          >
-            <div className="mb-1.5 h-14 overflow-hidden rounded-lg bg-stone-200">
-              {l.media?.[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.media[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-stone-400">
-                  <ShoppingBag size={18} />
-                </div>
-              )}
-            </div>
-            <p className="truncate text-[11px] font-semibold text-stone-800">{l.title}</p>
-            <p className="truncate text-[10px] text-emerald-700">
-              {l.price} {l.currency}
-            </p>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
 
 export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenProps) {
-  const { posts, profile, candidates, likePost, addComment, editComment, deleteComment, addCommentReaction, removeCommentReaction, pinComment, addToast, followUser, blockUser, reportPost, reportContent, deletePost, following, friends, conversations, blockedUsers, mutedUsers, settings, applyShareResult, shares, reposts, setTab, editPost, muteUser, unfollowFromPost, archivePost, savePost, unsavePost } = useGHC()
+  const {
+    posts, profile, candidates, likePost, addComment, editComment, deleteComment,
+    addCommentReaction, removeCommentReaction, pinComment, addToast, followUser,
+    blockUser, reportPost, reportContent, deletePost, following, friends,
+    blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
+    muteUser, unfollowFromPost, archivePost, savePost, unsavePost,
+  } = useGHCFeed()
+  const { setTab: shellSetTab } = useGHCShell()
+  const { conversations } = useGHCMessaging()
+  // Prefer feed setTab; shell keeps chrome in sync when needed
+  void shellSetTab
   const perms = usePermissions()
   const seedPostList = useMemo(() => seedPosts(), [])
   const seedPostIds = useMemo(() => new Set(seedPostList.map((post) => post.id)), [seedPostList])
@@ -151,23 +104,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("for-you")
   const [locationLane, setLocationLane] = useState<FeedLocationLane>("worldwide")
   const [intentionBias, setIntentionBias] = useState<FeedIntentionBias>("balanced")
-  const [personalizeOpen, setPersonalizeOpen] = useState(false)
-  const [feedChrome, setFeedChrome] = useState<"checklist" | "personalize" | "none">(() => {
-    try {
-      if (typeof localStorage !== "undefined" && localStorage.getItem("ghc_feed_chrome_v1") === "1") return "none"
-    } catch { /* */ }
-    return "checklist"
-  })
-  const dismissFeedChrome = () => {
-    setFeedChrome("none")
-    try { localStorage.setItem("ghc_feed_chrome_v1", "1") } catch { /* */ }
-  }
   const [focusMode, setFocusMode] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [viewingAuthorId, setViewingAuthorId] = useState<string | null>(null)
   const [pullDistance, setPullDistance] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [feedBootstrapped, setFeedBootstrapped] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [displayedPostsCount, setDisplayedPostsCount] = useState(MOBILE_PAGE_SIZES.feed)
   const [likedPosts, setLikedPosts] = useState<string[]>([])
@@ -204,28 +147,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const pendingLikesRef = useRef(new Set<string>())
   const pendingCommentsRef = useRef(new Set<string>())
 
-  // Dispose all temporary Feed UI when leaving section or global dismiss
-  useEffect(() => {
-    return onCloseTransientUI(() => {
-      setViewingAuthorId(null)
-      setVisibilityReasonPostId(null)
-      setSelectedVisibilityReason(null)
-      setSharePostId(null)
-      setShowComposer(false)
-      setShowCreateMenu(false)
-      setShowCommentEmoji(false)
-      setCommentingPostId(null)
-      setSaveCollectionPostId(null)
-      setLightbox(null)
-      setInsightsPost(null)
-      setIsSearchOpen(false)
-      setPersonalizeOpen(false)
-      setCommentText("")
-      setReplyingToCommentId(null)
-    })
-  }, [])
-
-
   // Infinite scroll detection
   const observerTargetRef = useRef<HTMLDivElement>(null)
 
@@ -253,12 +174,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       const blockedIds = Array.from(
         new Set([...(blockedUsers || []), ...((settings as any)?.blockedUsers || [])].filter(Boolean))
       )
-      const mutedIds = Array.from(
-        new Set([
-          ...(mutedUsers || []),
-          ...(((settings as any)?.mutedUsers as string[]) || []),
-        ].filter(Boolean)),
-      )
       const communityIds = (conversations || [])
         .filter(
           (c) =>
@@ -269,10 +184,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         .map((c) => c.id)
       const feedContext = {
         userProfile: profile,
-        userInterests: profile.interests,
+        userInterests: Array.isArray(profile?.interests) ? profile.interests : [],
         recentlyEngagedPostIds: likedPosts,
         blockedUserIds: blockedIds,
-        mutedUserIds: mutedIds,
         followingIds: following || [],
         friendIds: friends || [],
         communityIds,
@@ -290,23 +204,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         activeFilter,
         feedContext
       )
-      // Prevent duplicate rows after refresh / pagination merges
-      const seen = new Set<string>()
-      const unique = ranked.filter((row) => {
-        const id = row.post?.id
-        if (!id || seen.has(id)) return false
-        seen.add(id)
-        return true
-      })
-      setRankedPosts(unique)
+      setRankedPosts(ranked)
+      setFeedBootstrapped(true)
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to rank feed")
       setFeedError(err)
       console.error("[Feed Ranking Error]", err)
       // Fallback: show unranked posts
       setRankedPosts(posts.map((post) => ({ post, score: 0, reason: { reason: "Feed unavailable", category: "error" } })))
+      setFeedBootstrapped(true)
     }
-  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, mutedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode])
+  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode])
 
   // Pull-to-refresh handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -386,6 +294,26 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     },
     [likedPosts, likePost, addToast]
   )
+
+  useEffect(() => {
+    const open = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      if (d.mode === "story") setComposeMode("story")
+      else setComposeMode("post")
+      setShowComposer(true)
+    }
+    window.addEventListener("ghc:open-compose", open as EventListener)
+    const close = () => setShowComposer(false)
+    window.addEventListener("ghc:close-compose", close)
+    window.addEventListener("ghc:tab-change", close)
+    window.addEventListener("ghc:close-transient-ui", close)
+    return () => {
+      window.removeEventListener("ghc:open-compose", open as EventListener)
+      window.removeEventListener("ghc:close-compose", close)
+      window.removeEventListener("ghc:tab-change", close)
+      window.removeEventListener("ghc:close-transient-ui", close)
+    }
+  }, [])
 
   const handleSave = useCallback((postId: string) => {
     try {
@@ -507,7 +435,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               onClick={() => setIsSearchOpen(true)}
               aria-label="Search"
               aria-expanded={isSearchOpen}
-              className="flex h-11 w-11 items-center justify-center rounded-full transition hover:bg-emerald-50 active:scale-90"
+              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-emerald-50 active:scale-90"
             >
               <Search size={18} className="text-gray-700" />
             </button>
@@ -538,7 +466,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               </div>
             )}
             <div
-              className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
+              className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
               role="tablist"
               aria-label="Feed modes"
             >
@@ -556,10 +484,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     aria-selected={selected}
                     aria-label={`${filter.label} feed — ${filter.hint}`}
                     title={filter.hint}
-                    className={`flex min-h-9 shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all active:scale-[0.97] ${
+                    className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all active:scale-[0.97] ${
                       selected
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 ring-1 ring-primary/30"
-                        : "bg-muted/80 text-muted-foreground ring-1 ring-border/50 hover:bg-primary/10 hover:text-primary"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     }`}
                   >
                     <span className={selected ? "text-emerald-100" : "text-stone-400"} aria-hidden>
@@ -594,8 +522,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         </div>
       )}
 
-      {/* Feed content */}
-      {isRefreshing && rankedPosts.length === 0 ? <FeedSkeleton /> : null}
+      {/* Feed content — skeleton until bootstrap so empty state never flashes under load */}
+      {(!feedBootstrapped || (isRefreshing && rankedPosts.length === 0)) ? (
+        <FeedSkeleton />
+      ) : (
       <div
         ref={containerRef}
         onTouchStart={handleTouchStart}
@@ -609,151 +539,16 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         aria-label={`${activeFilter} feed`}
         aria-live="polite"
         aria-busy={isLoadingMore}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background px-1 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
+        className="gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background px-1 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
-        <div className="mx-auto max-w-lg space-y-3 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
+        <div className="space-y-3 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
+          <HomeCommandCentre
+            onCompose={() => {
+              try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
+            }}
+          />
           <ProfileStorySection scope="feed" />
-
-          {/* First-class Daily Reward — claim on Home, manage detail in Rewards Centre */}
-          {activeFilter === "for-you" && <DailyRewardHomeExperience />}
-
-          {/* Light marketplace discovery — not an ad wall */}
-          {activeFilter === "for-you" && (
-            <MarketplaceDiscoveryStrip onOpen={() => setTab?.("discover")} />
-          )}
-
-          {feedChrome === "checklist" && (
-            <div className="relative">
-              <SetupChecklist
-                onNavigate={(tab) => {
-                  window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
-                }}
-              />
-              <button
-                type="button"
-                onClick={dismissFeedChrome}
-                className="absolute right-2 top-2 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-bold text-muted-foreground shadow-sm"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Personalize — only after checklist dismissed to reduce first-screen noise */}
-          {feedChrome !== "checklist" && activeFilter === "for-you" && (
-            <div className="rounded-2xl border border-border/70 bg-card shadow-sm">
-              <button
-                type="button"
-                onClick={() => setPersonalizeOpen((v) => !v)}
-                className="flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-                aria-expanded={personalizeOpen}
-              >
-                <span className="text-xs font-bold text-foreground">Personalize feed</span>
-                <span className="flex items-center gap-2">
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setFocusMode((v) => !v)
-                    }}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition ${
-                      focusMode ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {focusMode ? "Focus on" : "Focus off"}
-                  </span>
-                  <span className="text-[10px] font-semibold text-muted-foreground">{personalizeOpen ? "Hide" : "Show"}</span>
-                </span>
-              </button>
-              {personalizeOpen && (
-                <div className="space-y-2 border-t border-border/60 px-3 pb-3 pt-2">
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Location lane">
-                    {([
-                      { id: "city" as const, label: "City" },
-                      { id: "country" as const, label: "Country" },
-                      { id: "worldwide" as const, label: "Worldwide" },
-                    ]).map((lane) => (
-                      <button
-                        key={lane.id}
-                        type="button"
-                        onClick={() => setLocationLane(lane.id)}
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                          locationLane === lane.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {lane.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Intention focus">
-                    {([
-                      { id: "balanced" as const, label: "Balanced" },
-                      { id: "friendship" as const, label: "Friends" },
-                      { id: "professional" as const, label: "Pro" },
-                      { id: "dating" as const, label: "Dating" },
-                    ]).map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => setIntentionBias(b.id)}
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                          intentionBias === b.id ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {b.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] leading-snug text-muted-foreground">
-                    Soft preferences only — not a compatibility score.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Community highlights — discovery, not ads */}
-          {activeFilter === "for-you" && (conversations || []).some((c) => c.conversationType === "group" || (c as any).isCommunity) && (
-            <div className="rounded-2xl border border-teal-200/60 bg-gradient-to-r from-teal-50/80 to-emerald-50/40 p-3 dark:border-teal-900/40 dark:from-teal-950/30 dark:to-emerald-950/20">
-              <p className="text-[11px] font-bold text-teal-900 dark:text-teal-100">Community highlights</p>
-              <p className="mt-0.5 text-[10px] text-teal-800/80 dark:text-teal-200/70">
-                Spaces you belong to — open the Community tab for posts, events, and member chat.
-              </p>
-              <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide">
-                {(conversations || [])
-                  .filter((c) => c.conversationType === "group" || (c as any).isCommunity)
-                  .slice(0, 6)
-                  .map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setTab?.("communities")}
-                      className="shrink-0 rounded-full border border-teal-200 bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-teal-900 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-100"
-                    >
-                      {c.groupName || c.participantName || "Community"}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {!hasRealPosts && displayPosts.length > 0 && (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-center">
-              <p className="text-xs text-stone-600">Here&apos;s some inspiration while you get started.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowComposer(true)
-                  onCompose?.()
-                }}
-                className="mt-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95"
-              >
-                Create your first post
-              </button>
-            </div>
-          )}
 
           {displayPosts.length === 0 ? (
             <EmptyState
@@ -777,15 +572,15 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     : activeFilter === "communities"
                       ? "Join communities to see discussions and shared posts here."
                       : activeFilter === "trending"
-                        ? "Check back soon for rising posts across GH Connect."
-                        : "Share something meaningful, or discover people and communities."
+                        ? "Check back soon for rising posts across GreenHaven."
+                        : "Posts from people and communities you follow will show up here. Use Discover to grow your network, or the + button to share."
               }
               action={
                 activeFilter === "following" || activeFilter === "friends"
                   ? { label: "Find people", onClick: () => setTab?.("discover") }
                   : activeFilter === "communities"
                     ? { label: "Explore communities", onClick: () => setTab?.("discover") }
-                    : { label: "Create a post", onClick: () => { setShowComposer(true); onCompose?.() } }
+                    : { label: "Discover people", onClick: () => setTab?.("discover") }
               }
               secondaryAction={
                 activeFilter !== "for-you"
@@ -894,7 +689,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             open={!!sharePostId}
             onClose={() => setSharePostId(null)}
             shareContext={{
-              currentUserId: "current-user",
+              currentUserId: IdentityService.getCurrentUserId(),
               blockedUsers: blockedUsers || settings?.blockedUsers || [],
               posts,
               conversations: conversations || [],
@@ -934,14 +729,15 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">Find people or share a moment.</p>
   <div className="mt-4 flex flex-wrap justify-center gap-2">
   <button type="button" onClick={() => setTab?.("discover") || onProfile?.()} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Find people</button>
-  <button type="button" onClick={() => { setComposeMode("post"); setShowComposer(true); onCompose?.() }} className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95">Share a moment</button>
+  <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { setShowComposer(true) } }} className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95">Share a moment</button>
   </div>
   </div>
           )}
         </div>
       </div>
+      )}
 
-            <CommentSheet
+      <CommentSheet
         post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}
         open={Boolean(commentingPostId)}
         onClose={() => {
@@ -952,69 +748,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }}
       />
 
-      {/* Create menu — long-press FAB or overflow */}
-      {showCreateMenu && (
-        <>
-          <button type="button" className="fixed inset-0 z-40 bg-black/30" aria-label="Close create menu" onClick={() => setShowCreateMenu(false)} />
-          <div className="fixed bottom-28 right-4 z-50 w-56 overflow-hidden rounded-2xl border border-emerald-100 bg-card shadow-2xl" role="menu">
-            <p className="border-b border-border px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Create</p>
-            {([
-              { id: "post", label: "Post", desc: "Share to your feed" },
-              { id: "story", label: "Story", desc: "24h moment" },
-              { id: "community", label: "Community", desc: "Open communities" },
-            ] as const).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setShowCreateMenu(false)
-                  if (item.id === "community") {
-                    setTab?.("communities")
-                    return
-                  }
-                  setComposeMode(item.id)
-                  setShowComposer(true)
-                  onCompose?.()
-                }}
-                className="flex w-full flex-col items-start px-3 py-2.5 text-left transition hover:bg-emerald-50"
-              >
-                <span className="text-sm font-bold text-foreground">{item.label}</span>
-                <span className="text-[11px] text-muted-foreground">{item.desc}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Compose FAB: short-press = post; long-press = Story · Post · Community */}
-      <button
-        type="button"
-        onClick={() => {
-          setComposeMode("post")
-          setShowComposer(true)
-          onCompose?.()
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          setShowCreateMenu(true)
-        }}
-        onPointerDown={(e) => {
-          if (e.pointerType === "touch") {
-            const timer = window.setTimeout(() => setShowCreateMenu(true), 450)
-            const clear = () => window.clearTimeout(timer)
-            e.currentTarget.addEventListener("pointerup", clear, { once: true })
-            e.currentTarget.addEventListener("pointerleave", clear, { once: true })
-            e.currentTarget.addEventListener("pointercancel", clear, { once: true })
-          }
-        }}
-        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-lg transition hover:shadow-xl active:scale-95"
-        aria-label="Create post. Long-press for Story or Community"
-        aria-expanded={showCreateMenu}
-        title="Tap to post · Long-press for more"
-      >
-        <Plus size={24} />
-      </button>
+      {/* Create: bottom-nav Create hub only (no floating FAB) */}
       <PostComposer open={showComposer} onOpenChange={setShowComposer} initialMode={composeMode} />
 
 
@@ -1074,10 +808,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               </div>
               <div className="px-5 py-5">
                 <div className="flex items-center gap-4">
-                  <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-100" />
+                  <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-100" loading="lazy" decoding="async" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-lg font-bold text-gray-900">{name}</p>
-                    <p className="text-xs text-gray-500">{candidate?.location || "GH Connect member"}</p>
+                    <p className="text-xs text-gray-500">{candidate?.location || "GreenHaven member"}</p>
                     {candidate?.verified && <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Verified</span>}
                   </div>
                 </div>

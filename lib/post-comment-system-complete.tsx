@@ -392,7 +392,7 @@ export function generateShareText(post: Post, platform: string): string {
     case "facebook":
       return truncated
     case "linkedin":
-      return `Shared from GH Connect: ${truncated}`
+      return `Shared from GreenHaven: ${truncated}`
     default:
       return truncated
   }

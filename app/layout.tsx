@@ -7,14 +7,14 @@ import "./globals.css"
 
 export const metadata: Metadata = {
   title: {
-    default: "GH Connect",
-    template: "%s · GH Connect",
+    default: "GreenHaven",
+    template: "%s · GreenHaven",
   },
   description:
-    "GH Connect — global social, matching, community and GHC utility platform on Pi Network",
-  applicationName: "GH Connect",
-  authors: [{ name: "GH Connect" }],
-  generator: "GH Connect",
+    "GreenHaven — global social, matching, community and GHC utility platform on Pi Network",
+  applicationName: "GreenHaven",
+  authors: [{ name: "GreenHaven" }],
+  generator: "GreenHaven",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "GH Connect",
+    title: "GreenHaven",
     statusBarStyle: "default",
   },
   formatDetection: {
@@ -33,8 +33,8 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "GH Connect",
-    title: "GH Connect",
+    siteName: "GreenHaven",
+    title: "GreenHaven",
     description:
       "Connect worldwide for friendships, dating, networking, and meaningful relationships on Pi Network",
   },
@@ -62,6 +62,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://sdk.minepi.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://sdk.minepi.com" />
+        <link rel="preconnect" href="https://api.minepi.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://api.minepi.com" />
         <style>{`
 html {
   font-family: ${GeistSans.style.fontFamily};

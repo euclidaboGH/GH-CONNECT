@@ -30,6 +30,7 @@ import {
   DAILY_STREAK_GHC,
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
+import { RewardsJourneyHero } from "./rewards-journey-hero"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
@@ -269,7 +270,7 @@ export function RewardsCentreScreen({
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-bold text-foreground">Rewards Centre</h1>
           <p className="text-[11px] text-muted-foreground">
-            Missions · XP · daily streak · not pay-to-win
+            Engagement economy · daily · challenges · social · not pay-to-win
           </p>
         </div>
         {onOpenWallet && (
@@ -295,192 +296,11 @@ export function RewardsCentreScreen({
           <GhcSocialFuelNote />
         </div>
 
-        {/* Dual axis: Membership stays separate; Reward Level is activity XP */}
-        {(() => {
-          const xp = getUserXp(userId)
-          const prog = xpProgress(xp)
-          let membershipTier = "free"
-          try {
-            const st = getBoundDomainServices()?.membership?.getStatus?.() as
-              | { tier?: string }
-              | null
-            membershipTier = String(st?.tier || "free").toLowerCase()
-          } catch {
-            /* */
-          }
-          const daily = getDailyStreak(userId, membershipTier)
-          const track = [1, 2, 3, 4, 5, 6, 7].map(
-            (d) => DAILY_STREAK_GHC[d] /* display base; claim uses tier track */
-          )
-          return (
-            <div className="mx-4 mt-3 space-y-2">
-              <div className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                      Reward Level · activity only
-                    </p>
-                    <p className="mt-0.5 text-sm font-bold text-foreground">
-                      <span style={{ color: prog.level.color }}>{prog.level.label}</span>
-                      <span className="ml-1.5 text-[11px] font-semibold text-muted-foreground">
-                        {xp.toLocaleString()} XP
-                      </span>
-                    </p>
-                  </div>
-                  <Award size={20} className="text-emerald-600" aria-hidden />
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-emerald-600 transition-all"
-                    style={{ width: `${prog.pct}%` }}
-                  />
-                </div>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  {prog.nextAt != null
-                    ? `${prog.pct}% to next level · ${prog.nextAt.toLocaleString()} XP`
-                    : "Top reward level"}
-                  {" · "}Membership (Free/VIP/VVIP) is separate and does not buy XP.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/30">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-                      Daily streak · {membershipTier === "free" ? "Member" : membershipTier.toUpperCase()} track
-                    </p>
-                    <p className="mt-0.5 text-sm font-bold text-foreground">
-                      Day {daily.displayCycleDay}/7
-                      {daily.streakDays > 0 ? (
-                        <span className="ml-1.5 text-[11px] font-semibold text-muted-foreground">
-                          · {daily.streakDays} day streak
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      Resets 00:00 Africa/Lagos · base track:{" "}
-                      {track.map((v, i) => `${i + 1}=${v}`).join(" · ")} GHC
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={!daily.canClaimToday}
-                    onClick={() => {
-                      const res = claimDailyStreak(userId, membershipTier)
-                      if (!res.ok) {
-                        ghc.addToast?.(res.error || "Already claimed", "error")
-                        return
-                      }
-                      // Stage + claim on ledger (idempotent via reference day key)
-                      void (async () => {
-                        try {
-                          const eco = getBoundDomainServices()?.economy as {
-                            evaluateReward?: (i: {
-                              sourceEvent: string
-                              referenceId?: string
-                            }) => Promise<{
-                              ok: boolean
-                              data?: { rewards?: Array<{ id: string }> }
-                            }>
-                            claimReward?: (id: string) => Promise<{ ok: boolean }>
-                          } | null
-                          if (eco?.evaluateReward) {
-                            const ref = `daily_checkin:${userId}:${daily.rewardDayKey}`
-                            const ev = await eco.evaluateReward({
-                              sourceEvent: "DAILY_CHECKIN",
-                              referenceId: ref,
-                            })
-                            for (const r of ev?.data?.rewards || []) {
-                              await eco.claimReward?.(r.id)
-                            }
-                          }
-                        } catch {
-                          /* offline / deferred */
-                        }
-                        ghc.addToast?.(
-                          `Day ${res.cycleDay}: +${res.ghc} GHC · +${res.xp} XP${
-                            res.usedShield ? " · shield used" : ""
-                          }`,
-                          "success"
-                        )
-                        setTick((t) => t + 1)
-                        try {
-                          window.dispatchEvent(
-                            new CustomEvent("ghc:daily-reward-claimed", { detail: res })
-                          )
-                        } catch {
-                          /* */
-                        }
-                      })()
-                    }}
-                    className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-bold ${
-                      daily.canClaimToday
-                        ? "bg-emerald-700 text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {daily.canClaimToday ? `Claim ${daily.todayGhc} GHC` : "Claimed"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Pending → Claim → Available funnel */}
-        <div className="mx-4 mt-3 rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">How rewards work</p>
-          <div className="mt-2 flex items-center justify-between gap-1 text-center">
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-bold text-amber-800 dark:text-amber-300">Pending</p>
-              <p className="text-[10px] text-muted-foreground">Held for checks</p>
-            </div>
-            <span className="text-muted-foreground" aria-hidden>→</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-bold text-sky-800 dark:text-sky-300">Claim</p>
-              <p className="text-[10px] text-muted-foreground">When ready</p>
-            </div>
-            <span className="text-muted-foreground" aria-hidden>→</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-bold text-emerald-800 dark:text-emerald-300">Available</p>
-              <p className="text-[10px] text-muted-foreground">In Wallet</p>
-            </div>
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Quality activity only — spam and self-interaction do not qualify.{" "}
-            <button type="button" onClick={() => setShowLearnMore(true)} className="font-semibold text-emerald-700 underline-offset-2 hover:underline">
-              Rules
-            </button>
-          </p>
-        </div>
-
-        {/* Balance strip */}
-        <div className="mx-4 mt-3 grid grid-cols-3 gap-2">
-          <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[10px] font-semibold text-muted-foreground">GHC balance</p>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <GhcCoinIcon size={22} />
-              <p className="text-lg font-bold text-emerald-700">
-                {formatGhc(snapshot.wallet?.balance ?? 0)}
-              </p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[10px] font-semibold text-muted-foreground">Pending</p>
-            <p className="text-lg font-bold text-amber-700">
-              {formatGhc(
-                (snapshot.wallet?.pending ?? 0) ||
-                  snapshot.pending.reduce((s, r) => s + (r.amount || 0), 0)
-              )}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-3">
-            <p className="text-[10px] font-semibold text-muted-foreground">Earned</p>
-            <p className="text-lg font-bold text-foreground">
-              {formatGhc(snapshot.wallet?.lifetimeEarned ?? 0)}
-            </p>
-          </div>
-        </div>
+        <RewardsJourneyHero
+          userId={userId}
+          onClaimed={refresh}
+          onOpenWallet={onOpenWallet}
+        />
 
         {/* Weekly quality streak (careful — not likes) */}
         <div className="mx-3 mt-3 flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/80 px-3 py-3 dark:border-orange-900 dark:bg-orange-950/30">
@@ -579,7 +399,43 @@ export function RewardsCentreScreen({
 
         <div className="mx-3 mt-3 mb-8 space-y-2">
           {tab === "opportunities" && (
-            <>
+          <>
+
+            <div className="mb-3 rounded-2xl border border-border bg-card px-3 py-3" aria-label="Engagement paths">
+              <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Engagement paths
+              </h2>
+              <ul className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Daily reward</p>
+                  <p className="text-[10px] text-muted-foreground">On Home every 24h</p>
+                </li>
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Profile completion</p>
+                  <p className="text-[10px] text-muted-foreground">Finish profile fields</p>
+                </li>
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Community activity</p>
+                  <p className="text-[10px] text-muted-foreground">Posts & groups</p>
+                </li>
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Social milestones</p>
+                  <p className="text-[10px] text-muted-foreground">Friends & messages</p>
+                </li>
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Referrals</p>
+                  <p className="text-[10px] text-muted-foreground">Invite pioneers</p>
+                </li>
+                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                  <p className="font-bold text-foreground">Campaigns</p>
+                  <p className="text-[10px] text-muted-foreground">Limited-time events</p>
+                </li>
+              </ul>
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Credits are ledger-backed after validation — never minted only on the device.
+              </p>
+            </div>
+
               <p className="px-1 text-[11px] font-semibold text-muted-foreground">
                 Activity credit opportunities (configured rules)
               </p>

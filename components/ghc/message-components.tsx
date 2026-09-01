@@ -63,7 +63,7 @@ export function EmptyMessagesState({
           onClick={onNavigateToMatches}
           className="w-full rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
         >
-          Open Matches
+          {hasMatches ? "Message a match" : "Open Matches"}
         </button>
         <button
           type="button"
@@ -75,9 +75,24 @@ export function EmptyMessagesState({
         >
           Find people
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
+            } catch {
+              /* */
+            }
+          }}
+          className="w-full rounded-2xl border border-transparent px-6 py-2.5 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+        >
+          Browse communities
+        </button>
       </div>
-      <p className="mt-4 max-w-xs text-[11px] text-muted-foreground">
-        Requests folder holds messages from people you don’t connect with yet.
+      <p className="mt-4 max-w-xs text-[11px] leading-relaxed text-muted-foreground">
+        <span className="font-semibold text-foreground">Matches</span> = people ready to chat.{" "}
+        <span className="font-semibold text-foreground">Find people</span> = discover new connections.{" "}
+        Requests hold messages from people you have not accepted yet.
       </p>
     </div>
   )
@@ -86,15 +101,15 @@ export function EmptyMessagesState({
 
 export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (query: string) => void }) {
   return (
-    <div className="sticky top-0 z-10 border-b border-border/60 bg-card/95 px-3 py-2.5 backdrop-blur-sm">
+    <div className="relative">
       <div className="relative flex items-center">
-        <Search size={18} className="absolute left-3 text-muted-foreground" />
+        <Search size={16} className="pointer-events-none absolute left-3 text-muted-foreground" />
         <input
           type="search"
-          placeholder="Search name or last message…"
+          placeholder="Search name or message…"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="min-h-11 w-full rounded-2xl border border-border bg-background py-2.5 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground shadow-sm transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
         />
         {searchQuery && (
           <button onClick={() => onSearchChange("")} className="absolute right-3 text-gray-500 hover:text-gray-700 active:scale-90 transition">
@@ -107,7 +122,7 @@ export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQ
 }
 
 // Individual conversation list item with actions - optimized rendering
-export function ConversationItem({
+function ConversationItemBase({
   conversation,
   isSelected,
   onClick,
@@ -217,6 +232,9 @@ const EmojiPickerGrid = memo(({ onEmojiSelect }: { onEmojiSelect: (emoji: string
 ))
 EmojiPickerGrid.displayName = "EmojiPickerGrid"
 
+export const ConversationItem = memo(ConversationItemBase)
+ConversationItem.displayName = "ConversationItem"
+
 export function MessageInput({
   messageText,
   onMessageChange,
@@ -303,7 +321,7 @@ export function MessageInput({
 }
 
 // Enhanced message bubble with long-press actions (mobile) + hover actions (desktop)
-export function MessageBubble({
+function MessageBubbleBase({
   message,
   isSentByCurrentUser,
   onReply,
@@ -625,6 +643,9 @@ export function MessageBubble({
 }
 
 // Chat header with participant info + presence / last-seen
+export const MessageBubble = memo(MessageBubbleBase)
+MessageBubble.displayName = "MessageBubble"
+
 export function ChatHeader({
   participantName,
   participantPhoto,

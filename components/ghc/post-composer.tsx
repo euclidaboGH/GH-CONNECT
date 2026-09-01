@@ -1,5 +1,10 @@
 "use client"
 
+/**
+ * Canonical compose entry for Feed.
+ * Thin wrapper over UnifiedCompose — do not add a third composer.
+ * Profile, Create hub, and Home all fire `ghc:open-compose`.
+ */
 import { UnifiedCompose, type ComposeMode } from "./unified-compose"
 
 interface PostComposerProps {

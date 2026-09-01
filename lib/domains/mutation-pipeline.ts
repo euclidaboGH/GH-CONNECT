@@ -1,5 +1,5 @@
 /**
- * GH Connect — Golden mutation pipeline
+ * GreenHaven — Golden mutation pipeline
  *
  * USER ACTION
  *   → DOMAIN ACTION

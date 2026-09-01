@@ -27,6 +27,7 @@ import {
   findLocalProfile,
 } from "@/lib/local-profiles"
 import { usePiAuth } from "./pi-auth-context"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
@@ -84,6 +85,13 @@ import { domainEvents } from "@/lib/realtime/event-bus"
 import { subscribeDomainCache } from "@/lib/realtime/use-domain-events"
 import { transportBridge } from "@/lib/realtime/transport-bridge"
 import { createDomainServices, bindDomainServices, type DomainServices } from "@/lib/domains"
+import {
+  loadPersistedCommunities,
+  persistCommunityConversation,
+  markJoined,
+  markLeft,
+  mergeCommunityConversations,
+} from "@/lib/domains/community-persistence"
 // Master unified post/comment system (all features consolidated here, no duplicates)
 import {
   createNestedComment,
@@ -290,6 +298,108 @@ interface GHCContextType {
 
 const GHCContext = createContext<GHCContextType | null>(null)
 
+/** Domain slices — consumers using these hooks only re-render when their slice changes */
+const GHCShellContext = createContext<{
+  ready: boolean
+  tab: Tab
+  setTab: (tab: Tab) => void
+  toasts: Toast[]
+  addToast: (message: string, type: "success" | "error" | "info") => void
+  isOnline: boolean
+  networkQuality: "excellent" | "good" | "fair" | "poor" | "offline"
+  matchCelebration: GHCContextType["matchCelebration"]
+  dismissMatchCelebration: () => void
+  startConversation: GHCContextType["startConversation"]
+} | null>(null)
+
+const GHCProfileContext = createContext<{
+  profile: Profile
+  settings: Settings
+  friends: string[]
+  following: string[]
+  posts: Post[]
+  updateProfile: GHCContextType["updateProfile"]
+  completeOnboarding: GHCContextType["completeOnboarding"]
+  updateSettings: GHCContextType["updateSettings"]
+  addToast: (message: string, type: "success" | "error" | "info") => void
+} | null>(null)
+
+const GHCDiscoveryContext = createContext<{
+  candidates: Candidate[]
+  matches: MatchEntry[]
+  following: string[]
+  swipe: GHCContextType["swipe"]
+  followUser: GHCContextType["followUser"]
+  addFriend: GHCContextType["addFriend"]
+  reportUser: GHCContextType["reportUser"]
+  blockUser: GHCContextType["blockUser"]
+  unblockUser: GHCContextType["unblockUser"]
+  startConversation: GHCContextType["startConversation"]
+  acceptMatch: GHCContextType["acceptMatch"]
+  rejectMatch: GHCContextType["rejectMatch"]
+  profile: Profile
+} | null>(null)
+
+const GHCMessagingContext = createContext<{
+  conversations: Conversation[]
+  sendMessage: GHCContextType["sendMessage"]
+  markConversationRead: GHCContextType["markConversationRead"]
+  pinConversation: GHCContextType["pinConversation"]
+  archiveConversation: GHCContextType["archiveConversation"]
+  muteConversation: GHCContextType["muteConversation"]
+  createGroup: GHCContextType["createGroup"]
+  joinCommunity: GHCContextType["joinCommunity"]
+  leaveCommunity: GHCContextType["leaveCommunity"]
+  createBoardPost: GHCContextType["createBoardPost"]
+  startConversation: GHCContextType["startConversation"]
+  addToast: (message: string, type: "success" | "error" | "info") => void
+  profile: Profile
+  setTab: (tab: Tab) => void
+} | null>(null)
+
+/** Feed / posts slice — Home re-renders only when posts/stories change */
+const GHCFeedContext = createContext<{
+  posts: Post[]
+  stories: StoryItem[]
+  likedPostIds: string[]
+  following: string[]
+  friends: string[]
+  profile: Profile
+  settings: Settings
+  candidates: Candidate[]
+  createPost: GHCContextType["createPost"]
+  likePost: GHCContextType["likePost"]
+  deletePost: GHCContextType["deletePost"]
+  editPost: GHCContextType["editPost"]
+  archivePost: GHCContextType["archivePost"]
+  unarchivePost: GHCContextType["unarchivePost"]
+  addComment: GHCContextType["addComment"]
+  editComment: GHCContextType["editComment"]
+  deleteComment: GHCContextType["deleteComment"]
+  addCommentReaction: GHCContextType["addCommentReaction"]
+  removeCommentReaction: GHCContextType["removeCommentReaction"]
+  pinComment: GHCContextType["pinComment"]
+  unpinComment: GHCContextType["unpinComment"]
+  createQuoteRepost: GHCContextType["createQuoteRepost"]
+  sharePost: GHCContextType["sharePost"]
+  applyShareResult: GHCContextType["applyShareResult"]
+  savePost: GHCContextType["savePost"]
+  unsavePost: GHCContextType["unsavePost"]
+  reportPost: GHCContextType["reportPost"]
+  reportContent: GHCContextType["reportContent"]
+  publishStory: GHCContextType["publishStory"]
+  followUser: GHCContextType["followUser"]
+  unfollowFromPost: GHCContextType["unfollowFromPost"]
+  muteUser: GHCContextType["muteUser"]
+  blockUser: GHCContextType["blockUser"]
+  addToast: (message: string, type: "success" | "error" | "info") => void
+  setTab: (tab: Tab) => void
+  shares: GHCContextType["shares"]
+  reposts: GHCContextType["reposts"]
+  blockedUsers: string[]
+} | null>(null)
+
+
 // Consolidated state interface (Quick Win: reduce from 16 to 5 useState calls)
 interface ConsolidatedState {
   ready: boolean
@@ -351,7 +461,44 @@ interface ExtendedGHCState extends ConsolidatedState {
 
 export function GHCProvider({ children }: { children: ReactNode }) {
   const { sdk } = usePiAuth()
+  const [identityUserId, setIdentityUserId] = useState(() => IdentityService.getCurrentUserId())
+  useEffect(() => {
+    return IdentityService.subscribe((id) => setIdentityUserId(id.userId))
+  }, [])
+
   const [state, setState] = useState<ExtendedGHCState>({ ...initialState, isOnline: true, networkQuality: "excellent" })
+
+  // Hydrate persisted communities into conversation list (survives reload)
+  useEffect(() => {
+    try {
+      const persisted = loadPersistedCommunities()
+      if (!persisted.length) return
+      setState((s) => {
+        const merged = mergeCommunityConversations(s.conversations as any, persisted)
+        const liveIds = new Set(s.conversations.map((c) => c.id))
+        const hasNew = persisted.some((c) => !liveIds.has(c.id))
+        if (!hasNew) return s
+        return { ...s, conversations: merged as typeof s.conversations }
+      })
+    } catch {
+      /* */
+    }
+  }, [])
+
+  // Keep IdentityService aligned with profile (Pi UID always wins)
+  useEffect(() => {
+    const profile = state.profile as { id?: string; username?: string; displayName?: string } | undefined
+    if (!profile) return
+    try {
+      IdentityService.setFromProfile({
+        userId: profile.id || null,
+        username: profile.username || null,
+        displayName: profile.displayName || null,
+      })
+    } catch {
+      /* */
+    }
+  }, [state.profile])
 
   // Setup network monitoring on mount
   useEffect(() => {
@@ -854,7 +1001,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       )
 
       // Notification
-      notificationSystem.addNotification("system", "Posted", "Your post is live on Feed", "✓")
+      notificationSystem.addNotification("share", "Posted", "Your post is live on Feed", "✓", { open: "feed", section: "post" })
       addToast("Posted to your feed", "success")
       return true
     } catch (error) {
@@ -896,12 +1043,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     likes: state.likes || [],
     friends: state.friends || [],
     outgoingFriendRequestIds: (state.friendRequests || [])
-      .filter((r: any) => r.fromUserId === "current-user" || r.toUserId)
+      .filter((r: any) => {
+        const me = IdentityService.getCurrentUserId()
+        return r.fromUserId === me || r.fromUserId === "current-user" || r.toUserId
+      })
       .map((r: any) => r.toUserId || r.fromUserId)
       .filter(Boolean),
     incomingFriendRequestIds: (state.friendRequests || [])
       .map((r) => r.fromUserId)
-      .filter((id) => id && id !== "current-user"),
+      .filter((id) => {
+        const me = IdentityService.getCurrentUserId()
+        return id && id !== me && id !== "current-user"
+      }),
     candidates: state.candidates || [],
     conversations: state.conversations || [],
   }), [state])
@@ -909,7 +1062,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   const domains: DomainServices = useMemo(
     () =>
       createDomainServices(getDomainState, {
-        currentUserId: "current-user",
+        currentUserId: IdentityService.getCurrentUserId(),
         onReportPersist: (report) => {
           try {
             recordModerationReport?.(report.targetType, report.targetId, report.reason)
@@ -920,7 +1073,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           setState((s) => ({ ...s, conversations: updater(s.conversations || []) }))
         },
       }),
-    [getDomainState]
+    [getDomainState, identityUserId]
   )
 
   // Migration foundation: non-React adapters can resolve active domain services
@@ -1429,7 +1582,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     // Legacy external platforms still supported; internal shares use ShareService via ShareSheet
     const { ShareService } = await import("@/lib/share-service")
     const ctx = {
-      currentUserId: "current-user",
+      currentUserId: IdentityService.getCurrentUserId(),
       blockedUsers: state.settings?.blockedUsers || state.blockedUsers || [],
       posts: state.posts,
       conversations: state.conversations,
@@ -2029,7 +2182,7 @@ const dismissMatchCelebration = useCallback(() => {
     }
   }, [domains, addToast])
 
-  const sendMessage = async (conversationId: string, text: string) => {
+  const sendMessage = useCallback(async (conversationId: string, text: string) => {
     try {
       if (!messageLimiter.isAllowed(`msg_${conversationId}`)) {
         addToast("You're messaging too fast. Please slow down.", "error")
@@ -2127,26 +2280,31 @@ const dismissMatchCelebration = useCallback(() => {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Failed to send message", "error")
     }
-  }
+  }, [domains, state.isOnline, state.profile.displayName, addToast])
 
   const markConversationRead = useCallback(
     async (conversationId: string) => {
-      const result = await domains.messaging.markRead(conversationId)
-      if (!result.ok) {
-        setState((s) => ({
+      // Skip work when already read — avoids full list remap freezes
+      let alreadyRead = false
+      setState((s) => {
+        const current = (s.conversations || []).find((c) => c.id === conversationId)
+        if (current && !current.unread && !(current.unreadCount && current.unreadCount > 0)) {
+          alreadyRead = true
+          return s
+        }
+        return {
           ...s,
-          conversations: s.conversations.map((c) =>
+          conversations: (s.conversations || []).map((c) =>
             c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
           ),
-        }))
-        return
+        }
+      })
+      if (alreadyRead) return
+      try {
+        await domains.messaging.markRead(conversationId)
+      } catch {
+        /* local state already cleared */
       }
-      setState((s) => ({
-        ...s,
-        conversations: s.conversations.map((c) =>
-          c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
-        ),
-      }))
     },
     [domains]
   )
@@ -2560,6 +2718,12 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: [newGroup, ...s.conversations],
         }))
+        try {
+          persistCommunityConversation(newGroup as any)
+          markJoined(newGroup.id)
+        } catch {
+          /* */
+        }
         analytics.trackEvent(
           "group_created",
           { groupId: newGroup.id, category: formData.category, privacy: formData.privacy },
@@ -2614,7 +2778,12 @@ const dismissMatchCelebration = useCallback(() => {
                     c.id === communityId
                       ? {
                           ...c,
-                          members: Array.from(new Set([...(c.members || []), "current-user"])),
+                          members: Array.from(
+                            new Set([
+                              ...(c.members || []),
+                              IdentityService.getCurrentUserId() || "current-user",
+                            ])
+                          ),
                         }
                       : c
                   ),
@@ -2622,27 +2791,37 @@ const dismissMatchCelebration = useCallback(() => {
               }
               return s
             })
+            markJoined(communityId)
             addToast("Joined community", "success")
             return true
           }
           addToast(result.error, "error")
           return false
         }
-        setState((s) => ({
-          ...s,
-          conversations: s.conversations.map((c) =>
+        setState((s) => {
+          const next = s.conversations.map((c) =>
             c.id === communityId
               ? {
                   ...c,
                   members: result.data.members,
                   groupRoles: {
                     ...((c as any).groupRoles || {}),
-                    "current-user": "member",
+                    [IdentityService.getCurrentUserId() || "current-user"]: "member",
                   },
                 }
               : c
-          ),
-        }))
+          )
+          const row = next.find((c) => c.id === communityId)
+          if (row) {
+            try {
+              persistCommunityConversation(row as any)
+            } catch {
+              /* */
+            }
+          }
+          return { ...s, conversations: next }
+        })
+        markJoined(communityId)
         addToast("Joined community", "success")
         analytics.trackEvent("community_joined", { communityId }, state.profile.displayName)
         return true
@@ -2663,17 +2842,26 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error, "error")
           return false
         }
-        setState((s) => ({
-          ...s,
-          conversations: s.conversations.map((c) =>
+        setState((s) => {
+          const next = s.conversations.map((c) =>
             c.id === communityId
               ? {
                   ...c,
                   members: result.data.members,
                 }
               : c
-          ),
-        }))
+          )
+          const row = next.find((c) => c.id === communityId)
+          if (row) {
+            try {
+              persistCommunityConversation(row as any)
+            } catch {
+              /* */
+            }
+          }
+          return { ...s, conversations: next }
+        })
+        markLeft(communityId)
         addToast("Left community", "info")
         return true
       } catch (err) {
@@ -3149,9 +3337,223 @@ const dismissMatchCelebration = useCallback(() => {
     ],
   )
 
+  const shellValue = useMemo(
+    () => ({
+      ready: state.ready,
+      tab: state.tab,
+      setTab,
+      toasts: state.toasts,
+      addToast,
+      isOnline: state.isOnline,
+      networkQuality: state.networkQuality,
+      matchCelebration: state.matchCelebration,
+      dismissMatchCelebration,
+      startConversation,
+    }),
+    [
+      state.ready,
+      state.tab,
+      state.toasts,
+      state.isOnline,
+      state.networkQuality,
+      state.matchCelebration,
+      setTab,
+      addToast,
+      dismissMatchCelebration,
+      startConversation,
+    ],
+  )
+
+  const profileValue = useMemo(
+    () => ({
+      profile: state.profile,
+      settings: state.settings,
+      friends: state.friends || [],
+      following: state.following || [],
+      posts: visibleSession.posts as typeof state.posts,
+      updateProfile,
+      completeOnboarding,
+      updateSettings,
+      addToast,
+    }),
+    [
+      state.profile,
+      state.settings,
+      state.friends,
+      state.following,
+      visibleSession.posts,
+      updateProfile,
+      completeOnboarding,
+      updateSettings,
+      addToast,
+    ],
+  )
+
+  const discoveryValue = useMemo(
+    () => ({
+      candidates: visibleSession.candidates as typeof state.candidates,
+      matches: visibleSession.matches as typeof state.matches,
+      following: state.following || [],
+      swipe,
+      followUser,
+      addFriend,
+      reportUser,
+      blockUser,
+      unblockUser,
+      startConversation,
+      acceptMatch,
+      rejectMatch,
+      profile: state.profile,
+    }),
+    [
+      visibleSession.candidates,
+      visibleSession.matches,
+      state.following,
+      state.profile,
+      swipe,
+      followUser,
+      addFriend,
+      reportUser,
+      blockUser,
+      unblockUser,
+      startConversation,
+      acceptMatch,
+      rejectMatch,
+    ],
+  )
+
+  const messagingValue = useMemo(
+    () => ({
+      conversations: visibleSession.conversations as typeof state.conversations,
+      sendMessage,
+      markConversationRead,
+      pinConversation,
+      archiveConversation,
+      muteConversation,
+      createGroup,
+      joinCommunity,
+      leaveCommunity,
+      createBoardPost,
+      startConversation,
+      addToast,
+      profile: state.profile,
+      setTab,
+    }),
+    [
+      visibleSession.conversations,
+      state.profile,
+      sendMessage,
+      markConversationRead,
+      pinConversation,
+      archiveConversation,
+      muteConversation,
+      createGroup,
+      joinCommunity,
+      leaveCommunity,
+      createBoardPost,
+      startConversation,
+      addToast,
+      setTab,
+    ],
+  )
+
+  const feedValue = useMemo(
+    () => ({
+      posts: visibleSession.posts as typeof state.posts,
+      stories: state.stories,
+      likedPostIds: state.likedPostIds || [],
+      following: state.following || [],
+      friends: state.friends || [],
+      profile: state.profile,
+      settings: state.settings,
+      candidates: visibleSession.candidates as typeof state.candidates,
+      createPost,
+      likePost,
+      deletePost,
+      editPost,
+      archivePost,
+      unarchivePost,
+      addComment,
+      editComment,
+      deleteComment,
+      addCommentReaction,
+      removeCommentReaction,
+      pinComment,
+      unpinComment,
+      createQuoteRepost,
+      sharePost,
+      applyShareResult,
+      savePost,
+      unsavePost,
+      reportPost,
+      reportContent,
+      publishStory,
+      followUser,
+      unfollowFromPost,
+      muteUser,
+      blockUser,
+      addToast,
+      setTab,
+      shares: state.shares,
+      reposts: state.reposts,
+      blockedUsers: blockedIdsForUi,
+    }),
+    [
+      visibleSession.posts,
+      visibleSession.candidates,
+      state.stories,
+      state.likedPostIds,
+      state.following,
+      state.friends,
+      state.profile,
+      state.settings,
+      state.shares,
+      state.reposts,
+      blockedIdsForUi,
+      createPost,
+      likePost,
+      deletePost,
+      editPost,
+      archivePost,
+      unarchivePost,
+      addComment,
+      editComment,
+      deleteComment,
+      addCommentReaction,
+      removeCommentReaction,
+      pinComment,
+      unpinComment,
+      createQuoteRepost,
+      sharePost,
+      applyShareResult,
+      savePost,
+      unsavePost,
+      reportPost,
+      reportContent,
+      publishStory,
+      followUser,
+      unfollowFromPost,
+      muteUser,
+      blockUser,
+      addToast,
+      setTab,
+    ],
+  )
+
+
   return (
     <GHCContext.Provider value={contextValue}>
-      {children}
+      <GHCShellContext.Provider value={shellValue}>
+        <GHCProfileContext.Provider value={profileValue}>
+          <GHCDiscoveryContext.Provider value={discoveryValue}>
+            <GHCMessagingContext.Provider value={messagingValue}>
+              <GHCFeedContext.Provider value={feedValue}>
+                {children}
+              </GHCFeedContext.Provider>
+            </GHCMessagingContext.Provider>
+          </GHCDiscoveryContext.Provider>
+        </GHCProfileContext.Provider>
+      </GHCShellContext.Provider>
     </GHCContext.Provider>
   )
 }
@@ -3162,85 +3564,43 @@ export function useGHC() {
   return context
 }
 
-/**
- * Focused read/write boundary for discovery screens.
- * Keep this selector small so discovery consumers do not need to understand
- * messaging, profile, or group-chat state while the context is being split.
- */
-export function useGHCDiscovery() {
-  const context = useGHC()
-  return useMemo(
-    () => ({
-      candidates: context.candidates,
-      matches: context.matches,
-      following: context.following,
-      swipe: context.swipe,
-      followUser: context.followUser,
-      addFriend: context.addFriend,
-      reportUser: context.reportUser,
-      blockUser: context.blockUser,
-      unblockUser: context.unblockUser,
-      startConversation: context.startConversation,
-      acceptMatch: context.acceptMatch,
-      rejectMatch: context.rejectMatch,
-    }),
-    [
-      context.candidates,
-      context.matches,
-      context.following,
-      context.swipe,
-      context.followUser,
-      context.addFriend,
-      context.reportUser,
-      context.blockUser,
-      context.startConversation,
-      context.acceptMatch,
-      context.rejectMatch,
-    ],
-  )
+/** Shell: tab, toasts, online — does not re-render on feed/messages data */
+export function useGHCShell() {
+  const ctx = useContext(GHCShellContext)
+  if (!ctx) throw new Error("useGHCShell must be used within GHCProvider")
+  return ctx
 }
 
-/** Focused boundary for community and group-chat consumers. */
-export function useGHCCommunity() {
-  const context = useGHC()
-  return useMemo(
-    () => ({
-      conversations: context.conversations,
-      sendMessage: context.sendMessage,
-      editMessage: context.editMessage,
-      deleteMessage: context.deleteMessage,
-      replyToMessage: context.replyToMessage,
-      forwardMessage: context.forwardMessage,
-      addMessageReaction: context.addMessageReaction,
-      removeMessageReaction: context.removeMessageReaction,
-      pinMessage: context.pinMessage,
-      unpinMessage: context.unpinMessage,
-      markConversationRead: context.markConversationRead,
-      createGroup: context.createGroup,
-      addGroupMember: context.addGroupMember,
-      removeGroupMember: context.removeGroupMember,
-      setGroupRole: context.setGroupRole,
-      updateGroupName: context.updateGroupName,
-      updateGroupPhoto: context.updateGroupPhoto,
-    }),
-    [
-      context.conversations,
-      context.sendMessage,
-      context.editMessage,
-      context.deleteMessage,
-      context.replyToMessage,
-      context.forwardMessage,
-      context.addMessageReaction,
-      context.removeMessageReaction,
-      context.pinMessage,
-      context.unpinMessage,
-      context.markConversationRead,
-      context.createGroup,
-      context.addGroupMember,
-      context.removeGroupMember,
-      context.setGroupRole,
-      context.updateGroupName,
-      context.updateGroupPhoto,
-    ],
-  )
+/** Profile + settings slice */
+export function useGHCProfile() {
+  const ctx = useContext(GHCProfileContext)
+  if (!ctx) throw new Error("useGHCProfile must be used within GHCProvider")
+  return ctx
 }
+
+/** Discovery / Find slice — isolated from messaging list churn */
+export function useGHCDiscovery() {
+  const ctx = useContext(GHCDiscoveryContext)
+  if (!ctx) throw new Error("useGHCDiscovery must be used within GHCProvider")
+  return ctx
+}
+
+/** Messages + communities slice */
+export function useGHCMessaging() {
+  const ctx = useContext(GHCMessagingContext)
+  if (!ctx) throw new Error("useGHCMessaging must be used within GHCProvider")
+  return ctx
+}
+
+/** Feed / Home slice — prefer over useGHC() on the feed screen */
+export function useGHCFeed() {
+  const ctx = useContext(GHCFeedContext)
+  if (!ctx) throw new Error("useGHCFeed must be used within GHCProvider")
+  return ctx
+}
+
+/** @deprecated Prefer useGHCMessaging — kept for existing imports */
+export function useGHCCommunity() {
+  return useGHCMessaging()
+}
+

@@ -1,11 +1,21 @@
 /**
- * EconomyDomain — canonical GH Connect economy.
+ * EconomyDomain — canonical GreenHaven economy.
  *
  * Owns: GHC ledger, wallet snapshot, rewards, premium membership hooks,
  * limits, anti-abuse. Does not implement on-chain tokens.
  *
  * Backend is authoritative for persistent balances when EconomyRepository is HTTP.
- * Local mode: in-memory + localStorage ledger for prototype continuity.
+ * Local mode: in-memory + localStorage ledger for Studio/offline only.
+ *
+ * ABSOLUTE RULE (server mode):
+ * Every operation that increases, decreases, claims, or spends GHC must be
+ * authorized by the server ledger (intent → verify → ledger → notify).
+ * Client never invents available balance. Paths:
+ *   spend / marketplace / boost / premium → POST /economy/ledger/spend
+ *   claim reward / daily → POST /economy/rewards/claim
+ *   stage reward → POST /economy/rewards/evaluate
+ *   P2P → POST /economy/transfers
+ *   purchase credit → server payment completion only (hydrate)
  */
 
 import { runMutation, type MutationResult } from "./mutation-pipeline"
@@ -90,6 +100,41 @@ export interface EconomyRepository {
    * when server payload is older (by updatedAt / max createdAt).
    */
   hydrate?: (userId: string) => Promise<void>
+  /** Server-mode only: claim pending hold via POST /economy/rewards/claim */
+  claimPendingReward?: (holdId: string) => Promise<{
+    ok: boolean
+    amount?: number
+    transactionId?: string
+    alreadyClaimed?: boolean
+    transaction?: GhcTransaction
+    error?: string
+  }>
+  /** Server-mode only: stage pending via POST /economy/rewards/evaluate */
+  evaluateRewardServer?: (input: {
+    amount: number
+    referenceId: string
+    reason: string
+    sourceEvent?: string
+  }) => Promise<{
+    ok: boolean
+    holdId?: string
+    transaction?: GhcTransaction
+    idempotent?: boolean
+    error?: string
+  }>
+  /** Server-mode only: spend via POST /economy/ledger/spend */
+  spendGhc?: (input: {
+    amount: number
+    referenceId: string
+    reason: string
+    sourceEvent?: string
+    kind?: "spent" | "purchased"
+  }) => Promise<{
+    ok: boolean
+    transaction?: GhcTransaction
+    idempotent?: boolean
+    error?: string
+  }>
 }
 
 function loadLocalBundle(userId: string): {
@@ -509,6 +554,13 @@ export function createEconomyDomain(deps: {
           return null
         },
         mutate: (i) => {
+          // Absolute rule: server mode must not invent ledger rows on the client.
+          // Use spend() / claimReward / transfers / evaluateRewardServer instead.
+          if (repo.mode === "server") {
+            throw new Error(
+              "Server-authoritative ledger: use spend(), claimReward(), or transfer APIs — not client recordTransaction"
+            )
+          }
           const built = createLedgerTransaction(
             {
               userId,
@@ -543,13 +595,84 @@ export function createEconomyDomain(deps: {
       sourceEvent: string
       referenceId?: string
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      const amount = -Math.abs(input.amount)
+      const abs = Math.abs(Number(input.amount) || 0)
+      if (!Number.isFinite(abs) || abs <= 0) {
+        return { ok: false, error: "Invalid spend amount", phase: "validate", requestId: "local" }
+      }
+      const ref =
+        (input.referenceId || "").trim() ||
+        `spend_${input.sourceEvent || "GHC"}_${userId}_${Math.round(abs * 100)}_${Date.now()}`
+
+      // SERVER-AUTHORITATIVE: never debit available balance on the client
+      if (repo.mode === "server") {
+        if (typeof repo.spendGhc !== "function") {
+          return {
+            ok: false,
+            error: "Server spend unavailable — configure ledger API",
+            phase: "mutate",
+            requestId: "server",
+          }
+        }
+        const remote = await repo.spendGhc({
+          amount: abs,
+          referenceId: ref,
+          reason: input.reason,
+          sourceEvent: input.sourceEvent,
+          kind: "spent",
+        })
+        if (!remote.ok) {
+          return {
+            ok: false,
+            error: remote.error || "Server spend failed",
+            phase: "mutate",
+            requestId: "server",
+          }
+        }
+        if (typeof repo.hydrate === "function") {
+          try {
+            await repo.hydrate(userId)
+          } catch {
+            /* cache best-effort */
+          }
+        }
+        if (remote.transaction) {
+          repo.appendTransaction(remote.transaction)
+        }
+        const w = computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
+        const tx =
+          remote.transaction ||
+          repo.listTransactions(userId).find((x) => x.referenceId === ref) ||
+          ({
+            id: ref,
+            userId,
+            kind: "spent" as const,
+            amount: -abs,
+            reason: input.reason,
+            sourceEvent: input.sourceEvent,
+            referenceId: ref,
+            status: "posted" as const,
+            createdAt: Date.now(),
+          } satisfies GhcTransaction)
+        try {
+          domainEvents.publish(
+            "WALLET_TRANSFER_COMPLETED",
+            { transferId: tx.id, amount: -abs, status: "posted" },
+            userId,
+            tx.id
+          )
+        } catch {
+          /* */
+        }
+        return { ok: true, data: { tx, wallet: w }, phase: "mutate", requestId: "server" }
+      }
+
+      // Local / Studio only
       return this.recordTransaction({
         kind: "spent",
-        amount,
+        amount: -abs,
         reason: input.reason,
         sourceEvent: input.sourceEvent,
-        referenceId: input.referenceId,
+        referenceId: ref,
         status: "posted",
       })
     },
@@ -562,6 +685,38 @@ export function createEconomyDomain(deps: {
       /** Must be true only from server-verified payment path */
       serverAuthority?: boolean
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
+      if (repo.mode === "server") {
+        // Client must never invent purchase credits. Server payment completion
+        // writes the ledger; client only hydrates.
+        if (input.serverAuthority !== true) {
+          return {
+            ok: false,
+            error: "GHC purchase credit requires server-verified payment authority",
+            phase: "authorize",
+            requestId: "server",
+          }
+        }
+        if (typeof repo.hydrate === "function") {
+          try {
+            await repo.hydrate(userId)
+          } catch {
+            /* */
+          }
+        }
+        const w = computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
+        const existing = repo
+          .listTransactions(userId)
+          .find((x) => x.referenceId === input.paymentRef && x.kind === "purchased")
+        if (existing) {
+          return { ok: true, data: { tx: existing, wallet: w }, phase: "mutate", requestId: "server" }
+        }
+        return {
+          ok: false,
+          error: "Purchase not yet reflected on server ledger — complete Pi payment first",
+          phase: "mutate",
+          requestId: "server",
+        }
+      }
       return this.recordTransaction({
         kind: "purchased",
         amount: Math.abs(input.amount),
@@ -652,6 +807,52 @@ export function createEconomyDomain(deps: {
     }): Promise<
       MutationResult<{ rewards: RewardRecord[]; skipped?: string }>
     > {
+      // Server mode: stage pending rewards only via evaluate API (never local ledger invent)
+      if (repo.mode === "server" && typeof repo.evaluateRewardServer === "function") {
+        const matched = rulesBySourceEvent(rules, input.sourceEvent)
+        if (!matched.length) {
+          return { ok: true, data: { rewards: [], skipped: "No rule for event" } }
+        }
+        const created: RewardRecord[] = []
+        for (const rule of matched) {
+          const ref =
+            (input.referenceId || "").trim() ||
+            `${rule.id}_${input.sourceEvent}_${userId}_${Date.now()}`
+          const remote = await repo.evaluateRewardServer({
+            amount: rule.amount,
+            referenceId: ref,
+            reason: rule.description,
+            sourceEvent: rule.sourceEvent,
+          })
+          if (!remote.ok) continue
+          if (remote.transaction) repo.appendTransaction(remote.transaction)
+          const reward: RewardRecord = {
+            id: remote.holdId || ref,
+            userId,
+            ruleId: rule.id,
+            category: rule.category,
+            sourceEvent: rule.sourceEvent,
+            amount: rule.amount,
+            validationStatus: "pending_validation",
+            referenceId: ref,
+            reason: rule.description,
+            transactionId: remote.transaction?.id,
+            createdAt: Date.now(),
+          }
+          repo.appendReward(reward)
+          markAward(rule.id, input.targetId)
+          created.push(reward)
+        }
+        if (typeof repo.hydrate === "function") {
+          try {
+            await repo.hydrate(userId)
+          } catch {
+            /* */
+          }
+        }
+        return { ok: true, data: { rewards: created }, phase: "mutate", requestId: "server" }
+      }
+
       return runMutation({
         name: "economy.evaluateReward",
         actorId: userId,
@@ -881,6 +1082,53 @@ export function createEconomyDomain(deps: {
     async claimReward(
       holdOrRewardId: string
     ): Promise<MutationResult<{ reward: RewardRecord; wallet: GhcWalletSnapshot }>> {
+      // Absolute rule: server mode never posts available balance client-side
+      if (repo.mode === "server" && typeof repo.claimPendingReward === "function") {
+        const remote = await repo.claimPendingReward(holdOrRewardId)
+        if (!remote.ok) {
+          return {
+            ok: false,
+            error: remote.error || "Server claim failed",
+            phase: "mutate",
+            requestId: "server",
+          }
+        }
+        if (typeof repo.hydrate === "function") {
+          try {
+            await repo.hydrate(userId)
+          } catch {
+            /* cache best-effort */
+          }
+        }
+        const wallet = computeWalletFromLedger(
+          userId,
+          repo.listTransactions(userId),
+          limits
+        )
+        const rewards = repo.listRewards(userId)
+        const reward =
+          rewards.find((r) => r.id === holdOrRewardId) ||
+          ({
+            id: holdOrRewardId,
+            userId,
+            ruleId: "server_claim",
+            category: "achievement",
+            sourceEvent: "CLAIM",
+            amount: remote.amount || 0,
+            validationStatus: "paid" as const,
+            createdAt: Date.now(),
+          } satisfies RewardRecord)
+        if (reward.validationStatus !== "paid") {
+          repo.updateReward(reward.id, { validationStatus: "paid" })
+        }
+        return {
+          ok: true,
+          data: { reward: { ...reward, validationStatus: "paid" }, wallet },
+          phase: "mutate",
+          requestId: "server",
+        }
+      }
+
       const resolved = this._resolveClaimableRewardId(holdOrRewardId)
       if (!resolved) {
         return {
@@ -888,6 +1136,15 @@ export function createEconomyDomain(deps: {
           error: "Nothing claimable for this pending item",
           phase: "validate",
           requestId: "local",
+        }
+      }
+      // Local mode only — Studio offline
+      if (repo.mode === "server") {
+        return {
+          ok: false,
+          error: "Server claim path unavailable — configure API or try again",
+          phase: "mutate",
+          requestId: "server",
         }
       }
       return this._creditPendingReward(resolved, userId)
@@ -993,58 +1250,58 @@ export function createEconomyDomain(deps: {
       })
     },
 
-    /** Premium purchase paid in GHC (utility spend) */
+    /** Premium purchase paid in GHC — spend is server-authoritative when repo.mode === "server" */
     async purchasePremium(
       planId: "monthly" | "yearly" | "lifetime",
       priceGhc: number
     ): Promise<MutationResult<{ membership: PremiumMembership; tx: GhcTransaction }>> {
-      return runMutation({
-        name: "economy.purchasePremium",
-        actorId: userId,
-        input: { planId, priceGhc },
-        authorize: (i) => {
-          if (!canPostDebit(wallet(), -Math.abs(i.priceGhc), limits)) {
-            return "Insufficient GHC for premium"
-          }
-          return null
-        },
-        mutate: (i) => {
-          const built = createLedgerTransaction({
-            userId,
-            kind: "spent",
-            amount: -Math.abs(i.priceGhc),
-            reason: `Premium ${i.planId}`,
-            sourceEvent: "PREMIUM_PURCHASE",
-            status: "posted",
-          })
-          if (!built.ok) throw new Error(built.error)
-          repo.appendTransaction(built.tx)
-          const now = Date.now()
-          const duration =
-            i.planId === "monthly"
-              ? 30 * 86400000
-              : i.planId === "yearly"
-                ? 365 * 86400000
-                : 100 * 365 * 86400000
-          const membership: PremiumMembership = {
-            userId,
-            planId: i.planId,
-            active: true,
-            startedAt: now,
-            expiresAt: now + duration,
-            lastPurchaseTxId: built.tx.id,
-          }
-          repo.setPremium(membership)
-          domainEvents.publish("PREMIUM_ACTIVATED", { planId: i.planId }, userId, built.tx.id)
-          return { membership, tx: built.tx }
-        },
+      const price = Math.abs(Number(priceGhc) || 0)
+      if (!Number.isFinite(price) || price <= 0) {
+        return { ok: false, error: "Invalid premium price", phase: "validate", requestId: "local" }
+      }
+      const spendRes = await this.spend({
+        amount: price,
+        reason: `Premium ${planId}`,
+        sourceEvent: "PREMIUM_PURCHASE",
+        referenceId: `premium_${planId}_${userId}`,
       })
-    },
+      if (!spendRes.ok || !spendRes.data) {
+        return {
+          ok: false,
+          error: spendRes.error || "Premium spend failed",
+          phase: spendRes.phase || "mutate",
+          requestId: spendRes.requestId || "local",
+        }
+      }
+      const now = Date.now()
+      const duration =
+        planId === "monthly"
+          ? 30 * 86400000
+          : planId === "yearly"
+            ? 365 * 86400000
+            : 100 * 365 * 86400000
+      const membership: PremiumMembership = {
+        userId,
+        planId,
+        active: true,
+        startedAt: now,
+        expiresAt: planId === "lifetime" ? undefined : now + duration,
+        lastPurchaseTxId: spendRes.data.tx.id,
+      }
+      repo.setPremium(membership)
+      return {
+        ok: true,
+        data: { membership, tx: spendRes.data.tx },
+        phase: "mutate",
+        requestId: spendRes.requestId || "local",
+      }
+    }
+
 
 
 
     /**
-     * Internal P2P: send GHC to another GH Connect user.
+     * Internal P2P: send GHC to another GreenHaven user.
      * Debits sender (transfer_out) and credits recipient (transfer_in) with the SAME referenceId.
      * Local Studio may write both legs via appendTransferPair; future server uses atomic POST /economy/transfers.
      * Never treats pending rewards as spendable.
@@ -1236,7 +1493,7 @@ export function createEconomyDomain(deps: {
           amount,
           reason: note
             ? `Received: ${note}`
-            : `Received from GH Connect member`,
+            : `Received from GreenHaven member`,
           sourceEvent: "WALLET_TRANSFER",
           referenceId: ref,
           status: "posted",

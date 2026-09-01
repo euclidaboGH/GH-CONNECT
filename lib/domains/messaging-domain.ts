@@ -11,9 +11,15 @@
  * Does NOT create a second messaging engine.
  *
  * Permissions: block, privacy (whoCanMessage), membership, community role chat.
+ *
+ * Monetization: optional tools in messaging-premium.ts only.
+ * Basic sendMessage is never blocked by payment or GHC balance.
  */
 
+
+
 import { runMutation, type MutationResult } from "./mutation-pipeline"
+import { MESSAGING_FREE_GUARANTEE } from "./messaging-premium"
 import { softDeleteMessage } from "../social-graph"
 import type { DomainMessage } from "./types"
 import type { MessageRepository } from "./repositories"
@@ -195,6 +201,8 @@ export function createMessagingDomain(deps: {
     },
 
     evaluateSendPermission,
+    /** Constant: chat is free */
+    freeMessagingGuarantee: MESSAGING_FREE_GUARANTEE as string,
     resolveMessageStatus,
     canTransitionMessageStatus,
 

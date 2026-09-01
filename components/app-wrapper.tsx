@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { PiAuthProvider, usePiAuth } from "@/contexts/pi-auth-context";
+import { IdentityProvider } from "@/contexts/identity-context";
 import { AuthLoadingScreen } from "./auth-loading-screen";
 import { ErrorBoundary } from "@/lib/error-boundary";
 import { a11y } from "@/lib/accessibility";
@@ -60,10 +61,12 @@ export function AppWrapper({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
       <PiAuthProvider>
+      <IdentityProvider>
         <AccessibilitySetup />
         <OfflineListener />
         <AppContent>{children}</AppContent>
-      </PiAuthProvider>
+      </IdentityProvider>
+    </PiAuthProvider>
     </ErrorBoundary>
   );
 }

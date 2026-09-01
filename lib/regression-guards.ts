@@ -1,5 +1,5 @@
 /**
- * Lightweight regression guards for GH Connect.
+ * Lightweight regression guards for GreenHaven.
  */
 
 import { asArray } from "@/lib/safe-data"

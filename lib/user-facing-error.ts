@@ -64,7 +64,7 @@ export function logClientError(scope: string, err: unknown, extra?: Record<strin
   try {
     const message = err instanceof Error ? err.message : String(err)
     // Avoid logging tokens / large payloads
-    console.warn(`[GH Connect] ${scope}:`, message, extra ? { ...extra } : "")
+    console.warn(`[GreenHaven] ${scope}:`, message, extra ? { ...extra } : "")
   } catch {
     /* ignore */
   }

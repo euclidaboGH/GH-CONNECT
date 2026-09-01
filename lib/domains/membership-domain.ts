@@ -308,6 +308,15 @@ function saveStatus(status: MembershipStatus) {
   }
 }
 
+
+/**
+ * Standalone status read for account spine / UI (no domain instance required).
+ * Prefer createMembershipDomain().getStatus() inside mutation flows.
+ */
+export function getMembershipStatus(userId = "current-user"): MembershipStatus {
+  return loadStatus(userId)
+}
+
 export function createMembershipDomain(deps: {
   currentUserId?: string
   /**
@@ -496,6 +505,83 @@ export function createMembershipDomain(deps: {
       })
     },
 
+    /** After Pi U2A completes — server grants entitlement; local cache updated on success */
+    async activateFromExternalPayment(
+      tier: "vip" | "vvip",
+      billingPeriod: "monthly" | "yearly",
+      payment: {
+        provider: string
+        paymentId: string
+        txid: string
+        intentId?: string
+      }
+    ): Promise<MutationResult<{ status: MembershipStatus }>> {
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" }
+        try {
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/activate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            tier,
+            period: billingPeriod,
+            method: "pi",
+            intentId: payment.intentId,
+            paymentId: payment.paymentId,
+            txid: payment.txid,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data?.ok && data?.entitlement) {
+          const e = data.entitlement
+          return this.activate({
+            tier: e.tier === "vvip" ? "vvip" : "vip",
+            billingPeriod,
+            source: "external",
+            purchaseTxId: e.purchaseRef || `${payment.provider}:${payment.paymentId}:${payment.txid}`,
+            durationMs:
+              e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
+          })
+        }
+        // Server denied — do not grant locally
+        if (res.status === 401 || res.status === 503) {
+          // Offline / unauthenticated studio: fall back to local only with payment proof present
+          if (payment.paymentId && payment.txid) {
+            return this.activate({
+              tier,
+              billingPeriod,
+              source: "external",
+              purchaseTxId: `${payment.provider}:${payment.paymentId}:${payment.txid}`,
+            })
+          }
+        }
+        return {
+          ok: false,
+          error: data?.error || data?.message || "Server did not activate membership",
+          phase: "authorize",
+          requestId: payment.paymentId,
+        }
+      } catch {
+        if (payment.paymentId && payment.txid) {
+          return this.activate({
+            tier,
+            billingPeriod,
+            source: "external",
+            purchaseTxId: `${payment.provider}:${payment.paymentId}:${payment.txid}`,
+          })
+        }
+        return {
+          ok: false,
+          error: "Activation failed",
+          phase: "authorize",
+          requestId: "local",
+        }
+      }
+    },
+
     async purchaseWithGhc(
       tier: "vip" | "vvip",
       billingPeriod: "monthly" | "yearly" = "monthly"
@@ -503,11 +589,51 @@ export function createMembershipDomain(deps: {
       const plan = planFor(tier)
       const price =
         billingPeriod === "yearly" ? plan.priceGhcYearly : plan.priceGhcMonthly
-      if (!deps.spendGhc) {
-        return { ok: false, error: "GHC spend not available", phase: "authorize", requestId: "local" }
-      }
       if (price <= 0) {
         return { ok: false, error: "Invalid price", phase: "validate", requestId: "local" }
+      }
+      // Prefer server: spend + grant entitlement atomically from server catalog
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" }
+        try {
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/activate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            tier,
+            period: billingPeriod,
+            method: "ghc",
+            spendReferenceId: `membership_${tier}_${billingPeriod}_${userId}`,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data?.ok && data?.entitlement) {
+          const e = data.entitlement
+          return this.activate({
+            tier: e.tier === "vvip" ? "vvip" : "vip",
+            billingPeriod,
+            source: "ghc",
+            purchaseTxId: e.purchaseRef,
+            durationMs:
+              e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
+          })
+        }
+        if (res.status !== 503 && res.status !== 401 && data?.error) {
+          return {
+            ok: false,
+            error: data.error || data.message || "Purchase failed",
+            phase: "authorize",
+            requestId: "server",
+          }
+        }
+      } catch {
+        /* fall through to local spend */
+      }
+      if (!deps.spendGhc) {
+        return { ok: false, error: "GHC spend not available", phase: "authorize", requestId: "local" }
       }
       const paid = await deps.spendGhc({
         amount: price,

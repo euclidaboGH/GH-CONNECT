@@ -48,6 +48,7 @@ import {
   resolveApiBaseUrl,
   createHttpEconomyRepository,
 } from "./http-repositories"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { createFeedDomain } from "./feed-domain"
 import { buildPermissionContext } from "../permission-engine"
 import type { Profile, Post, Conversation, StoryItem } from "../ghc-types"
@@ -89,7 +90,11 @@ export function createDomainServices(
   getState: () => DomainStateSlice,
   options?: DomainServiceOptions
 ) {
-  const uid = options?.currentUserId || "current-user"
+  // Prefer explicit option → IdentityService (Pi UID) → studio placeholder
+  const uid =
+    options?.currentUserId ||
+    IdentityService.getCurrentUserId() ||
+    "current-user"
 
   const user = createUserDomain({
     getProfile: () => getState().profile,
@@ -108,8 +113,9 @@ export function createDomainServices(
   // Prefer HTTP repos when API base is configured (backend authoritative + optimistic cache)
   let postRepo = options?.postRepository
   const apiBase = resolveApiBaseUrl()
+  const authHeaders = () => IdentityService.getAuthHeaders()
   if (!postRepo && apiBase) {
-    postRepo = createHttpPostRepository({ baseUrl: apiBase })
+    postRepo = createHttpPostRepository({ baseUrl: apiBase, getAuthHeaders: authHeaders })
   } else if (!postRepo && options?.getPosts && options?.setPosts) {
     postRepo = createLocalPostRepository({
       getPosts: options.getPosts,
@@ -360,7 +366,10 @@ export function createDomainServices(
 
   const economyRepo =
     apiBase
-      ? createHttpEconomyRepository({ baseUrl: apiBase })
+      ? createHttpEconomyRepository({
+          baseUrl: apiBase,
+          getAuthHeaders: authHeaders,
+        })
       : createLocalEconomyRepository()
 
   const economy = createEconomyDomain({

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Image, Video, X, Globe, Users, Lock, MapPin, Tag } from "lucide-react"
+import { Image, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
@@ -9,6 +9,27 @@ import type { StoryItem } from "@/lib/ghc-types"
 
 export type ComposeMode = "post" | "story"
 export type Audience = "public" | "followers" | "mutuals" | "private"
+
+/** Rotating contextual suggestions — fills empty vertical space with gentle prompts */
+const COMPOSE_PROMPTS = [
+  "Share something useful today",
+  "💡 What's something you've learned recently?",
+  "🎉 Celebrate a small win from this week",
+  "🤝 Who inspired you lately?",
+  "🌱 What's growing in your community?",
+  "Ask a thoughtful question your network can answer",
+  "Share an opportunity others might need",
+] as const
+
+function pickComposePrompt(): string {
+  try {
+    const i = Math.floor(Date.now() / (1000 * 60 * 30)) % COMPOSE_PROMPTS.length
+    return COMPOSE_PROMPTS[i]
+  } catch {
+    return COMPOSE_PROMPTS[0]
+  }
+}
+
 
 interface UnifiedComposeProps {
   open: boolean
@@ -28,6 +49,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [text, setText] = useState("")
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
+  const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
+  const [selectedDocName, setSelectedDocName] = useState<string | null>(null)
   const [storyMedia, setStoryMedia] = useState<StoryItem["media"]>(null)
   const [audience, setAudience] = useState<Audience>("public")
   const [showAudience, setShowAudience] = useState(false)
@@ -39,6 +62,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [storyAudience, setStoryAudience] = useState<"everyone" | "followers" | "friends" | "private">("followers")
   const [isPublishing, setIsPublishing] = useState(false)
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>("")
+  const [promptHint, setPromptHint] = useState(pickComposePrompt)
+
 
   const DRAFT_KEY = "ghc-post-draft-v1"
   const publishingRef = useRef(false)
@@ -56,7 +81,25 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  
+  useEffect(() => {
+    if (!open) return
+    const close = () => onOpenChange(false)
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
+    window.addEventListener("ghc:tab-change", close)
+    window.addEventListener("ghc:close-compose", close)
+    window.addEventListener("ghc:close-transient-ui", close)
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("ghc:tab-change", close)
+      window.removeEventListener("ghc:close-compose", close)
+      window.removeEventListener("ghc:close-transient-ui", close)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [open, onOpenChange])
 
   useEffect(() => {
     if (open) {
@@ -71,6 +114,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           }
         } catch { /* ignore */ }
       }
+      setPromptHint(pickComposePrompt())
       const t = window.setTimeout(() => textareaRef.current?.focus(), 80)
       return () => window.clearTimeout(t)
     }
@@ -99,10 +143,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     setMode(initialMode)
   }
 
-  const readFileAsDataUrl = (file: File, kind: "image" | "video") =>
+  const readFileAsDataUrl = (file: File, kind: "image" | "video" | "file") =>
     new Promise<string>((resolve, reject) => {
       try {
-        validateMediaFile(file, kind)
+        if (kind !== "file") {
+          validateMediaFile(file, kind)
+        }
       } catch (error) {
         reject(error)
         return
@@ -144,7 +190,23 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
   }
 
-  const handleVideo = async (file: File | undefined) => {
+  const handleDoc = async (file: File | undefined) => {
+    if (!file || mode !== "post") return
+    try {
+      if (file.size > 8 * 1024 * 1024) {
+        addToast("File must be under 8 MB", "error")
+        return
+      }
+      const url = await readFileAsDataUrl(file, "file")
+      setSelectedDoc(url)
+      setSelectedDocName(file.name || "attachment")
+      addToast("File attached", "success")
+    } catch {
+      addToast("Unable to attach file", "error")
+    }
+  }
+
+    const handleVideo = async (file: File | undefined) => {
     if (!file) return
     try {
       if (mode === "story") {
@@ -153,8 +215,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setSelectedImages([])
         setSelectedVideo(null)
       } else {
+        // Post mode: video can accompany photos (Facebook-style mixed media)
         setSelectedVideo(await readFileAsDataUrl(file, "video"))
-        setSelectedImages([])
         setStoryMedia(null)
       }
     } catch {
@@ -189,7 +251,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const canPublish =
     mode === "post"
-      ? Boolean(text.trim() || selectedImages.length > 0 || selectedVideo)
+      ? Boolean(text.trim() || selectedImages.length > 0 || selectedVideo || selectedDoc)
       : Boolean(text.trim() || storyMedia)
 
   const handlePublish = async () => {
@@ -209,8 +271,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           text.trim(),
           selectedImages,
           selectedVideo,
-          null,
-          null,
+          selectedDoc,
+          selectedDocName,
           audience,
           community,
         )
@@ -385,7 +447,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             <div className="mb-3 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
               {(
                 [
-                  { id: "public" as const, label: "Public", desc: "Anyone on GH Connect", Icon: Globe },
+                  { id: "public" as const, label: "Public", desc: "Anyone on GreenHaven", Icon: Globe },
                   { id: "followers" as const, label: "Followers", desc: "People who follow you", Icon: Users },
                   { id: "mutuals" as const, label: "Mutuals", desc: "You both follow each other", Icon: Users },
                   { id: "private" as const, label: "Only me", desc: "Hidden from the feed", Icon: Lock },
@@ -484,13 +546,39 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </div>
           )}
 
+          {mode === "post" && !text.trim() ? (
+            <button
+              type="button"
+              onClick={() => {
+                const next = pickComposePrompt()
+                setPromptHint(next)
+                const el = textareaRef.current
+                if (el) el.placeholder = next
+              }}
+              className="mb-2 flex w-full items-start gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-left transition hover:bg-emerald-500/10"
+            >
+              <span className="text-[15px] leading-none" aria-hidden>
+                💡
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11px] font-bold uppercase tracking-wide text-emerald-700/80">
+                  Idea for you
+                </span>
+                <span className="mt-0.5 block text-[13px] font-medium leading-snug text-foreground/90">
+                  {promptHint}
+                </span>
+                <span className="mt-1 block text-[10px] text-muted-foreground">Tap to refresh · starts as your placeholder</span>
+              </span>
+            </button>
+          ) : null}
+
           <textarea
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : 5000))}
             placeholder={mode === "post" ? "What's on your mind?" : "Share a moment…"}
-            className="min-h-[140px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-gray-900 placeholder-gray-400 focus:outline-none"
-            rows={8}
+            className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-gray-900 placeholder-gray-400 focus:outline-none"
+            rows={5}
           />
           <p className="text-right text-[11px] text-gray-400">
             {text.length}/{mode === "story" ? 500 : 5000}
@@ -618,6 +706,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             e.currentTarget.value = ""
           }}
         />
+        <input
+          ref={docInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,application/pdf"
+          className="sr-only"
+          onChange={(e) => {
+            void handleDoc(e.target.files?.[0])
+            e.currentTarget.value = ""
+          }}
+        />
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -636,6 +734,15 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {mode === "post" && (
             <button
               type="button"
+              onClick={() => docInputRef.current?.click()}
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-sky-50 text-sm font-bold text-sky-700 transition hover:bg-sky-100 active:scale-[0.98]"
+            >
+              <FileText size={18} aria-hidden /> File
+            </button>
+          )}
+          {mode === "post" && (
+            <button
+              type="button"
               onClick={() => setShowAudience((v) => !v)}
               className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-gray-100 px-3 text-xs font-bold text-gray-700 transition hover:bg-gray-200"
               aria-label="Audience"
@@ -644,9 +751,17 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </button>
           )}
         </div>
+        {mode === "post" && selectedDocName ? (
+          <p className="mt-1.5 flex items-center justify-between rounded-lg bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800">
+            <span className="truncate">📎 {selectedDocName}</span>
+            <button type="button" className="font-bold" onClick={() => { setSelectedDoc(null); setSelectedDocName(null) }}>
+              Remove
+            </button>
+          </p>
+        ) : null}
         <p className="mt-2 text-center text-[10px] text-gray-400">
           {mode === "post"
-            ? "Long posts, photos & video · safer audiences than open social defaults"
+            ? "One post · text, photos, video & files together"
             : "Stories disappear after 24 hours"}
         </p>
       </footer>

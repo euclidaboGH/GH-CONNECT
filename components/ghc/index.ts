@@ -1,4 +1,4 @@
-// GH Connect component barrel exports for cleaner imports
+// GreenHaven component barrel exports for cleaner imports
 export { GHConnectApp } from './app'
 export { Onboarding } from './onboarding'
 export { SettingsScreen } from './settings'

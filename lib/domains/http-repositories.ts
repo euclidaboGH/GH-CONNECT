@@ -314,17 +314,10 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
     },
 
     appendTransaction(tx) {
-      // Cache-only merge after server success — never POST transfer_in as authority
+      // Server mode: cache-only. Never POST raw ledger rows — balance changes
+      // only via /economy/transfers, /rewards/claim|evaluate, /ledger/spend|credit.
       const exists = localTx.some((t) => t.id === tx.id)
       if (!exists) localTx.push(tx)
-      if (tx.kind === "transfer_in" || tx.kind === "transfer_out") {
-        // Money legs only via executeTransfer / server hydrate
-        return
-      }
-      fireWrite(cfg, "/economy/transactions", {
-        method: "POST",
-        body: JSON.stringify(tx),
-      })
     },
 
     /**
@@ -411,6 +404,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
     },
 
     updateTransaction(userId, id, patch) {
+      // Cache-only — no client-authoritative PATCH of ledger rows
       const idx = localTx.findIndex((t) => t.id === id && t.userId === userId)
       if (idx >= 0) {
         localTx[idx] = {
@@ -419,10 +413,6 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
           metadata: { ...(localTx[idx].metadata || {}), ...(patch.metadata || {}) },
         }
       }
-      fireWrite(cfg, `/economy/transactions/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      })
     },
 
     async listTransferRequests(userId, direction) {
@@ -465,29 +455,103 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
       return localRewards.filter((r) => r.userId === userId)
     },
     appendReward(reward) {
-      localRewards.push(reward)
-      fireWrite(cfg, "/economy/rewards", {
-        method: "POST",
-        body: JSON.stringify(reward),
-      })
+      // Cache-only metadata. Balance impact only via server evaluate/claim.
+      if (!localRewards.some((r) => r.id === reward.id)) localRewards.push(reward)
     },
     updateReward(id, patch) {
       const idx = localRewards.findIndex((r) => r.id === id)
       if (idx >= 0) localRewards[idx] = { ...localRewards[idx], ...patch }
-      fireWrite(cfg, `/economy/rewards/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      })
     },
     getPremium(userId) {
       return premium && premium.userId === userId ? premium : null
     },
     setPremium(membership) {
+      // Membership entitlement cache only — GHC spend must use ledger/spend
       premium = membership
-      fireWrite(cfg, "/economy/premium", {
-        method: "PUT",
-        body: JSON.stringify(membership),
-      })
+    },
+
+    /** Server-authoritative claim of pending hold */
+    async claimPendingReward(holdId: string) {
+      try {
+        const data = await req<{
+          ok?: boolean
+          amount?: number
+          transactionId?: string
+          transaction?: import("./economy-types").GhcTransaction
+          alreadyClaimed?: boolean
+          error?: string
+        }>(cfg, "/economy/rewards/claim", {
+          method: "POST",
+          body: JSON.stringify({ holdId }),
+        })
+        if (data.transaction && !localTx.some((t) => t.id === data.transaction!.id)) {
+          localTx.push(data.transaction)
+        }
+        return {
+          ok: true as const,
+          amount: data.amount,
+          transactionId: data.transactionId,
+          alreadyClaimed: data.alreadyClaimed,
+          transaction: data.transaction,
+        }
+      } catch (e) {
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : "CLAIM_FAILED",
+        }
+      }
+    },
+
+    /** Stage pending reward on server */
+    async evaluateRewardServer(input: {
+      amount: number
+      referenceId: string
+      reason: string
+      sourceEvent?: string
+    }) {
+      try {
+        const data = await req<{
+          ok?: boolean
+          holdId?: string
+          transaction?: import("./economy-types").GhcTransaction
+          idempotent?: boolean
+        }>(cfg, "/economy/rewards/evaluate", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+        if (data.transaction && !localTx.some((t) => t.id === data.transaction!.id)) {
+          localTx.push(data.transaction)
+        }
+        return { ok: true as const, holdId: data.holdId, transaction: data.transaction, idempotent: data.idempotent }
+      } catch (e) {
+        return { ok: false as const, error: e instanceof Error ? e.message : "EVALUATE_FAILED" }
+      }
+    },
+
+    /** Server-authoritative spend (membership / marketplace / boost) */
+    async spendGhc(input: {
+      amount: number
+      referenceId: string
+      reason: string
+      sourceEvent?: string
+      kind?: "spent" | "purchased"
+    }) {
+      try {
+        const data = await req<{
+          ok?: boolean
+          transaction?: import("./economy-types").GhcTransaction
+          idempotent?: boolean
+        }>(cfg, "/economy/ledger/spend", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+        if (data.transaction && !localTx.some((t) => t.id === data.transaction!.id)) {
+          localTx.push(data.transaction)
+        }
+        return { ok: true as const, transaction: data.transaction, idempotent: data.idempotent }
+      } catch (e) {
+        return { ok: false as const, error: e instanceof Error ? e.message : "SPEND_FAILED" }
+      }
     },
 
     hydrate: async (userId) => {

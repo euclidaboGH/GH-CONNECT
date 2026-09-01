@@ -1,4 +1,4 @@
-// GH Connect Types
+// GreenHaven Types
 
 export type Gender = "male" | "female" | "non-binary" | "prefer-not-to-say"
 export type PrimaryMode = "friendship" | "dating" | "networking"
@@ -52,6 +52,8 @@ export interface Profile {
   locationPrivacy?: import("./geography/types").LocationPrivacyLevel
   bio: string
   primaryMode: PrimaryMode
+  /** Multi-select: what the user is looking for (Discover ranking) */
+  connectionIntents?: string[]
   interests: string[]
   photos: string[] // max 6 base64 or URLs
   coverPhoto: string | null

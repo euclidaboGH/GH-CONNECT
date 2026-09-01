@@ -152,15 +152,37 @@ export function PremiumCommunityHub({
   const isMod =
     community.role === "owner" || community.role === "admin" || community.role === "moderator"
 
-  const membersWithRoles =
-    memberPreview.length > 0
-      ? memberPreview
-      : [
-          { id: "owner-1", name: "Alex Owner", role: "owner" },
-          { id: "mod-1", name: "Sam Mod", role: "moderator" },
-          { id: "mem-1", name: "Jordan", role: "member" },
-          { id: "mem-2", name: "Riley", role: "member" },
-        ]
+  const membersWithRoles = (() => {
+    if (memberPreview.length > 0) return memberPreview
+    const roster: Array<{ id: string; name: string; role?: string; photo?: string }> = []
+    const creator = (community as { createdBy?: string }).createdBy
+    if (creator) {
+      roster.push({
+        id: creator,
+        name: creator === "current-user" ? "You" : creator,
+        role: "owner",
+      })
+    }
+    const members = Array.isArray((community as { members?: string[] }).members)
+      ? ((community as { members?: string[] }).members as string[])
+      : []
+    for (const m of members) {
+      if (roster.some((r) => r.id === m)) continue
+      roster.push({
+        id: m,
+        name: m === "current-user" ? "You" : m.charAt(0).toUpperCase() + m.slice(1),
+        role: community.role && m === "current-user" ? community.role : "member",
+      })
+    }
+    if (community.isJoined && !roster.some((r) => r.id === "current-user")) {
+      roster.unshift({
+        id: "current-user",
+        name: "You",
+        role: community.role || "member",
+      })
+    }
+    return roster
+  })()
 
   const requestJoin = () => {
     if (!community.isJoined) {

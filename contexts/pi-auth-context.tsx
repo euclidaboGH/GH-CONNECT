@@ -8,6 +8,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { PI_NETWORK_CONFIG } from "@/lib/system-config";
+import { IdentityService } from "@/lib/identity/identity-service";
 import { buildPiSdk, createSdk } from "@/lib/pi";
 import { createLocalSdkLite, isLikelyAppStudioPreview } from "@/lib/local-pi-sdk";
 import type {
@@ -21,20 +22,9 @@ const COMMUNICATION_REQUEST_TYPE = '@pi:app:sdk:communication_information_reques
 function isInIframe(): boolean {
   try {
     return window.self !== window.top;
-  } catch (error) {
-    // Cross-origin access may throw when in an iframe
-    if (
-      error instanceof DOMException &&
-      (error.name === 'SecurityError' || error.code === DOMException.SECURITY_ERR || error.code === 18)
-    ) {
-      return true;
-    }
-    // Firefox may throw generic Permission denied errors
-    if (error instanceof Error && /Permission denied/i.test(error.message)) {
-      return true;
-    }
-
-    throw error;
+  } catch {
+    // Cross-origin / Permission denied — treat as iframe, never crash auth
+    return true;
   }
 }
 
@@ -244,6 +234,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(true);
         setProducts([]);
         setRestoredPurchases([]);
+        IdentityService.setFromPi({
+          uid: parentCredentials.appId || null,
+          accessToken: parentCredentials.accessToken,
+          username: null,
+        });
         return;
       }
 
@@ -278,12 +273,26 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           if (!success) {
             throw new Error("Login failed. Please try again.");
           }
+          const piUser = pi.auth.getUser?.() || null;
           sdkInstance = createSdk(sdkLite, pi);
+          IdentityService.setFromPi({
+            uid: piUser?.uid || null,
+            username: piUser?.username || null,
+            displayName: piUser?.username || null,
+          });
         } catch (loginErr) {
           console.warn("[PiAuth] Hybrid login failed, using SDKLite only:", loginErr);
           const ok = await sdkLite.login();
           if (!ok) throw loginErr instanceof Error ? loginErr : new Error("Login failed");
           sdkInstance = sdkLite;
+          // Best-effort: window.Pi current user
+          try {
+            const wPi = (window as unknown as { Pi?: { getUser?: () => { uid?: string; username?: string } | null } }).Pi;
+            const u = wPi?.getUser?.() || null;
+            if (u?.uid) {
+              IdentityService.setFromPi({ uid: u.uid, username: u.username || null });
+            }
+          } catch { /* */ }
         }
 
         setSdk(sdkInstance);
@@ -310,6 +319,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           setIsAuthenticated(true);
           setProducts([]);
           setRestoredPurchases([]);
+          IdentityService.setFromPi({ uid: null, username: "preview" });
+          IdentityService.setAuthState("authenticated");
           console.info(
             "[PiAuth] Local auth fallback active — remote SDKLite unavailable. Onboarding will use local storage."
           );

@@ -1,2 +1,3 @@
-/** Structural export — implementation remains in screens-complete for safe incremental extraction. */
-export { MatchScreen } from "./screens-complete"
+/** Matches entry — mutual interest only. */
+export { MatchScreen } from "./match-screen"
+export { MatchScreen as MatchesScreen } from "./match-screen"

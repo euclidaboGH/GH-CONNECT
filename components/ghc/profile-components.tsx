@@ -7,6 +7,8 @@ import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { EnhancedPostCard } from "./enhanced-post-card"
 import { LocationPicker } from "./location-picker"
+import { GhIdentityQr } from "./gh-identity-qr"
+import { getOrCreateGreenHavenId } from "@/lib/domains/greenhaven-id"
 import { parseLegacyLocation, legacyCityCountry, type StructuredLocation, type LocationPrivacyLevel } from "@/lib/geography"
 
 // Calculate profile completion percentage from real fields only
@@ -993,16 +995,32 @@ export function SavedPostsSection({ savedCount = 0, onViewSaved }: { savedCount?
   )
 }
 
-// Profile QR Code Share
-export function ProfileQRCode({ profileUrl = "" }: { profileUrl?: string }) {
+// Profile QR — identity-only GreenHaven ID (production qrcode package)
+export function ProfileQRCode({
+  profileUrl = "",
+  greenHavenId,
+  userId = "current-user",
+}: {
+  profileUrl?: string
+  greenHavenId?: string
+  userId?: string
+}) {
+  const id = greenHavenId || getOrCreateGreenHavenId(userId)
   return (
-    <div className="p-6 bg-gray-50 rounded-lg text-center">
-      <p className="text-sm font-semibold text-gray-900 mb-3">Share via QR Code</p>
-      {/* Placeholder for QR code - in production would use qrcode library */}
-      <div className="w-32 h-32 bg-white border-2 border-gray-300 rounded-lg mx-auto flex items-center justify-center">
-        <span className="text-4xl">📱</span>
+    <div className="rounded-2xl bg-muted/40 p-6 text-center">
+      <p className="mb-3 text-sm font-semibold text-foreground">Share GreenHaven ID</p>
+      <div className="mx-auto flex justify-center">
+        <GhIdentityQr greenHavenId={id} size={160} alt={`QR for ${id}`} />
       </div>
-      <p className="text-xs text-gray-500 mt-2">Scan to view profile</p>
+      <p className="mt-2 font-mono text-xs font-bold tracking-wider text-emerald-800 dark:text-emerald-300">
+        {id}
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Identity only · no balance, tokens, or private data
+      </p>
+      {profileUrl ? (
+        <p className="mt-1 truncate text-[10px] text-muted-foreground/80">{profileUrl}</p>
+      ) : null}
     </div>
   )
 }

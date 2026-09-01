@@ -131,7 +131,7 @@ function UserCardInner({
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [liked, setLiked] = useState(false)
-  const [compatOpen, setCompatOpen] = useState(false)
+  const [compatOpen, setCompatOpen] = useState(true)
 
   const sameCity = Boolean(
     userLocation &&
@@ -245,7 +245,7 @@ function UserCardInner({
         </button>
         {compatOpen && (
           <div className="rounded-2xl border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">Why this suggestion</p>
+            <p className="font-semibold text-foreground">Why you're seeing this person</p>
             <ul className="mt-1 list-inside list-disc space-y-0.5">
               {mutualInterestNames.length > 0 ? (
                 <li>Shared interests: {mutualInterestNames.slice(0, 4).join(", ")}</li>
@@ -264,7 +264,7 @@ function UserCardInner({
 
         {(professionLine || professionalMode) ? (
           <p className="truncate text-[12px] font-semibold text-emerald-700 dark:text-emerald-400">
-            {[professionLine || (professionalMode ? "Professional" : null), professionalMode ? "Open to network" : null]
+            {[professionLine || (professionalMode ? "Professional" : null), professionalMode ? "Open to connect" : null]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -440,7 +440,7 @@ export function DiscoverListRow({
       ? (candidate as { occupation?: string }).occupation
       : (Array.isArray(candidate.interests) && candidate.interests[0]) ||
         candidate.location ||
-        "On GH Connect"
+        "On GreenHaven"
   const tagline =
     typeof candidate.bio === "string" && candidate.bio.trim()
       ? candidate.bio.trim()

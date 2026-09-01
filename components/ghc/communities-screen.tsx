@@ -1,3 +1,5 @@
+import { IdentityService } from "@/lib/identity/identity-service"
+import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/domains/community-persistence"
 "use client"
 
 /**
@@ -15,7 +17,7 @@ import {
   Sparkles,
   MapPin,
 } from "lucide-react"
-import { useGHC } from "@/contexts/ghc-context"
+import { useGHCMessaging } from "@/contexts/ghc-context"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { GroupCard } from "./group-card"
@@ -237,7 +239,7 @@ function isCommunityConv(c: {
 }
 
 export function CommunitiesScreen() {
-  const ctx = useGHC() as any
+  const ctx = useGHCMessaging() as any as any
   const {
     conversations: conversationsRaw,
     profile,
@@ -258,10 +260,57 @@ export function CommunitiesScreen() {
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
   const [hubKey, setHubKey] = useState(0)
-  const [localJoined, setLocalJoined] = useState<string[]>([])
+  const [localJoined, setLocalJoined] = useState<string[]>(() => {
+    if (typeof window === "undefined") return []
+    try {
+      const raw = window.localStorage.getItem("ghc.community.joinedIds")
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as string[]
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ghc.community.joinedIds", JSON.stringify(localJoined))
+    } catch {
+      /* */
+    }
+  }, [localJoined])
+
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = String((e as CustomEvent).detail?.groupId || (e as CustomEvent).detail?.id || "").trim()
+      if (!id) return
+      setSelectedCommunityId(id)
+      setDirectory("my")
+    }
+    window.addEventListener("ghc:open-community", onOpen as EventListener)
+    return () => window.removeEventListener("ghc:open-community", onOpen as EventListener)
+  }, [])
   const [localBoard, setLocalBoard] = useState<
     Record<string, NonNullable<CommunityRow["boardPosts"]>>
-  >({})
+  >(() => {
+    if (typeof window === "undefined") return {}
+    try {
+      const raw = window.localStorage.getItem("ghc.community.boardPosts")
+      if (!raw) return {}
+      const parsed = JSON.parse(raw) as Record<string, NonNullable<CommunityRow["boardPosts"]>>
+      return parsed && typeof parsed === "object" ? parsed : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ghc.community.boardPosts", JSON.stringify(localBoard))
+    } catch {
+      /* quota */
+    }
+  }, [localBoard])
 
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } =
     useScrollHeader({ threshold: 48 })
@@ -290,14 +339,22 @@ export function CommunitiesScreen() {
   }, [conversations])
 
   const communityGroups = useMemo(() => {
-    const seen = new Set(fromState.map((c) => c.id))
-    const seedOnly = seeds.filter((s) => !seen.has(s.id))
-    return [...fromState, ...seedOnly]
+    const persisted = loadPersistedCommunities()
+    const map = new Map<string, CommunityRow>()
+    for (const c of seeds) map.set(c.id, c as CommunityRow)
+    for (const c of persisted) {
+      if (isCommunityConversationRow(c as any)) map.set(c.id, c as unknown as CommunityRow)
+    }
+    for (const c of fromState) map.set(c.id, c)
+    return Array.from(map.values())
   }, [fromState, seeds])
 
   const isJoined = useCallback(
     (c: CommunityRow) => {
-      if (c.members?.includes("current-user") || c.createdBy === "current-user") return true
+      const me = IdentityService.getCurrentUserId()
+      const members = c.members || []
+      if (members.includes(me) || members.includes("current-user")) return true
+      if (c.createdBy === me || c.createdBy === "current-user") return true
       if (localJoined.includes(c.id)) return true
       return false
     },
@@ -469,8 +526,14 @@ export function CommunitiesScreen() {
               addToast("Join this community to use Chat", "info")
               return
             }
-            setTab?.("messages")
-            addToast("Community chat is in Messages", "info")
+            // Unmount heavy hub before switching tabs — reduces freeze risk
+            setSelectedCommunityId(null)
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
+            } catch {
+              setTab?.("messages")
+            }
+            addToast("Opening community chat in Messages", "info")
           }}
           onPost={(body: string, kind?: "text" | "question" | "resource") =>
             handleBoardPost(selected.id, body, kind)
@@ -669,8 +732,39 @@ export function CommunitiesScreen() {
           communityGroups.every((c) => String(c.id).startsWith("demo-community-")) &&
           fromState.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-              Sample communities for preview — including local chapters. Create your own anytime.
+              Sample communities for preview — including local chapters. Create your own GreenHaven space anytime.
             </p>
+          ) : null}
+
+          {visibleGroups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
+              <p className="text-[14px] font-bold text-foreground">
+                {directory === "my" ? "No communities yet" : "No communities match"}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {directory === "my"
+                  ? "Join a space from Discover, or create one for your city or interest."
+                  : "Try another search or category."}
+              </p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {directory === "my" ? (
+                  <button
+                    type="button"
+                    onClick={() => setDirectory("discover")}
+                    className="rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                  >
+                    Discover communities
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
+                >
+                  Create community
+                </button>
+              </div>
+            </div>
           ) : null}
 
           {visibleGroups.length > 0 ? (

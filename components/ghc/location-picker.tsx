@@ -186,13 +186,17 @@ export function LocationPicker({
                   })
                 }
               >
-                <option value="">Optional</option>
+                <option value="">{admin2List.length ? "Select LGA / district" : "Optional"}</option>
                 {admin2List.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
                 ))}
+                <option value="custom-lga">My LGA is not listed…</option>
               </select>
+              <p className={variant === "dark" ? "mt-1 text-[10px] text-white/40" : "mt-1 text-[10px] text-stone-400"}>
+                All listed areas can be selected. If yours is missing, pick any nearby LGA and type your exact town below.
+              </p>
             </div>
           )}
 
@@ -204,10 +208,20 @@ export function LocationPicker({
             <select
               id={`${idPrefix}-locality`}
               className={field}
-              value={localityId}
+              value={localityId === "custom" ? "custom" : localityId}
               disabled={!admin1Id}
               onChange={(e) => {
                 const id = e.target.value
+                if (id === "custom") {
+                  emit({
+                    countryId,
+                    admin1Id,
+                    admin2Id,
+                    localityId: "custom",
+                    localityName: value?.localityName && localityId === "custom" ? value.localityName : "",
+                  })
+                  return
+                }
                 const name = localityList.find((l) => l.id === id)?.name
                 emit({
                   countryId,
@@ -224,7 +238,26 @@ export function LocationPicker({
                   {l.name}
                 </option>
               ))}
+              <option value="custom">My city / town is not listed…</option>
             </select>
+            {(localityId === "custom" || (!localityId && requireLocality && admin1Id)) && (
+              <input
+                className={`${field} mt-2`}
+                placeholder="Type your city or town"
+                value={localityId === "custom" ? (value?.localityName || "") : ""}
+                onChange={(e) => {
+                  const name = e.target.value
+                  emit({
+                    countryId,
+                    admin1Id,
+                    admin2Id,
+                    localityId: "custom",
+                    localityName: name,
+                  })
+                }}
+                aria-label="Custom city or town"
+              />
+            )}
           </div>
 
           {country.labels.sublocality && (

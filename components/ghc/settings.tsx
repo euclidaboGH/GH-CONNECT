@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react"
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, type ReactNode } from "react"
 import { useGHC } from "@/contexts/ghc-context"
 import { LANGUAGES, SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
 import { compressForTheme } from "@/lib/media/compress-image"
@@ -26,10 +26,32 @@ import {
   User,
   Ban,
 } from "lucide-react"
-import { PremiumWalletScreen } from "./premium-wallet-screen"
-import { PremiumMembershipScreen } from "./premium-membership-screen"
-import { RewardsCentreScreen } from "./rewards-centre-screen"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
+
+const PremiumWalletScreen = lazy(() =>
+  import("../../features/wallet/wallet-screen").then((m) => ({
+    default: m.PremiumWalletScreen || m.default,
+  }))
+)
+const PremiumMembershipScreen = lazy(() =>
+  import("./premium-membership-screen").then((m) => ({
+    default: m.PremiumMembershipScreen || m.default,
+  }))
+)
+const RewardsCentreScreen = lazy(() =>
+  import("./rewards-centre-screen").then((m) => ({
+    default: m.RewardsCentreScreen || m.default,
+  }))
+)
+
+function SectionFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
+      Loading {label}…
+    </div>
+  )
+}
+
 
 export type SettingsSection =
   | "main"
@@ -233,20 +255,26 @@ export function SettingsScreen({
   }
 
   if (section === "wallet") {
-    return <PremiumWalletScreen onBack={goBackOneLevel} />
+    return <Suspense fallback={<SectionFallback label="Wallet" />}>
+        <PremiumWalletScreen onBack={goBackOneLevel} />
+      </Suspense>
   }
 
   if (section === "rewards") {
     return (
-      <RewardsCentreScreen
-        onBack={goBackOneLevel}
-        onOpenWallet={() => goToSection("wallet")}
-      />
+      <Suspense fallback={<SectionFallback label="Rewards" />}>
+        <RewardsCentreScreen
+          onBack={goBackOneLevel}
+          onOpenWallet={() => goToSection("wallet")}
+        />
+      </Suspense>
     )
   }
 
   if (section === "membership") {
-    return <PremiumMembershipScreen onBack={goBackOneLevel} />
+    return <Suspense fallback={<SectionFallback label="Membership" />}>
+        <PremiumMembershipScreen onBack={goBackOneLevel} />
+      </Suspense>
   }
 
   if (section === "about") {
@@ -256,7 +284,7 @@ export function SettingsScreen({
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">About GH Connect</h2>
+          <h2 className="text-[18px] font-bold">About GreenHaven</h2>
           <p className="text-[12px] text-muted-foreground">Version 0.36</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
@@ -717,7 +745,7 @@ export function SettingsScreen({
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-3">
           <section className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              These control in-app and push categories. Your device must still allow notifications for GH Connect. Delivery is best-effort when offline.
+              These control in-app and push categories. Your device must still allow notifications for GreenHaven. Delivery is best-effort when offline.
             </p>
           </section>
           <section className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
@@ -1016,7 +1044,7 @@ export function SettingsScreen({
           keywords: "help support contact whatsapp email",
         },
         {
-          title: "About GH Connect",
+          title: "About GreenHaven",
           subtitle: "Version 0.38",
           icon: <Info size={20} strokeWidth={1.75} />,
           action: () => goToSection("about"),
@@ -1135,7 +1163,7 @@ export function SettingsScreen({
               </button>
             ) : (
               <div className="rounded-2xl border border-destructive/40 bg-card p-4">
-                <p className="text-[15px] font-semibold text-foreground">Log out of GH Connect?</p>
+                <p className="text-[15px] font-semibold text-foreground">Log out of GreenHaven?</p>
                 <p className="mt-1 text-[12px] text-muted-foreground">You can sign back in anytime on this device.</p>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -1164,3 +1192,5 @@ export function SettingsScreen({
     </div>
   )
 }
+
+export default SettingsScreen

@@ -11,6 +11,11 @@ export type NotificationType =
   | "story_reply"
   | "share"
   | "group"
+  | "ghc_received"
+  | "ghc_sent"
+  | "reward"
+  | "payment"
+  | "mention"
 
 export interface Notification {
   id: string

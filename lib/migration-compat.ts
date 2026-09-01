@@ -1,5 +1,5 @@
 /**
- * GH Connect — Safe Migration Compatibility Facade
+ * GreenHaven — Safe Migration Compatibility Facade
  *
  * Single import surface for gradual architectural migration.
  * Existing components may keep older import paths; new code should prefer

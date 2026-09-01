@@ -83,6 +83,16 @@ export class ErrorBoundary extends React.Component<
           <p className="text-[11px] text-muted-foreground">
             We kept your account safe. No progress or profile data was removed.
           </p>
+          {this.state.error?.message ? (
+            <details className="mt-1 max-w-sm text-left">
+              <summary className="cursor-pointer text-[11px] font-semibold text-muted-foreground">
+                Technical details
+              </summary>
+              <p className="mt-1 max-h-20 overflow-auto rounded-lg bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                {this.state.error.message}
+              </p>
+            </details>
+          ) : null}
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"

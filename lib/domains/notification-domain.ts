@@ -105,7 +105,11 @@ export function mapEventToNotification(
         title: "New follower",
         message: "Someone started following you",
         icon: "👤",
-        data: p,
+        data: {
+          ...p,
+          open: "discover",
+          deepLink: { tab: "discover", userId: p.followerId || p.fromUserId || p.userId },
+        },
       }
     case "FRIEND_REQUEST_SENT":
       return {
@@ -209,7 +213,11 @@ export function mapEventToNotification(
         title: "Marketplace",
         message: "Your order status was updated",
         icon: "🛍️",
-        data: p,
+        data: {
+          ...p,
+          open: "discover",
+          deepLink: { open: "discover", tab: "discover" },
+        },
       }
     case "WALLET_TRANSFER_COMPLETED": {
       const amount = p.amount != null ? Number(p.amount) : null
@@ -221,31 +229,33 @@ export function mapEventToNotification(
       if (role === "received") {
         return {
           category: "wallet",
-          type: "system",
+          type: "ghc_received",
           title: "GHC received",
           message: `You received ${amtLabel} GHC from ${name}.`,
           icon: "🪙",
           data: {
             ...p,
-            open: "transaction",
+            open: "wallet",
             referenceId: ref,
             dedupeKey: ref ? `GHC_RECEIVED:${ref}` : undefined,
             ghcEvent: "GHC_RECEIVED",
+            deepLink: { open: "wallet", tab: "wallet", section: "transaction", transactionId: ref },
           },
         }
       }
       return {
         category: "wallet",
-        type: "system",
+        type: "ghc_sent",
         title: "GHC sent",
         message: `${amtLabel} GHC sent to ${name}.`,
         icon: "🪙",
         data: {
           ...p,
-          open: "transaction",
+          open: "wallet",
           referenceId: ref,
           dedupeKey: ref ? `GHC_SENT:${ref}` : undefined,
           ghcEvent: "GHC_SENT",
+          deepLink: { open: "wallet", tab: "wallet", section: "transaction", transactionId: ref },
         },
       }
     }
@@ -335,21 +345,29 @@ export function mapEventToNotification(
     case "REWARD_EARNED":
       return {
         category: "rewards",
-        type: "system",
+        type: "reward",
         title: "Reward earned",
-        message: "You earned a reward",
+        message: p.message || p.title || "You earned a reward — claim it in Rewards",
         icon: "🎁",
-        data: p,
+        data: {
+          ...p,
+          open: "rewards",
+          deepLink: { open: "rewards", tab: "rewards", id: p.rewardId || p.holdId },
+        },
       }
     case "PREMIUM_ACTIVATED":
     case "PREMIUM_UPDATED":
       return {
         category: "premium",
         type: "system",
-        title: "Premium",
-        message: "Premium membership updated",
+        title: "Membership updated",
+        message: p.message || "Your membership benefits were updated",
         icon: "⭐",
-        data: p,
+        data: {
+          ...p,
+          open: "membership",
+          deepLink: { open: "membership", tab: "membership" },
+        },
       }
     case "REPORT_CREATED":
       return {
@@ -358,7 +376,11 @@ export function mapEventToNotification(
         title: "Report received",
         message: "Thanks — we received your report",
         icon: "🛡️",
-        data: p,
+        data: {
+          ...p,
+          open: "feed",
+          deepLink: { open: "feed", tab: "home" },
+        },
       }
     default:
       return null

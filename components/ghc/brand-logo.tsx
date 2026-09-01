@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Official GH Connect logo — single source of truth.
+ * Official GreenHaven logo — single source of truth.
  * Asset is a transparent PNG (shield + wordmark). Never place on a dark plate
  * or solid color square; let the page background show through.
  */
@@ -34,7 +34,7 @@ export function BrandLogo({
   return (
     <img
       src="/gh-connect-logo.png"
-      alt="GH Connect"
+      alt="GreenHaven"
       className={`${SIZES[size]} object-contain object-center bg-transparent ${className}`}
       width={size === "hero" ? 216 : size === "bar" ? 120 : size === "header" ? 104 : size === "icon" ? 44 : 92}
       height={size === "hero" ? 252 : size === "bar" ? 44 : size === "header" ? 40 : size === "icon" ? 36 : 32}

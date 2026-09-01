@@ -5,7 +5,7 @@
  * Does not expose private wallet balances. Trust ≠ GHC balance.
  */
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { Award, BadgeCheck, Briefcase, ChevronDown, ChevronUp, Shield, Sparkles, Star, Store } from "lucide-react"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 
@@ -39,6 +39,10 @@ export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boole
           s?.verification?.isVerified?.("business") ||
             s?.verification?.isVerified?.("organization")
         ),
+        isCommunityLeader: Boolean(
+          s?.verification?.isVerified?.("community_leader") ||
+            (s?.community as { isLeader?: () => boolean } | undefined)?.isLeader?.()
+        ),
       }
     } catch {
       return {
@@ -56,11 +60,12 @@ export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boole
         },
         isCreator: false,
         isBusiness: false,
+        isCommunityLeader: false,
       }
     }
   }, [profileVerified])
 
-  const primaryBadges: { key: string; label: string; className: string; icon: React.ReactNode }[] = []
+  const primaryBadges: { key: string; label: string; className: string; icon: ReactNode }[] = []
   if (identity.verified) {
     primaryBadges.push({
       key: "verified",
@@ -102,6 +107,14 @@ export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boole
       label: "Seller",
       className: "bg-emerald-50 text-emerald-800 border-emerald-100",
       icon: <Store size={12} />,
+    })
+  }
+  if (identity.isCommunityLeader) {
+    primaryBadges.push({
+      key: "leader",
+      label: "Community leader",
+      className: "bg-teal-50 text-teal-800 border-teal-100",
+      icon: <Award size={12} />,
     })
   }
 
@@ -237,6 +250,64 @@ export function ProfileInterestChips({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+
+/** Clean public identity hierarchy — never shows GHC balance */
+export function ProfileIdentityBlock({
+  displayName,
+  username,
+  greenHavenId,
+  locationLine,
+  profession,
+  ageLabel,
+  bio,
+  verified,
+  children,
+}: {
+  displayName: string
+  username: string
+  greenHavenId: string
+  locationLine: string
+  profession?: string
+  ageLabel?: string
+  bio?: string
+  verified?: boolean
+  children?: ReactNode
+}) {
+  const handle = username.startsWith("@") ? username : `@${username}`
+  return (
+    <div className="min-w-0 flex-1 pb-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="truncate text-[22px] font-bold leading-tight tracking-tight text-foreground">
+          {displayName}
+        </h1>
+        {verified ? (
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800">
+            <BadgeCheck size={12} aria-hidden /> Verified
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">{handle}</p>
+      <p className="mt-0.5 font-mono text-[12px] tracking-wide text-emerald-700/90 dark:text-emerald-400/90">
+        {greenHavenId}
+      </p>
+      {(ageLabel || profession) && (
+        <p className="mt-1 text-sm font-semibold text-foreground/90">
+          {ageLabel || null}
+          {ageLabel && profession ? (
+            <span className="font-medium text-muted-foreground"> · {profession}</span>
+          ) : profession ? (
+            <span className="font-medium text-muted-foreground">{profession}</span>
+          ) : null}
+        </p>
+      )}
+      {locationLine ? (
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{locationLine}</p>
+      ) : null}
+      {children}
     </div>
   )
 }

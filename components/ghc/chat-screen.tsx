@@ -1,8 +1,9 @@
-/** @deprecated Prefer MessageScreen from screens-complete / messages-screen — kept for compatibility. */
 "use client"
 
+/** @deprecated Prefer MessageScreen from screens-complete / messages-screen — kept for compatibility. */
+
 import { useState, useMemo, useCallback } from "react"
-import { useGHC } from "@/contexts/ghc-context"
+import { useGHCMessaging, useGHCShell } from "@/contexts/ghc-context"
 import { Plus, Sparkles, Users, Flame } from "lucide-react"
 import { GroupCard } from "./group-card"
 import { FeaturedGroupCard } from "./featured-group-card"
@@ -54,7 +55,8 @@ const getSuggestedGroups = () => {
 }
 
 export function ChatScreen() {
-  const { addToast, createGroup } = useGHC()
+  const { addToast, createGroup } = useGHCMessaging()
+  const { setTab } = useGHCShell()
   const [searchQuery, setSearchQuery] = useState("")
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [showCreateGroup, setShowCreateGroup] = useState(false)

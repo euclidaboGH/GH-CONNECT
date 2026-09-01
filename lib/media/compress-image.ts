@@ -1,5 +1,5 @@
 /**
- * Professional image compression for GH Connect.
+ * Professional image compression for GreenHaven.
  * Accepts any reasonable image size/type; outputs a compact data URL
  * sized for the intended use (avatar, feed, theme, etc.).
  */

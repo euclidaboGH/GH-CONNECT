@@ -7,6 +7,7 @@ import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { ActionIconButton } from "./action-controls"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
+import { SpecialPostBody, detectSpecialPost } from "./feed-special-blocks"
 import { resolveAvatarUrl } from "@/lib/avatar"
 import { isOwnAuthor } from "@/lib/ownership"
 import { ImageSkeleton } from "./skeleton-loaders"
@@ -221,9 +222,11 @@ function EnhancedPostCardInner({
                 const hasVideo = Boolean(post.video)
                 const realImages = (post.images || []).filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))
                 const hasImage = realImages.length > 0
-                const isPoll = Boolean((post as Post & { poll?: unknown }).poll)
+                const special = detectSpecialPost(post.content)
+                const isPoll = Boolean((post as Post & { poll?: unknown }).poll) || special === "poll"
+                const isChallenge = special === "challenge"
                 const isListing = Boolean((post as Post & { listingId?: string }).listingId)
-                const label = isListing ? "Listing" : isPoll ? "Poll" : hasVideo ? "Video" : hasImage ? "Photo" : null
+                const label = isListing ? "Listing" : isPoll ? "Poll" : isChallenge ? "Challenge" : hasVideo ? "Video" : hasImage ? "Photo" : null
                 if (!label) return null
                 return (
                   <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -328,52 +331,55 @@ function EnhancedPostCardInner({
 
       {/* Content with rich formatting */}
       <div className="p-4">
-        <div
-          className={`mb-1 break-words text-[15px] sm:text-base leading-relaxed text-foreground ${
-            !contentExpanded && (post.content?.length || 0) > 220 ? "line-clamp-5" : ""
-          }`}
-        >
-          {contentParts.map((part, idx) => {
-            if (typeof part === "string") {
-              return <span key={idx}>{part}</span>
-            }
-            if (part.type === "hashtag") {
-              return (
-                <button
-                  key={idx}
-                  className="text-blue-600 hover:text-blue-700 hover:underline"
-                  onClick={() => {
-                    // Navigate to hashtag feed
-                  }}
-                >
-                  {part.value}
-                </button>
-              )
-            }
-            if (part.type === "mention") {
-              return (
-                <button
-                  key={idx}
-                  className="text-blue-600 hover:text-blue-700 hover:underline"
-                  onClick={() => {
-                    // Navigate to user profile
-                  }}
-                >
-                  {part.value}
-                </button>
-              )
-            }
-            return null
-          })}
-        </div>
-        {(post.content?.length || 0) > 220 && (
-          <button
-            type="button"
-            onClick={() => setContentExpanded((v) => !v)}
-            className="mb-3 text-[13px] font-bold text-emerald-700 hover:text-emerald-800"
-          >
-            {contentExpanded ? "Show less" : "more"}
-          </button>
+        {detectSpecialPost(post.content) ? (
+          <SpecialPostBody content={post.content || ""} />
+        ) : (
+          <>
+            <div
+              className={`mb-1 break-words text-[15px] sm:text-base leading-relaxed text-foreground ${
+                !contentExpanded && (post.content?.length || 0) > 220 ? "line-clamp-5" : ""
+              }`}
+            >
+              {contentParts.map((part, idx) => {
+                if (typeof part === "string") {
+                  return <span key={idx}>{part}</span>
+                }
+                if (part.type === "hashtag") {
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="text-emerald-700 hover:underline dark:text-emerald-400"
+                    >
+                      {part.value}
+                    </button>
+                  )
+                }
+                if (part.type === "mention") {
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="text-emerald-700 hover:underline dark:text-emerald-400"
+                      onClick={() => onOpenProfile?.(String(part.value || "").replace(/^@/, ""))}
+                    >
+                      {part.value}
+                    </button>
+                  )
+                }
+                return null
+              })}
+            </div>
+            {(post.content?.length || 0) > 220 && (
+              <button
+                type="button"
+                onClick={() => setContentExpanded((v) => !v)}
+                className="mb-3 text-[13px] font-bold text-emerald-700 hover:text-emerald-800"
+              >
+                {contentExpanded ? "Show less" : "more"}
+              </button>
+            )}
+          </>
         )}
 
         {/* Link preview */}

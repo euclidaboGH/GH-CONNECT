@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Canonical GH Connect contextual menu / action sheet.
+ * Canonical GreenHaven contextual menu / action sheet.
  * Only ONE sheet open app-wide. Portal to document.body.
  * Always above bottom nav. Close: backdrop, Escape, Back, scroll, tab change.
  */

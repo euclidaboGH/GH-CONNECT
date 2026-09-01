@@ -113,7 +113,7 @@ export function ShareSheet({
         if (result.ok && result.link && typeof navigator !== "undefined") {
           try {
             if (navigator.share) {
-              await navigator.share({ title: "GH Connect", text: "Check this post", url: result.link })
+              await navigator.share({ title: "GreenHaven", text: "Check this post", url: result.link })
             } else if (navigator.clipboard) {
               await navigator.clipboard.writeText(result.link)
             }

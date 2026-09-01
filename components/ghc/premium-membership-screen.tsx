@@ -28,6 +28,8 @@ import {
   type MembershipStatus,
 } from "@/lib/domains/membership-domain"
 import { useGHC } from "@/contexts/ghc-context"
+import { isPiPaymentsAvailable } from "@/lib/gh-pay"
+import { runGhPayMembership } from "@/components/ghc/gh-pay-panel"
 
 /** Human labels + optional product deep-link (tab or settings section) */
 const ENTITLEMENT_META: Partial<
@@ -230,9 +232,49 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHC()
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly")
   const [busy, setBusy] = useState<MembershipTierId | null>(null)
+
   const [confirmTier, setConfirmTier] = useState<MembershipTierId | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
   const [tick, setTick] = useState(0)
+
+  // Prefer server entitlement over local-only cache
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const headers: Record<string, string> = {}
+        try {
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/status", { headers })
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (data?.ok && data?.entitlement) {
+          const e = data.entitlement
+          const mem = getBoundDomainServices()?.membership as {
+            activate?: (i: unknown) => Promise<unknown>
+          } | null
+          // Refresh local cache from server truth
+          if (e.tier === "vip" || e.tier === "vvip") {
+            await mem?.activate?.({
+              tier: e.tier,
+              billingPeriod: e.billingPeriod || "monthly",
+              source: e.source || "external",
+              purchaseTxId: e.purchaseRef,
+              durationMs:
+                e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
+            })
+          }
+          setTick((x) => x + 1)
+        }
+      } catch { /* offline */ }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [faqOpen, setFaqOpen] = useState<string | null>(null)
   const [view, setView] = useState<"cards" | "compare">("cards")
 
@@ -247,40 +289,40 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const currentTier = (status?.tier || "free") as MembershipTierId
 
-  const purchase = async (tier: MembershipTierId) => {
+  const purchaseWithPiCoin = async (tier: MembershipTierId) => {
     if (tier === "free" || tier === currentTier) return
     setBusy(tier)
     try {
-      const m = getBoundDomainServices()?.membership
-      if (!m?.purchaseWithGhc) {
+      const ok = await runGhPayMembership(tier as "vip" | "vvip", period, addToast)
+      if (ok) {
+        setConfirmTier(null)
+        setTick((t) => t + 1)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const purchaseWithGhcCoin = async (tier: MembershipTierId) => {
+    if (tier === "free" || tier === currentTier) return
+    setBusy(tier)
+    try {
+      const mem = getBoundDomainServices()?.membership
+      if (!mem?.purchaseWithGhc) {
         addToast("Membership purchase unavailable offline", "error")
         return
       }
-      const result = await m.purchaseWithGhc(tier, period)
+      const result = await mem.purchaseWithGhc(tier, period)
       if (result.ok) {
         setConfirmTier(null)
         setTick((t) => t + 1)
-        // Prefer fresh status from domain
         let next: MembershipStatus | null = null
         try {
           next = getBoundDomainServices()?.membership?.getStatus?.() || null
         } catch {
           next = null
         }
-        if (!next) {
-          const now = Date.now()
-          const ms = period === "monthly" ? 30 * 86400000 : 365 * 86400000
-          next = {
-            userId: "current-user",
-            tier,
-            active: true,
-            startedAt: now,
-            expiresAt: now + ms,
-            billingPeriod: period,
-            source: "ghc",
-          }
-        }
-        setSuccessStatus(next)
+        if (next) setSuccessStatus(next)
         addToast(`${MEMBERSHIP_PLANS[tier].label} activated`, "success")
       } else {
         addToast(result.error || "Purchase failed", "error")
@@ -290,6 +332,15 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setBusy(null)
     }
+  }
+
+  const purchase = async (tier: MembershipTierId, method: "pi" | "ghc" = "ghc") => {
+    if (tier === "free" || tier === currentTier) return
+    if (method === "pi") {
+      await purchaseWithPiCoin(tier)
+      return
+    }
+    await purchaseWithGhcCoin(tier)
   }
 
   // Close success sheet on back navigation cleanup
@@ -379,17 +430,104 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {/* Current paid plan snapshot */}
-        {currentTier !== "free" && status?.active && (
-          <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 px-3 py-3 dark:border-emerald-800 dark:bg-emerald-950/20">
-            <p className="text-sm font-bold text-foreground">
-              {MEMBERSHIP_PLANS[currentTier].label} · {formatUntil(status.expiresAt)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Your entitlements are active. Tap any benefit below to open the related feature.
-            </p>
+        {/* Current plan — product-tier presentation */}
+        {status?.active && (
+          <div
+            className={`mb-3 overflow-hidden rounded-2xl border shadow-sm ${
+              currentTier === "vvip"
+                ? "border-amber-300/80 bg-gradient-to-br from-amber-50 via-card to-violet-50 dark:border-amber-800 dark:from-amber-950/40"
+                : currentTier === "vip"
+                  ? "border-violet-300/80 bg-gradient-to-br from-violet-50 via-card to-emerald-50 dark:border-violet-800 dark:from-violet-950/40"
+                  : "border-border bg-card"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2 px-4 pt-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  Your membership
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xl font-black text-foreground">
+                  <Crown
+                    size={20}
+                    className={
+                      currentTier === "vvip"
+                        ? "text-amber-600"
+                        : currentTier === "vip"
+                          ? "text-violet-600"
+                          : "text-muted-foreground"
+                    }
+                  />
+                  {MEMBERSHIP_PLANS[currentTier].label}
+                </p>
+                {status?.expiresAt ? (
+                  <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
+                    {status.source === "trial" || (status as { lifecycle?: string }).lifecycle === "trial"
+                      ? `Welcome trial · ends ${formatUntil(status.expiresAt)}`
+                      : `Membership expires ${formatUntil(status.expiresAt)}`}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[12px] text-muted-foreground">Standard access · upgrade anytime</p>
+                )}
+              </div>
+              {currentTier !== "free" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById(`membership-plan-${currentTier}`)
+                    el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                  }}
+                  className="shrink-0 rounded-full bg-foreground px-3.5 py-2 text-[12px] font-bold text-background"
+                >
+                  Renew
+                </button>
+              ) : null}
+            </div>
+            <div className="px-4 pb-4 pt-3">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Your benefits
+              </p>
+              <ul className="space-y-1.5">
+                {(currentTier === "free"
+                  ? [
+                      "Full social access · feed, messages, communities",
+                      "Earn GHC through activity (standard daily cap)",
+                      "GreenHaven ID · QR · profile",
+                      "Upgrade anytime for discovery priority & boosts",
+                    ]
+                  : currentTier === "vip"
+                    ? [
+                        "Higher daily GHC earning limit (1.5×)",
+                        "Enhanced profile visibility in discovery",
+                        "VIP badge on your profile",
+                        "More discovery exposure & advanced filters",
+                        "Post & profile boosts",
+                        "Priority support",
+                      ]
+                    : [
+                        "Highest daily GHC earning limit (2×)",
+                        "Maximum discovery priority",
+                        "VVIP badge & premium profile presentation",
+                        "Advanced matching & analytics",
+                        "Creator / business tools",
+                        "Exclusive experiences & elevated storage",
+                      ]
+                ).map((line) => (
+                  <li key={line} className="flex items-start gap-2 text-[12px] font-medium text-foreground">
+                    <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" strokeWidth={2.5} />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-center text-[10px] font-semibold text-muted-foreground">
+                Free → VIP → VVIP · compare plans below
+              </p>
+            </div>
           </div>
         )}
+
+                <p className="mb-2 px-0.5 text-[12px] font-bold text-foreground">
+          Compare Free → VIP → VVIP
+        </p>
 
         {/* Period — calm, no pressure */}
         <div className="mb-2 flex gap-1 rounded-2xl border border-border bg-card p-1">
@@ -658,7 +796,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               {
                 id: "pay",
                 q: "How do I pay?",
-                a: "When purchase is enabled, upgrades use available GHC from your wallet. External card billing is not implied here.",
+                a: "In the Pi Browser, upgrades prefer Pay with π (User-to-App). Offline Studio can use available GHC from your wallet. Card billing is not used.",
               },
               {
                 id: "cancel",
@@ -717,24 +855,43 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             <p className="mt-2 text-[11px] text-muted-foreground">
               You can stay on Free anytime. No auto-charge of external currency is implied.
             </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmTier(null)}
-                className="flex-1 rounded-2xl border border-border py-2.5 text-sm font-bold text-foreground"
-              >
-                Cancel
-              </button>
+            <p className="mt-3 text-[11px] font-semibold text-muted-foreground">Payment methods</p>
+            <div className="mt-2 flex flex-col gap-2">
+              {isPiPaymentsAvailable() ? (
+                <button
+                  type="button"
+                  disabled={busy === confirmTier}
+                  onClick={() => void purchase(confirmTier, "pi")}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {busy === confirmTier ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Pay with π
+                </button>
+              ) : (
+                <p className="rounded-xl bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
+                  Pay with π is available in the Pi Browser after GH Pay is configured.
+                </p>
+              )}
               <button
                 type="button"
                 disabled={busy === confirmTier}
-                onClick={() => void purchase(confirmTier)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                onClick={() => void purchase(confirmTier, "ghc")}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/40 bg-card py-2.5 text-sm font-bold text-emerald-800 dark:text-emerald-300 disabled:opacity-60"
               >
                 {busy === confirmTier ? <Loader2 size={16} className="animate-spin" /> : null}
-                Confirm with GHC
+                Pay with GHC
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmTier(null)}
+                className="w-full rounded-2xl border border-border py-2.5 text-sm font-bold text-foreground"
+              >
+                Cancel
               </button>
             </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Entitlement is granted by the server after payment is verified — the app never self-assigns VIP/VVIP.
+            </p>
           </div>
         </div>
       )}

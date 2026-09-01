@@ -140,7 +140,14 @@ export { createReputationDomain, tierFromScore, REPUTATION_WEIGHTS } from "./rep
 export type { ReputationDomain, ReputationSnapshot, ReputationTier, ReputationSignalKind } from "./reputation-domain"
 export { createAchievementDomain, ACHIEVEMENT_CATALOG } from "./achievement-domain"
 export type { AchievementDomain, AchievementId, UnlockedAchievement, AchievementDefinition } from "./achievement-domain"
-export { createMembershipDomain, MEMBERSHIP_PLANS, tierFromTrialAnchor, TRIAL_VVIP_MS, TRIAL_VIP_MS } from "./membership-domain"
+export {
+  createMembershipDomain,
+  MEMBERSHIP_PLANS,
+  tierFromTrialAnchor,
+  TRIAL_VVIP_MS,
+  TRIAL_VIP_MS,
+  getMembershipStatus,
+} from "./membership-domain"
 export type { MembershipDomain, MembershipTierId, EntitlementKey, MembershipPlan, MembershipStatus } from "./membership-domain"
 export { createVerificationDomain } from "./verification-domain"
 export type { VerificationDomain, VerificationType, VerificationStatus, VerificationSnapshot } from "./verification-domain"
@@ -259,3 +266,4 @@ export type {
   GhcTransferError,
 } from "./economy-transfer-contract"
 export { mapTransferFailure, toTransferHttpBody } from "./economy-transfer-contract"
+export * from "./gh-account"

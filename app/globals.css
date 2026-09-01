@@ -14,10 +14,10 @@
   --popover-foreground: oklch(0.27 0.01 20);
   
   /* Primary - Vibrant Pink */
-  --primary: #7C3AED;
+  --primary: #059669;
   --primary-foreground: #ffffff;
-  --primary-light: #8B5CF6;
-  --primary-dark: #6D28D9;
+  --primary-light: #10B981;
+  --primary-dark: #047857;
   
   /* Secondary - Cyan/Teal */
   --secondary: oklch(0.6 0.2 200);
@@ -26,17 +26,17 @@
   --secondary-dark: oklch(0.48 0.18 195);
   
   /* States */
-  --muted: #F5F3FF;
+  --muted: #F3F4F6;
   --muted-foreground: #6B7280;
-  --accent: #F5F3FF;
-  --accent-foreground: #7C3AED;
+  --accent: #ECFDF5;
+  --accent-foreground: #047857;
   --destructive: oklch(0.62 0.23 25);
   --destructive-foreground: oklch(0.99 0 0);
   
   /* Borders & Inputs */
   --border: #E5E7EB;
   --input: #F9FAFB;
-  --ring: #7C3AED;
+  --ring: #059669;
   
   /* Success & Info */
   --success: oklch(0.7 0.16 145);
@@ -52,6 +52,15 @@
   
   /* Radius & Spacing */
   --radius: 1rem;
+  --gh-radius-sm: 0.75rem;   /* 12px */
+  --gh-radius-md: 1rem;      /* 16px */
+  --gh-radius-lg: 1.25rem;   /* 20px */
+  --gh-space-1: 0.25rem;     /* 4px */
+  --gh-space-2: 0.5rem;      /* 8px */
+  --gh-space-3: 0.75rem;     /* 12px */
+  --gh-space-4: 1rem;        /* 16px */
+  --gh-space-5: 1.5rem;      /* 24px */
+  --gh-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* Bottom navigation + safe-area clearance (global layout)
@@ -59,10 +68,15 @@
      modest breathing gap — not a second full nav-height pad. When nav auto-hides
      on scroll, --gh-bottom-content-inset can shrink via [data-nav-hidden].
      Full-screen overlays (Settings / Wallet / Membership) use a larger screen inset. */
-  --gh-bottom-nav-height: 3.25rem;
-  /* Reserve space for absolute bottom nav so last list items clear the bar */
-  --gh-bottom-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem);
-  --gh-screen-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
+  --gh-bottom-nav-height: 3.5rem;
+  /* When nav is in document flow, content only needs a small breathing gap + safe-area.
+     Do NOT stack a second full nav-height pad — that creates the empty “shadow band”. */
+  --gh-bottom-content-inset: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  --gh-screen-bottom-inset: calc(1rem + env(safe-area-inset-bottom, 0px));
+  /* Legacy alias for overlays that still sit above a fixed nav */
+  --gh-fixed-nav-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  /* Content column — wider than classic max-w-md on phones */
+  --gh-content-max: 28rem; /* 448px — between md and lg */
   
   /* Sidebar */
   --sidebar: oklch(0.98 0 0);
@@ -139,6 +153,15 @@
   
   /* Radius & Spacing */
   --radius: 1rem;
+  --gh-radius-sm: 0.75rem;   /* 12px */
+  --gh-radius-md: 1rem;      /* 16px */
+  --gh-radius-lg: 1.25rem;   /* 20px */
+  --gh-space-1: 0.25rem;     /* 4px */
+  --gh-space-2: 0.5rem;      /* 8px */
+  --gh-space-3: 0.75rem;     /* 12px */
+  --gh-space-4: 1rem;        /* 16px */
+  --gh-space-5: 1.5rem;      /* 24px */
+  --gh-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   
   /* Sidebar */
@@ -449,7 +472,7 @@ body {
 }
 
 
-/* GH Connect design tokens — spacing & type hierarchy */
+/* GreenHaven design tokens — spacing & type hierarchy */
 .gh-space-y-section > * + * { margin-top: 1rem; }
 .gh-type-title { font-size: 1.125rem; line-height: 1.3; font-weight: 700; color: var(--foreground); }
 .gh-type-body { font-size: 0.875rem; line-height: 1.5; color: var(--foreground); }
@@ -466,4 +489,191 @@ body {
 .gh-card-surface {
   border-radius: 1rem; border: 1px solid var(--border);
   background: var(--card); color: var(--card-foreground);
+}
+
+
+/* Use on every scrollable screen root so content never sits under the fixed nav */
+.gh-content-pad-bottom {
+  padding-bottom: var(--gh-bottom-content-inset) !important;
+}
+.gh-screen-pad-bottom {
+  padding-bottom: var(--gh-screen-bottom-inset) !important;
+}
+
+
+/* ——— GreenHaven design system (standardized surfaces) ——— */
+.gh-app-shell {
+  font-family: var(--gh-font, var(--font-sans));
+}
+
+/* Prefer soft surfaces over outlined admin cards */
+.gh-surface {
+  border-radius: var(--gh-radius-md);
+  background: var(--card);
+}
+.gh-surface-muted {
+  border-radius: var(--gh-radius-md);
+  background: var(--muted);
+}
+.gh-surface-elevated {
+  border-radius: var(--gh-radius-md);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.04);
+}
+.gh-divider {
+  height: 1px;
+  background: var(--border);
+  opacity: 0.7;
+}
+.gh-section-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Buttons — one primary / secondary / destructive language */
+.gh-btn {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.gh-btn:active { transform: scale(0.97); }
+.gh-btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 4px 14px color-mix(in oklab, var(--primary) 28%, transparent);
+}
+.gh-btn-secondary {
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.gh-btn-destructive {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+}
+
+/* Soft list rows (wallet activity, settings) — dividers not boxes */
+.gh-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+}
+.gh-list-row:last-child { border-bottom: none; }
+
+
+/* ——— Unified scroll roots (use on every main overflow-y-auto panel) ——— */
+.gh-scroll-root {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+  padding-bottom: var(--gh-bottom-content-inset);
+}
+
+/* Type scale — 3 levels + meta */
+.gh-type-display {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.gh-type-title {
+  font-size: 1rem;
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.gh-type-body {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+.gh-type-meta {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+/* Soft card — prefer surface over heavy borders */
+.gh-card {
+  border-radius: var(--gh-radius-md);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.04);
+}
+.gh-card-outline {
+  border-radius: var(--gh-radius-md);
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+/* Icon button hit target */
+.gh-icon-btn {
+  display: inline-flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--foreground);
+  transition: background 0.15s;
+}
+.gh-icon-btn:hover { background: var(--muted); }
+.gh-icon-btn:active { transform: scale(0.96); }
+
+/* Slim page header for Discover / secondary tabs */
+.gh-page-header-slim {
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  background: color-mix(in oklab, var(--background) 92%, transparent);
+  padding: max(0.25rem, env(safe-area-inset-top, 0px)) 0.75rem 0.375rem;
+  backdrop-filter: blur(8px);
+}
+
+
+/* Bottom nav — no floating shadow band between content and bar */
+.gh-app-shell > nav[aria-label="Main navigation"] {
+  box-shadow: none !important;
+  background-color: hsl(var(--background) / 0.97);
+}
+.gh-app-shell > nav[aria-label="Main navigation"]::before {
+  display: none !important;
+  content: none !important;
+}
+/* One clear content inset only — applied by .gh-scroll-root */
+.gh-scroll-root {
+  padding-bottom: var(--gh-bottom-content-inset) !important;
+  box-sizing: border-box;
+}
+
+
+/* In-flow bottom nav: main already ends above nav — only light pad on scroll roots */
+.gh-app-shell[data-nav-in-flow="true"] {
+  --gh-bottom-content-inset: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+.gh-app-shell[data-nav-in-flow="true"] > nav.gh-bottom-nav {
+  position: relative;
+  z-index: 40;
+  box-shadow: none;
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  background: var(--background);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }

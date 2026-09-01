@@ -1,2 +1,3 @@
-/** Structural export — implementation remains in screens-complete for safe incremental extraction. */
-export { DiscoveryGridScreen } from "./screens-complete"
+/** Discover entry — real implementation. */
+export { DiscoveryGridScreen } from "./discovery-grid-screen"
+export { DiscoveryGridScreen as FindScreen } from "./discovery-grid-screen"

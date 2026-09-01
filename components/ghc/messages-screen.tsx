@@ -1,2 +1,3 @@
-/** Structural export — implementation remains in screens-complete for safe incremental extraction. */
-export { MessageScreen } from "./screens-complete"
+/** Messages entry. */
+export { MessageScreen } from "./message-screen"
+export { MessageScreen as MessagesScreen } from "./message-screen"

@@ -134,7 +134,7 @@ async function syncMessages() {
 // Push notifications
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {}
-  const title = data.title || 'GH Connect'
+  const title = data.title || 'GreenHaven'
   const options = {
     body: data.body || 'You have a new notification',
     icon: '/icon-dark-32x32.png',

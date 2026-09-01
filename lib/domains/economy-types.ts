@@ -1,9 +1,10 @@
 /**
- * GH Connect Economy types.
+ * GreenHaven Economy types.
  *
  * GHC (GreenHaven Coin) = in-app utility / reward credit.
  * Not an external cryptocurrency or investment product in this phase.
- * Room left for future compliant Pi / chain integration.
+ * Not Pi — Pi is settled only via GH Pay (external). There is no 1 π = X GHC rate.
+ * Room left for future compliant Pi / chain integration only under a governed product.
  */
 
 /** Transaction kinds — every balance change is one of these */

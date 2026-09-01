@@ -22,13 +22,24 @@ import {
   type MembershipTierForTrack,
 } from "@/lib/domains/reward-level-domain"
 import { GhcCoinIcon } from "./ghc-coin-icon"
+import { IdentityService } from "@/lib/identity/identity-service"
 
 function resolveUserId(profile?: Record<string, unknown> | null): string {
-  return (
-    (profile?.id as string) ||
-    (profile?.userId as string) ||
-    "current-user"
-  )
+  const fromIdentity = IdentityService.getCurrentUserId()
+  if (fromIdentity && fromIdentity !== "current-user" && fromIdentity !== "anonymous") {
+    return fromIdentity
+  }
+  try {
+    const id = String(
+      (profile as { id?: string } | null)?.id ||
+        (profile as { userId?: string } | null)?.userId ||
+        ""
+    ).trim()
+    if (id && id !== "current-user" && id !== "anonymous") return id
+  } catch {
+    /* */
+  }
+  return IdentityService.getCurrentUserId() || "current-user"
 }
 
 function resolveTier(): MembershipTierForTrack {
@@ -51,7 +62,73 @@ async function creditDailyToWallet(
   amount: number,
   cycleDay: number,
   rewardDayKey: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; serverAmount?: number }> {
+  const ref = `daily_checkin:${userId}:${rewardDayKey}`
+  // Prefer server evaluate+claim — amount is NEVER taken from the client
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(IdentityService.getAuthHeaders?.() || {}),
+    }
+    const dailyRes = await fetch("/api/economy/rewards/daily", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        rewardDayKey,
+        cycleDay,
+      }),
+    })
+    if (dailyRes.ok) {
+      const data = (await dailyRes.json().catch(() => ({}))) as {
+        ok?: boolean
+        amount?: number
+        alreadyClaimed?: boolean
+      }
+      return { ok: true, serverAmount: Number(data.amount) || undefined }
+    }
+    // 409 already claimed today
+    if (dailyRes.status === 409) {
+      return { ok: true }
+    }
+
+    const evalRes = await fetch("/api/economy/rewards/evaluate", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sourceEvent: "DAILY_CHECKIN",
+        referenceId: ref,
+        metadata: { cycleDay, uiPreviewAmount: amount },
+      }),
+    })
+    if (evalRes.ok) {
+      const data = (await evalRes.json().catch(() => ({}))) as {
+        ok?: boolean
+        holdId?: string
+        amount?: number
+        rewards?: Array<{ id: string }>
+      }
+      const holdId =
+        data.holdId ||
+        data.rewards?.[0]?.id ||
+        ""
+      if (holdId) {
+        const claimRes = await fetch("/api/economy/rewards/claim", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ holdId }),
+        })
+        if (claimRes.ok) {
+          const claimed = (await claimRes.json().catch(() => ({}))) as { amount?: number }
+          return { ok: true, serverAmount: Number(claimed.amount || data.amount) || undefined }
+        }
+      }
+      // Evaluate succeeded with idempotent/no hold — treat as ok
+      return { ok: true, serverAmount: Number(data.amount) || undefined }
+    }
+  } catch {
+    /* fall through to domain */
+  }
+
   try {
     const eco = getBoundDomainServices()?.economy as {
       evaluateReward?: (input: {
@@ -67,22 +144,19 @@ async function creditDailyToWallet(
     } | null
 
     if (!eco?.evaluateReward) {
-      return { ok: true } // streak state already recorded; ledger optional offline
+      return { ok: true }
     }
 
-    const ref = `daily_checkin:${userId}:${rewardDayKey}`
     const evaluated = await eco.evaluateReward({
       sourceEvent: "DAILY_CHECKIN",
       referenceId: ref,
-      metadata: { cycleDay, intendedAmount: amount },
+      metadata: { cycleDay, uiPreviewAmount: amount },
     })
 
     if (!evaluated?.ok) {
-      // Already rewarded today is fine (idempotent)
       if (String(evaluated?.error || "").toLowerCase().includes("duplicate")) {
         return { ok: true }
       }
-      // Continue — streak is source of truth for UI; wallet may sync later
       return { ok: true, error: evaluated?.error }
     }
 
@@ -92,7 +166,7 @@ async function creditDailyToWallet(
         await eco.claimReward(r.id)
       }
     }
-    return { ok: true }
+    return { ok: true, serverAmount: rewards[0]?.amount }
   } catch (e) {
     return {
       ok: true,
@@ -317,7 +391,7 @@ export function DailyRewardSheet({
             </span>
             <div>
               <p id="daily-reward-title" className="text-sm font-bold text-foreground">
-                Your daily GreenHaven reward
+                Your Daily GHC Reward is ready
               </p>
               <p className="text-[11px] text-muted-foreground">
                 Day {daily.displayCycleDay} of 7 · {tier === "free" ? "Member" : tier.toUpperCase()} track
@@ -347,7 +421,7 @@ export function DailyRewardSheet({
               <span className="text-lg font-bold text-emerald-700">GHC</span>
             </p>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              Keep your streak alive · next day {daily.nextDayPreview} GHC
+              Once every 24h · next day {daily.nextDayPreview} GHC · 00:00 Africa/Lagos
             </p>
           </div>
 
@@ -372,7 +446,7 @@ export function DailyRewardSheet({
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:bg-emerald-800 disabled:opacity-60"
           >
             <Gift size={18} />
-            {claiming ? "Claiming…" : `Claim ${daily.todayGhc} GHC`}
+            {claiming ? "Claiming…" : `Claim Daily Reward · ${daily.todayGhc} GHC`}
           </button>
           <button
             type="button"

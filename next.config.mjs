@@ -36,6 +36,11 @@ const nextConfig = {
         source: "/tpa/ghconnectakmx4864/validation-key.txt",
         destination: "/api/validation-key",
       },
+      // Some hosts / previews request /index.html
+      {
+        source: "/index.html",
+        destination: "/",
+      },
     ]
   },
   async headers() {

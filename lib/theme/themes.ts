@@ -1,5 +1,5 @@
 /**
- * GH Connect appearance themes.
+ * GreenHaven appearance themes.
  * - Mode: light | dark | system
  * - Preset themes: accent + surface styling
  * - Custom: user-uploaded wallpaper (privacy: stored locally / profile settings only)

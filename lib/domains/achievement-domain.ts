@@ -88,7 +88,7 @@ export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
   {
     id: "early_member",
     title: "Early Member",
-    description: "Joined during the early GH Connect period",
+    description: "Joined during the early GreenHaven period",
     icon: "🌱",
     rarity: "epic",
     criterion: "early_member",

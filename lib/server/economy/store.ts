@@ -496,6 +496,11 @@ export function getProcessGhcStore(): GhcAuthoritativeStore {
   return singletonStore
 }
 
+/** Alias used by reward-engine and payment fulfillment */
+export function getGhcAuthoritativeStore(): GhcAuthoritativeStore {
+  return getProcessGhcStore()
+}
+
 export function resetProcessGhcStoreForTests() {
   singletonStore = createMemoryGhcStore()
 }
@@ -524,3 +529,188 @@ export async function expirePendingRequests(
   }
   return n
 }
+
+
+/** Authoritative credit (reward claim, promo, admin) — posted positive amount */
+export async function executeAuthoritativeCredit(
+  store: GhcAuthoritativeStore,
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason: string
+    sourceEvent?: string
+    kind?: GhcLedgerRow["kind"]
+  }
+): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
+  const amount = Math.abs(Number(input.amount))
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  return withUserLock(input.userId, () => {
+    const existing = store.listTransactions(input.userId).find(
+      (t) => t.referenceId === ref && t.status === "posted" && t.amount > 0
+    )
+    if (existing) return { ok: true as const, tx: existing, idempotent: true }
+
+    const tx: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: input.kind || "earned",
+      amount,
+      status: "posted",
+      reason: input.reason,
+      sourceEvent: input.sourceEvent || "SYSTEM",
+      referenceId: ref,
+      createdAt: Date.now(),
+    }
+    store.appendPosted(tx)
+    return { ok: true as const, tx }
+  })
+}
+
+/** Stage pending hold (not transferable until claim) */
+export async function executeAuthoritativePending(
+  store: GhcAuthoritativeStore,
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason: string
+    sourceEvent?: string
+  }
+): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
+  const amount = Math.abs(Number(input.amount))
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  return withUserLock(input.userId, () => {
+    const existing = store.listTransactions(input.userId).find(
+      (t) => t.referenceId === ref && (t.status === "pending" || t.status === "posted")
+    )
+    if (existing) return { ok: true as const, tx: existing, idempotent: true }
+
+    const tx: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: "pending",
+      amount,
+      status: "pending",
+      reason: input.reason,
+      sourceEvent: input.sourceEvent || "SYSTEM",
+      referenceId: ref,
+      createdAt: Date.now(),
+    }
+    store.appendPosted(tx)
+    return { ok: true as const, tx }
+  })
+}
+
+/** Claim pending → posted available (zero out pending, post reward) */
+export async function executeAuthoritativeClaimPending(
+  store: GhcAuthoritativeStore,
+  input: { userId: string; holdId: string }
+): Promise<
+  | { ok: true; tx: GhcLedgerRow; amount: number; alreadyClaimed?: boolean }
+  | { ok: false; error: string }
+> {
+  return withUserLock(input.userId, () => {
+    const txs = store.listTransactions(input.userId)
+    const pending = txs.find(
+      (t) =>
+        (t.id === input.holdId || t.referenceId === input.holdId) &&
+        t.status === "pending" &&
+        t.amount > 0
+    )
+    if (!pending) {
+      const already = txs.find(
+        (t) =>
+          (t.id === input.holdId || t.referenceId === input.holdId) &&
+          t.status === "posted" &&
+          t.amount > 0
+      )
+      if (already) return { ok: true as const, tx: already, amount: already.amount, alreadyClaimed: true }
+      return { ok: false, error: "NOT_CLAIMABLE" }
+    }
+
+    // Mark original pending as cancelled via zeroing post pattern — append claim credit
+    const claimRef = `claim:${pending.referenceId || pending.id}`
+    const existingClaim = txs.find((t) => t.referenceId === claimRef && t.status === "posted")
+    if (existingClaim) {
+      return { ok: true as const, tx: existingClaim, amount: existingClaim.amount, alreadyClaimed: true }
+    }
+
+    // Append negative pending clear + positive available (net: available increases)
+    const clear: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: "pending",
+      amount: -Math.abs(pending.amount),
+      status: "posted",
+      reason: "Claim clear",
+      referenceId: claimRef + ":clear",
+      createdAt: Date.now(),
+      metadata: { clearedHoldId: pending.id },
+    }
+    const credit: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: "earned",
+      amount: Math.abs(pending.amount),
+      status: "posted",
+      reason: pending.reason || "Claimed reward",
+      sourceEvent: pending.sourceEvent,
+      referenceId: claimRef,
+      createdAt: Date.now(),
+      metadata: { claimedFrom: pending.id },
+    }
+    store.appendPosted(clear)
+    store.appendPosted(credit)
+    return { ok: true as const, tx: credit, amount: credit.amount }
+  })
+}
+
+/** Authoritative spend (membership, marketplace, boost) */
+export async function executeAuthoritativeSpend(
+  store: GhcAuthoritativeStore,
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason: string
+    sourceEvent?: string
+    kind?: GhcLedgerRow["kind"]
+  }
+): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
+  const amount = Math.abs(Number(input.amount))
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  return withUserLock(input.userId, () => {
+    const existing = store.listTransactions(input.userId).find(
+      (t) => t.referenceId === ref && t.status === "posted" && t.amount < 0
+    )
+    if (existing) return { ok: true as const, tx: existing, idempotent: true }
+
+    const available = store.availableBalance(input.userId)
+    if (available < amount) return { ok: false, error: "INSUFFICIENT_BALANCE" }
+
+    const tx: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: input.kind || "spent",
+      amount: -amount,
+      status: "posted",
+      reason: input.reason,
+      sourceEvent: input.sourceEvent || "SYSTEM",
+      referenceId: ref,
+      createdAt: Date.now(),
+    }
+    store.appendPosted(tx)
+    return { ok: true as const, tx }
+  })
+}
+

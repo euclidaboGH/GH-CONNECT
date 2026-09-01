@@ -1,5 +1,5 @@
 /**
- * GH Connect — Canonical geography types.
+ * GreenHaven — Canonical geography types.
  * Hierarchy is country-specific; labels adapt (State/Province/Region, LGA/County/etc.).
  */
 

@@ -91,10 +91,16 @@ export function getOrCreateGreenHavenId(userId: string, preferredHandle?: string
   return derived
 }
 
+export type GreenHavenDirectoryEntry = {
+  id: string
+  name?: string
+  greenHavenId?: string
+}
+
 /** Lookup userId from a public GreenHaven ID using local cache + directory probe */
 export function resolveUserIdFromGreenHavenId(
   publicId: string,
-  directory: Array<{ id: string; name?: string; greenHavenId?: string }> = []
+  directory: GreenHavenDirectoryEntry[] = []
 ): { userId: string; name: string; greenHavenId: string } | null {
   const id = normalizeGreenHavenId(publicId)
   if (!GH_ID_REGEX.test(id)) return null
@@ -264,4 +270,16 @@ export async function resolveGreenHavenIdServer(
     displayName: local.name,
     source: "local_fallback",
   }
+}
+
+
+/** Deep link for profile / identity sharing (app-relative) */
+export function buildProfileDeepLink(greenHavenId: string): string {
+  const id = normalizeGreenHavenId(greenHavenId)
+  return `ghc://profile?id=${encodeURIComponent(id)}`
+}
+
+/** Universal identity label for UI */
+export function greenHavenIdentityTagline(): string {
+  return "Your universal GreenHaven identity"
 }

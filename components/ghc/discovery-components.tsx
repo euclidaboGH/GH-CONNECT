@@ -26,39 +26,113 @@ export type ConnectionMode =
   | "all"
   | "friendship"
   | "professional"
+  | "business"
   | "dating"
   | "community"
   | "collaborate"
   | "mentor"
   | "learn"
 
+/**
+ * Multi-select connection intents for Discover.
+ * Empty selection = show everyone (same as "All").
+ * Not dating-only — friendship, networking, business, communities, etc.
+ */
 export function ConnectionModeBar({
   mode,
   onChange,
+  selectedIntents,
+  onIntentsChange,
 }: {
-  mode: ConnectionMode
-  onChange: (m: ConnectionMode) => void
+  mode?: ConnectionMode
+  onChange?: (m: ConnectionMode) => void
+  /** Preferred multi-select API */
+  selectedIntents?: string[]
+  onIntentsChange?: (ids: string[]) => void
 }) {
+  const intents = [
+    { id: "friendship", label: "Friendship" },
+    { id: "networking", label: "Networking" },
+    { id: "business", label: "Business" },
+    { id: "collaboration", label: "Collab" },
+    { id: "communities", label: "Communities" },
+    { id: "mentorship", label: "Mentorship" },
+    { id: "dating", label: "Dating" },
+  ]
+
+  // Multi-select path
+  if (onIntentsChange) {
+    const selected = new Set(selectedIntents || [])
+    const toggle = (id: string) => {
+      const next = new Set(selected)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      onIntentsChange(Array.from(next))
+    }
+    return (
+      <div className="border-b border-border/40 px-2.5 py-1.5" role="group" aria-label="Connection intents">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Looking for
+          </p>
+          {selected.size > 0 ? (
+            <button
+              type="button"
+              onClick={() => onIntentsChange([])}
+              className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400"
+            >
+              Clear
+            </button>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">Any connection</span>
+          )}
+        </div>
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+          {intents.map((m) => {
+            const on = selected.has(m.id)
+            return (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(m.id)}
+                className={`flex min-h-8 shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 ${
+                  on
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/40"
+                }`}
+              >
+                {m.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // Legacy single-mode API
   const modes: { id: ConnectionMode; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "friendship", label: "Friends" },
-    { id: "professional", label: "Pro" },
-    { id: "collaborate", label: "Collaborate" },
+    { id: "friendship", label: "Friendship" },
+    { id: "professional", label: "Networking" },
+    { id: "business", label: "Business" },
+    { id: "community", label: "Communities" },
+    { id: "collaborate", label: "Collab" },
+    { id: "dating", label: "Dating" },
     { id: "mentor", label: "Mentor" },
     { id: "learn", label: "Learn" },
-    { id: "dating", label: "Dating" },
-    { id: "community", label: "Community" },
   ]
   return (
-    <div className="flex gap-1.5 overflow-x-auto px-4 py-2 scrollbar-hide" role="tablist" aria-label="Connection intent">
+    <div className="flex gap-1 overflow-x-auto border-b border-border/40 px-2.5 py-1.5 scrollbar-hide" role="tablist" aria-label="Connection intent">
       {modes.map((m) => (
         <button
           key={m.id}
           type="button"
           role="tab"
           aria-selected={mode === m.id}
-          onClick={() => onChange(m.id)}
-          className={`flex min-h-9 shrink-0 items-center rounded-full px-3.5 py-1.5 text-[11px] font-bold transition active:scale-95 ${
+          onClick={() => onChange?.(m.id)}
+          className={`flex min-h-8 shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 ${
             mode === m.id
               ? "bg-primary text-primary-foreground shadow-sm"
               : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
@@ -69,6 +143,29 @@ export function ConnectionModeBar({
       ))}
     </div>
   )
+}
+
+/** Multi-intent match: candidate fits if any selected intent matches (or none selected). */
+export function candidateMatchesIntents(c: Candidate, intentIds: string[]): boolean {
+  if (!intentIds.length) return true
+  const map: Record<string, ConnectionMode> = {
+    friendship: "friendship",
+    networking: "professional",
+    business: "business",
+    collaboration: "collaborate",
+    communities: "community",
+    mentorship: "mentor",
+    dating: "dating",
+  }
+  return intentIds.some((id) => {
+    const mode = map[id]
+    if (!mode) return true
+    try {
+      return candidateMatchesIntent(c, mode)
+    } catch {
+      return true
+    }
+  })
 }
 
 /** Intent filters that actually narrow the list (keyword + goal signals) */
@@ -84,6 +181,8 @@ export function candidateMatchesIntent(c: Candidate, mode: ConnectionMode): bool
   switch (mode) {
     case "professional":
       return /work|job|career|business|tech|startup|founder|engineer|design|finance|product/.test(blob) || Boolean(occupation)
+    case "business":
+      return /business|sell|shop|brand|client|service|entrepreneur|company|startup|market/.test(blob) || Boolean(occupation)
     case "collaborate":
       return /collab|project|partner|co-?found|build|startup|team/.test(blob)
     case "mentor":
@@ -135,7 +234,7 @@ function SmartSuggestionsSection({
         ? "Active now"
         : candidate.verified
           ? "Trusted profile"
-          : candidate.interests?.length
+          : (Array.isArray(candidate.interests) && (Array.isArray(candidate.interests) ? candidate.interests.length : 0))
             ? "Shared interests"
             : "Popular near you"
       return { candidate, score, reason }
@@ -381,14 +480,14 @@ export function ProfilePreviewModal({
           )}
 
           {/* Interests */}
-          {candidate.interests.length > 0 && (
+          {Array.isArray(candidate?.interests) && (Array.isArray(candidate.interests) ? candidate.interests.length : 0) > 0 && (
             <div>
               <h4 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2">
                 <Zap size={16} className="text-yellow-500" />
                 Interests
               </h4>
               <div className="flex flex-wrap gap-2">
-                {candidate.interests.map((interest) => (
+                {(candidate.interests || []).map((interest) => (
                   <span
                     key={interest}
                     className="bg-gradient-to-r from-emerald-100 to-pink-100 text-emerald-700 px-3 py-2 rounded-full text-sm font-semibold border border-emerald-200"

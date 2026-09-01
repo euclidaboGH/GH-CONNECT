@@ -107,7 +107,7 @@ export const POLICY_COPY: Record<ConsentKey, { title: string; summary: string }>
   terms_of_use: {
     title: "Terms of Use",
     summary:
-      "You agree to use GH Connect respectfully, follow Pi Network rules, and not abuse the platform.",
+      "You agree to use GreenHaven respectfully, follow Pi Network rules, and not abuse the platform.",
   },
   privacy_policy: {
     title: "Privacy Policy",

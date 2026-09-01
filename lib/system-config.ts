@@ -8,7 +8,21 @@ export const PI_NETWORK_CONFIG = {
     "https://cdn.jsdelivr.net/gh/pi-apps/pi-sdk-lite@main/build/production/sdklite.js",
   ] as readonly string[],
   BACKEND_URL: "https://backend.appstudio-u7cm9zhmha0ruwv8.piappengine.com",
-  SANDBOX: true,
+  /** Pi Developer Portal app slug (public) */
+  APP_SLUG: "gh-connect-4a60bc91d8ef4a84",
+  /**
+   * Connected app wallet on Pi (public identifier for U2A — not a secret).
+   * Server API Key must NEVER be placed in client code — use env PI_API_KEY only.
+   */
+  CONNECTED_APP: "GDF4JBEOAYRGMUVDFPNUHWOSLY6EDFQYDBDEJ7EV2LCL6FZXNFGZ3VDZ",
+  /**
+   * Production checklist (item 10) needs sandbox: false on the live URL.
+   * Override with NEXT_PUBLIC_PI_SANDBOX=true for Develop/sandbox only.
+   */
+  SANDBOX:
+    typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
+      ? process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
+      : false,
   /**
    * When remote SDKLite cannot load (App Studio preview, offline, CDN block),
    * allow a local authenticated session so onboarding is not blocked.

@@ -1,3 +1,4 @@
+import { IdentityService } from "@/lib/identity/identity-service"
 "use client"
 
 import { useState, useEffect } from "react"
@@ -6,6 +7,7 @@ import { useGHC } from "@/contexts/ghc-context"
 import { INTERESTS } from "@/lib/ghc-data"
 import { compressForAvatar } from "@/lib/media/compress-image"
 import type { OnboardingStep, Gender, PrimaryMode } from "@/lib/ghc-types"
+
 import {
   Heart,
   Users,
@@ -21,6 +23,10 @@ import {
   Rocket,
   Check,
   ChevronLeft,
+  Handshake,
+  Building2,
+  Globe2,
+  GraduationCap,
 } from "lucide-react"
 import { BrandLogo } from "./brand-logo"
 import { LazyImage } from "./lazy-image"
@@ -30,6 +36,50 @@ import {
   parseLegacyLocation,
   type StructuredLocation,
 } from "@/lib/geography"
+
+
+/** Connection intents — local helpers (avoid path-alias runtime misses in App Studio) */
+type ConnectionIntentId =
+  | "friendship"
+  | "dating"
+  | "networking"
+  | "business"
+  | "collaboration"
+  | "communities"
+  | "mentorship"
+
+const INTENT_IDS: ConnectionIntentId[] = [
+  "friendship",
+  "dating",
+  "networking",
+  "business",
+  "collaboration",
+  "communities",
+  "mentorship",
+]
+
+function normalizeIntents(raw: unknown): ConnectionIntentId[] {
+  if (!Array.isArray(raw)) return []
+  const allowed = new Set<string>(INTENT_IDS)
+  const out: ConnectionIntentId[] = []
+  for (const x of raw) {
+    const id = String(x).toLowerCase().trim() as ConnectionIntentId
+    if (allowed.has(id) && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+function saveConnectionIntents(userId: string, intents: ConnectionIntentId[]) {
+  try {
+    if (typeof localStorage === "undefined") return
+    const key = "ghc_connection_intents_v1"
+    const all = JSON.parse(localStorage.getItem(key) || "{}")
+    all[userId] = normalizeIntents(intents)
+    localStorage.setItem(key, JSON.stringify(all))
+  } catch {
+    /* ignore */
+  }
+}
 
 const INTEREST_ICONS: Record<string, string> = {
   Reading: "📚",
@@ -165,6 +215,7 @@ export function Onboarding() {
   const { profile, updateProfile, completeOnboarding } = useGHC()
   const safeProfile = profile || ({} as typeof profile)
   const [phase, setPhase] = useState<"splash" | "welcome" | "flow">("splash")
+  const [introPage, setIntroPage] = useState(0)
 
   useEffect(() => {
     if (phase !== "splash") return
@@ -176,7 +227,7 @@ export function Onboarding() {
     displayName: safeProfile.displayName || "",
     age: safeProfile.age || 18,
     bornDate: (safeProfile as any).bornDate || "",
-    gender: safeProfile.gender || "prefer-not-to-say",
+    gender: safeProfile.gender && safeProfile.gender !== "prefer-not-to-say" ? safeProfile.gender : "",
     city: safeProfile.city || "",
     country: safeProfile.country || "",
     state: "",
@@ -184,7 +235,8 @@ export function Onboarding() {
       ? parseLegacyLocation(safeProfile.city || "", safeProfile.country || "")
       : null) as StructuredLocation | null,
     bio: safeProfile.bio || "",
-    primaryMode: safeProfile.primaryMode || "friends",
+    primaryMode: safeProfile.primaryMode || "friendship",
+    connectionIntents: (() => { const n = normalizeIntents((safeProfile as { connectionIntents?: string[] }).connectionIntents); return n.length ? n : (["friendship"] as ConnectionIntentId[]) })(),
     interests: safeProfile.interests || [],
     photos: safeProfile.photos || [],
   })
@@ -216,6 +268,16 @@ export function Onboarding() {
         !(formData.structuredLocation?.localityName || formData.structuredLocation?.admin2Name || formData.city)
       ) {
         nextErrors.location = "Select your country, region, and city or town."
+      } else if (
+        formData.structuredLocation?.countryId === "ng" &&
+        formData.structuredLocation?.admin1Id &&
+        !formData.structuredLocation?.admin2Id &&
+        !formData.structuredLocation?.admin2Name
+      ) {
+        nextErrors.location = "Select your Local Government Area (LGA), then your city or town."
+      }
+      if (!formData.gender || formData.gender === "prefer-not-to-say") {
+        nextErrors.gender = "Please select your gender to continue."
       }
     }
     if (step === 3 && formData.interests.length < 3) nextErrors.interests = "Choose at least 3 interests."
@@ -240,7 +302,13 @@ export function Onboarding() {
       })
       setStep(2)
     } else if (step === 2) {
-      await updateProfile({ primaryMode: formData.primaryMode as PrimaryMode })
+      await updateProfile({
+        primaryMode: formData.primaryMode as PrimaryMode,
+        connectionIntents: normalizeIntents((formData as { connectionIntents?: string[] }).connectionIntents),
+      } as Partial<import("@/lib/ghc-types").Profile>)
+      try {
+        saveConnectionIntents(IdentityService.getCurrentUserId(), normalizeIntents((formData as { connectionIntents?: string[] }).connectionIntents) as ConnectionIntentId[])
+      } catch { /* */ }
       setStep(3)
     } else if (step === 3) {
       await updateProfile({ interests: formData.interests })
@@ -316,59 +384,111 @@ export function Onboarding() {
     )
   }
 
-  /* ───────────── WELCOME ───────────── */
+  /* ───────────── WELCOME / ECOSYSTEM INTRO (4 screens) ───────────── */
   if (phase === "welcome") {
+    const INTRO = [
+      {
+        n: "01",
+        title: "Connect",
+        desc: "Meet people around shared interests — friendship, networking, business, communities, or dating.",
+        icon: Users,
+      },
+      {
+        n: "02",
+        title: "Communicate",
+        desc: "Chat, share posts, and build communities. Conversations stay meaningful and intentional.",
+        icon: MessageCircle,
+      },
+      {
+        n: "03",
+        title: "Earn",
+        desc: "Earn GHC through meaningful participation — daily rewards, missions, and quality activity.",
+        icon: TrendingUp,
+      },
+      {
+        n: "04",
+        title: "Use",
+        desc: "Use GHC across the GreenHaven ecosystem — membership, marketplace, boosts, and more.",
+        icon: Sparkles,
+      },
+    ] as const
+    const page = INTRO[Math.min(introPage, INTRO.length - 1)]
+    const isLast = introPage >= INTRO.length - 1
+
     return (
       <Shell>
         <div className="pt-[max(0.75rem,env(safe-area-inset-top))]" aria-hidden />
         <div className="relative z-10 flex flex-1 flex-col overflow-y-auto px-6 pb-8 pt-4">
           <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-            {/* Centered official logo — transparent, no plate */}
-            <div className="mb-6 flex flex-col items-center text-center">
-              <div className="relative mb-1">
-                <div className="absolute inset-0 scale-125 rounded-full bg-emerald-400/15 blur-3xl" />
-                <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_32px_rgba(16,185,129,0.4)]" />
+            <div className="mb-4 flex items-center justify-between">
+              <BrandLogo size="bar" className="object-left opacity-90" />
+              <button
+                type="button"
+                onClick={() => setPhase("flow")}
+                className="text-[12px] font-semibold text-white/50 hover:text-white/80"
+              >
+                Skip
+              </button>
+            </div>
+
+            <div className="flex flex-1 flex-col items-center justify-center text-center">
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-emerald-400/90">
+                {page.n}
+              </p>
+              <div className="mt-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25">
+                <page.icon size={32} strokeWidth={1.75} />
               </div>
-              <h1 className="mt-2 text-[1.65rem] font-black leading-tight tracking-tight text-white">
-                A better way to{" "}
-                <span className="bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">
-                  connect and grow
-                </span>
+              <h1 className="mt-6 text-[1.75rem] font-black tracking-tight text-white">
+                {page.title}
               </h1>
-              <p className="mx-auto mt-2.5 max-w-[18rem] text-[13px] leading-relaxed text-white/55">
-                Meet people. Share ideas. Build meaningful connections.
+              <p className="mx-auto mt-3 max-w-[18rem] text-[14px] leading-relaxed text-white/55">
+                {page.desc}
               </p>
+
+              <div className="mt-8 flex items-center gap-2">
+                {INTRO.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Intro page ${i + 1}`}
+                    onClick={() => setIntroPage(i)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === introPage ? "w-6 bg-emerald-400" : "w-1.5 bg-white/25"
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {[
-                { icon: Users, title: "Connect", desc: "Meet amazing people and communities" },
-                { icon: MessageCircle, title: "Share", desc: "Post, story, chat and more" },
-                { icon: TrendingUp, title: "Grow", desc: "Learn, create and achieve more" },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="flex items-center gap-3.5 rounded-2xl border border-white/8 bg-white/[0.04] p-3.5 backdrop-blur-sm"
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">
-                    <item.icon size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-bold text-white">{item.title}</p>
-                    <p className="text-[12px] text-white/45">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-auto space-y-3 pt-8">
-              <PrimaryButton onClick={() => setPhase("flow")}>
-                Get Started <Rocket size={18} />
+            <div className="mt-auto space-y-3 pt-6">
+              <PrimaryButton
+                onClick={() => {
+                  if (isLast) setPhase("flow")
+                  else setIntroPage((p) => p + 1)
+                }}
+              >
+                {isLast ? (
+                  <>
+                    Get Started <Rocket size={18} />
+                  </>
+                ) : (
+                  "Continue"
+                )}
               </PrimaryButton>
-              <p className="text-center text-[12px] text-white/40">
-                Already have an account?{" "}
-                <span className="font-semibold text-emerald-400">Sign in</span>
-              </p>
+              {!isLast ? (
+                <button
+                  type="button"
+                  onClick={() => setPhase("flow")}
+                  className="w-full py-2 text-center text-[12px] font-semibold text-white/45"
+                >
+                  Skip intro
+                </button>
+              ) : (
+                <p className="text-center text-[12px] text-white/40">
+                  Already have an account?{" "}
+                  <span className="font-semibold text-emerald-400">Sign in</span>
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -376,6 +496,7 @@ export function Onboarding() {
     )
   }
 
+  /* ───────────── FLOW STEPS ───────────── */
   /* ───────────── FLOW STEPS ───────────── */
   return (
     <Shell>
@@ -451,14 +572,24 @@ export function Onboarding() {
                     <label className="mb-1.5 block text-[12px] font-bold text-white/60">Gender</label>
                     <select
                       value={formData.gender}
-                      onChange={(e) => setFormData((p) => ({ ...p, gender: e.target.value as Gender }))}
+                      required
+                      aria-required="true"
+                      onChange={(e) => {
+                        const v = e.target.value as Gender
+                        setFormData((p) => ({ ...p, gender: v }))
+                        if (v) setErrors((p) => ({ ...p, gender: "" }))
+                      }}
                       className={`${fieldClass} [color-scheme:dark]`}
                     >
-                      <option value="prefer-not-to-say">Not specified</option>
+                      <option value="" disabled>
+                        Select gender
+                      </option>
                       <option value="male">Male</option>
                       <option value="female">Female</option>
                       <option value="non-binary">Non-binary</option>
+                      <option value="prefer-not-to-say">Prefer not to say</option>
                     </select>
+                    {errors.gender && <p className="mt-1 text-xs text-rose-400">{errors.gender}</p>}
                   </div>
                 </div>
                 {errors.age && <p className="text-xs text-rose-400">{errors.age}</p>}
@@ -520,45 +651,65 @@ export function Onboarding() {
 
           {/* STEP 2 — Mode */}
           {step === 2 && (
-            <div className="space-y-5 animate-in fade-in duration-300">
+            <div className="space-y-4 animate-in fade-in duration-300">
               <div className="text-center">
                 <h1 className="text-[1.45rem] font-black tracking-tight text-white">What brings you here?</h1>
-                <p className="mt-1 text-[13px] text-white/50">Choose your primary mode</p>
+                <p className="mt-1 text-[13px] text-white/50">Select all that apply — change anytime in Profile</p>
               </div>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { value: "dating", label: "Dating", desc: "Looking for romance", icon: Heart, accent: "from-rose-500 to-pink-500", ring: "ring-rose-400/40" },
-                  { value: "friendship", label: "Friendship", desc: "Make genuine friends", icon: Users, accent: "from-violet-500 to-purple-500", ring: "ring-violet-400/40" },
-                  { value: "networking", label: "Networking", desc: "Professional connections", icon: Briefcase, accent: "from-sky-500 to-blue-600", ring: "ring-sky-400/40" },
+                  { value: "friendship", label: "Friendship", icon: Users, accent: "from-violet-500 to-purple-500" },
+                  { value: "dating", label: "Dating", icon: Heart, accent: "from-rose-500 to-pink-500" },
+                  { value: "networking", label: "Networking", icon: Briefcase, accent: "from-sky-500 to-blue-600" },
+                  { value: "business", label: "Business", icon: Building2, accent: "from-emerald-500 to-teal-600" },
+                  { value: "collaboration", label: "Collaboration", icon: Handshake, accent: "from-amber-500 to-orange-600" },
+                  { value: "communities", label: "Communities", icon: Globe2, accent: "from-cyan-500 to-blue-600" },
+                  { value: "mentorship", label: "Mentorship", icon: GraduationCap, accent: "from-indigo-500 to-violet-600" },
                 ].map((mode) => {
-                  const selected = formData.primaryMode === mode.value
+                  const selected = (normalizeIntents((formData as { connectionIntents?: string[] }).connectionIntents).includes(mode.value as ConnectionIntentId) || formData.primaryMode === mode.value)
                   return (
                     <button
                       key={mode.value}
                       type="button"
-                      onClick={() => setFormData((p) => ({ ...p, primaryMode: mode.value as PrimaryMode }))}
-                      className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${
+                      onClick={() =>
+                        setFormData((p) => {
+                          const id = mode.value as ConnectionIntentId
+                          const cur = normalizeIntents((p as { connectionIntents?: string[] }).connectionIntents)
+                          const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+                          const intents = next.length ? next : [id]
+                          const primary =
+                            intents[0] === "dating"
+                              ? "dating"
+                              : intents[0] === "networking" || intents[0] === "business"
+                                ? "networking"
+                                : "friendship"
+                          return { ...p, primaryMode: primary as PrimaryMode, connectionIntents: intents }
+                        })
+                      }
+                      className={`relative flex min-h-[5.25rem] flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 py-3 text-center transition active:scale-[0.98] ${
                         selected
-                          ? `border-emerald-400/50 bg-emerald-500/10 shadow-[0_0_24px_rgba(16,185,129,0.15)] ring-1 ${mode.ring}`
+                          ? "border-emerald-400/55 bg-emerald-500/12 shadow-[0_0_20px_rgba(16,185,129,0.18)]"
                           : "border-white/8 bg-white/[0.04] hover:border-white/15 hover:bg-white/[0.06]"
                       }`}
                     >
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${mode.accent} text-white shadow-lg`}>
-                        <mode.icon size={22} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[16px] font-bold text-white">{mode.label}</p>
-                        <p className="text-[13px] text-white/45">{mode.desc}</p>
-                      </div>
-                      {selected && (
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)]">
-                          <Check size={14} strokeWidth={3} />
+                      <span
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${mode.accent} text-white shadow-md`}
+                      >
+                        <mode.icon size={20} />
+                      </span>
+                      <span className="text-[13px] font-bold leading-tight text-white">{mode.label}</span>
+                      {selected ? (
+                        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.45)]">
+                          <Check size={11} strokeWidth={3} />
                         </span>
-                      )}
+                      ) : null}
                     </button>
                   )
                 })}
               </div>
+              <p className="text-center text-[11px] text-white/35">
+                Multi-select is fine — Discover uses these to rank people for you.
+              </p>
             </div>
           )}
 
@@ -748,9 +899,18 @@ export function Onboarding() {
           <div className="flex-[1.4]">
             <PrimaryButton
               onClick={() => void handleNext()}
-              disabled={(step === 3 && formData.interests.length < 3) || finishing}
+              disabled={
+                finishing ||
+                (step === 3 && formData.interests.length < 3) ||
+                (step === 1 && (
+                  !formData.gender ||
+                  !formData.displayName.trim() ||
+                  !(formData.structuredLocation?.countryId && formData.structuredLocation?.admin1Id)
+                )) ||
+                (step === 4 && formData.photos.length < 1)
+              }
             >
-              {step === 5 ? (finishing ? "Starting…" : "Enter GH Connect →") : "Next →"}
+              {step === 5 ? (finishing ? "Starting…" : "Enter GreenHaven →") : "Next →"}
             </PrimaryButton>
           </div>
         </div>

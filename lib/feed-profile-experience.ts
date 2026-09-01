@@ -1,6 +1,6 @@
 import { isOwnAuthor, CURRENT_USER_ID } from "@/lib/ownership"
 /**
- * GH Connect — Feed + Profile experience layer (items 1–20 each).
+ * GreenHaven — Feed + Profile experience layer (items 1–20 each).
  * Pure helpers + constants; UI wires these for consistent product behavior.
  */
 

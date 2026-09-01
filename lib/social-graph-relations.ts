@@ -1,5 +1,5 @@
 /**
- * Social graph relations — canonical vocabulary for GH Connect.
+ * Social graph relations — canonical vocabulary for GreenHaven.
  *
  * Follow           = one-directional (A → B)
  * Follower         = inverse of follow (B sees A as follower)

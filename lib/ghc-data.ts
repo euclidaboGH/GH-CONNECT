@@ -368,9 +368,9 @@ export function getVisibleUserDetails(candidate: Candidate, userSettings: Settin
 
 // Legal content
 export const LEGAL = {
-  about: `Welcome to GH Connect — a global community built on genuine connections.
+  about: `Welcome to GreenHaven — a global community built on genuine connections.
 
-GH Connect (GreenHaven Connect) was created with a simple belief: meaningful relationships should know no borders. Whether you're looking for friendship, dating, professional networking, or something in between, our platform brings together people from every corner of the world in a safe, respectful, and inclusive environment.
+GreenHaven (GreenHaven Connect) was created with a simple belief: meaningful relationships should know no borders. Whether you're looking for friendship, dating, professional networking, or something in between, our platform brings together people from every corner of the world in a safe, respectful, and inclusive environment.
 
 Our Mission: To empower individuals to form authentic connections across cultures, interests, and backgrounds — fostering relationships that enrich lives and broaden horizons.
 
@@ -381,10 +381,10 @@ Our Values:
 • Respect: We maintain a culture of kindness and mutual respect
 • Transparency: We are open about how your data is used and protected`,
 
-  terms: `Terms of Service - GH Connect
+  terms: `Terms of Service - GreenHaven
 
 1. Acceptance of Terms
-By using GH Connect, you accept these terms and our privacy policy.
+By using GreenHaven, you accept these terms and our privacy policy.
 
 2. User Conduct
 You agree to:
@@ -399,10 +399,10 @@ You agree to:
 You are responsible for maintaining your account security and all activities under your account.
 
 4. User Content
-You retain all rights to content you post. By posting, you grant GH Connect a license to use that content.
+You retain all rights to content you post. By posting, you grant GreenHaven a license to use that content.
 
 5. Limitations of Liability
-GH Connect is provided "as is". We are not liable for indirect damages or issues arising from third-party content.
+GreenHaven is provided "as is". We are not liable for indirect damages or issues arising from third-party content.
 
 6. Termination
 We reserve the right to terminate accounts that violate these terms.
@@ -410,7 +410,7 @@ We reserve the right to terminate accounts that violate these terms.
 7. Changes to Terms
 We may update these terms at any time with notice to users.`,
 
-  privacy: `Privacy Policy - GH Connect
+  privacy: `Privacy Policy - GreenHaven
 
 1. Information We Collect
 - Account information (name, age, location)

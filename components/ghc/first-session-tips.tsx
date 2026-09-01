@@ -77,7 +77,7 @@ export function FirstSessionTips({
             <Sparkles size={16} aria-hidden />
           </span>
           <div>
-            <p className="text-sm font-bold text-foreground">Welcome to GH Connect</p>
+            <p className="text-sm font-bold text-foreground">Welcome to GreenHaven</p>
             <p className="text-[11px] text-muted-foreground">Follow 3 · Join 1 community · Share 1 post</p>
           </div>
         </div>

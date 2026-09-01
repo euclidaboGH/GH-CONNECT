@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * GH Connect empty-state design system.
+ * GreenHaven empty-state design system.
  * Use across Feed, Messages, Communities, Discover, Matches, Profile.
  */
 
@@ -24,6 +24,11 @@ export type EmptyVariant =
   | "discover"
   | "matches"
   | "search"
+  | "friends"
+  | "transactions"
+  | "posts"
+  | "wallet"
+  | "notifications"
   | "generic"
 
 const PRESETS: Record<
@@ -33,14 +38,13 @@ const PRESETS: Record<
   feed: {
     icon: Newspaper,
     title: "Your feed is quiet",
-    description: "Follow people or share your first post to see activity here.",
+    description: "Follow people and join communities — their posts appear here. Use the + button anytime to share.",
     gradient: "from-emerald-500 to-teal-500",
   },
   messages: {
     icon: MessageCircle,
     title: "No conversations yet",
-    description:
-      "Message matches and connections here. Requests stay separate until you accept.",
+    description: "Start connecting with people. Matches and accepted connections appear here.",
     gradient: "from-emerald-500 to-cyan-600",
   },
   communities: {
@@ -68,6 +72,36 @@ const PRESETS: Record<
     title: "No results",
     description: "Try another name, interest, or community keyword.",
     gradient: "from-stone-500 to-stone-600",
+  },
+  friends: {
+    icon: Users,
+    title: "Your network starts here",
+    description: "Find people who share your interests and connection goals.",
+    gradient: "from-emerald-500 to-teal-600",
+  },
+  transactions: {
+    icon: Inbox,
+    title: "No transactions yet",
+    description: "Your GHC activity will appear here when you earn, send, or receive.",
+    gradient: "from-emerald-600 to-teal-500",
+  },
+  posts: {
+    icon: Newspaper,
+    title: "Nothing here yet",
+    description: "When you share, your posts appear here and on your profile.",
+    gradient: "from-teal-500 to-emerald-600",
+  },
+  wallet: {
+    icon: Inbox,
+    title: "Wallet is ready",
+    description: "Earn GHC from rewards or receive from friends. Activity shows up here.",
+    gradient: "from-emerald-700 to-teal-600",
+  },
+  notifications: {
+    icon: Inbox,
+    title: "You're all caught up",
+    description: "Likes, messages, rewards, and wallet alerts will land here.",
+    gradient: "from-slate-500 to-slate-600",
   },
   generic: {
     icon: Inbox,
@@ -103,7 +137,7 @@ export function EmptyState({
       role="status"
     >
       <div
-        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-gradient-to-br ${preset.gradient} text-white shadow-lg shadow-emerald-500/20 ring-4 ring-primary/10 dark:shadow-none`}
+        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-gradient-to-br ${preset.gradient} text-white shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-500/10 dark:shadow-none`}
       >
         <Icon size={30} strokeWidth={2} aria-hidden />
       </div>
@@ -150,7 +184,7 @@ export function EmptyInline({
   onAction?: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border/80 bg-muted/30 px-4 py-8 text-center">
+    <div className="rounded-[var(--gh-radius-md)] bg-muted/40 px-4 py-8 text-center">
       <p className="text-sm font-medium text-muted-foreground">{message}</p>
       {actionLabel && onAction && (
         <button

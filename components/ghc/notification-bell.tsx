@@ -1,50 +1,110 @@
 "use client"
 
 /**
- * NotificationBell — header icon + panel (not a bottom-nav tab).
- * Reads from notificationSystem (local) with mark-read + deep-link hooks.
+ * Unified Notification Center
+ * Buckets: All · Social · Messages · GHC · Rewards · Requests · System — deep-links never dump to Settings by default
+ * Taps deep-link to the right surface — never dumps users into Settings by default.
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
-import { Bell, X, Heart, MessageCircle, UserPlus, Users, Info } from "lucide-react"
+import {
+  Bell,
+  X,
+  Heart,
+  MessageCircle,
+  UserPlus,
+  Users,
+  Coins,
+  Shield,
+  Gift,
+  Share2,
+  CheckCheck,
+} from "lucide-react"
 import {
   notificationSystem,
   type Notification,
   type NotificationType,
 } from "@/lib/notifications"
+import {
+  NOTIFICATION_CENTER_BUCKETS,
+  filterByBucket,
+  resolveNotificationDeepLink,
+  navigateNotificationDeepLink,
+  type NotificationCenterBucket,
+} from "@/lib/notification-center"
 
 const ICON: Partial<Record<NotificationType, React.ReactNode>> = {
-  like: <Heart size={14} className="text-rose-500" />,
-  comment: <MessageCircle size={14} className="text-blue-500" />,
-  message: <MessageCircle size={14} className="text-purple-600" />,
-  match: <Heart size={14} className="text-pink-500" />,
-  friend_request: <UserPlus size={14} className="text-emerald-600" />,
-  follow: <Users size={14} className="text-indigo-600" />,
-  system: <Info size={14} className="text-gray-500" />,
-  story_reply: <MessageCircle size={14} className="text-fuchsia-600" />,
-  share: <Users size={14} className="text-violet-600" />,
-  group: <Users size={14} className="text-indigo-500" />,
+  like: <Heart size={15} className="text-rose-500" />,
+  comment: <MessageCircle size={15} className="text-sky-600" />,
+  message: <MessageCircle size={15} className="text-violet-600" />,
+  match: <Heart size={15} className="text-pink-500" />,
+  friend_request: <UserPlus size={15} className="text-emerald-600" />,
+  follow: <Users size={15} className="text-indigo-600" />,
+  system: <Shield size={15} className="text-muted-foreground" />,
+  story_reply: <MessageCircle size={15} className="text-fuchsia-600" />,
+  share: <Share2 size={15} className="text-emerald-600" />,
+  group: <Users size={15} className="text-teal-600" />,
+  ghc_received: <Coins size={15} className="text-emerald-600" />,
+  ghc_sent: <Coins size={15} className="text-emerald-700" />,
+  reward: <Gift size={15} className="text-amber-600" />,
+  payment: <Coins size={15} className="text-teal-600" />,
+  mention: <MessageCircle size={15} className="text-sky-600" />,
 }
 
 function timeLabel(ts: number) {
-  const d = Date.now() - ts
-  if (d < 60_000) return "now"
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m`
-  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h`
-  return `${Math.floor(d / 86_400_000)}d`
+  const d = Date.now() - (ts || 0)
+  if (d < 45_000) return "just now"
+  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`
+  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h ago`
+  if (d < 7 * 86_400_000) return `${Math.floor(d / 86_400_000)}d ago`
+  try {
+    return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  } catch {
+    return ""
+  }
+}
+
+const EMPTY_COPY: Record<NotificationCenterBucket, { title: string; body: string }> = {
+  all: {
+    title: "You're all caught up",
+    body: "Likes, messages, GHC, rewards, and system updates appear here.",
+  },
+  social: {
+    title: "No social activity yet",
+    body: "Likes, comments, follows, and matches show up in this tab.",
+  },
+  messages: {
+    title: "No message alerts",
+    body: "New chats and group mentions will land here.",
+  },
+  ghc: {
+    title: "No GHC activity",
+    body: "Transfers, payments, and wallet events appear here.",
+  },
+  rewards: {
+    title: "No reward alerts",
+    body: "Daily claims, streaks, missions, and XP updates appear here.",
+  },
+  requests: {
+    title: "No pending requests",
+    body: "Friend and join requests will show here.",
+  },
+  system: {
+    title: "No system notices",
+    body: "Security and account notices appear here when needed.",
+  },
 }
 
 export function NotificationBell({
   onOpenTarget,
 }: {
-  /** Optional: navigate when user taps a notification */
   onOpenTarget?: (n: Notification) => void
 }) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState(0)
-  const [filterCat, setFilterCat] = useState<"all" | "wallet" | "requests" | NotificationType | "mentions">("all")
+  const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
 
   const refresh = useCallback(() => {
     try {
@@ -52,15 +112,15 @@ export function NotificationBell({
         typeof notificationSystem.getVisibleNotifications === "function"
           ? notificationSystem.getVisibleNotifications()
           : notificationSystem.getNotifications()
-      const all = visible.slice().reverse()
-      // Dedupe by id
+      const all = (visible || []).slice().reverse()
       const seen = new Set<string>()
       const unique = all.filter((n) => {
-        if (!n.id || seen.has(n.id)) return false
-        seen.add(n.id)
+        const k = n.id || `${n.type}-${n.title}-${n.timestamp}`
+        if (seen.has(k)) return false
+        seen.add(k)
         return true
       })
-      setItems(unique.slice(0, 60))
+      setItems(unique)
       setUnread(unique.filter((n) => !n.read).length)
     } catch {
       setItems([])
@@ -70,159 +130,155 @@ export function NotificationBell({
 
   useEffect(() => {
     refresh()
-    const t = setInterval(refresh, 4000)
-    return () => clearInterval(t)
+    const id = window.setInterval(refresh, 4000)
+    return () => window.clearInterval(id)
   }, [refresh])
 
   useEffect(() => {
-    if (!open) return
     return onCloseTransientUI(() => setOpen(false))
-  }, [open])
+  }, [])
 
-  const filtered = items.filter((n) => {
-    if (filterCat === "all") return true
-    if (filterCat === "wallet") {
-      const cat = (n.data as any)?.category
-      const ghc = (n.data as any)?.ghcEvent
-      return cat === "wallet" || !!ghc || /GHC|Wallet/i.test(n.title || "")
-    }
-    if (filterCat === "requests") {
-      return (n.data as any)?.open === "requests" || /request/i.test(n.title || "")
-    }
-    if (filterCat === "mentions") return n.type === "comment" || /mention/i.test(n.title || "")
-    return n.type === filterCat
-  })
+  const filtered = useMemo(() => filterByBucket(items, bucket), [items, bucket])
 
-  const markAll = () => {
-    try {
-      notificationSystem.markAllAsRead()
-    } catch {
-      try {
-        items.filter((n) => !n.read).forEach((n) => notificationSystem.markAsRead(n.id))
-      } catch {
-        /* */
-      }
-    }
+  const openPanel = () => {
+    setOpen(true)
     refresh()
+  }
+
+  const closePanel = () => {
+    setOpen(false)
+    dispatchCloseTransientUI({ reason: "notification-close" })
   }
 
   const onTap = (n: Notification) => {
     try {
-      notificationSystem.markAsRead(n.id)
+      notificationSystem.markAsRead?.(n.id)
+    } catch {
+      /* */
+    }
+    const link = resolveNotificationDeepLink(n)
+    navigateNotificationDeepLink(link)
+    onOpenTarget?.(n)
+    refresh()
+    closePanel()
+  }
+
+  const markAll = () => {
+    try {
+      notificationSystem.markAllAsRead?.()
     } catch {
       /* */
     }
     refresh()
-    setOpen(false)
-    dispatchCloseTransientUI({ reason: "navigate" })
-
-    const data = (n.data || {}) as Record<string, unknown>
-    const openTarget = data.open as string | undefined
-    const type = n.type
-
-    // Deep-link to the right primary section
-    let tab: string | null = null
-    if (type === "message" || openTarget === "messages") tab = "messages"
-    else if (type === "match" || openTarget === "matches") tab = "matches"
-    else if (type === "follow" || type === "friend_request" || openTarget === "find") tab = "discover"
-    else if (type === "group" || openTarget === "communities") tab = "communities"
-    else if (type === "comment" || type === "like" || openTarget === "feed") tab = "home"
-    else if (openTarget === "wallet" || openTarget === "transaction" || data.ghcEvent) tab = "profile"
-    else if (openTarget === "requests") tab = "messages"
-
-    if (tab) {
-      try {
-        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
-      } catch {
-        /* */
-      }
-    }
-    onOpenTarget?.(n)
   }
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => {
-          setOpen((v) => !v)
-          refresh()
-        }}
-        className="relative rounded-full p-2 hover:bg-gray-100 active:scale-95"
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-        aria-expanded={open}
+        onClick={openPanel}
+        className="relative flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted"
+        aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
       >
-        <Bell size={18} className="text-gray-700" />
-        {unread > 0 && (
-          <span className="absolute right-0.5 top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-card">
+        <Bell size={20} strokeWidth={2.1} />
+        {unread > 0 ? (
+          <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm">
             {unread > 99 ? "99+" : unread}
           </span>
-        )}
+        ) : null}
       </button>
 
-      {open && (
-        <>
-          <button type="button" className="fixed inset-0 z-40" aria-label="Close" onClick={() => setOpen(false)} />
-          <div
-            className="absolute right-0 top-full z-50 mt-1 w-[min(100vw-1.5rem,20rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
-            role="dialog"
-            aria-label="Notifications"
-          >
-            <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-              <p className="text-sm font-bold text-gray-900">Notifications</p>
+      {open ? (
+        <div className="fixed inset-0 z-[85]" role="dialog" aria-modal="true" aria-label="Notifications">
+          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={closePanel} />
+          <div className="absolute inset-x-0 top-0 mx-auto flex max-h-[min(88vh,640px)] w-full max-w-[var(--gh-content-max,28rem)] flex-col overflow-hidden rounded-b-3xl border border-border bg-card shadow-2xl sm:top-3 sm:rounded-3xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[15px] font-bold text-foreground">Notifications</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {unread > 0 ? `${unread} unread` : "All caught up"}
+                </p>
+              </div>
               <div className="flex items-center gap-1">
-                {unread > 0 && (
-                  <button type="button" onClick={markAll} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50">
-                    Mark all read
+                {unread > 0 ? (
+                  <button
+                    type="button"
+                    onClick={markAll}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300"
+                  >
+                    <CheckCheck size={14} /> Mark all read
                   </button>
-                )}
-                <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Close">
-                  <X size={16} />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={closePanel}
+                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
+                  aria-label="Close"
+                >
+                  <X size={18} />
                 </button>
               </div>
             </div>
-            <div className="flex gap-1 overflow-x-auto border-b border-gray-50 px-2 py-1.5 scrollbar-hide" role="tablist">
-              {(["all", "wallet", "requests", "like", "comment", "follow", "message", "match"] as const).map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  role="tab"
-                  aria-selected={filterCat === cat}
-                  onClick={() => setFilterCat(cat as typeof filterCat)}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize transition ${
-                    filterCat === cat ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-emerald-50"
-                  }`}
-                >
-                  {cat === "all" ? "All" : cat === "wallet" ? "GHC" : cat === "requests" ? "Requests" : cat}
-                </button>
-              ))}
+
+            <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-hide">
+              {NOTIFICATION_CENTER_BUCKETS.map((b) => {
+                const active = bucket === b.id
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setBucket(b.id)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
+                      active
+                        ? "bg-emerald-600 text-white"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {b.label}
+                  </button>
+                )
+              })}
             </div>
-            <div className="max-h-80 overflow-y-auto">
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {filtered.length === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <p className="text-sm font-semibold text-gray-800">You&apos;re all caught up</p>
-                  <p className="mt-1 text-xs text-gray-500">Likes, comments, follows, messages and GHC activity will show up here.</p>
+                <div className="flex flex-col items-center px-6 py-14 text-center">
+                  <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                    <Bell size={26} />
+                  </span>
+                  <p className="text-[15px] font-bold text-foreground">{EMPTY_COPY[bucket]?.title || "Nothing here"}</p>
+                  <p className="mt-1 max-w-[16rem] text-[12px] leading-relaxed text-muted-foreground">
+                    {EMPTY_COPY[bucket]?.body}
+                  </p>
                 </div>
               ) : (
-                <ul>
+                <ul className="divide-y divide-border">
                   {filtered.map((n) => (
                     <li key={n.id}>
                       <button
                         type="button"
                         onClick={() => onTap(n)}
-                        className={`flex w-full gap-2.5 px-3 py-2.5 text-left transition hover:bg-gray-50 ${
-                          !n.read ? "bg-emerald-50/60" : ""
+                        className={`flex w-full items-start gap-3 px-4 py-3.5 text-left transition hover:bg-muted/50 ${
+                          !n.read ? "bg-emerald-50/40 dark:bg-emerald-950/20" : ""
                         }`}
                       >
-                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                          {ICON[n.type] || <Bell size={14} className="text-gray-500" />}
+                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                          {ICON[n.type] || <Bell size={15} className="text-muted-foreground" />}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-bold text-gray-900">{n.title}</span>
-                          <span className="mt-0.5 block line-clamp-2 text-[11px] text-gray-600">{n.message}</span>
-                          <span className="mt-0.5 block text-[10px] text-gray-400">{timeLabel(n.timestamp)}</span>
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="text-[13px] font-bold leading-snug text-foreground">{n.title}</span>
+                            <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                              {timeLabel(n.timestamp)}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground line-clamp-2">
+                            {n.message}
+                          </span>
                         </span>
-                        {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-emerald-600" aria-hidden />}
+                        {!n.read ? (
+                          <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-label="Unread" />
+                        ) : null}
                       </button>
                     </li>
                   ))}
@@ -230,8 +286,10 @@ export function NotificationBell({
               )}
             </div>
           </div>
-        </>
-      )}
+        </div>
+      ) : null}
     </div>
   )
 }
+
+export default NotificationBell

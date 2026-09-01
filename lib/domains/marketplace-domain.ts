@@ -2,7 +2,7 @@
  * MarketplaceDomain — products, services, orders, reviews, promotions.
  *
  * Integrated with Profile, Reputation, Verification, Membership, Wallet, Notifications.
- * Not a separate app identity — sellers are GH Connect profiles.
+ * Not a separate app identity — sellers are GreenHaven profiles.
  */
 
 import { runMutation, type MutationResult } from "./mutation-pipeline"
@@ -74,7 +74,10 @@ export interface MarketplaceOrder {
   cancelledAt?: number
   notes?: string
   /** Payment is separate — never auto-complete on payment request alone */
-  paymentStatus?: "none" | "requested" | "held" | "captured" | "refunded"
+  paymentStatus?: "none" | "requested" | "pending" | "held" | "captured" | "verified" | "refunded"
+  /** Server order id when mirrored to /api/marketplace/orders */
+  serverOrderId?: string
+  paymentMethod?: "ghc" | "pi" | "none"
 }
 
 export interface MarketplaceReview {
@@ -499,6 +502,110 @@ export function createMarketplaceDomain(deps: {
           return { order }
         },
       })
+    },
+
+
+    /**
+     * Pay order via server: GHC ledger or verified Pi intent.
+     * Never marks paid from client alone.
+     */
+    async payOrder(
+      orderId: string,
+      method: "ghc" | "pi",
+      proof?: { intentId?: string; paymentId?: string; txid?: string }
+    ): Promise<MutationResult<{ order: MarketplaceOrder }>> {
+      const local = orders().find((o) => o.id === orderId)
+      if (!local) {
+        return { ok: false, error: "Order not found", phase: "validate", requestId: "local" }
+      }
+      if (local.buyerId !== userId) {
+        return { ok: false, error: "Only buyer can pay", phase: "authorize", requestId: "local" }
+      }
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" }
+        try {
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+
+        // Ensure server order exists
+        let serverOrderId = local.serverOrderId
+        if (!serverOrderId) {
+          const createRes = await fetch("/api/marketplace/orders", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              listingId: local.listingId,
+              sellerId: local.sellerId,
+              listingTitle: local.listingId,
+              quantity: local.quantity,
+              unitPrice: local.unitPrice,
+              currency: local.currency,
+            }),
+          })
+          const created = await createRes.json().catch(() => ({}))
+          if (createRes.ok && created?.order?.id) {
+            serverOrderId = created.order.id as string
+          }
+        }
+        if (!serverOrderId) {
+          return {
+            ok: false,
+            error: "Could not create server order — enable auth / GHC_SERVER_MEMORY",
+            phase: "authorize",
+            requestId: "server",
+          }
+        }
+
+        const payRes = await fetch(
+          `/api/marketplace/orders/${encodeURIComponent(serverOrderId)}/pay`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ method, ...proof }),
+          }
+        )
+        const data = await payRes.json().catch(() => ({}))
+        if (!payRes.ok || !data?.ok) {
+          return {
+            ok: false,
+            error: data?.error || data?.message || "Payment failed",
+            phase: "authorize",
+            requestId: serverOrderId,
+          }
+        }
+
+        // Mirror server success onto local order
+        const olist = orders()
+        const idx = olist.findIndex((o) => o.id === orderId)
+        if (idx >= 0) {
+          olist[idx] = {
+            ...olist[idx],
+            status: "confirmed",
+            paymentStatus: "verified",
+            paymentMethod: method,
+            serverOrderId,
+            confirmedAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          saveOrders(olist)
+          domainEvents.publish(
+            "MARKETPLACE_ORDER_UPDATED",
+            { orderId, status: "confirmed", listingId: local.listingId },
+            userId,
+            orderId
+          )
+          return { ok: true, data: { order: olist[idx] }, requestId: serverOrderId, phase: "commit" }
+        }
+        return { ok: false, error: "Local order missing", phase: "commit", requestId: serverOrderId }
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : "Payment failed",
+          phase: "authorize",
+          requestId: "local",
+        }
+      }
     },
 
     async transitionOrder(

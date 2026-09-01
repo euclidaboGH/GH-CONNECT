@@ -246,7 +246,7 @@ export function GlobalSearchModal({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="People, GH ID, posts, communities…"
+            placeholder="People, GH-XXXXXX, posts, communities, marketplace…"
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             aria-label="Global search"
             autoComplete="off"

@@ -99,7 +99,7 @@ export function ReportChooser({
                     <h2 className="text-base font-bold text-gray-900">
                       Report this {TARGET_LABELS[targetType]}
                     </h2>
-                    <p className="mt-1 text-xs text-gray-500">Help keep GH Connect safe for everyone.</p>
+                    <p className="mt-1 text-xs text-gray-500">Help keep GreenHaven safe for everyone.</p>
                   </div>
                   <button
                     type="button"

@@ -14,6 +14,24 @@ export const GHC_RECEIVE_PROTOCOL = "ghc"
 export const GHC_RECEIVE_HOST = "receive"
 export const GHC_RECEIVE_VERSION = 1
 
+/** Never allowed in receive QR / deep links */
+export const FORBIDDEN_RECEIVE_PARAMS = [
+  "amount",
+  "balance",
+  "token",
+  "access_token",
+  "refresh_token",
+  "secret",
+  "key",
+  "password",
+  "email",
+  "phone",
+  "pin",
+  "auth",
+  "session",
+  "private",
+] as const
+
 export type GhcReceivePayload = {
   version: number
   greenHavenId: string
@@ -96,10 +114,16 @@ export function parseReceivePayload(raw: string): ParseReceiveResult {
     return { ok: false, code: "INVALID_ID", message: "Invalid GreenHaven ID in code" }
   }
 
-  // Reject unexpected sensitive-looking params
-  for (const key of ["token", "access_token", "secret", "amount", "balance", "key"]) {
+  // Reject unexpected sensitive-looking params (identity-only payload)
+  for (const key of FORBIDDEN_RECEIVE_PARAMS) {
     if (url.searchParams.has(key)) {
       return { ok: false, code: "INVALID_QR", message: "Receive code contains disallowed fields" }
+    }
+  }
+  // Only allow known safe keys: v, id
+  for (const key of url.searchParams.keys()) {
+    if (key !== "v" && key !== "id") {
+      return { ok: false, code: "INVALID_QR", message: "Receive code contains unknown fields" }
     }
   }
 
