@@ -101,7 +101,7 @@ function GroupCardContent({
       }}
       aria-label={`Open community ${groupName}, ${memberCount} members. Board and chat are separate.`}
     >
-      <article className="flex gap-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm transition hover:border-emerald-300/50 hover:shadow-md active:scale-[0.995]">
+      <article className="flex gap-3 rounded-[1.25rem] border border-border/60 bg-card p-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition hover:border-emerald-400/40 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)] active:scale-[0.995] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
         {isPinned && (
           <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-emerald-600" aria-hidden />
         )}
@@ -113,7 +113,7 @@ function GroupCardContent({
         )}
 
         {/* 64px cover */}
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-lg font-bold text-white shadow-sm">
+        <div className="relative h-[4.25rem] w-[4.25rem] shrink-0 overflow-hidden rounded-[1.1rem] bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 text-lg font-bold text-white shadow-md ring-2 ring-emerald-500/15">
           {coverImage || groupAvatar ? (
             <LazyImage
               src={coverImage || groupAvatar || ""}

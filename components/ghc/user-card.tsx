@@ -154,7 +154,7 @@ function UserCardInner({
   const photoH = variant === "hero" ? "aspect-[3/4] max-h-72" : "aspect-[3/4] max-h-56"
 
   return (
-    <article className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md">
+    <article className="relative flex h-full flex-col overflow-hidden rounded-[1.35rem] border border-border/70 bg-card text-card-foreground shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition hover:border-emerald-400/40 hover:shadow-[0_12px_32px_rgba(16,185,129,0.12)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
       {/* Hero photo */}
       <button
         type="button"
@@ -452,7 +452,7 @@ export function DiscoverListRow({
     <button
       type="button"
       onClick={onViewProfile}
-      className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 text-left shadow-sm transition hover:bg-muted/40 active:scale-[0.99]"
+      className="flex w-full items-center gap-3 rounded-[1.15rem] border border-border/60 bg-card px-3.5 py-3 text-left shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition hover:border-emerald-400/35 hover:bg-muted/30 hover:shadow-md active:scale-[0.99]"
     >
       <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
         <LazyImage src={photo} alt="" className="h-full w-full object-cover" online={Boolean(candidate.online)} />

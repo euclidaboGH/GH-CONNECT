@@ -3,7 +3,7 @@ import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/doma
 "use client"
 
 /**
- * Communities tab — My communities vs Discover.
+ * Communities tab — My communities vs Discover (0.58 community polish).
  * Domain-backed join/create; Board is the product surface (hub).
  */
 

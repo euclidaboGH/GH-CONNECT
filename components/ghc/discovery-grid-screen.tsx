@@ -1,3 +1,4 @@
+/** Discover 0.58 — modern profile cards */
 "use client"
 
 /**
