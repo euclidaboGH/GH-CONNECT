@@ -1295,10 +1295,7 @@ export function createEconomyDomain(deps: {
         phase: "mutate",
         requestId: spendRes.requestId || "local",
       }
-    }
-
-
-
+    },
 
     /**
      * Internal P2P: send GHC to another GreenHaven user.

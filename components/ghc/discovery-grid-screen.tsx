@@ -1,6 +1,6 @@
-/** Discover 0.58 — modern profile cards */
 "use client"
 
+/** Discover 0.58 — modern profile cards */
 /**
  * Discover — connection-intent discovery (not dating-only).
  * Slim chrome, safer candidate normalization, clear empty states.

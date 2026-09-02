@@ -1,6 +1,5 @@
 GreenHaven deploy stamp
-version=0.58.0
+version=0.58.1
 node=24.x
-base=user-attached-studio-zip
-ui=wallet+community+discover-cards
-generated=2026-09-02T11:40Z
+fix=use-client+economy-syntax
+generated=2026-09-02T12:40Z
