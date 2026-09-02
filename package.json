@@ -83,6 +83,6 @@
     "@types/qrcode": "^1.5.5"
   },
   "engines": {
-    "node": ">=20 <25"
+    "node": "20.x"
   }
 }
