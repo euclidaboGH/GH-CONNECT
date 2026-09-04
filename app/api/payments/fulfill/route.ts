@@ -7,6 +7,11 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { updateOrderStatus, getOrder, saveOrder, genOrderId } from "@/lib/gh-pay/order-store"
 import type { GhPayOrder } from "@/lib/gh-pay/types"
 import { piGetPayment, getPiApiKey } from "@/lib/server/payments/pi-api"
+import {
+  loadByProviderPaymentId,
+  markIntentFulfilled,
+  getPaymentIntent,
+} from "@/lib/server/payments/intent-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -78,6 +83,18 @@ export async function POST(request: Request) {
     }
 
     fulfilledPayments.add(paymentId)
+
+    // Durable fulfillment flag (idempotent)
+    try {
+      const intent = await loadByProviderPaymentId(paymentId)
+      if (intent && intent.status === "COMPLETED") {
+        markIntentFulfilled(intent.id, auth?.userId)
+      } else if (intent && intent.status === "FULFILLED") {
+        /* already */
+      }
+    } catch {
+      /* non-blocking */
+    }
 
     return NextResponse.json({
       ok: true,

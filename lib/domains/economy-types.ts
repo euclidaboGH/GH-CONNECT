@@ -144,7 +144,8 @@ export interface EconomyLimits {
 }
 
 export const DEFAULT_ECONOMY_LIMITS: EconomyLimits = {
-  maxDailyEarn: 500,
+  /** ECONOMY 1.2: activity cap 0.5 + claim claim ~2; keep headroom, not 500 */
+  maxDailyEarn: 5,
   maxPendingRewards: 50,
   minBalance: 0,
   minimumTransferAmount: 1,

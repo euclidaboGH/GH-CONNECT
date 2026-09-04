@@ -16,6 +16,7 @@ import {
 } from "@/lib/server/economy/http"
 import { NextResponse } from "next/server"
 import { evaluateRewardAuthoritative } from "@/lib/server/economy/reward-engine"
+import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,12 @@ export const dynamic = "force-dynamic"
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  pruneRateLimitBuckets()
+  const rl = checkRateLimit(`reward_eval:${auth.userId}`, 60, 60_000)
+  if (!rl.ok) {
+    return jsonErr("RATE_LIMITED", `Too many reward evaluations; retry in ${rl.retryAfterSec}s`, 429)
+  }
 
   let body: Record<string, unknown>
   try {

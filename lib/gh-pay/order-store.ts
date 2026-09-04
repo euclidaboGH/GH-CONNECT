@@ -1,6 +1,12 @@
 /**
- * Server + client order memory (process / localStorage).
- * Production: replace with DB table `gh_pay_orders`.
+ * GH Pay order store — NON-AUTHORITATIVE UI / session cache only.
+ *
+ * Financial settlement authority is:
+ *   ghc_payment_intents (durable) + Pi Platform API approve/complete
+ *
+ * This store does NOT authorize paid state, mint benefits, or settle π.
+ * Fulfillment must key off durable intent status COMPLETED → FULFILLED.
+ * Safe to keep in memory/localStorage for UX lists.
  */
 import type { GhPayOrder, OrderStatus } from "./types"
 

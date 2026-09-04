@@ -9,14 +9,18 @@
  */
 
 import { DEFAULT_REWARD_RULES } from "@/lib/domains/reward-rules"
+import type { RewardRule } from "@/lib/domains/economy-types"
+import {
+  computeActivityEmission,
+  commitActivityEmission,
+} from "@/lib/server/economy/activity-emission"
+import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
+import { lagosDayKey } from "@/lib/server/economy/claim-engine"
 
-/** Hard ceiling on GHC credited per user per calendar day (all reward sources) */
-const GLOBAL_DAILY_GHC_CAP = 120
 /** Minimum account age (ms) before social rewards (follow/like/comment) */
 const MIN_ACCOUNT_AGE_MS_SOCIAL = 24 * 60 * 60 * 1000
 /** Minimum reputation score for high-frequency social rewards */
 const MIN_REP_FOR_SOCIAL = 5
-import type { RewardRule } from "@/lib/domains/economy-types"
 import {
   executeAuthoritativePending,
   getGhcAuthoritativeStore,
@@ -43,6 +47,9 @@ export type EvaluateRewardResult =
       requiresValidation: boolean
       idempotent?: boolean
       transaction?: unknown
+      economicVersion?: string
+      m?: number
+      g?: number
       deniedReasons?: never
     }
   | {
@@ -251,11 +258,36 @@ export async function evaluateRewardAuthoritative(
     return { ok: false, error: "NO_RULE", deniedReasons: ["UNKNOWN_SOURCE_EVENT"] }
   }
 
-  // Server amount only — ignore clientSuggestedAmount for credit size
-  const amount = Number(rule.amount)
-  if (!Number.isFinite(amount) || amount <= 0) {
+  // Server base amount only — ignore clientSuggestedAmount for credit size.
+  // ECONOMY_VERSION 1.2: activity-style rewards pass through cap + m × g.
+  const baseAmount = Number(rule.amount)
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
     return { ok: false, error: "RULE_AMOUNT_INVALID" }
   }
+
+  // Daily check-in is handled by claim-engine via /api/economy/rewards/daily
+  if (sourceEvent.toUpperCase() === "DAILY_CHECKIN") {
+    return {
+      ok: false,
+      error: "USE_DAILY_CLAIM_ENDPOINT",
+      deniedReasons: ["ROUTE_TO_DAILY_CLAIM_V12"],
+    }
+  }
+
+  const day = lagosDayKey()
+  const emission = computeActivityEmission({
+    userId: input.userId,
+    baseAmountGhc: baseAmount,
+    dayKey: day,
+  })
+  if (!emission.ok) {
+    return {
+      ok: false,
+      error: emission.error,
+      deniedReasons: [emission.error, `DAY_REM_${emission.dayRemaining}`, `WEEK_REM_${emission.weekRemaining}`],
+    }
+  }
+  const amount = emission.grantedGhc
 
   const legitimacy = verifyActionLegitimacy({
     userId: input.userId,
@@ -282,7 +314,6 @@ export async function evaluateRewardAuthoritative(
     return { ok: false, error: "ALREADY_REWARDED", deniedReasons: ["DUPLICATE_REFERENCE"] }
   }
 
-  const day = dayKey()
   const dayStats = storeDayCounts(store, input.userId, sourceEvent, day)
 
   if (rule.dailyLimit != null && dayStats.count >= rule.dailyLimit) {
@@ -290,31 +321,6 @@ export async function evaluateRewardAuthoritative(
       ok: false,
       error: "DAILY_CAP",
       deniedReasons: [`DAILY_LIMIT_${rule.dailyLimit}`],
-    }
-  }
-
-  // Global daily GHC ceiling across all reward sources
-  const dayAll = storeDayCounts(store, input.userId, "*", day)
-  // When source is "*", storeDayCounts may not support it — sum all day amounts
-  let dayGhcTotal = 0
-  try {
-    const txs = store.listTransactions(input.userId) || []
-    const list = Array.isArray(txs) ? txs : []
-    const d = day
-    for (const tx of list as Array<{ createdAt?: number; amount?: number; status?: string; kind?: string }>) {
-      if (dayKey(Number(tx.createdAt) || 0) !== d) continue
-      if (tx.status === "reversed" || tx.status === "cancelled") continue
-      const amt = Number(tx.amount) || 0
-      if (amt > 0) dayGhcTotal += amt
-    }
-  } catch {
-    dayGhcTotal = dayStats.amountSum
-  }
-  if (dayGhcTotal + amount > GLOBAL_DAILY_GHC_CAP) {
-    return {
-      ok: false,
-      error: "GLOBAL_DAILY_CAP",
-      deniedReasons: [`GLOBAL_DAILY_GHC_CAP_${GLOBAL_DAILY_GHC_CAP}`],
     }
   }
 
@@ -354,6 +360,12 @@ export async function evaluateRewardAuthoritative(
     return { ok: false, error: result.error || "PENDING_FAILED" }
   }
 
+  commitActivityEmission({
+    userId: input.userId,
+    result: emission,
+    dayKey: day,
+  })
+
   return {
     ok: true,
     amount,
@@ -362,5 +374,8 @@ export async function evaluateRewardAuthoritative(
     requiresValidation: Boolean(rule.requiresValidation),
     idempotent: result.idempotent,
     transaction: result.tx,
+    economicVersion: ECONOMY_VERSION,
+    m: emission.m,
+    g: emission.g,
   }
 }

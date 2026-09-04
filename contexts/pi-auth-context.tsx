@@ -7,7 +7,8 @@ import React, {
   useEffect,
   type ReactNode,
 } from "react";
-import { PI_NETWORK_CONFIG } from "@/lib/system-config";
+import { PI_NETWORK_CONFIG } from "@/lib/system-config"
+import { onIncompletePaymentFound } from "@/lib/pi-incomplete-payment";
 import { IdentityService } from "@/lib/identity/identity-service";
 import { buildPiSdk, createSdk } from "@/lib/pi";
 import { createLocalSdkLite, isLikelyAppStudioPreview } from "@/lib/local-pi-sdk";
@@ -252,6 +253,44 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             version: "2.0",
             sandbox: PI_NETWORK_CONFIG.SANDBOX,
           });
+        }
+        // Official incomplete-payment recovery (production Pi Browser path)
+        const wPi = window.Pi as unknown as {
+          authenticate?: (
+            scopes: string[],
+            onIncomplete: (payment: unknown) => void
+          ) => Promise<{ user?: { uid?: string; username?: string }; accessToken?: string }>
+        }
+        if (typeof wPi.authenticate === "function") {
+          try {
+            setAuthMessage("Authenticating with Pi...");
+            const authResult = await wPi.authenticate(
+              ["username", "payments"],
+              (payment) => {
+                void onIncompletePaymentFound(
+                  payment as {
+                    identifier?: string
+                    paymentId?: string
+                    transaction?: { txid?: string } | null
+                  }
+                )
+              }
+            )
+            const u = authResult?.user
+            if (u?.uid) {
+              IdentityService.setFromPi({
+                uid: u.uid,
+                username: u.username || null,
+                displayName: u.username || null,
+                accessToken: authResult?.accessToken || null,
+              })
+            }
+          } catch (authCbErr) {
+            console.warn(
+              "[PiAuth] Pi.authenticate (incomplete recovery) issue:",
+              authCbErr
+            )
+          }
         }
       } catch (piErr) {
         console.warn("[PiAuth] Pi SDK load/init issue:", piErr);

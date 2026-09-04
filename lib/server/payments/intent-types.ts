@@ -10,9 +10,26 @@ export type PaymentIntentStatus =
   | "USER_SUBMITTED"
   | "COMPLETION_PENDING"
   | "COMPLETED"
+  | "FULFILLED"
   | "FAILED"
   | "CANCELLED"
   | "REFUNDED"
+  | "INCOMPLETE"
+
+/** Allowed forward transitions (invalid backwards blocked in store) */
+export const PAYMENT_STATUS_RANK: Record<PaymentIntentStatus, number> = {
+  CREATED: 0,
+  APPROVAL_PENDING: 1,
+  APPROVED: 2,
+  USER_SUBMITTED: 3,
+  COMPLETION_PENDING: 4,
+  INCOMPLETE: 4,
+  COMPLETED: 5,
+  FULFILLED: 6,
+  FAILED: 90,
+  CANCELLED: 91,
+  REFUNDED: 92,
+}
 
 export type PaymentProvider = "pi" | "ghc_internal" | "manual"
 
@@ -44,28 +61,23 @@ export interface PaymentIntent {
   id: string
   userId: string
   provider: PaymentProvider
-  /** Pi payment identifier once known */
   providerPaymentId: string | null
   purpose: PaymentPurpose
-  /** Amount in provider currency units (π for Pi) */
   amount: number
   currency: "PI" | "GHC"
   status: PaymentIntentStatus
-  /** Client/server correlation (order id, membership ref) */
   referenceId: string
   metadata: Record<string, unknown>
   createdAt: number
   approvedAt?: number
   submittedAt?: number
   completedAt?: number
+  fulfilledAt?: number
   cancelledAt?: number
   refundedAt?: number
-  /** Blockchain tx id when completed */
   txid?: string | null
-  /** Last error message */
   lastError?: string | null
   audit: PaymentIntentAuditEvent[]
-  /** Idempotency key from client */
   idempotencyKey?: string | null
 }
 

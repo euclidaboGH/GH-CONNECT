@@ -101,22 +101,26 @@ export interface DailyStreakState {
   shieldsMonthKey?: string | null
 }
 
-/** Base FREE track — VIP/VVIP use enhanced tracks (not raw × multipliers) */
+/**
+ * Display-oriented daily streak bases (ECONOMY_VERSION 1.2 gross schedule).
+ * Server claim-engine is authoritative; UI must not credit balances from these alone.
+ * Gross day amounts: 0.39, 0.62, 0.86, 1.09, 1.33, 1.56, 1.96 — user receives 80% after m×g.
+ */
 export const DAILY_STREAK_GHC: Record<number, number> = {
-  1: 10,
-  2: 15,
-  3: 20,
-  4: 25,
-  5: 30,
-  6: 40,
-  7: 100,
+  1: 0.39,
+  2: 0.62,
+  3: 0.86,
+  4: 1.09,
+  5: 1.33,
+  6: 1.56,
+  7: 1.96,
 }
 
-/** Membership-aware tracks — progressive value, not unlimited inflation */
+/** Membership-aware *display* tracks — soft hints only; server enforces economy */
 export const DAILY_STREAK_TRACKS: Record<"free" | "vip" | "vvip", Record<number, number>> = {
-  free: { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30, 6: 40, 7: 100 },
-  vip: { 1: 12, 2: 18, 3: 24, 4: 30, 5: 36, 6: 48, 7: 120 },
-  vvip: { 1: 15, 2: 22, 3: 30, 4: 38, 5: 45, 6: 60, 7: 150 },
+  free: { 1: 0.39, 2: 0.62, 3: 0.86, 4: 1.09, 5: 1.33, 6: 1.56, 7: 1.96 },
+  vip: { 1: 0.39, 2: 0.62, 3: 0.86, 4: 1.09, 5: 1.33, 6: 1.56, 7: 1.96 },
+  vvip: { 1: 0.39, 2: 0.62, 3: 0.86, 4: 1.09, 5: 1.33, 6: 1.56, 7: 1.96 },
 }
 
 const XP_STORAGE = "ghc_reward_xp_v1"

@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.58.1",
+  "version": "0.59.0",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -12,7 +12,8 @@
     "vercel-build": "next build",
     "ci": "npm ci",
     "check:jsx": "node scripts/check-jsx-safety.mjs",
-    "prebuild": "node scripts/check-jsx-safety.mjs"
+    "prebuild": "node scripts/check-jsx-safety.mjs",
+    "test:economy": "node scripts/test-economy-v12.mjs"
   },
   "dependencies": {
     "next": "15.5.24",

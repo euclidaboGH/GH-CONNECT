@@ -27,6 +27,7 @@ import {
 } from "@/lib/gh-pay"
 import type { GhPayOrder } from "@/lib/gh-pay/types"
 import { getProduct } from "@/lib/gh-pay/catalog"
+import { ASSET_POLICY } from "@/lib/asset-separation"
 
 const VERIFY_KEY = "gh_pay_pi_verified_v1"
 
@@ -185,8 +186,8 @@ export function GhPayPanel({
             Pay with π
           </h2>
           <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-            Membership, boosts, and marketplace use Pi. GHC is a separate in-app utility — never
-            mixed or converted here.
+            {ASSET_POLICY.piRailsCopy} {ASSET_POLICY.piPeerCopy} GHC stays on the GreenHaven
+            ledger — never mixed or converted here.
           </p>
         </div>
         <div

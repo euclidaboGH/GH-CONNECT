@@ -62,7 +62,13 @@ async function creditDailyToWallet(
   amount: number,
   cycleDay: number,
   rewardDayKey: string
-): Promise<{ ok: boolean; error?: string; serverAmount?: number }> {
+): Promise<{
+  ok: boolean
+  error?: string
+  serverAmount?: number
+  alreadyClaimed?: boolean
+  cycleDay?: number
+}> {
   const ref = `daily_checkin:${userId}:${rewardDayKey}`
   // Prefer server evaluate+claim — amount is NEVER taken from the client
   try {
@@ -83,12 +89,19 @@ async function creditDailyToWallet(
         ok?: boolean
         amount?: number
         alreadyClaimed?: boolean
+        idempotent?: boolean
+        cycleDay?: number
       }
-      return { ok: true, serverAmount: Number(data.amount) || undefined }
+      return {
+        ok: true,
+        serverAmount: Number(data.amount) || undefined,
+        alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
+        cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,
+      }
     }
-    // 409 already claimed today
+    // 409 already claimed today — safe idempotent success
     if (dailyRes.status === 409) {
-      return { ok: true }
+      return { ok: true, alreadyClaimed: true }
     }
 
     const evalRes = await fetch("/api/economy/rewards/evaluate", {
@@ -243,28 +256,43 @@ export function DailyRewardFeedCard({
     if (claiming || !daily.canClaimToday) return
     setClaiming(true)
     try {
-      const res = claimDailyStreak(userId, tier)
-      if (!res.ok) {
-        ghc.addToast?.(res.error || "Already claimed", "error")
+      // Server is authoritative — never optimistically credit from client preview
+      const server = await creditDailyToWallet(
+        userId,
+        daily.todayGhc,
+        daily.displayCycleDay,
+        daily.rewardDayKey
+      )
+      if (!server.ok) {
+        ghc.addToast?.(server.error || "Claim failed", "error")
         setTick((t) => t + 1)
         return
       }
-      await creditDailyToWallet(userId, res.ghc, res.cycleDay, daily.rewardDayKey)
+      // Local streak UX only after server success
+      const res = claimDailyStreak(userId, tier)
+      const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
+      const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
       ghc.addToast?.(
-        `+${res.ghc} GHC · Day ${res.cycleDay}/7 · +${res.xp} XP${shieldNote}`,
+        server.alreadyClaimed
+          ? `Already claimed · ${amt} GHC`
+          : `+${amt} GHC · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       setTick((t) => t + 1)
       try {
-        window.dispatchEvent(new CustomEvent("ghc:daily-reward-claimed", { detail: res }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:daily-reward-claimed", {
+            detail: { ...res, ghc: amt, cycleDay: day, server: true },
+          })
+        )
       } catch {
         /* */
       }
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, userId, tier, ghc])
+  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, userId, tier, ghc])
 
   // Feed only shows the card while a claim is still available.
   // After claim, hide entirely — streak / history live in Rewards Centre.
@@ -339,16 +367,24 @@ export function DailyRewardSheet({
     if (claiming || !daily.canClaimToday) return
     setClaiming(true)
     try {
-      const res = claimDailyStreak(userId, tier)
-      if (!res.ok) {
-        ghc.addToast?.(res.error || "Already claimed", "error")
-        onClose()
+      const server = await creditDailyToWallet(
+        userId,
+        daily.todayGhc,
+        daily.displayCycleDay,
+        daily.rewardDayKey
+      )
+      if (!server.ok) {
+        ghc.addToast?.(server.error || "Claim failed", "error")
         return
       }
-      await creditDailyToWallet(userId, res.ghc, res.cycleDay, daily.rewardDayKey)
+      const res = claimDailyStreak(userId, tier)
+      const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
+      const day = server.cycleDay ?? res.cycleDay
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
       ghc.addToast?.(
-        `+${res.ghc} GHC added · Day ${res.cycleDay}/7 · +${res.xp} XP${shieldNote}`,
+        server.alreadyClaimed
+          ? `Already claimed · ${amt} GHC`
+          : `+${amt} GHC added · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       try {

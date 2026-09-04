@@ -936,14 +936,20 @@ export function createEconomyDomain(deps: {
               .filter((r) => r.validationStatus === "pending_validation").length
             if (pendingCount >= limits.maxPendingRewards) continue
 
-            // Stage every positive reward as pending — not transferable until claimed
+            // Stage every positive reward as pending — not transferable until claimed.
+            // ECONOMY 1.2: local/studio path must not stage above activity daily pre-control cap (0.5).
+            // Daily claims use /api/economy/rewards/daily (not this path).
+            const ACTIVITY_PRE_CAP = 0.5
+            const stagedAmount = Math.min(Number(rule.amount) || 0, ACTIVITY_PRE_CAP)
+            if (stagedAmount <= 0) continue
+
             const reward: RewardRecord = {
               id: genId("rwd"),
               userId,
               ruleId: rule.id,
               category: rule.category,
               sourceEvent: rule.sourceEvent,
-              amount: rule.amount,
+              amount: stagedAmount,
               validationStatus: "pending_validation",
               referenceId: i.referenceId,
               reason: rule.description,
@@ -954,7 +960,7 @@ export function createEconomyDomain(deps: {
               const built = createLedgerTransaction({
                 userId,
                 kind: "pending",
-                amount: rule.amount,
+                amount: stagedAmount,
                 reason: rule.description,
                 sourceEvent: rule.sourceEvent,
                 referenceId: reward.id,
@@ -1295,7 +1301,10 @@ export function createEconomyDomain(deps: {
         phase: "mutate",
         requestId: spendRes.requestId || "local",
       }
-    },
+    }
+
+
+
 
     /**
      * Internal P2P: send GHC to another GreenHaven user.

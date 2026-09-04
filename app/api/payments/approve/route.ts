@@ -10,6 +10,9 @@ import {
   getByProviderPaymentId,
   bindProviderPayment,
   transitionIntent,
+  loadPaymentIntent,
+  loadByProviderPaymentId,
+  assertDurableWrite,
 } from "@/lib/server/payments/intent-store"
 import {
   piApprovePayment,
@@ -38,8 +41,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Resolve intent: explicit id → already bound provider id
-    let intent = intentId ? getPaymentIntent(intentId) : getByProviderPaymentId(paymentId)
+    // Resolve durable intent (DB then memory)
+    let intent = intentId
+      ? (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+      : (await loadByProviderPaymentId(paymentId)) || getByProviderPaymentId(paymentId)
 
     if (intent && auth && intent.userId !== auth.userId) {
       return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
@@ -126,6 +131,10 @@ export async function POST(request: Request) {
         detail: "Pi developer approved",
         providerPaymentId: paymentId,
       })
+      const durable = await assertDurableWrite(getPaymentIntent(intent.id) || intent)
+      if (!durable.ok) {
+        return NextResponse.json({ ok: false, error: durable.error }, { status: 503 })
+      }
     }
 
     return NextResponse.json({

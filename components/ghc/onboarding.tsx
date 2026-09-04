@@ -1,6 +1,6 @@
+import { IdentityService } from "@/lib/identity/identity-service"
 "use client"
 
-import { IdentityService } from "@/lib/identity/identity-service"
 import { useState, useEffect } from "react"
 import { ageFromBornDate, isAdultFromBornDate, maxBornDateForMinAge } from "@/lib/age-utils"
 import { useGHC } from "@/contexts/ghc-context"

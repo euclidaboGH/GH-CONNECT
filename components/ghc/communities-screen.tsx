@@ -1,10 +1,11 @@
-"use client"
-
 import { IdentityService } from "@/lib/identity/identity-service"
 import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/domains/community-persistence"
+"use client"
+
 /**
  * Communities tab — My communities vs Discover (0.58 community polish).
  * Domain-backed join/create; Board is the product surface (hub).
+ * Cards use elevated surfaces + clearer My vs Discover hierarchy.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"

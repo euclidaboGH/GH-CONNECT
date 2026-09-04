@@ -6,6 +6,7 @@
  */
 
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
+import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
 
 export function WalletBalanceCard({
@@ -41,13 +42,24 @@ export function WalletBalanceCard({
       aria-label="GHC wallet balance"
     >
       <div className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 px-5 pb-6 pt-5 text-white">
-        <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-12 left-0 h-32 w-32 rounded-full bg-teal-300/15 blur-3xl" aria-hidden />
+        {/* soft light blobs — premium depth without noise */}
+        <div
+          className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -bottom-12 left-0 h-32 w-32 rounded-full bg-teal-300/15 blur-3xl"
+          aria-hidden
+        />
 
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-100/75">Available</p>
-            <p className="mt-0.5 text-[12px] font-medium text-emerald-50/80">GreenHaven Coin · GHC</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-100/75">
+              Available
+            </p>
+            <p className="mt-0.5 text-[12px] font-medium text-emerald-50/80">
+              GreenHaven Coin · GHC · in-app utility
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <GhcCoinIcon size={36} className="drop-shadow-md opacity-95" title="GreenHaven Coin" />
@@ -95,7 +107,11 @@ export function WalletBalanceCard({
           className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center transition hover:bg-amber-50/70 active:scale-[0.98] dark:hover:bg-amber-950/25"
         >
           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pending</span>
-          <span className={`text-[14px] font-bold tabular-nums ${pending > 0 ? "text-amber-700 dark:text-amber-400" : "text-foreground"}`}>
+          <span
+            className={`text-[14px] font-bold tabular-nums ${
+              pending > 0 ? "text-amber-700 dark:text-amber-400" : "text-foreground"
+            }`}
+          >
             {mask(pending)}
           </span>
           {pending > 0 && (
@@ -104,7 +120,9 @@ export function WalletBalanceCard({
         </button>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Earned</span>
-          <span className="text-[14px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{mask(monthEarned)}</span>
+          <span className="text-[14px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+            {mask(monthEarned)}
+          </span>
         </div>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Spent</span>

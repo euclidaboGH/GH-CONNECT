@@ -42,9 +42,18 @@ export const ASSET_POLICY = {
   /** Explicit: no FX / peg */
   conversionEnabled: false as const,
   walletCopy:
-    "GHC is an in-app utility only — not Pi and not an investment product.",
+    "GHC is a GreenHaven in-app utility balance — not Pi, not an investment product, and not an external exchange asset.",
   payCopy:
     "GH Pay settles in π on Pi Network. GHC balances are separate and never mixed.",
+  /** Primary wallet rails explanation */
+  ghcRailsCopy:
+    "GHC — send, request and receive between GreenHaven users.",
+  piRailsCopy:
+    "π — pay GreenHaven services in Pi Browser or receive eligible platform payouts.",
+  piPeerCopy:
+    "Peer-to-peer π transfers remain in the Pi Wallet.",
+  referenceUnitCopy:
+    "100 GHC is GreenHaven's internal pricing/reference benchmark only — not a market price and not a promise that GHC can be redeemed for Pi.",
 } as const
 
 export type AssetCode = "PI" | "GHC"

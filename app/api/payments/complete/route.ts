@@ -10,6 +10,8 @@ import {
   getByProviderPaymentId,
   bindProviderPayment,
   transitionIntent,
+  loadPaymentIntent,
+  loadByProviderPaymentId,
 } from "@/lib/server/payments/intent-store"
 import {
   piCompletePayment,
@@ -42,7 +44,9 @@ export async function POST(request: Request) {
       )
     }
 
-    let intent = intentId ? getPaymentIntent(intentId) : getByProviderPaymentId(paymentId)
+    let intent = intentId
+      ? (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+      : (await loadByProviderPaymentId(paymentId)) || getByProviderPaymentId(paymentId)
 
     if (intent && auth && intent.userId !== auth.userId) {
       return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
