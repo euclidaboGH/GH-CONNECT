@@ -6,6 +6,7 @@
  * Taps deep-link to the right surface — never dumps users into Settings by default.
  */
 
+import { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
 import {
@@ -88,7 +89,11 @@ const EMPTY_COPY: Record<NotificationCenterBucket, { title: string; body: string
   },
   requests: {
     title: "No pending requests",
-    body: "Friend and join requests will show here.",
+    body: "Friend and connection requests will show here.",
+  },
+  community: {
+    title: "No community alerts",
+    body: "Invites, join requests, and community announcements appear here.",
   },
   system: {
     title: "No system notices",
@@ -272,6 +277,11 @@ export function NotificationBell({
                               {timeLabel(n.timestamp)}
                             </span>
                           </span>
+                          {isCommunityNotification(n) ? (
+                            <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                              {communityNotificationLabel(n)}
+                            </span>
+                          ) : null}
                           <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground line-clamp-2">
                             {n.message}
                           </span>

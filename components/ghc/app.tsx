@@ -1,5 +1,8 @@
 "use client"
 
+import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-connect-flow"
+import { IdentityService } from "@/lib/identity/identity-service"
+
 import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
 import { useGHCShell, useGHCProfile, useGHCDiscovery } from "@/contexts/ghc-context"
 import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
@@ -223,6 +226,23 @@ export function GHConnectApp() {
   const { ready, tab, setTab, toasts, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
+  const [connectionRequestBadge, setConnectionRequestBadge] = useState(0)
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        setConnectionRequestBadge(incomingRequestBadgeCount(IdentityService.getCurrentUserId()))
+      } catch {
+        setConnectionRequestBadge(0)
+      }
+    }
+    refresh()
+    const id = window.setInterval(refresh, 8000)
+    window.addEventListener("ghc:open-connection-inbox", refresh)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener("ghc:open-connection-inbox", refresh)
+    }
+  }, [])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
     "main" | "wallet" | "rewards" | "membership" | "help"
@@ -702,7 +722,15 @@ export function GHConnectApp() {
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
-                aria-label={isActive ? `${label}, current tab` : `Go to ${label}`}
+                aria-label={
+                  id === "matches" && connectionRequestBadge > 0
+                    ? isActive
+                      ? `${label}, ${connectionRequestBadge} connection requests, current tab`
+                      : `Go to ${label}, ${connectionRequestBadge} connection requests`
+                    : isActive
+                      ? `${label}, current tab`
+                      : `Go to ${label}`
+                }
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
@@ -720,13 +748,23 @@ export function GHConnectApp() {
                         }`
                   }
                 >
-                  <Icon
-                    size={id === "create" ? 22 : 20}
-                    strokeWidth={id === "create" ? 2.5 : isActive ? 2.5 : 2}
-                    fill={isActive && id === "matches" ? "currentColor" : "none"}
-                    aria-hidden="true"
-                    className={id === "create" ? "text-white" : undefined}
-                  />
+                  <span className="relative inline-flex">
+                    <Icon
+                      size={id === "create" ? 22 : 20}
+                      strokeWidth={id === "create" ? 2.5 : isActive ? 2.5 : 2}
+                      fill={isActive && id === "matches" ? "currentColor" : "none"}
+                      aria-hidden="true"
+                      className={id === "create" ? "text-white" : undefined}
+                    />
+                    {id === "matches" && connectionRequestBadge > 0 ? (
+                      <span
+                        className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal-600 px-1 text-[9px] font-bold text-white"
+                        aria-label={`${connectionRequestBadge} connection requests`}
+                      >
+                        {connectionRequestBadge > 9 ? "9+" : connectionRequestBadge}
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
                 <span
                   className={`max-w-full truncate text-[10px] font-bold leading-none tracking-tight ${
@@ -756,6 +794,12 @@ export function GHConnectApp() {
               setPollOpen(true)
             } else if (action === "challenge") {
               setChallengeOpen(true)
+            } else if (action === "story") {
+              window.dispatchEvent(
+                new CustomEvent("ghc:open-compose", {
+                  detail: { mode: "story" },
+                })
+              )
             } else {
               // Unified post: text + photo + video + files in one composer
               window.dispatchEvent(

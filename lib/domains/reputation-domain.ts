@@ -1,4 +1,7 @@
 /**
+ * Authority Class D — local signal cache until server reputation is primary.
+ * Never purchasable with GHC. Not financial authority.
+ *
  * ReputationDomain — trust / quality / contribution score.
  *
  * Separate from GHC, VIP/VVIP, and Verification.
@@ -7,6 +10,7 @@
 
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
+import { canMutateReputationPrivileged, isTrustProductionMode } from "@/lib/architecture/trust-authority"
 
 export type ReputationSignalKind =
   | "successful_interaction"
@@ -217,21 +221,37 @@ export function createReputationDomain(deps: { currentUserId?: string }) {
         validate: (i) => {
           if (!i.reason?.trim()) return "Reason required"
           if (!i.sourceEvent?.trim()) return "Source event required"
-          // Guard: never accept GHC purchase as reputation source
           if (
             /ghc|purchase|buy.?rep|wallet.?spend/i.test(i.sourceEvent) ||
             /bought reputation|paid for reputation/i.test(i.reason)
           ) {
             return "Reputation cannot be purchased with GHC"
           }
+          // Production: no arbitrary delta overrides from the browser
+          if (i.deltaOverride !== undefined && !canMutateReputationPrivileged()) {
+            return "REPUTATION_PRIVILEGED_BLOCKED"
+          }
+          // Production: cannot write reputation for another user from client
+          if (
+            i.targetUserId &&
+            i.targetUserId !== userId &&
+            !canMutateReputationPrivileged()
+          ) {
+            return "REPUTATION_CROSS_USER_BLOCKED"
+          }
           return null
         },
         mutate: (i) => {
           const target = i.targetUserId || userId
-          const base =
-            i.deltaOverride !== undefined
+          let base =
+            i.deltaOverride !== undefined && canMutateReputationPrivileged()
               ? i.deltaOverride
               : REPUTATION_WEIGHTS[i.kind]
+          // Clamp extreme client deltas in production even if weight table used
+          if (isTrustProductionMode() && !canMutateReputationPrivileged()) {
+            const cap = Math.abs(REPUTATION_WEIGHTS[i.kind] ?? 1)
+            if (Math.abs(base) > cap) base = base < 0 ? -cap : cap
+          }
           const event: ReputationEvent = {
             id: genId(),
             userId: target,

@@ -275,7 +275,7 @@ export function createCommunityDomain(deps: {
     async inviteMember(
       communityId: string,
       userId: string
-    ): Promise<MutationResult<{ communityId: string; userId: string }>> {
+    ): Promise<MutationResult<{ communityId: string; userId: string; invitedMembers: string[] }>> {
       return runMutation({
         name: "community.invite",
         actorId,
@@ -284,9 +284,103 @@ export function createCommunityDomain(deps: {
           const gate = assertAction(i.communityId, "invite")
           if (!gate.ok) return gate.error
           if (deps.getBlockedUsers?.()?.includes(i.userId)) return "Cannot invite blocked user"
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          if ((community.members || []).includes(i.userId)) return "Already a member"
           return null
         },
-        mutate: (i) => ({ communityId: i.communityId, userId: i.userId }),
+        mutate: (i) => {
+          const community = find(i.communityId)!
+          const invitedMembers = Array.from(
+            new Set([...((community as any).invitedMembers || []), i.userId])
+          )
+          // Persist on conversation row when setter exists
+          try {
+            const next = { ...(community as any), invitedMembers }
+            deps.setConversation?.(i.communityId, next)
+          } catch { /* optional */ }
+          return { communityId: i.communityId, userId: i.userId, invitedMembers }
+        },
+        eventType: "COMMUNITY_INVITED",
+        eventPayload: (d) => ({ communityId: d.communityId, userId: d.userId, actorId }),
+      })
+    },
+
+    /** Invitee accepts a pending invitation — re-checks invitedMembers at mutation time */
+    async acceptInvitation(
+      communityId: string
+    ): Promise<MutationResult<{ communityId: string; members: string[] }>> {
+      return runMutation({
+        name: "community.acceptInvitation",
+        actorId,
+        input: { communityId },
+        authorize: (i) => {
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          if ((community.members || []).includes(actorId)) return "Already a member"
+          const invited = (community as any).invitedMembers || []
+          if (!invited.includes(actorId)) return "No active invitation"
+          if (deps.getBlockedUsers?.()?.includes(community.createdBy || "")) {
+            return "Cannot join — relationship blocked"
+          }
+          return null
+        },
+        mutate: (i) => {
+          const community = find(i.communityId)!
+          const members = Array.from(new Set([...(community.members || []), actorId]))
+          const invitedMembers = ((community as any).invitedMembers || []).filter(
+            (id: string) => id !== actorId
+          )
+          try {
+            deps.setConversation?.(i.communityId, {
+              ...(community as any),
+              members,
+              invitedMembers,
+              groupRoles: {
+                ...((community as any).groupRoles || {}),
+                [actorId]: "member",
+              },
+            })
+          } catch { /* */ }
+          return { communityId: i.communityId, members }
+        },
+        eventType: "COMMUNITY_JOINED",
+        eventPayload: (d) => ({ communityId: d.communityId, userId: actorId, via: "invitation" }),
+      })
+    },
+
+    /** Invitee declines — removes from invitedMembers only */
+    async declineInvitation(
+      communityId: string
+    ): Promise<MutationResult<{ communityId: string }>> {
+      return runMutation({
+        name: "community.declineInvitation",
+        actorId,
+        input: { communityId },
+        authorize: (i) => {
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const invited = (community as any).invitedMembers || []
+          if (!invited.includes(actorId) && !(community.members || []).includes(actorId)) {
+            return "No active invitation"
+          }
+          return null
+        },
+        mutate: (i) => {
+          const community = find(i.communityId)!
+          const invitedMembers = ((community as any).invitedMembers || []).filter(
+            (id: string) => id !== actorId
+          )
+          try {
+            deps.setConversation?.(i.communityId, {
+              ...(community as any),
+              invitedMembers,
+            })
+          } catch { /* */ }
+          return { communityId: i.communityId }
+        },
+        eventType: "COMMUNITY_INVITE_DECLINED",
+        eventPayload: (d) => ({ communityId: d.communityId, userId: actorId }),
       })
     },
 
@@ -518,7 +612,7 @@ export function createCommunityDomain(deps: {
     async approveJoinRequest(
       communityId: string,
       userId: string
-    ): Promise<MutationResult<{ communityId: string; userId: string; members: string[] }>> {
+    ): Promise<MutationResult<{ communityId: string; userId: string; members: string[]; pendingJoinRequests: string[] }>> {
       return runMutation({
         name: "community.approveJoin",
         actorId,
@@ -526,13 +620,53 @@ export function createCommunityDomain(deps: {
         authorize: (i) => {
           const gate = assertAction(i.communityId, "invite")
           if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          if ((community.members || []).includes(i.userId)) return "Already a member"
+          const pending = (community as any).pendingJoinRequests || []
+          if (!pending.includes(i.userId)) return "No pending join request"
+          if (deps.getBlockedUsers?.()?.includes(i.userId)) return "Cannot approve blocked user"
           return null
         },
         mutate: (i) => {
           const community = find(i.communityId)!
           const members = Array.from(new Set([...(community.members || []), i.userId]))
-          return { communityId: i.communityId, userId: i.userId, members }
+          const pendingJoinRequests = ((community as any).pendingJoinRequests || []).filter(
+            (id: string) => id !== i.userId
+          )
+          return { communityId: i.communityId, userId: i.userId, members, pendingJoinRequests }
         },
+        eventType: "COMMUNITY_JOIN_APPROVED",
+        eventPayload: (d) => ({ communityId: d.communityId, userId: d.userId, actorId }),
+      })
+    },
+
+    async declineJoinRequest(
+      communityId: string,
+      userId: string
+    ): Promise<MutationResult<{ communityId: string; userId: string; pendingJoinRequests: string[] }>> {
+      return runMutation({
+        name: "community.declineJoin",
+        actorId,
+        input: { communityId, userId },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "invite")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const pending = (community as any).pendingJoinRequests || []
+          if (!pending.includes(i.userId)) return "No pending join request"
+          return null
+        },
+        mutate: (i) => {
+          const community = find(i.communityId)!
+          const pendingJoinRequests = ((community as any).pendingJoinRequests || []).filter(
+            (id: string) => id !== i.userId
+          )
+          return { communityId: i.communityId, userId: i.userId, pendingJoinRequests }
+        },
+        eventType: "COMMUNITY_JOIN_DECLINED",
+        eventPayload: (d) => ({ communityId: d.communityId, userId: d.userId, actorId }),
       })
     },
 
@@ -588,6 +722,242 @@ export function createCommunityDomain(deps: {
       })
     },
 
+    /**
+     * Reply to a board post (same local-first authority as createBoardPost).
+     * Stores replies[] on the post; increments comments count.
+     */
+    async replyToBoardPost(
+      communityId: string,
+      postId: string,
+      body: string
+    ): Promise<
+      MutationResult<{
+        postId: string
+        reply: {
+          id: string
+          postId: string
+          authorId: string
+          authorName: string
+          body: string
+          createdAt: number
+        }
+        comments: number
+      }>
+    > {
+      return runMutation({
+        name: "community.boardReply",
+        actorId,
+        input: { communityId, postId, body },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "comment")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const posts = ((community as any).boardPosts || []) as any[]
+          if (!posts.some((p) => p.id === i.postId)) return "Discussion not found"
+          if (!(i.body || "").trim()) return "Write a reply first"
+          if ((i.body || "").trim().length > 1000) return "Reply is too long (max 1000 characters)"
+          return null
+        },
+        mutate: (i) => {
+          const reply = {
+            id: `breply_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+            postId: i.postId,
+            authorId: actorId,
+            authorName: "You",
+            body: i.body.trim(),
+            createdAt: Date.now(),
+          }
+          const community = find(i.communityId)!
+          const posts = ((community as any).boardPosts || []) as any[]
+          const post = posts.find((p) => p.id === i.postId)
+          const replies = [...(post?.replies || []), reply]
+          const comments = replies.length
+          return { postId: i.postId, reply, comments }
+        },
+      })
+    },
+
+    /**
+     * Toggle like reaction on a board post (idempotent per actor).
+     * Only reaction type supported: like.
+     */
+    async reactToBoardPost(
+      communityId: string,
+      postId: string,
+      reaction: "like" = "like"
+    ): Promise<
+      MutationResult<{ postId: string; likes: number; likedByMe: boolean; likedBy: string[] }>
+    > {
+      return runMutation({
+        name: "community.boardReact",
+        actorId,
+        input: { communityId, postId, reaction },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "comment")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const posts = ((community as any).boardPosts || []) as any[]
+          if (!posts.some((p) => p.id === i.postId)) return "Discussion not found"
+          if (i.reaction !== "like") return "Unsupported reaction"
+          return null
+        },
+        mutate: (i) => {
+          const community = find(i.communityId)!
+          const posts = ((community as any).boardPosts || []) as any[]
+          const post = posts.find((p) => p.id === i.postId)
+          const likedBy = new Set<string>((post?.likedBy || []) as string[])
+          let likedByMe = likedBy.has(actorId)
+          if (likedByMe) {
+            likedBy.delete(actorId)
+            likedByMe = false
+          } else {
+            likedBy.add(actorId)
+            likedByMe = true
+          }
+          const arr = Array.from(likedBy)
+          return {
+            postId: i.postId,
+            likes: arr.length,
+            likedByMe,
+            likedBy: arr,
+          }
+        },
+      })
+    },
+
+    
+    async pinBoardPost(
+      communityId: string,
+      postId: string
+    ): Promise<MutationResult<{ postId: string; pinned: boolean }>> {
+      return runMutation({
+        name: "community.boardPin",
+        actorId,
+        input: { communityId, postId },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "moderate")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const posts = ((community as any).boardPosts || []) as any[]
+          if (!posts.some((p) => p.id === i.postId)) return "Discussion not found"
+          if (posts.find((p) => p.id === i.postId)?.hidden) return "Cannot pin a hidden post"
+          return null
+        },
+        mutate: (i) => ({ postId: i.postId, pinned: true }),
+      })
+    },
+
+    async unpinBoardPost(
+      communityId: string,
+      postId: string
+    ): Promise<MutationResult<{ postId: string; pinned: boolean }>> {
+      return runMutation({
+        name: "community.boardUnpin",
+        actorId,
+        input: { communityId, postId },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "moderate")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const posts = ((community as any).boardPosts || []) as any[]
+          if (!posts.some((p) => p.id === i.postId)) return "Discussion not found"
+          return null
+        },
+        mutate: (i) => ({ postId: i.postId, pinned: false }),
+      })
+    },
+
+    /** Soft-hide a board post (reversible moderation). */
+    async hideBoardPost(
+      communityId: string,
+      postId: string
+    ): Promise<MutationResult<{ postId: string; hidden: boolean }>> {
+      return runMutation({
+        name: "community.boardHide",
+        actorId,
+        input: { communityId, postId },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "moderate")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          const posts = ((community as any).boardPosts || []) as any[]
+          if (!posts.some((p) => p.id === i.postId)) return "Discussion not found"
+          return null
+        },
+        mutate: (i) => ({ postId: i.postId, hidden: true }),
+      })
+    },
+
+    async unhideBoardPost(
+      communityId: string,
+      postId: string
+    ): Promise<MutationResult<{ postId: string; hidden: boolean }>> {
+      return runMutation({
+        name: "community.boardUnhide",
+        actorId,
+        input: { communityId, postId },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "moderate")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          return null
+        },
+        mutate: (i) => ({ postId: i.postId, hidden: false }),
+      })
+    },
+
+    
+    async transitionLifecycle(
+      communityId: string,
+      next: "draft" | "discoverable" | "active" | "quiet" | "archived"
+    ): Promise<MutationResult<{ communityId: string; lifecycle: string }>> {
+      return runMutation({
+        name: "community.lifecycle",
+        actorId,
+        input: { communityId, next },
+        authorize: (i) => {
+          const gate = assertAction(i.communityId, "settings")
+          if (!gate.ok) return gate.error
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          return null
+        },
+        mutate: (i) => ({ communityId: i.communityId, lifecycle: i.next }),
+      })
+    },
+
+    async reportCommunityContent(
+      communityId: string,
+      input: {
+        targetType: "community" | "post" | "member"
+        targetId: string
+        reason: string
+        note?: string
+      }
+    ): Promise<MutationResult<{ reportId: string }>> {
+      return runMutation({
+        name: "community.report",
+        actorId,
+        input: { communityId, ...input },
+        authorize: (i) => {
+          const community = find(i.communityId)
+          if (!community) return "Community not found"
+          if (!(i.targetId || "").trim()) return "Invalid report target"
+          if (!(i.reason || "").trim()) return "Select a reason"
+          return null
+        },
+        mutate: (i) => ({
+          reportId: `crep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        }),
+      })
+    },
+
     listBoardPosts(communityId: string): Array<{
       id: string
       communityId: string
@@ -612,7 +982,9 @@ export function createCommunityDomain(deps: {
         likes: number
         comments: number
       }>
-      return [...posts].sort((a, b) => b.createdAt - a.createdAt)
+      return [...posts]
+        .filter((p) => !(p as any).hidden)
+        .sort((a, b) => b.createdAt - a.createdAt)
     },
   }
 }

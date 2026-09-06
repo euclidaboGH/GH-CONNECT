@@ -15,3 +15,6 @@ export {
 export { buildReceivePayload, parseReceivePayload } from "@/lib/domains/ghc-receive-payload"
 
 export { GhIdentityQr, buildIdentityOnlyQrPayload } from "@/components/ghc/gh-identity-qr"
+
+export type { IdentitySnapshot } from "@/lib/domains/contracts/identity"
+export { createIdentitySeam } from "@/lib/domains/adapters/ghc-context-seams"

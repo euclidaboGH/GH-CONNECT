@@ -267,3 +267,95 @@ export type {
 } from "./economy-transfer-contract"
 export { mapTransferFailure, toTransferHttpBody } from "./economy-transfer-contract"
 export * from "./gh-account"
+
+/** Human Connection OS contracts + ghc-context extraction seams (Prompt #36) */
+export * from "./contracts"
+export {
+  createIdentitySeam,
+  createConnectionsSeam,
+  createDiscoverySeam,
+  createFeedSeam,
+  createMessagingSeam,
+  GHC_CONTEXT_EXTRACTION_MAP,
+} from "./adapters/ghc-context-seams"
+
+export {
+  adaptDiscoveryList,
+  normalizeDiscoveryCandidate,
+  formatReasonsForUi,
+  filterByCategory,
+} from "./adapters/discovery-adapter"
+export {
+  normalizeConnectionState,
+  eligibleConnectionActions,
+  connectionStateLabel,
+  MATCH_VS_CONNECTION_COPY,
+} from "./adapters/connection-graph-adapter"
+export { buildProfileConnectionContext } from "./adapters/profile-connection-context"
+
+export { sendUnifiedConnectionRequest, acceptUnifiedConnectionRequest, declineUnifiedConnectionRequest } from "./adapters/unified-connection-request"
+export { runUniversalSearch, groupSearchResults } from "./adapters/universal-search"
+
+export {
+  sendUnifiedConnectionRequest,
+  acceptUnifiedConnectionRequest,
+  declineUnifiedConnectionRequest,
+  listPendingConnectionRequests,
+  getUnifiedConnectionState,
+  validateConnectionIntents,
+} from "./adapters/unified-connection-request"
+export type { PendingConnectionRequest, ConnectionRequestSource } from "./adapters/unified-connection-request"
+export type { IntroductionRequest, IntroductionStatus } from "./contracts/introductions"
+export { INTRODUCTIONS_NOT_IMPLEMENTED } from "./contracts/introductions"
+export {
+  acceptFromNotification,
+  declineFromNotification,
+  connectFromSearch,
+  connectFromMatches,
+  wireConnectionNotificationListeners,
+} from "./adapters/connection-notification-actions"
+
+export {
+  buildConnectionRequestInbox,
+  isInterestOnlyAction,
+  isConnectionMutationAction,
+} from "./adapters/connection-request-inbox"
+export type { ConnectionRequestInboxItem, InboxDataSource } from "./adapters/connection-request-inbox"
+
+export {
+  submitConnectionFromPicker,
+  userFacingConnectError,
+  incomingRequestBadgeCount,
+  primaryConnectionCta,
+  resolveConnectionUiState,
+} from "./adapters/connection-connect-flow"
+export type { ConnectFlowTarget, ConnectFlowPhase } from "./adapters/connection-connect-flow"
+
+export {
+  resolveMembershipState,
+  toCommunitySummary,
+  toCommunityOverview,
+  filterMemberIdsForViewer,
+  saveLocalJoinReasons,
+  loadLocalJoinReasons,
+  userFacingJoinError,
+  membershipStateLabel,
+  primaryMembershipAction,
+  COMMUNITY_JOIN_REASON_OPTIONS,
+} from "./adapters/community-membership-adapter"
+export type {
+  CommunityMembershipState,
+  CommunityJoinReasonId,
+  CommunityOverviewModel,
+  CommunitySummary,
+} from "./contracts/communities"
+export {
+  communitiesEmptyState,
+  communityDiscoverEmptyState,
+} from "./contracts/communities"
+
+export { listInvitationsForViewer, userFacingInviteError } from "./adapters/community-invites-adapter"
+export type { CommunityInvitationView, CommunityInviteStatus } from "./adapters/community-invites-adapter"
+export { buildPeopleYouMayKnowInCommunity } from "./adapters/community-people-you-may-know"
+export type { CommunityMemberSuggestion } from "./adapters/community-people-you-may-know"
+export { listMyCommunitiesForHome } from "./adapters/my-communities-home"

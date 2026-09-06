@@ -2,6 +2,7 @@
 
 import { ArrowLeft, RefreshCw } from "lucide-react"
 import { formatWhen } from "./wallet-format"
+import { ASSET_POLICY } from "@/lib/asset-separation"
 
 export function WalletHeader({
   onBack,
@@ -27,8 +28,11 @@ export function WalletHeader({
       <div className="min-w-0 flex-1">
         <h1 className="text-sm font-bold text-foreground">GHC Wallet</h1>
         <p className="text-[11px] text-muted-foreground">
-          Your balance · not your profile ID
+          GreenHaven utility · separate from Pi
           {lastSynced ? ` · synced ${formatWhen(lastSynced)}` : ""}
+        </p>
+        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground/90">
+          {ASSET_POLICY.ghcRailsCopy}
         </p>
       </div>
       <button

@@ -3,10 +3,16 @@
  *
  * Purchasing VVIP must never imply verification or trust.
  * Separate from GHC and Reputation.
+ *
+ * Authority: Class D local cache for Studio/dev UX.
+ * Privileged mutations (approve / reject / revoke) are blocked in production
+ * without server authorization (Prompt #50).
  */
 
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
+import { canMutateVerificationPrivileged } from "@/lib/architecture/trust-authority"
+import { canShowVerifiedBadge } from "@/lib/architecture/trust-authority"
 
 export type VerificationType =
   | "identity"
@@ -35,20 +41,29 @@ export interface VerificationRecord {
 export interface VerificationSnapshot {
   userId: string
   records: Partial<Record<VerificationType, VerificationRecord>>
-  /** True if any type is verified */
   anyVerified: boolean
-  /** Identity verified (strongest personal authenticity signal) */
   identityVerified: boolean
   updatedAt: number
 }
 
 const STORAGE_KEY = "ghc_verification_v1"
 
-const TYPE_LABELS: Record<VerificationType, string> = {
+export const TYPE_LABELS: Record<VerificationType, string> = {
   identity: "Identity verified",
   creator: "Creator verified",
   business: "Business verified",
   organization: "Organization verified",
+}
+
+function assertVerificationPrivileged(action: string): MutationResult<never> | null {
+  if (canMutateVerificationPrivileged()) return null
+  return {
+    ok: false,
+    error: {
+      code: "VERIFICATION_PRIVILEGED_BLOCKED",
+      message: `${action} requires server authorization in production. Client-side verification decisions are not authoritative.`,
+    },
+  } as MutationResult<never>
 }
 
 function loadAll(userId: string): Partial<Record<VerificationType, VerificationRecord>> {
@@ -116,18 +131,6 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
       return loadAll(forUserId)[type]?.status === "verified"
     },
 
-    /** Any verification badge eligible for profile */
-    hasAnyVerification(forUserId = userId): boolean {
-      return snapshot(forUserId).anyVerified
-    },
-
-    getLabels(forUserId = userId): string[] {
-      const records = loadAll(forUserId)
-      return (Object.keys(records) as VerificationType[])
-        .filter((t) => records[t]?.status === "verified")
-        .map((t) => TYPE_LABELS[t])
-    },
-
     async request(
       type: VerificationType,
       evidenceRefs?: string[]
@@ -137,9 +140,7 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
         actorId: userId,
         input: { type, evidenceRefs },
         validate: (i) => {
-          const existing = loadAll(userId)[i.type]
-          if (existing?.status === "verified") return "Already verified"
-          if (existing?.status === "pending") return "Verification already pending"
+          if (!i.type) return "Verification type required"
           return null
         },
         mutate: (i) => {
@@ -152,22 +153,19 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
           }
           records[i.type] = record
           saveAll(userId, records)
-          domainEvents.publish(
-            "VERIFICATION_REQUESTED",
-            { type: i.type },
-            userId
-          )
+          domainEvents.publish("VERIFICATION_REQUESTED", { type: i.type }, userId)
           return { record }
         },
       })
     },
 
-    /** Admin / backend approval path */
     async approve(
       targetUserId: string,
       type: VerificationType,
       reviewerId = "system"
     ): Promise<MutationResult<{ record: VerificationRecord }>> {
+      const blocked = assertVerificationPrivileged("verification.approve")
+      if (blocked) return blocked
       return runMutation({
         name: "verification.approve",
         actorId: reviewerId,
@@ -188,7 +186,6 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
             { type: i.type, userId: i.targetUserId },
             reviewerId
           )
-          // Does NOT grant VIP/VVIP or reputation purchase
           return { record }
         },
       })
@@ -200,6 +197,8 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
       notes?: string,
       reviewerId = "system"
     ): Promise<MutationResult<{ record: VerificationRecord }>> {
+      const blocked = assertVerificationPrivileged("verification.reject")
+      if (blocked) return blocked
       return runMutation({
         name: "verification.reject",
         actorId: reviewerId,
@@ -231,6 +230,8 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
       reason: string,
       reviewerId = "system"
     ): Promise<MutationResult<{ record: VerificationRecord }>> {
+      const blocked = assertVerificationPrivileged("verification.revoke")
+      if (blocked) return blocked
       return runMutation({
         name: "verification.revoke",
         actorId: reviewerId,
@@ -256,12 +257,12 @@ export function createVerificationDomain(deps: { currentUserId?: string }) {
       })
     },
 
-    /**
-     * Sync profile.verified flag from identity verification only.
-     * VIP purchase must never set this.
-     */
-    shouldShowVerifiedBadge(forUserId = userId): boolean {
-      return this.isVerified("identity", forUserId) || this.isVerified("creator", forUserId)
+    shouldShowVerifiedBadge(forUserId = userId, profileVerified?: boolean): boolean {
+      return canShowVerifiedBadge({
+        profileVerified: profileVerified === true,
+        domainIdentityVerified: this.isVerified("identity", forUserId),
+        domainAnyVerified: this.isVerified("creator", forUserId),
+      })
     },
   }
 }

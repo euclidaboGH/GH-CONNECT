@@ -11,6 +11,17 @@ import { useGHC } from "@/contexts/ghc-context"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { performProfileRelationshipAction } from "@/lib/domains/profile-domain"
 import type { ProfileRelationshipAction } from "@/lib/domains/profile-domain"
+import {
+  acceptUnifiedConnectionRequest,
+  declineUnifiedConnectionRequest,
+} from "@/lib/domains/adapters/unified-connection-request"
+import { IdentityService } from "@/lib/identity/identity-service"
+import { resolveUserIntents, type ConnectionIntentId } from "@/lib/connection-intents"
+import { ConnectionIntentPicker } from "./connection-intent-picker"
+import {
+  submitConnectionFromPicker,
+  userFacingConnectError,
+} from "@/lib/domains/adapters/connection-connect-flow"
 
 type Props = {
   userId: string
@@ -30,6 +41,8 @@ export function RelationshipActions({
 }: Props) {
   const { following, friends, matches, blockedUsers, addToast, followUser, swipe, startConversation } = useGHC()
   const [busy, setBusy] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
 
   const state = useMemo(() => {
     const services = getBoundDomainServices()
@@ -84,13 +97,26 @@ export function RelationshipActions({
       setBusy(action)
       try {
         const services = getBoundDomainServices()
+        const me = IdentityService.getCurrentUserId()
+        // Canonical connection mutations
+        if (action === "connect") {
+          setConnectError(null)
+          setPickerOpen(true)
+          setBusy(null)
+          return
+        }
+        if (action === "accept_request") {
+          const r = await acceptUnifiedConnectionRequest(me, userId)
+          if (!r.ok) addToast(r.error || "Could not accept", "error")
+          else addToast("Connected", "success")
+          return
+        }
         if (services && performProfileRelationshipAction) {
           const result = await performProfileRelationshipAction(services, action, userId, {
             userName,
             userPhoto,
           })
           if (!result.ok) {
-            // Fallback to legacy handlers for follow/match
             if (action === "follow" || action === "unfollow") {
               await followUser(userId)
             } else if (action === "match") {
@@ -102,9 +128,7 @@ export function RelationshipActions({
             const labels: Partial<Record<ProfileRelationshipAction, string>> = {
               follow: "Following — you'll see their public posts",
               unfollow: "Unfollowed",
-              connect: "Connection request sent — they can accept to become friends",
-              accept_request: "Connected",
-              match: "Interest sent",
+              match: "Interest sent — not an automatic connection",
               unmatch: "Unmatched",
               message: "Opening chat",
             }
@@ -131,7 +155,7 @@ export function RelationshipActions({
         setBusy(null)
       }
     },
-    [busy, userId, userName, userPhoto, followUser, swipe, startConversation, addToast]
+    [busy, userId, userName, userPhoto, followUser, swipe, startConversation, addToast, blockedUsers]
   )
 
   if (state.isSelf) return null
@@ -142,7 +166,7 @@ export function RelationshipActions({
       : "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold transition motion-safe:active:scale-[0.98] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
 
   return (
-    <div className={`flex flex-wrap gap-2 ${className}`} role="group" aria-label="Relationship actions" aria-busy={!!busy}>
+    <div className={`flex flex-wrap gap-2 ${className}`} role="group" aria-label="Relationship actions" aria-busy={!!busy || pickerOpen}>
       {/* Follow — one-way social signal */}
       <button
         type="button"
@@ -169,7 +193,7 @@ export function RelationshipActions({
       {/* Connect — mutual friendship request */}
       <button
         type="button"
-        disabled={!!busy || state.isFriend}
+        disabled={!!busy || state.isFriend || state.outgoingRequest}
         onClick={() =>
           run(
             state.incomingRequest
@@ -190,12 +214,16 @@ export function RelationshipActions({
           state.isFriend
             ? "Connected"
             : state.outgoingRequest
-              ? "Request sent"
+              ? "Pending"
               : state.incomingRequest
                 ? "Accept connection"
                 : "Connect"
         }
-        title="Connect — request a mutual connection"
+        title={
+          state.outgoingRequest
+            ? "Connection request pending"
+            : "Connect — request a mutual connection"
+        }
       >
         {busy === "connect" || busy === "accept_request" ? (
           <Loader2 size={14} className="animate-spin" />
@@ -205,7 +233,7 @@ export function RelationshipActions({
         {state.isFriend
           ? "Connected"
           : state.outgoingRequest
-            ? "Requested"
+            ? "Pending"
             : state.incomingRequest
               ? "Accept"
               : "Connect"}
@@ -245,6 +273,51 @@ export function RelationshipActions({
         </button>
       )}
     </div>
+
+      <ConnectionIntentPicker
+        open={pickerOpen}
+        targetName={userName}
+        defaultIntents={resolveUserIntents(IdentityService.getCurrentUserId(), null).slice(0, 3)}
+        busy={busy === "connect"}
+        error={connectError}
+        onConfirm={(result) => {
+          void (async () => {
+            setBusy("connect")
+            setConnectError(null)
+            try {
+              const me = IdentityService.getCurrentUserId()
+              const r = await submitConnectionFromPicker(
+                me,
+                {
+                  userId,
+                  displayName: userName,
+                  source: "profile",
+                  blockedUserIds: blockedUsers || [],
+                },
+                result.intents,
+                result.note
+              )
+              if (!r.ok) {
+                setConnectError(userFacingConnectError(r.code || r.error))
+                return
+              }
+              setPickerOpen(false)
+              addToast("Connection request sent — they can accept to become friends", "success")
+            } catch {
+              setConnectError(userFacingConnectError("REQUEST_FAILED"))
+            } finally {
+              setBusy(null)
+            }
+          })()
+        }}
+        onCancel={() => {
+          if (busy !== "connect") {
+            setPickerOpen(false)
+            setConnectError(null)
+          }
+        }}
+      />
+
   )
 }
 

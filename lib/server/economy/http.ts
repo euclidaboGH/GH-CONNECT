@@ -29,9 +29,30 @@ export function isDatabaseConfigured(): boolean {
  * Never used when a real DB is configured — DB is always preferred.
  */
 export function allowMemoryServer(): boolean {
+  // Database always wins when configured — never dual-authority.
   if (isDatabaseConfigured()) return false
+  // Production: memory financial mode is forbidden unless explicitly emergency-armed.
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
+    if (process.env.GHC_SERVER_MEMORY === "1") {
+      if (process.env.GHC_ALLOW_MEMORY_IN_PRODUCTION === "1") {
+        return true
+      }
+      // Fail closed: do not treat memory as authority in production.
+      return false
+    }
+    return false
+  }
   if (process.env.GHC_SERVER_MEMORY === "1") return true
   if (process.env.NODE_ENV === "test") return true
   if (process.env.NODE_ENV === "development") return true
   return false
+}
+
+/** True when production would reject memory-mode financial authority */
+export function isProductionMemoryFinancialBlocked(): boolean {
+  const prod =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+  if (!prod) return false
+  if (isDatabaseConfigured()) return false
+  return process.env.GHC_ALLOW_MEMORY_IN_PRODUCTION !== "1"
 }

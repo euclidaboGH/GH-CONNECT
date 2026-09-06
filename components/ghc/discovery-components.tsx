@@ -1,5 +1,7 @@
 "use client"
 
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
+
 import { useState, useRef, useEffect } from "react"
 import { Heart, MessageCircle, ThumbsDown, X, ChevronLeft, ChevronRight, Search, Sliders, Flame, MapPin, Briefcase, ShoppingBag, Calendar, Video, TrendingUp, Clock, UserPlus, Star, Zap, TrendingDown, Eye, Volume2, VolumeX, Bell } from "lucide-react"
 import type { Candidate } from "@/lib/ghc-types"
@@ -744,8 +746,12 @@ export function PopularPostsSection({ posts, onViewPost }: { posts: any[]; onVie
 // Live Section
 export function LiveSection({ onViewLive }: { onViewLive: (streamId: string) => void }) {
   const liveStreams = [
-    { id: "live-1", name: "Travel Tips", creator: "Sarah M." },
-    { id: "live-2", name: "Cooking Class", creator: "Emma L." },
+    ...(isDemoDataAllowed()
+      ? [
+          { id: "live-1", name: "Travel Tips", creator: "Sarah M." },
+          { id: "live-2", name: "Cooking Class", creator: "Emma L." },
+        ]
+      : []),
   ]
   return (
     <DiscoverySection title="Live Now" icon={<div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />} actionLabel="All">

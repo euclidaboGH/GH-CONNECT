@@ -130,21 +130,25 @@ export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend
   }
 
   return (
-    <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <div className="text-lg flex-shrink-0">📅</div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm text-gray-900">{event.title}</h3>
-            <p className="text-xs text-gray-600 mt-1">{formatEventDate(event)}</p>
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-base dark:bg-emerald-950/40" aria-hidden>
+            📅
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-foreground">{event.title}</h3>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{formatEventDate(event)}</p>
           </div>
         </div>
-        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-200 text-green-800 flex-shrink-0">
+        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold capitalize text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-100">
           {event.status}
         </span>
       </div>
 
-      <p className="text-sm text-gray-700 mb-3">{event.description}</p>
+      {event.description ? (
+        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{event.description}</p>
+      ) : null}
 
       <div className="space-y-1 text-xs text-gray-600 mb-3">
         {event.location && (
@@ -176,13 +180,13 @@ export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend
 
       <button
         onClick={handleAttend}
-        className={`w-full px-3 py-2 rounded-lg font-semibold text-sm transition ${
+        className={`min-h-10 w-full rounded-xl px-3 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
           isAttending
-            ? "bg-green-600 text-white hover:bg-green-700"
-            : "bg-white text-green-600 border border-green-300 hover:bg-green-50"
+            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+            : "border border-emerald-300 bg-background text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
         }`}
       >
-        {isAttending ? "✓ Attending" : "Attend Event"}
+        {isAttending ? "✓ Attending" : "Attend"}
       </button>
     </div>
   )
@@ -200,7 +204,9 @@ export function PinnedResourceCard({ resource, onRemove }: { resource: PinnedRes
 
   return (
     <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 flex items-start gap-3">
-      <span className="text-lg flex-shrink-0">{resourceIcons[resource.resourceType]}</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-lg" aria-hidden>
+        {resourceIcons[resource.resourceType as keyof typeof resourceIcons] || "📌"}
+      </span>
       <div className="flex-1 min-w-0">
         <h3 className="font-semibold text-sm text-gray-900">{resource.title}</h3>
         <p className="text-xs text-gray-600 mt-1">{resource.description}</p>

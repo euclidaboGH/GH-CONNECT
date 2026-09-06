@@ -93,9 +93,14 @@ export function EmptyMatchesState({ onStartSwiping }: { onStartSwiping: () => vo
         <p className="mb-1 text-sm text-muted-foreground">
           Mutual interest — not automatic friendship.
         </p>
-        <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
           Dating · Friendship · Pro · Mentor (and more) are mutual interest types — they do not
           auto-create friends.
+        </p>
+        <p className="mb-4 rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Match = opportunity.</span>{" "}
+          <span className="font-semibold text-foreground">Connection = relationship</span> after you
+          choose an intent and both accept. Matches are never auto-converted into connections.
         </p>
 
         {/* Example of what a Match card will look like */}
@@ -150,6 +155,8 @@ export function MatchCard({
   onMessage,
   onRemove,
   onOpenProfile,
+  onConnect,
+  connectionState = "none",
   animationDelay = 0,
   mutualConnectionCount = 0,
 }: {
@@ -168,6 +175,9 @@ export function MatchCard({
   onMessage: () => void
   onRemove: () => void
   onOpenProfile?: () => void
+  /** Explicit connection request — never a silent swipe("like") */
+  onConnect?: () => void
+  connectionState?: "none" | "outgoing_pending" | "incoming_pending" | "connected" | "mutual" | "matched" | "blocked" | "declined"
   animationDelay?: number
   mutualConnectionCount?: number
 }) {
@@ -263,7 +273,7 @@ export function MatchCard({
           </p>
 
           <p className="text-[10px] font-medium text-muted-foreground">
-            Mutual interest only · matched {timeAgo(match.matchedAt)} · {lastSeenLabel}
+            Match = mutual interest (not a connection) · matched {timeAgo(match.matchedAt)} · {lastSeenLabel}
           </p>
 
           {isStale && (
@@ -276,16 +286,61 @@ export function MatchCard({
             <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{bio}</p>
           ) : null}
 
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
+            {connectionState === "connected" || connectionState === "mutual" ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMessage()
+                }}
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+              >
+                <MessageCircle size={15} aria-hidden />
+                Message
+              </button>
+            ) : connectionState === "outgoing_pending" ? (
+              <button
+                type="button"
+                disabled
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-muted px-3 text-sm font-bold text-muted-foreground"
+              >
+                Request pending
+              </button>
+            ) : connectionState === "incoming_pending" ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.dispatchEvent(new CustomEvent("ghc:open-connection-inbox", { detail: { focus: "incoming" } }))
+                }}
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-teal-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 active:scale-[0.98]"
+              >
+                Review request
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (onConnect) onConnect()
+                  else window.dispatchEvent(new CustomEvent("ghc:open-connection-inbox"))
+                }}
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-teal-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 active:scale-[0.98]"
+                aria-label={`Send connection request to ${match.userName}`}
+              >
+                Connect
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 onMessage()
               }}
-              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+              className="flex min-h-11 items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-[12px] font-bold text-foreground transition hover:bg-muted active:scale-[0.98]"
             >
-              <MessageCircle size={15} aria-hidden />
+              <MessageCircle size={14} aria-hidden />
               Message
             </button>
             <button

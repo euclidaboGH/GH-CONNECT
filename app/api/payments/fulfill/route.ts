@@ -1,51 +1,92 @@
 /**
- * POST /api/payments/fulfill — after U2A complete, mark order fulfilled (idempotent).
- * Verifies payment with Pi Platform API when PI_API_KEY is available.
+ * POST /api/payments/fulfill
+ * Grant benefit only when durable intent is COMPLETED and owned by caller.
+ * Client paymentId/txid alone is never sufficient.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { updateOrderStatus, getOrder, saveOrder, genOrderId } from "@/lib/gh-pay/order-store"
-import type { GhPayOrder } from "@/lib/gh-pay/types"
-import { piGetPayment, getPiApiKey } from "@/lib/server/payments/pi-api"
 import {
   loadByProviderPaymentId,
+  loadPaymentIntent,
   markIntentFulfilled,
   getPaymentIntent,
 } from "@/lib/server/payments/intent-store"
+import { piGetPayment, getPiApiKey } from "@/lib/server/payments/pi-api"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const fulfilledPayments = new Set<string>()
-
 export async function POST(request: Request) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
+    if (!auth) {
+      return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    }
+
     const body = await request.json().catch(() => ({}))
     const paymentId = typeof body.paymentId === "string" ? body.paymentId.trim() : ""
     const txid = typeof body.txid === "string" ? body.txid.trim() : ""
-    const productId = typeof body.productId === "string" ? body.productId.trim() : ""
-    const orderId = typeof body.orderId === "string" ? body.orderId.trim() : ""
-    const fulfillment = body.fulfillment
+    const intentId = typeof body.intentId === "string" ? body.intentId.trim() : ""
 
-    if (!paymentId || !txid) {
+    if (!paymentId && !intentId) {
       return NextResponse.json(
-        { ok: false, error: "paymentId and txid required" },
+        { ok: false, error: "intentId or paymentId required" },
         { status: 400 }
       )
     }
 
-    if (fulfilledPayments.has(paymentId)) {
+    let intent =
+      (intentId ? await loadPaymentIntent(intentId) : null) ||
+      (paymentId ? await loadByProviderPaymentId(paymentId) : null) ||
+      (intentId ? getPaymentIntent(intentId) : null)
+
+    if (!intent) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "INTENT_NOT_FOUND",
+          message: "No durable completed payment intent — refuse fulfillment",
+        },
+        { status: 409 }
+      )
+    }
+
+    if (intent.userId !== auth.userId) {
+      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
+    }
+
+    if (paymentId && intent.providerPaymentId && intent.providerPaymentId !== paymentId) {
+      return NextResponse.json({ ok: false, error: "PAYMENT_MISMATCH" }, { status: 409 })
+    }
+
+    if (intent.status === "FULFILLED") {
       return NextResponse.json({
         ok: true,
         idempotent: true,
-        paymentId,
+        paymentId: intent.providerPaymentId,
+        intent: getPaymentIntent(intent.id),
         message: "Already fulfilled",
       })
     }
 
-    if (getPiApiKey()) {
-      const lookup = await piGetPayment(paymentId)
+    if (intent.status !== "COMPLETED") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "PAYMENT_NOT_COMPLETED",
+          status: intent.status,
+          message: "Fulfillment requires COMPLETED durable intent",
+        },
+        { status: 409 }
+      )
+    }
+
+    if (txid && intent.txid && intent.txid !== txid) {
+      return NextResponse.json({ ok: false, error: "TXID_MISMATCH" }, { status: 409 })
+    }
+
+    if (getPiApiKey() && intent.providerPaymentId) {
+      const lookup = await piGetPayment(intent.providerPaymentId)
       if (lookup.ok && lookup.payment) {
         const st = lookup.payment.status
         if (st?.cancelled || st?.user_cancelled) {
@@ -57,58 +98,18 @@ export async function POST(request: Request) {
       }
     }
 
-    let order = orderId ? getOrder(orderId) : null
-    if (!order && orderId) {
-      const created: GhPayOrder = {
-        orderId: orderId || genOrderId(),
-        direction: "u2a",
-        productId: productId || "unknown",
-        category: "service",
-        amountPi: 0,
-        memo: "GH Pay",
-        userId: auth?.userId || "unknown",
-        status: "completed",
-        paymentId,
-        txid,
-        fulfillment: fulfillment || { type: "none" },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-      saveOrder(created)
-      order = created
-    }
-
-    if (order) {
-      updateOrderStatus(order.orderId, "fulfilled", { paymentId, txid })
-    }
-
-    fulfilledPayments.add(paymentId)
-
-    // Durable fulfillment flag (idempotent)
-    try {
-      const intent = await loadByProviderPaymentId(paymentId)
-      if (intent && intent.status === "COMPLETED") {
-        markIntentFulfilled(intent.id, auth?.userId)
-      } else if (intent && intent.status === "FULFILLED") {
-        /* already */
-      }
-    } catch {
-      /* non-blocking */
-    }
-
+    const fulfilled = markIntentFulfilled(intent.id, auth.userId)
     return NextResponse.json({
       ok: true,
-      paymentId,
-      productId,
-      orderId: order?.orderId || orderId,
-      fulfillment,
-      applyClientMembership: fulfillment?.type === "membership",
-      engine: "gh_pay",
-      ghcCredit: false,
+      paymentId: intent.providerPaymentId,
+      txid: intent.txid || txid || null,
+      intent: fulfilled || getPaymentIntent(intent.id),
+      productId: intent.metadata?.productId || null,
+      referenceId: intent.referenceId,
     })
-  } catch (err) {
+  } catch (e) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Fulfill failed" },
+      { ok: false, error: e instanceof Error ? e.message : "fulfill_failed" },
       { status: 500 }
     )
   }

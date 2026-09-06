@@ -10,6 +10,10 @@
  */
 
 import type { Notification, NotificationType } from "./notifications"
+import {
+  isCommunityNotification,
+  communityNotificationLabel,
+} from "@/lib/domains/adapters/community-notification"
 
 export type NotificationCenterBucket =
   | "all"
@@ -18,6 +22,7 @@ export type NotificationCenterBucket =
   | "ghc"
   | "rewards"
   | "requests"
+  | "community"
   | "system"
 
 export const NOTIFICATION_CENTER_BUCKETS: {
@@ -30,6 +35,7 @@ export const NOTIFICATION_CENTER_BUCKETS: {
   { id: "ghc", label: "GHC" },
   { id: "rewards", label: "Rewards" },
   { id: "requests", label: "Requests" },
+  { id: "community", label: "Community" },
   { id: "system", label: "System" },
 ]
 
@@ -120,6 +126,11 @@ export function bucketForNotification(n: Notification): Exclude<NotificationCent
     /transfer|payment|sent ghc|received ghc|balance/i.test(blobOf(n))
   ) {
     return "ghc"
+  }
+
+  if (isCommunityNotification(n) || cat === "community" || cat === "communities" || open === "communities") {
+    // Community invite/join/announcement — distinct from friend requests
+    return "community"
   }
 
   if (REQUEST_TYPES.has(n.type) || open === "requests" || open === "group-request" || cat === "requests") {
@@ -284,9 +295,10 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.open = "matches"
     link.tab = "matches"
   } else if (n.type === "friend_request") {
-    link.open = "messages"
-    link.tab = "messages"
-    link.section = "friend-request"
+    // Connection request inbox — not messages
+    link.open = "matches"
+    link.tab = "matches"
+    link.section = "connection_requests"
   } else if (n.type === "follow") {
     link.open = "discover"
     link.tab = "discover"
@@ -372,7 +384,6 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
           : link.tab
       window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
     } else {
-      // Absolute fallback — feed, never settings
       window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
     }
 
@@ -386,14 +397,21 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
     if (link.groupId) {
       window.dispatchEvent(
         new CustomEvent("ghc:open-community", {
-          detail: { groupId: link.groupId },
+          detail: {
+            groupId: link.groupId,
+            invite: link.section === "group-request" || link.section === "community_invite",
+          },
         })
       )
     }
     if (link.userId && (link.tab === "discover" || link.section === "friend-request")) {
       window.dispatchEvent(
         new CustomEvent("ghc:open-profile", {
-          detail: { userId: link.userId },
+          detail: {
+            userId: link.userId,
+            section: "friend-request",
+            intents: (link as { intents?: string[] }).intents,
+          },
         })
       )
     }
@@ -405,8 +423,42 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       )
     }
 
+    if (
+      link.section === "connection_requests" ||
+      link.section === "friend-request"
+    ) {
+      window.dispatchEvent(
+        new CustomEvent("ghc:open-connection-inbox", {
+          detail: { focus: "incoming", userId: link.userId },
+        })
+      )
+    }
+
     window.dispatchEvent(new CustomEvent("ghc:notification-deep-link", { detail: link }))
+
+    if (link.section === "listing" || (link as { listingId?: string }).listingId) {
+      const listingId = (link as { listingId?: string }).listingId || link.id
+      window.dispatchEvent(
+        new CustomEvent("ghc:open-listing", {
+          detail: { listingId },
+        })
+      )
+      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
+    }
+    if (link.open === "matches" || link.tab === "matches" || link.section === "match") {
+      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "matches" }))
+      if (link.userId) {
+        window.dispatchEvent(
+          new CustomEvent("ghc:open-match", {
+            detail: { userId: link.userId },
+          })
+        )
+      }
+    }
+
   } catch {
     /* */
   }
 }
+
+export { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"

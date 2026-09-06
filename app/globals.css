@@ -72,7 +72,10 @@
   /* When nav is in document flow, content only needs a small breathing gap + safe-area.
      Do NOT stack a second full nav-height pad — that creates the empty “shadow band”. */
   --gh-bottom-content-inset: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  --gh-screen-bottom-inset: calc(1rem + env(safe-area-inset-bottom, 0px));
+  --gh-nav-height: 3.5rem;
+  --gh-screen-bottom-inset: calc(var(--gh-nav-height) + env(safe-area-inset-bottom, 0px) + 1.25rem);
+  --gh-content-max: 28rem;
+  --gh-header-slim: 3rem;
   /* Legacy alias for overlays that still sit above a fixed nav */
   --gh-fixed-nav-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem);
   /* Content column — wider than classic max-w-md on phones */

@@ -152,7 +152,7 @@ export function ChallengeComposer({
             <p className="text-sm font-bold">GreenHaven Quests</p>
           </div>
           <p className="mt-1 text-[12px] text-white/90">
-            Challenges reward meaningful participation — not spam. Server validation applies before GHC credits.
+            Challenges track meaningful participation — not spam. Any GHC credit is server-validated and subject to daily caps.
           </p>
         </div>
 

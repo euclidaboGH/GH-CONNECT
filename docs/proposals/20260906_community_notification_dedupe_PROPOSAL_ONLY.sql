@@ -1,0 +1,17 @@
+-- PROPOSAL ONLY — NOT APPLIED
+-- Durable community notification dedupe for multi-instance / multi-device.
+-- Current: in-process shouldSkipDuplicateCommunityNotification + referenceId.
+-- Do NOT run against production without operator review.
+-- Additive only. No financial tables.
+
+-- CREATE TABLE IF NOT EXISTS ghc_community_notification_events (
+--   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+--   reference_id text NOT NULL,
+--   community_id text NOT NULL,
+--   recipient_user_id text NOT NULL,
+--   subtype text NOT NULL,
+--   created_at timestamptz NOT NULL DEFAULT now(),
+--   UNIQUE (reference_id, recipient_user_id)
+-- );
+-- RLS: recipients SELECT own rows; inserts via service role / SECURITY DEFINER.
+-- Idempotency: INSERT ON CONFLICT DO NOTHING; emit only on insert.

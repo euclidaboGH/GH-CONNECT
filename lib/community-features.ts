@@ -1,3 +1,4 @@
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 // Community Features for Groups - Optional extensions to Chat
 // All features are opt-in and compatible with existing groups
 
@@ -331,6 +332,7 @@ export function closeEvent(event: ScheduledEvent): ScheduledEvent {
 
 // Seed community features for demo
 export function seedCommunityFeatures() {
+  if (!isDemoDataAllowed()) return
   return {
     announcements: [] as Announcement[],
     polls: [] as Poll[],

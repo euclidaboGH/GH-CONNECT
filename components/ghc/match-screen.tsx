@@ -1,7 +1,22 @@
 "use client"
 
+/**
+ * Matches — mutual interest opportunities.
+ * Like/Interest ≠ Connection. Use Connect → intent picker → unified request.
+ */
+
 import { useDeferredValue, useMemo, useState, useRef, useEffect, useCallback, type ChangeEvent } from "react"
 import { useGHC } from "@/contexts/ghc-context"
+import { sendUnifiedConnectionRequest, getUnifiedConnectionState } from "@/lib/domains/adapters/unified-connection-request"
+import { IdentityService } from "@/lib/identity/identity-service"
+import { ConnectionRequestInbox } from "./connection-request-inbox"
+import { ConnectionIntentPicker } from "./connection-intent-picker"
+import {
+  submitConnectionFromPicker,
+  userFacingConnectError,
+  primaryConnectionCta,
+} from "@/lib/domains/adapters/connection-connect-flow"
+import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { getOrCreateGreenHavenId } from "@/lib/domains/greenhaven-id"
 import { onCloseTransientUI } from "@/lib/transient-ui"
@@ -93,12 +108,58 @@ import {
 
 // HOME SCREEN — legacy stub (app uses EnhancedFeedScreen). Kept so this module parses.
 export function MatchScreen() {
-  const { matches, likes, profile, candidates, startConversation, sendMessage, conversations, addToast, setTab, friends } = useGHC()
+  const { matches, likes, profile, candidates, startConversation, sendMessage, conversations, addToast, setTab, friends = [], blockedUsers = [] } = useGHC() as any
   const [activeTab, setActiveTab] = useState<"new" | "all">("new")
   const [intentionFilter, setIntentionFilter] = useState<MatchIntention | "all">("all")
   const [removedMatches, setRemovedMatches] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showRequestInbox, setShowRequestInbox] = useState(false)
+  const [pickerTarget, setPickerTarget] = useState<{ userId: string; userName: string } | null>(null)
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [connectBusy, setConnectBusy] = useState(false)
+  const meId = IdentityService.getCurrentUserId()
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } = useScrollHeader({ threshold: 36 })
+
+  useEffect(() => {
+    const open = () => setShowRequestInbox(true)
+    window.addEventListener("ghc:open-connection-inbox", open as EventListener)
+    return () => window.removeEventListener("ghc:open-connection-inbox", open as EventListener)
+  }, [])
+
+  const handleConnectMatch = (match: { userId: string; userName: string }) => {
+    setConnectError(null)
+    setPickerTarget({ userId: match.userId, userName: match.userName })
+  }
+
+  const confirmMatchConnect = async (result: { intents: ConnectionIntentId[]; note?: string }) => {
+    if (!pickerTarget) return
+    setConnectBusy(true)
+    setConnectError(null)
+    try {
+      const r = await submitConnectionFromPicker(
+        meId,
+        {
+          userId: pickerTarget.userId,
+          displayName: pickerTarget.userName,
+          source: "match",
+          blockedUserIds: blockedUsers || [],
+        },
+        result.intents,
+        result.note
+      )
+      if (!r.ok) {
+        setConnectError(userFacingConnectError(r.code || r.error))
+        return
+      }
+      setPickerTarget(null)
+      addToast(`Connection request sent to ${pickerTarget.userName}`, "success")
+    } catch {
+      setConnectError(userFacingConnectError("REQUEST_FAILED"))
+    } finally {
+      setConnectBusy(false)
+    }
+  }
+
 
   const safeMatches = filterValidMatches(matches)
   const safeLikes = asArray(likes)
@@ -263,6 +324,13 @@ export function MatchScreen() {
             <p className="text-[12px] leading-relaxed text-stone-600">
               A Match is mutual interest — not automatic friendship or a compatibility score. Follow and Connect are different.
             </p>
+            <button
+              type="button"
+              onClick={() => setShowRequestInbox(true)}
+              className="w-full rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-left text-[12px] font-semibold text-teal-900 transition hover:bg-teal-100 dark:border-teal-900/40 dark:bg-teal-950/40 dark:text-teal-100"
+            >
+              Connection requests inbox
+            </button>
           </div>
         }
       />
@@ -304,6 +372,11 @@ export function MatchScreen() {
                 candidateData={getCandidateData(match.userId)}
                 onMessage={() => void handleMessage(match)}
                 onRemove={() => handleRemoveMatch(match.id)}
+                onConnect={() => void handleConnectMatch(match)}
+                connectionState={getUnifiedConnectionState(meId, match.userId, {
+                  friends: friends as string[],
+                  blockedUsers: blockedUsers as string[],
+                })}
                 onOpenProfile={() => {
                   window.dispatchEvent(
                     new CustomEvent("ghc:open-profile", { detail: { userId: match.userId, name: match.userName } })
@@ -317,6 +390,27 @@ export function MatchScreen() {
           </div>
         )}
       </div>
+
+      {showRequestInbox ? (
+        <div className="absolute inset-0 z-40 bg-background/95 backdrop-blur-sm">
+          <ConnectionRequestInbox onClose={() => setShowRequestInbox(false)} />
+        </div>
+      ) : null}
+
+      <ConnectionIntentPicker
+        open={!!pickerTarget}
+        targetName={pickerTarget?.userName}
+        defaultIntents={resolveUserIntents(meId, null).slice(0, 3)}
+        busy={connectBusy}
+        error={connectError}
+        onConfirm={(r) => void confirmMatchConnect(r)}
+        onCancel={() => {
+          if (!connectBusy) {
+            setPickerTarget(null)
+            setConnectError(null)
+          }
+        }}
+      />
     </div>
   )
 }

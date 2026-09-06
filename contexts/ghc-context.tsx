@@ -16,6 +16,12 @@ import {
   syncSessionEdgesToStore,
 } from "@/lib/domains/graph-session-adapter"
 import { defaultProfile, DEFAULT_SETTINGS, seedCandidates, seedReciprocalInterests, seedPosts, seedStories, sanitizeStories, sanitizeStory, STORAGE_KEYS, generateId } from "@/lib/ghc-data"
+import {
+  bootstrapPosts,
+  bootstrapStories,
+  bootstrapCandidates,
+  bootstrapLikes,
+} from "@/lib/domains/adapters/session-bootstrap"
 import { canFollowUser as privacyCanFollow, canMessageUser as privacyCanMessage } from "@/lib/privacy-controls"
 import {
   type LocalProfileRecord,
@@ -32,6 +38,11 @@ import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
 import { notificationSystem } from "@/lib/notifications"
+import { emitCommunityNotification } from "@/lib/domains/adapters/community-notification"
+import {
+  appendModerationLog,
+  createCommunityReport,
+} from "@/lib/domains/adapters/community-governance"
 import { offlineSupport } from "@/lib/offline"
 import { offlineQueue, connectionMonitor, withRetry } from "@/lib/network-resilience"
 import { sanitizeText, sanitizeDisplayName, sanitizeHtml } from "@/lib/sanitizer"
@@ -277,8 +288,43 @@ interface GHCContextType {
   // Group / community features
   createGroup: (formData: any) => Promise<string>
   joinCommunity: (communityId: string) => Promise<boolean>
+  acceptCommunityInvitation: (communityId: string) => Promise<boolean>
+  declineCommunityInvitation: (communityId: string) => Promise<boolean>
+  approveCommunityJoinRequest: (communityId: string, userId: string) => Promise<boolean>
+  declineCommunityJoinRequest: (communityId: string, userId: string) => Promise<boolean>
+  inviteCommunityMember: (communityId: string, userId: string) => Promise<boolean>
   leaveCommunity: (communityId: string) => Promise<boolean>
   requestJoinCommunity: (communityId: string) => Promise<boolean>
+  replyToBoardPost: (
+    communityId: string,
+    postId: string,
+    body: string
+  ) => Promise<boolean>
+  reactToBoardPost: (
+    communityId: string,
+    postId: string
+  ) => Promise<boolean>
+  pinBoardPost: (communityId: string, postId: string) => Promise<boolean>
+  unpinBoardPost: (communityId: string, postId: string) => Promise<boolean>
+  hideBoardPost: (communityId: string, postId: string) => Promise<boolean>
+  unhideBoardPost: (communityId: string, postId: string) => Promise<boolean>
+  transitionCommunityLifecycle: (
+    communityId: string,
+    next: "draft" | "discoverable" | "active" | "quiet" | "archived"
+  ) => Promise<boolean>
+  reportCommunityContent: (
+    communityId: string,
+    input: {
+      targetType: "community" | "post" | "member"
+      targetId: string
+      reason: "spam" | "harassment" | "hate" | "misinformation" | "impersonation" | "safety" | "other"
+      note?: string
+    }
+  ) => Promise<boolean>
+  createCommunityAnnouncement: (
+    communityId: string,
+    input: { title: string; content: string; type?: "info" | "important" | "celebration" | "maintenance" }
+  ) => Promise<boolean>
   createBoardPost: (
     communityId: string,
     body: string,
@@ -519,19 +565,19 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           setState((s) => ({
             ...s,
             ready: true,
-            posts: s.posts?.length ? s.posts : seedPosts(),
-            stories: s.stories?.length ? s.stories : seedStories(),
+            posts: s.posts?.length ? s.posts : bootstrapPosts(),
+            stories: s.stories?.length ? s.stories : bootstrapStories(),
           }))
         }
 
         const updates: Partial<ExtendedGHCState> = { ready: true }
 
         if (!sdk) {
-          const cands = seedCandidates()
-          updates.posts = seedPosts()
-          updates.stories = seedStories()
+          const cands = bootstrapCandidates()
+          updates.posts = bootstrapPosts()
+          updates.stories = bootstrapStories()
           updates.candidates = cands
-          updates.likes = seedReciprocalInterests(cands)
+          updates.likes = bootstrapLikes(cands)
           if (mounted) setState((s) => ({ ...s, ...updates }))
           return
         }
@@ -607,16 +653,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                   : [],
                 comments: Array.isArray(post?.comments) ? post.comments : [],
               }))
-            : seedPosts()
+            : bootstrapPosts()
         } else {
           errorLogger.logWarning("Posts load failed, using seed data", { error: postsResult.reason })
-          updates.posts = seedPosts()
+          updates.posts = bootstrapPosts()
         }
 
         if (storiesResult.status === "fulfilled" && Array.isArray(storiesResult.value?.blob)) {
           updates.stories = sanitizeStories(storiesResult.value.blob)
         } else {
-          updates.stories = seedStories()
+          updates.stories = bootstrapStories()
         }
         if (matchesResult.status === "fulfilled" && Array.isArray(matchesResult.value?.blob)) {
           updates.matches = matchesResult.value.blob as MatchEntry[]
@@ -624,20 +670,20 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           errorLogger.logWarning("matches load failed, using empty state", { error: matchesResult.reason })
         }
         // Discovery candidates — light seed only if still empty (after first paint path)
-        const cands = seedCandidates()
+        const cands = bootstrapCandidates()
         updates.candidates = cands
         if (likesResult.status === "fulfilled" && Array.isArray(likesResult.value?.blob)) {
           const loadedLikes = likesResult.value.blob as Like[]
           updates.likes =
-            loadedLikes.length > 0 ? loadedLikes : seedReciprocalInterests(cands)
+            loadedLikes.length > 0 ? loadedLikes : bootstrapLikes(cands)
           updates.likedPostIds = (updates.likes as Like[])
             .filter((like) => like?.fromUserId === "current-user" && typeof like.toUserId === "string")
             .map((like) => like.toUserId)
         } else if (likesResult.status === "rejected") {
           errorLogger.logWarning("likes load failed, using empty state", { error: likesResult.reason })
-          updates.likes = seedReciprocalInterests(cands)
+          updates.likes = bootstrapLikes(cands)
         } else {
-          updates.likes = seedReciprocalInterests(cands)
+          updates.likes = bootstrapLikes(cands)
         }
         if (conversationsResult.status === "fulfilled" && Array.isArray(conversationsResult.value?.blob)) {
           updates.conversations = conversationsResult.value.blob as Conversation[]
@@ -658,7 +704,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (mounted) setState((s) => ({ ...s, ...updates }))
       } catch (err) {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
-        if (mounted) setState((s) => ({ ...s, ready: true, posts: seedPosts(), stories: seedStories() }))
+        if (mounted) setState((s) => ({ ...s, ready: true, posts: bootstrapPosts(), stories: bootstrapStories() }))
       }
     }
 
@@ -2873,6 +2919,214 @@ const dismissMatchCelebration = useCallback(() => {
     [addToast, domains]
   )
 
+  const acceptCommunityInvitation = useCallback(
+    async (communityId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.acceptInvitation(communityId)
+        if (!result.ok) {
+          addToast(result.error || "Invitation unavailable", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId
+              ? {
+                  ...c,
+                  members: result.data.members,
+                  invitedMembers: ((c as any).invitedMembers || []).filter(
+                    (id: string) => id !== (IdentityService.getCurrentUserId() || "current-user")
+                  ),
+                  groupRoles: {
+                    ...((c as any).groupRoles || {}),
+                    [IdentityService.getCurrentUserId() || "current-user"]: "member",
+                  },
+                }
+              : c
+          ),
+        }))
+        try {
+          const communityName =
+            (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+          emitCommunityNotification({
+            subtype: "invitation_accepted",
+            communityId,
+            communityName,
+            userId: IdentityService.getCurrentUserId() || undefined,
+            actorName: state.profile.displayName || "Member",
+            referenceId: `invitation_accepted:${communityId}:${IdentityService.getCurrentUserId()}`,
+          })
+        } catch { /* */ }
+        addToast("Joined community", "success")
+        return true
+      } catch (err) {
+        addToast("Could not accept invitation", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.conversations, state.profile.displayName]
+  )
+
+  const declineCommunityInvitation = useCallback(
+    async (communityId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.declineInvitation(communityId)
+        if (!result.ok) {
+          addToast(result.error || "Invitation unavailable", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId
+              ? {
+                  ...c,
+                  invitedMembers: ((c as any).invitedMembers || []).filter(
+                    (id: string) => id !== (IdentityService.getCurrentUserId() || "current-user")
+                  ),
+                }
+              : c
+          ),
+        }))
+        addToast("Invitation declined", "info")
+        return true
+      } catch {
+        addToast("Could not decline invitation", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+
+  const approveCommunityJoinRequest = useCallback(
+    async (communityId: string, userId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.approveJoinRequest(communityId, userId)
+        if (!result.ok) {
+          addToast(result.error || "Could not approve", "error")
+          return false
+        }
+        const communityName =
+          (state.conversations.find((c) => c.id === communityId) as any)?.groupName ||
+          (state.conversations.find((c) => c.id === communityId) as any)?.participantName ||
+          "community"
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId
+              ? {
+                  ...c,
+                  members: result.data.members,
+                  pendingJoinRequests: result.data.pendingJoinRequests,
+                }
+              : c
+          ),
+        }))
+        try {
+          emitCommunityNotification({
+            subtype: "join_accepted",
+            communityId,
+            communityName,
+            userId,
+            actorName: state.profile.displayName || "Admin",
+            referenceId: `join_accepted:${communityId}:${userId}`,
+          })
+        } catch { /* */ }
+        addToast("Join request approved", "success")
+        return true
+      } catch {
+        addToast("Could not approve request", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.conversations, state.profile.displayName]
+  )
+
+  const declineCommunityJoinRequest = useCallback(
+    async (communityId: string, userId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.declineJoinRequest(communityId, userId)
+        if (!result.ok) {
+          addToast(result.error || "Could not decline", "error")
+          return false
+        }
+        const communityName =
+          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId
+              ? { ...c, pendingJoinRequests: result.data.pendingJoinRequests }
+              : c
+          ),
+        }))
+        try {
+          emitCommunityNotification({
+            subtype: "join_declined",
+            communityId,
+            communityName,
+            userId,
+            referenceId: `join_declined:${communityId}:${userId}`,
+          })
+        } catch { /* */ }
+        addToast("Join request declined", "info")
+        return true
+      } catch {
+        addToast("Could not decline request", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.conversations]
+  )
+
+  const inviteCommunityMember = useCallback(
+    async (communityId: string, userId: string): Promise<boolean> => {
+      try {
+        if (!userId || userId === IdentityService.getCurrentUserId()) {
+          addToast("Invalid invite target", "error")
+          return false
+        }
+        const result = await domains.community.inviteMember(communityId, userId)
+        if (!result.ok) {
+          addToast(result.error || "Could not invite", "error")
+          return false
+        }
+        const communityName =
+          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId
+              ? {
+                  ...c,
+                  invitedMembers: result.data.invitedMembers || [
+                    ...new Set([...((c as any).invitedMembers || []), userId]),
+                  ],
+                }
+              : c
+          ),
+        }))
+        try {
+          emitCommunityNotification({
+            subtype: "invitation",
+            communityId,
+            communityName,
+            userId,
+            actorName: state.profile.displayName || "Member",
+            referenceId: `invitation:${communityId}:${userId}`,
+          })
+        } catch { /* */ }
+        addToast("Invitation sent", "success")
+        return true
+      } catch {
+        addToast("Could not send invitation", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.conversations, state.profile.displayName]
+  )
+
   const requestJoinCommunity = useCallback(
     async (communityId: string): Promise<boolean> => {
       try {
@@ -2889,6 +3143,18 @@ const dismissMatchCelebration = useCallback(() => {
               : c
           ),
         }))
+        try {
+          const communityName =
+            (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+          emitCommunityNotification({
+            subtype: "join_request",
+            communityId,
+            communityName,
+            userId: IdentityService.getCurrentUserId() || undefined,
+            actorName: state.profile.displayName || "Member",
+            referenceId: `join_request:${communityId}:${IdentityService.getCurrentUserId()}`,
+          })
+        } catch { /* */ }
         addToast("Request sent", "info")
         return true
       } catch (err) {
@@ -2896,7 +3162,7 @@ const dismissMatchCelebration = useCallback(() => {
         return false
       }
     },
-    [addToast, domains]
+    [addToast, domains, state.conversations, state.profile.displayName]
   )
 
   const createBoardPost = useCallback(
@@ -2936,6 +3202,362 @@ const dismissMatchCelebration = useCallback(() => {
       }
     },
     [state.profile.displayName, addToast, domains]
+  )
+
+  const replyToBoardPost = useCallback(
+    async (communityId: string, postId: string, body: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.replyToBoardPost(communityId, postId, body)
+        if (!result.ok) {
+          addToast(result.error || "Could not reply", "error")
+          return false
+        }
+        const reply = {
+          ...result.data.reply,
+          authorName: state.profile.displayName || "You",
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId
+                  ? {
+                      ...p,
+                      replies: [...(p.replies || []), reply],
+                      comments: result.data.comments,
+                    }
+                  : p
+              ),
+            }
+          }),
+        }))
+        addToast("Reply posted", "success")
+        return true
+      } catch {
+        addToast("Could not reply", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.profile.displayName]
+  )
+
+  const reactToBoardPost = useCallback(
+    async (communityId: string, postId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.reactToBoardPost(communityId, postId, "like")
+        if (!result.ok) {
+          addToast(result.error || "Could not react", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId
+                  ? {
+                      ...p,
+                      likes: result.data.likes,
+                      likedBy: result.data.likedBy,
+                    }
+                  : p
+              ),
+            }
+          }),
+        }))
+        return true
+      } catch {
+        addToast("Could not react", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+
+  const pinBoardPost = useCallback(
+    async (communityId: string, postId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.pinBoardPost(communityId, postId)
+        if (!result.ok) {
+          addToast(result.error || "Could not pin", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId ? { ...p, pinned: true } : p
+              ),
+            }
+          }),
+        }))
+        try {
+          appendModerationLog({
+            communityId,
+            action: "pin",
+            actorId: IdentityService.getCurrentUserId() || "unknown",
+            targetType: "post",
+            targetId: postId,
+          })
+        } catch { /* */ }
+        addToast("Discussion pinned", "success")
+        return true
+      } catch {
+        addToast("Could not pin", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const unpinBoardPost = useCallback(
+    async (communityId: string, postId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.unpinBoardPost(communityId, postId)
+        if (!result.ok) {
+          addToast(result.error || "Could not unpin", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId ? { ...p, pinned: false } : p
+              ),
+            }
+          }),
+        }))
+        try {
+          appendModerationLog({
+            communityId,
+            action: "unpin",
+            actorId: IdentityService.getCurrentUserId() || "unknown",
+            targetType: "post",
+            targetId: postId,
+          })
+        } catch { /* */ }
+        addToast("Discussion unpinned", "info")
+        return true
+      } catch {
+        addToast("Could not unpin", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const hideBoardPost = useCallback(
+    async (communityId: string, postId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.hideBoardPost(communityId, postId)
+        if (!result.ok) {
+          addToast(result.error || "Could not hide", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId ? { ...p, hidden: true, pinned: false } : p
+              ),
+            }
+          }),
+        }))
+        try {
+          appendModerationLog({
+            communityId,
+            action: "hide",
+            actorId: IdentityService.getCurrentUserId() || "unknown",
+            targetType: "post",
+            targetId: postId,
+          })
+        } catch { /* */ }
+        addToast("Discussion hidden", "info")
+        return true
+      } catch {
+        addToast("Could not hide", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const unhideBoardPost = useCallback(
+    async (communityId: string, postId: string): Promise<boolean> => {
+      try {
+        const result = await domains.community.unhideBoardPost(communityId, postId)
+        if (!result.ok) {
+          addToast(result.error || "Could not unhide", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const posts = ((c as any).boardPosts || []) as any[]
+            return {
+              ...c,
+              boardPosts: posts.map((p) =>
+                p.id === postId ? { ...p, hidden: false } : p
+              ),
+            }
+          }),
+        }))
+        try {
+          appendModerationLog({
+            communityId,
+            action: "unhide",
+            actorId: IdentityService.getCurrentUserId() || "unknown",
+            targetType: "post",
+            targetId: postId,
+          })
+        } catch { /* */ }
+        addToast("Discussion restored", "success")
+        return true
+      } catch {
+        addToast("Could not unhide", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const transitionCommunityLifecycle = useCallback(
+    async (
+      communityId: string,
+      next: "draft" | "discoverable" | "active" | "quiet" | "archived"
+    ): Promise<boolean> => {
+      try {
+        const result = await domains.community.transitionLifecycle(communityId, next)
+        if (!result.ok) {
+          addToast(result.error || "Could not update status", "error")
+          return false
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === communityId ? { ...c, lifecycle: next } : c
+          ),
+        }))
+        try {
+          appendModerationLog({
+            communityId,
+            action: "lifecycle",
+            actorId: IdentityService.getCurrentUserId() || "unknown",
+            targetType: "community",
+            targetId: communityId,
+            metadata: { lifecycle: next },
+          })
+        } catch { /* */ }
+        addToast(`Community marked ${next}`, "success")
+        return true
+      } catch {
+        addToast("Could not update community status", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const reportCommunityContent = useCallback(
+    async (
+      communityId: string,
+      input: {
+        targetType: "community" | "post" | "member"
+        targetId: string
+        reason: "spam" | "harassment" | "hate" | "misinformation" | "impersonation" | "safety" | "other"
+        note?: string
+      }
+    ): Promise<boolean> => {
+      try {
+        const result = await domains.community.reportCommunityContent(communityId, input)
+        if (!result.ok) {
+          addToast(result.error || "Could not submit report", "error")
+          return false
+        }
+        try {
+          createCommunityReport({
+            communityId,
+            targetType: input.targetType,
+            targetId: input.targetId,
+            reporterId: IdentityService.getCurrentUserId() || "unknown",
+            reason: input.reason,
+            note: input.note,
+          })
+        } catch { /* */ }
+        addToast("Report submitted — thank you", "success")
+        return true
+      } catch {
+        addToast("Could not submit report", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const createCommunityAnnouncement = useCallback(
+    async (
+      communityId: string,
+      input: { title: string; content: string; type?: "info" | "important" | "celebration" | "maintenance" }
+    ): Promise<boolean> => {
+      try {
+        const result = await domains.community.createAnnouncement(communityId, input)
+        if (!result.ok) {
+          addToast(result.error || "Could not announce", "error")
+          return false
+        }
+        const announcement = result.data.announcement
+        const communityName =
+          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const existing = ((c as any).announcements || []) as any[]
+            return {
+              ...c,
+              announcements: [announcement, ...existing],
+            }
+          }),
+        }))
+        try {
+          emitCommunityNotification({
+            subtype: "announcement",
+            communityId,
+            communityName,
+            actorName: state.profile.displayName || "Moderator",
+            referenceId: `announcement:${communityId}:${announcement.id}`,
+            messageOverride: input.title,
+          })
+        } catch { /* */ }
+        addToast("Announcement published", "success")
+        return true
+      } catch {
+        addToast("Could not publish announcement", "error")
+        return false
+      }
+    },
+    [addToast, domains, state.conversations, state.profile.displayName]
   )
 
   const addGroupMember = useCallback(
@@ -3305,8 +3927,25 @@ const dismissMatchCelebration = useCallback(() => {
       setTypingIndicator,
       createGroup,
       joinCommunity,
+      acceptCommunityInvitation,
+      declineCommunityInvitation,
       leaveCommunity,
       requestJoinCommunity,
+      approveCommunityJoinRequest,
+      declineCommunityJoinRequest,
+      inviteCommunityMember,
+      replyToBoardPost,
+      reactToBoardPost,
+      createCommunityAnnouncement,
+      replyToBoardPost,
+      reactToBoardPost,
+      pinBoardPost,
+      unpinBoardPost,
+      hideBoardPost,
+      unhideBoardPost,
+      transitionCommunityLifecycle,
+      reportCommunityContent,
+      createCommunityAnnouncement,
       createBoardPost,
       addGroupMember,
       removeGroupMember,
@@ -3432,7 +4071,18 @@ const dismissMatchCelebration = useCallback(() => {
       muteConversation,
       createGroup,
       joinCommunity,
+      acceptCommunityInvitation,
+      declineCommunityInvitation,
       leaveCommunity,
+      replyToBoardPost,
+      reactToBoardPost,
+      pinBoardPost,
+      unpinBoardPost,
+      hideBoardPost,
+      unhideBoardPost,
+      transitionCommunityLifecycle,
+      reportCommunityContent,
+      createCommunityAnnouncement,
       createBoardPost,
       startConversation,
       addToast,
@@ -3449,7 +4099,18 @@ const dismissMatchCelebration = useCallback(() => {
       muteConversation,
       createGroup,
       joinCommunity,
+      acceptCommunityInvitation,
+      declineCommunityInvitation,
       leaveCommunity,
+      replyToBoardPost,
+      reactToBoardPost,
+      pinBoardPost,
+      unpinBoardPost,
+      hideBoardPost,
+      unhideBoardPost,
+      transitionCommunityLifecycle,
+      reportCommunityContent,
+      createCommunityAnnouncement,
       createBoardPost,
       startConversation,
       addToast,

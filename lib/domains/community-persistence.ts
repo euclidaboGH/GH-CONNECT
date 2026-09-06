@@ -1,6 +1,9 @@
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 /**
- * Local authoritative snapshot for communities (until Supabase is primary).
- * Ensures create/join survives reload — domain conversations stay source of UI truth after hydrate.
+ * Community local cache (Authority Class D — UI cache only).
+ * NOT production membership/ledger truth.
+ * Ensures create/join UX survives reload until Supabase community tables are primary (Class A).
+ * Join/leave still must go through membership adapter when available.
  */
 
 import type { Conversation } from "@/lib/ghc-types"
@@ -40,6 +43,7 @@ export function savePersistedCommunities(list: Conversation[]) {
       // Cap messages in persistence — chat window loads recent only
       messages: Array.isArray(c.messages) ? c.messages.slice(-120) : [],
     }))
+    if (!isDemoDataAllowed()) return
     localStorage.setItem(STORAGE_KEY, JSON.stringify(communities))
   } catch {
     /* quota */
@@ -69,6 +73,7 @@ export function loadJoinedIds(): string[] {
 export function saveJoinedIds(ids: string[]) {
   if (typeof window === "undefined") return
   try {
+    if (!isDemoDataAllowed()) return
     localStorage.setItem(JOINED_KEY, JSON.stringify(Array.from(new Set(ids.filter(Boolean)))))
   } catch {
     /* */

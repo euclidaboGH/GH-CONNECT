@@ -19,6 +19,15 @@ export async function POST(request: Request) {
   const apiKey = (process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
   if (!apiKey) {
     return NextResponse.json({ ok: false, error: "PI_API_KEY not configured" }, { status: 503 })
+
+  const adminKey = (process.env.GHC_A2U_ADMIN_KEY || process.env.GHC_ADMIN_CREDIT_KEY || "").trim()
+  const provided = (request.headers.get("x-ghc-a2u-admin-key") || "").trim()
+  if (!adminKey || provided !== adminKey) {
+    return NextResponse.json(
+      { ok: false, error: "FORBIDDEN", message: "A2U complete requires server admin authorization" },
+      { status: 403 }
+    )
+  }
   }
 
   const body = await request.json().catch(() => ({}))

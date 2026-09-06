@@ -230,7 +230,7 @@ export function PollComposer({
         </div>
 
         <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground">
-          Polls are published to your feed with a clear structure so people can respond quickly.
+          Polls appear on your public feed with a clear structure so people can respond in one tap. Results stay visible to voters.
           Results stay on-device until live voting is enabled server-side.
         </p>
       </div>

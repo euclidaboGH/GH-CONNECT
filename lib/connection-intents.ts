@@ -3,14 +3,22 @@
  * Broader than single primaryMode; primaryMode remains a soft default.
  */
 
+/**
+ * First-class connection intents — multi-select; not forced into a single "friend" model.
+ * Existing ids remain stable for backward compatibility.
+ */
 export const CONNECTION_INTENT_OPTIONS = [
   { id: "friendship", label: "Friendship", desc: "Genuine friends & shared interests" },
   { id: "dating", label: "Dating", desc: "Romance & relationships" },
   { id: "networking", label: "Networking", desc: "Professional connections" },
+  { id: "professional", label: "Professional", desc: "Career peers and industry contacts" },
   { id: "business", label: "Business", desc: "Clients, partners, growth" },
   { id: "collaboration", label: "Collaboration", desc: "Projects & building together" },
   { id: "communities", label: "Communities", desc: "Groups & local chapters" },
   { id: "mentorship", label: "Mentorship", desc: "Mentor or be mentored" },
+  { id: "learning", label: "Learning", desc: "Skills, courses, and knowledge exchange" },
+  { id: "volunteering", label: "Volunteering", desc: "Causes and community service" },
+  { id: "events", label: "Events", desc: "Meetups, gatherings, and live activities" },
 ] as const
 
 export type ConnectionIntentId = (typeof CONNECTION_INTENT_OPTIONS)[number]["id"]
@@ -53,8 +61,15 @@ export function saveConnectionIntents(userId: string, intents: ConnectionIntentI
 export function intentsFromPrimaryMode(mode?: string | null): ConnectionIntentId[] {
   const m = String(mode || "").toLowerCase()
   if (m === "dating") return ["dating"]
-  if (m === "networking" || m === "professional") return ["networking"]
+  if (m === "networking") return ["networking"]
+  if (m === "professional") return ["professional", "networking"]
   if (m === "friendship" || m === "friends") return ["friendship"]
+  if (m === "business") return ["business"]
+  if (m === "collaboration") return ["collaboration"]
+  if (m === "mentorship") return ["mentorship"]
+  if (m === "learning") return ["learning"]
+  if (m === "volunteering") return ["volunteering"]
+  if (m === "events") return ["events"]
   return ["friendship", "networking"]
 }
 
@@ -110,10 +125,14 @@ export function scoreIntentMatch(
     friendship: /friend|hobby|sport|music|travel|game|hang/,
     dating: /dating|relationship|single|romance|love/,
     networking: /network|career|professional|linkedin|role/,
+    professional: /engineer|designer|developer|manager|industry|career/,
     business: /business|client|brand|entrepreneur|startup|sell/,
     collaboration: /collab|project|partner|co-?found|build|team/,
-    communities: /community|volunteer|group|chapter|local/,
-    mentorship: /mentor|coach|advise|guide|senior|junior|learn/,
+    communities: /community|group|chapter|local|chapter/,
+    mentorship: /mentor|coach|advise|guide|senior|junior/,
+    learning: /learn|course|skill|study|tutorial|education/,
+    volunteering: /volunteer|charity|cause|nonprofit|give\s?back/,
+    events: /event|meetup|conference|gathering|workshop/,
   }
 
   for (const v of viewerIntents) {

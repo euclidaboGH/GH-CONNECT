@@ -28,6 +28,16 @@ export async function POST(request: Request) {
   if (!apiKey) {
     return NextResponse.json(
       { ok: false, error: "PI_API_KEY not configured" },
+
+  // Privileged A2U only — ordinary users cannot create platform payouts
+  const adminKey = (process.env.GHC_A2U_ADMIN_KEY || process.env.GHC_ADMIN_CREDIT_KEY || "").trim()
+  const provided = (request.headers.get("x-ghc-a2u-admin-key") || "").trim()
+  if (!adminKey || provided !== adminKey) {
+    return NextResponse.json(
+      { ok: false, error: "FORBIDDEN", message: "A2U requires server admin authorization" },
+      { status: 403 }
+    )
+  }
       { status: 503 }
     )
   }

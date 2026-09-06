@@ -1,0 +1,190 @@
+{
+  "generatedAt": "2026-09-06T17:03:23.552Z",
+  "step": "5",
+  "automated": [
+    {
+      "name": "safety-scan",
+      "status": "PASS",
+      "ms": 111
+    },
+    {
+      "name": "authority-map",
+      "status": "PASS",
+      "ms": 191
+    },
+    {
+      "name": "community-authority",
+      "status": "PASS",
+      "ms": 37
+    },
+    {
+      "name": "trust-authority",
+      "status": "PASS",
+      "ms": 100
+    },
+    {
+      "name": "governance-durability",
+      "status": "PASS",
+      "ms": 168
+    },
+    {
+      "name": "context-strangler-50.1",
+      "status": "PASS",
+      "ms": 163
+    },
+    {
+      "name": "context-strangler-step4",
+      "status": "PASS",
+      "ms": 95
+    },
+    {
+      "name": "domain-contracts",
+      "status": "PASS",
+      "ms": 137
+    },
+    {
+      "name": "discovery-connections",
+      "status": "PASS",
+      "ms": 112
+    },
+    {
+      "name": "unified-connections",
+      "status": "PASS",
+      "ms": 136
+    },
+    {
+      "name": "connection-inbox",
+      "status": "PASS",
+      "ms": 186
+    },
+    {
+      "name": "connection-ux",
+      "status": "PASS",
+      "ms": 134
+    },
+    {
+      "name": "universal-search",
+      "status": "PASS",
+      "ms": 222
+    },
+    {
+      "name": "communities",
+      "status": "PASS",
+      "ms": 132
+    },
+    {
+      "name": "community-belonging",
+      "status": "PASS",
+      "ms": 221
+    },
+    {
+      "name": "community-hub",
+      "status": "PASS",
+      "ms": 138
+    },
+    {
+      "name": "community-governance",
+      "status": "PASS",
+      "ms": 219
+    },
+    {
+      "name": "community-health",
+      "status": "PASS",
+      "ms": 127
+    },
+    {
+      "name": "community-lifecycle",
+      "status": "PASS",
+      "ms": 159
+    },
+    {
+      "name": "community-moderation",
+      "status": "PASS",
+      "ms": 234
+    },
+    {
+      "name": "community-onboarding",
+      "status": "PASS",
+      "ms": 101
+    },
+    {
+      "name": "community-participation-bridge",
+      "status": "PASS",
+      "ms": 117
+    },
+    {
+      "name": "community-participation-depth",
+      "status": "PASS",
+      "ms": 163
+    },
+    {
+      "name": "community-participation",
+      "status": "PASS",
+      "ms": 157
+    },
+    {
+      "name": "community-feed-search",
+      "status": "PASS",
+      "ms": 138
+    },
+    {
+      "name": "home-os-audit",
+      "status": "PASS",
+      "ms": 257
+    },
+    {
+      "name": "social-experience",
+      "status": "PASS",
+      "ms": 131
+    },
+    {
+      "name": "social-os-foundation",
+      "status": "PASS",
+      "ms": 269
+    },
+    {
+      "name": "economy-v12",
+      "status": "PASS",
+      "ms": 46
+    },
+    {
+      "name": "pi-payment-durable",
+      "status": "PASS",
+      "ms": 37
+    }
+  ],
+  "passCount": 30,
+  "failCount": 0,
+  "skipCount": 0,
+  "operatorGates": [
+    {
+      "name": "npm install --legacy-peer-deps",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "npm run typecheck",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "npm run lint",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "npm run build",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "Supabase migration reconcile (prod)",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "Live Test-Pi E2E in Pi Browser",
+      "status": "OPERATOR REQUIRED"
+    },
+    {
+      "name": "Multi-instance concurrency smoke",
+      "status": "OPERATOR REQUIRED"
+    }
+  ],
+  "decision": "AUTOMATED_GATES_PASS — OPERATOR VERIFICATION STILL REQUIRED"
+}

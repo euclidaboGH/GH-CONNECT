@@ -1,3 +1,4 @@
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import type { Profile, Settings, Candidate, Post, StoryItem } from "./ghc-types"
 
 // Storage keys
@@ -27,6 +28,8 @@ export const INTERESTS = {
 export const ALL_INTERESTS = [...INTERESTS.hobbies, ...INTERESTS.professional, ...INTERESTS.lifestyle]
 
 export function seedStories(): StoryItem[] {
+  if (!isDemoDataAllowed()) return []
+
   const now = Date.now()
   return [
     { id: "story-sarah", ownerId: "cand-1", name: "Sarah", photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah&size=128", text: "Morning coffee vibes", createdAt: now - 3600000 },
@@ -132,12 +135,14 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyMarketing: false,
 }
 
-// Seed candidates for discovery
+// Seed candidates for discovery — PRODUCTION returns [] (never silent fake people)
 export function seedCandidates(): Candidate[] {
+  if (!isDemoDataAllowed()) return []
   const now = Date.now()
   const candidates: Candidate[] = [
     {
       id: "cand-1",
+      isSeed: true,
       name: "Sarah",
       age: 26,
       location: "Lagos, Nigeria",
@@ -150,6 +155,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-2",
+      isSeed: true,
       name: "Emma",
       age: 24,
       location: "Abuja, Nigeria",
@@ -162,6 +168,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-3",
+      isSeed: true,
       name: "Jessica",
       age: 28,
       location: "Accra, Ghana",
@@ -174,6 +181,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-4",
+      isSeed: true,
       name: "Nicole",
       age: 25,
       location: "Nairobi, Kenya",
@@ -186,6 +194,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-5",
+      isSeed: true,
       name: "Zainab",
       age: 27,
       location: "Cairo, Egypt",
@@ -238,6 +247,8 @@ export function seedCandidates(): Candidate[] {
 
 // Seed posts for home feed
 export function seedPosts(): Post[] {
+  if (!isDemoDataAllowed()) return []
+
   return [
     {
       id: "post-current-1",
@@ -460,6 +471,8 @@ export function seedReciprocalInterests(
   candidates: { id: string }[],
   currentUserId = "current-user",
 ): import("./ghc-types").Like[] {
+  if (!isDemoDataAllowed()) return []
+
   const now = Date.now()
   const likes: import("./ghc-types").Like[] = []
   candidates.forEach((c, index) => {

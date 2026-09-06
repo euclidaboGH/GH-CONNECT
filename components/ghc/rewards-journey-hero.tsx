@@ -67,34 +67,40 @@ export function RewardsJourneyHero({
   }, [tick])
 
   const claimDaily = useCallback(async () => {
-    const res = claimDailyStreak(userId, membershipTier)
-    if (!res.ok) {
-      ghc.addToast?.(res.error || "Already claimed", "error")
-      setTick((t) => t + 1)
-      return
-    }
+    // Server-authoritative daily claim only — no local GHC mint
     try {
-      const eco = getBoundDomainServices()?.economy as
-        | { claimReward?: (id: string) => Promise<{ ok: boolean }> }
-        | undefined
-      // Best-effort ledger claim of staged pending
-      if (eco?.claimReward && res.referenceId) {
-        /* staged elsewhere */
+      const res = await fetch("/api/economy/rewards/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) {
+        ghc.addToast?.(data.error || data.message || "Claim failed", "error")
+        setTick((t) => t + 1)
+        return
       }
+      const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
+      const day = data.cycleDay ?? data.day ?? ""
+      ghc.addToast?.(
+        data.alreadyClaimed || data.idempotent
+          ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`
+          : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
+        "success"
+      )
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:daily-reward-claimed", { detail: { ...data, server: true } })
+        )
+      } catch {
+        /* */
+      }
+      setTick((t) => t + 1)
+      onClaimed?.()
     } catch {
-      /* */
+      ghc.addToast?.("Claim failed", "error")
+      setTick((t) => t + 1)
     }
-    ghc.addToast?.(
-      `Day ${res.cycleDay}: +${res.ghc} GHC · +${res.xp} XP`,
-      "success"
-    )
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:daily-reward-claimed", { detail: res }))
-    } catch {
-      /* */
-    }
-    setTick((t) => t + 1)
-    onClaimed?.()
   }, [userId, membershipTier, ghc, onClaimed])
 
   const opportunities = [

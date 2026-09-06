@@ -1,0 +1,19 @@
+-- PROPOSAL ONLY — DO NOT APPLY AUTOMATICALLY
+-- Additive join-reason storage for community memberships.
+-- GreenHaven Prompt #44: optional durability for join reasons.
+--
+-- This file is intentionally not referenced by production apply scripts.
+-- Operator must review and apply manually if multi-device join reasons are required.
+-- Does NOT touch GHC, Pi, economy, or payment tables.
+
+-- CREATE TABLE IF NOT EXISTS ghc_community_join_reasons (
+--   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+--   user_id text NOT NULL,
+--   community_id text NOT NULL,
+--   reasons jsonb NOT NULL DEFAULT '[]'::jsonb,
+--   created_at timestamptz NOT NULL DEFAULT now(),
+--   UNIQUE (user_id, community_id)
+-- );
+--
+-- ALTER TABLE ghc_community_join_reasons ENABLE ROW LEVEL SECURITY;
+-- -- Policies: service-role write; user can read own rows only.

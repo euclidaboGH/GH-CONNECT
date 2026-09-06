@@ -3,6 +3,11 @@
 import { memo, useState } from "react"
 import { Heart, MessageCircle, Share2, MoreVertical, Plus, Bookmark, Flag, Eye, ThumbsDown, Volume2, Slash, Video, FileText } from "lucide-react"
 import type { Post, PostComment } from "@/lib/ghc-types"
+import {
+  resolvePostContentKind,
+  contentKindLabel,
+  contentKindBadgeClass,
+} from "@/lib/domains/adapters/social-content-kinds"
 import { timeAgo } from "@/lib/ghc-data"
 import { PostMenu, CommentReactions, EnhancedComment, EnhancedPostContent, LinkPreview, QuoteRepost, ShareMenu } from "./feed-enhancements"
 import { LazyImage } from "./lazy-image"
@@ -110,7 +115,7 @@ export const PostCard = memo(function PostCard({
   }
 
   return (
-    <article className="bg-white border border-gray-200/80 rounded-2xl overflow-hidden shadow-[0_4px_18px_rgba(15,23,42,0.05)] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-shadow">
+    <article className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
       {/* Post header — avatar + name open public profile when provided */}
       <header className="px-4 py-3 border-b border-gray-100/80 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -136,9 +141,18 @@ export const PostCard = memo(function PostCard({
             >
               {post.authorName}
             </button>
-            <p className="text-xs text-gray-500">
-              {timeAgo(post.createdAt)}
-              {post.isEdited && <span className="text-gray-400 ml-1">(edited)</span>}
+            <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{timeAgo(post.createdAt)}</span>
+              {post.isEdited && <span className="text-muted-foreground/80">(edited)</span>}
+              {(() => {
+                const kind = resolvePostContentKind(post as any)
+                if (kind === "post") return null
+                return (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${contentKindBadgeClass(kind)}`}>
+                    {contentKindLabel(kind)}
+                  </span>
+                )
+              })()}
             </p>
           </div>
         </div>
@@ -171,6 +185,41 @@ export const PostCard = memo(function PostCard({
           onLinkClick={(url) => window.open(url, "_blank")}
         />
         </div>
+
+        {/* Marketplace listing share */}
+        {post.listingId ? (
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-listing", {
+                    detail: { listingId: post.listingId },
+                  })
+                )
+                window.dispatchEvent(
+                  new CustomEvent("ghc:navigate-tab", { detail: "marketplace" })
+                )
+              } catch {
+                /* */
+              }
+            }}
+            className="flex w-full items-center gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40"
+          >
+            <span className="text-sm" aria-hidden>🛒</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-bold text-foreground">
+                {post.listingKind === "service"
+                  ? "Service on Marketplace"
+                  : post.listingKind === "opportunity"
+                    ? "Opportunity on Marketplace"
+                    : "Listing on Marketplace"}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">Tap to view details</span>
+            </span>
+            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">View</span>
+          </button>
+        ) : null}
 
         {/* Link preview */}
         {post.linkPreview && (

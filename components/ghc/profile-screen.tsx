@@ -6,7 +6,8 @@
  * Full-width layout: no left gutter shift.
  */
 import { useMemo, useState, useCallback } from "react"
-import { useGHCProfile } from "@/contexts/ghc-context"
+import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
+import { ProfileMyCommunities } from "./profile-my-communities"
 import { IdentityLayersStrip } from "./identity-layers-strip"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
@@ -48,6 +49,7 @@ export function ProfileScreen({
     updateProfile?: (updates: Partial<Profile>) => void
     addToast?: (m: string, t?: "success" | "error" | "info") => void
   }
+  const messaging = useGHCMessaging() as { conversations?: unknown[] }
   const p = ghc.profile || ({} as Profile)
   const name = p.displayName || "Member"
   const photos = Array.isArray(p.photos) ? p.photos.filter(Boolean) : []
@@ -164,7 +166,7 @@ export function ProfileScreen({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
+    <div className="gh-profile-shell flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
       <header className="flex w-full shrink-0 items-center justify-between border-b border-border/40 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))]">
         <h1 className="text-base font-bold tracking-tight">Profile</h1>
         <div className="flex items-center gap-0.5">
@@ -315,6 +317,11 @@ export function ProfileScreen({
             onToast={ghc.addToast}
           />
         </div>
+
+        <ProfileMyCommunities
+          conversations={messaging?.conversations}
+          viewerId={meId}
+        />
 
         {intents.length > 0 ? (
           <section className="mt-4 w-full px-4">

@@ -25,6 +25,9 @@ import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-she
 import { LazyImage } from "./lazy-image"
 import { ReportChooser } from "./report-chooser"
 import { resolveAvatarUrl } from "@/lib/avatar"
+import { buildProfileConnectionContext } from "@/lib/domains/adapters/profile-connection-context"
+import { resolveUserIntents } from "@/lib/connection-intents"
+import { IdentityService } from "@/lib/identity/identity-service"
 
 function calculateProfileMatch(candidate: Candidate, interests: string[], age?: number, location?: string) {
   const shared = (candidate.interests ?? []).filter((item) => interests.includes(item)).length
@@ -62,6 +65,9 @@ export function ProfilePreviewPage({
   canMessage = false,
   isFollowing = false,
   isMatched = false,
+  viewerIntents,
+  viewerCommunityIds,
+  viewerFriendIds,
 }: {
   candidate: Candidate
   userInterests?: string[]
@@ -80,6 +86,9 @@ export function ProfilePreviewPage({
   canMessage?: boolean
   isFollowing?: boolean
   isMatched?: boolean
+  viewerIntents?: string[]
+  viewerCommunityIds?: string[]
+  viewerFriendIds?: string[]
 }) {
   const [showActions, setShowActions] = useState(false)
   const [liked, setLiked] = useState(false)
@@ -107,6 +116,23 @@ export function ProfilePreviewPage({
   const photo = resolveAvatarUrl(candidate.photo, { seed: candidate.id || candidate.name, size: 720 })
   const name = candidate.name?.trim() || "Member"
 
+  const profileConnectionContext = buildProfileConnectionContext({
+    viewer: {
+      interests: userInterests,
+      intents: (viewerIntents as any) || resolveUserIntents(IdentityService.getCurrentUserId(), null),
+      communityIds: viewerCommunityIds,
+      friendIds: viewerFriendIds,
+    },
+    subject: {
+      id: String(candidate.id || ""),
+      interests: candidate.interests,
+      intents: (candidate as any).connectionIntents,
+      communityIds: (candidate as any).communityIds,
+      friendIds: (candidate as any).mutualFriendIds,
+    },
+  })
+
+
   return (
     <section
       className="fixed inset-0 z-[80] flex h-dvh flex-col overflow-hidden bg-background"
@@ -120,6 +146,42 @@ export function ProfilePreviewPage({
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/80" />
+
+        {profileConnectionContext.reasons.length > 0 ||
+        profileConnectionContext.sharedCommunities.length > 0 ? (
+          <div className="absolute inset-x-0 bottom-28 z-[1] px-4">
+            <div className="rounded-2xl border border-white/20 bg-black/50 p-3 backdrop-blur-md" aria-label="How you may connect">
+              <p className="text-[11px] font-semibold text-white">How you may connect</p>
+              <p className="mt-1 text-[11px] leading-snug text-white/85">{profileConnectionContext.summary}</p>
+              {profileConnectionContext.sharedCommunities.length > 0 ? (
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Shared communities">
+                  {profileConnectionContext.sharedCommunities.slice(0, 3).map((c) => (
+                    <li key={c}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:open-community", {
+                                detail: { groupId: c },
+                              })
+                            )
+                          } catch {
+                            /* */
+                          }
+                        }}
+                        className="rounded-full border border-white/30 bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      >
+                        Both in {c}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
 
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4 pt-[calc(0.75rem+env(safe-area-inset-top))]">
           <button

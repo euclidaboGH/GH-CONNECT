@@ -19,8 +19,8 @@ import {
 import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 
-const MESSAGE_WINDOW = 50
-const WINDOW_STEP = 40
+const MESSAGE_WINDOW = 40
+const WINDOW_STEP = 30
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"
 
@@ -315,7 +315,10 @@ export function MessageScreen() {
         <div className="mt-2">
           <ConversationSearchBar searchQuery={query} onSearchChange={setQuery} />
         </div>
-        <div className="mt-2 flex gap-1 rounded-xl bg-muted/60 p-1">
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          Private messages stay separate from community boards.
+        </p>
+        <div className="mt-2 flex gap-1 rounded-xl bg-muted/60 p-1" role="tablist" aria-label="Inbox filters">
           {filters.map((f) => (
             <button
               key={f.id}

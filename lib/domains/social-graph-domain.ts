@@ -289,23 +289,35 @@ export function createSocialGraphDomain(getCtx: () => GraphCtx) {
     },
 
     async sendFriendRequest(
-      userId: string
+      userId: string,
+      requestContext?: { intents?: string[]; note?: string; source?: string }
     ): Promise<MutationResult<{ outgoingFriendRequestIds: string[]; friends: string[] }>> {
       const s = getCtx()
       return runMutation({
         name: "graph.sendFriendRequest",
         actorId: s.currentUserId,
-        input: { userId },
+        input: { userId, requestContext },
         validate: (i) => transitionGate(s, i.userId, "send_connection_request"),
         authorize: (i) => (canConnect(s, i.userId) ? null : "Connection not allowed"),
         mutate: (i) => {
           const outgoing = Array.from(new Set([...(s.outgoingFriendRequestIds || []), i.userId]))
-          socialGraphStore.addEdge(s.currentUserId, i.userId, "friend_request")
+          const meta = i.requestContext
+            ? {
+                intents: i.requestContext.intents || [],
+                note: i.requestContext.note,
+                source: i.requestContext.source || "discover",
+                intentVersion: 1,
+              }
+            : undefined
+          socialGraphStore.addEdge(s.currentUserId, i.userId, "friend_request", meta)
           persistEdge(s, "friend_request", i.userId)
           return { outgoingFriendRequestIds: outgoing, friends: s.friends || [] }
         },
         eventType: "FRIEND_REQUEST_SENT",
-        eventPayload: (_d, i) => ({ userId: i.userId }),
+        eventPayload: (_d, i) => ({
+          userId: i.userId,
+          intents: i.requestContext?.intents,
+        }),
       })
     },
 
@@ -338,9 +350,18 @@ export function createSocialGraphDomain(getCtx: () => GraphCtx) {
         input: { userId },
         validate: (i) => transitionGate(s, i.userId, "accept_request"),
         mutate: (i) => {
+          const reqMeta = socialGraphStore
+            .list()
+            .find(
+              (e) =>
+                e.type === "friend_request" &&
+                ((e.fromUserId === i.userId && e.toUserId === s.currentUserId) ||
+                  (e.fromUserId === s.currentUserId && e.toUserId === i.userId))
+            )?.meta
+          const friendMeta = reqMeta ? { ...reqMeta, connectedFromRequest: true } : undefined
           socialGraphStore.clearFriendRequestsBetween(s.currentUserId, i.userId)
-          socialGraphStore.addEdge(s.currentUserId, i.userId, "friend")
-          socialGraphStore.addEdge(i.userId, s.currentUserId, "friend")
+          socialGraphStore.addEdge(s.currentUserId, i.userId, "friend", friendMeta)
+          socialGraphStore.addEdge(i.userId, s.currentUserId, "friend", friendMeta)
           if (!s.following.includes(i.userId)) {
             socialGraphStore.addEdge(s.currentUserId, i.userId, "follow")
           }

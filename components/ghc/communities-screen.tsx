@@ -1,6 +1,9 @@
+"use client"
+
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
+
 import { IdentityService } from "@/lib/identity/identity-service"
 import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/domains/community-persistence"
-"use client"
 
 /**
  * Communities tab — My communities vs Discover (0.58 community polish).
@@ -26,6 +29,19 @@ import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { EmptyState } from "./empty-state"
+import { CommunityJoinReasonPicker } from "./community-join-reason-picker"
+import {
+  resolveMembershipState,
+  saveLocalJoinReasons,
+  userFacingJoinError,
+  primaryMembershipAction,
+} from "@/lib/domains/adapters/community-membership-adapter"
+import {
+  isCommunityMemberWithOptionalCache,
+  allowLocalBoardFallback,
+  communityLocalCacheAllowed,
+} from "@/lib/domains/adapters/community-ui-authority"
+import type { CommunityJoinReasonId } from "@/lib/domains/contracts/communities"
 
 type DirectoryTab = "my" | "discover"
 
@@ -71,6 +87,7 @@ type CommunityRow = {
 }
 
 function buildSeedCommunities(): CommunityRow[] {
+  if (!isDemoDataAllowed()) return []
   const now = Date.now()
   return [
     {
@@ -240,7 +257,7 @@ function isCommunityConv(c: {
 }
 
 export function CommunitiesScreen() {
-  const ctx = useGHCMessaging() as any as any
+  const ctx = useGHCMessaging() as any as any as any
   const {
     conversations: conversationsRaw,
     profile,
@@ -249,7 +266,22 @@ export function CommunitiesScreen() {
     joinCommunity,
     leaveCommunity,
     createBoardPost,
+    replyToBoardPost,
+    reactToBoardPost,
+    createCommunityAnnouncement,
+    pinBoardPost,
+    unpinBoardPost,
+    hideBoardPost,
+    unhideBoardPost,
+    transitionCommunityLifecycle,
+    reportCommunityContent,
     setTab,
+    candidates,
+    approveCommunityJoinRequest,
+    declineCommunityJoinRequest,
+    inviteCommunityMember,
+    muteConversation,
+    unmuteConversation,
   } = ctx
 
   const conversations = Array.isArray(conversationsRaw) ? conversationsRaw : []
@@ -261,8 +293,12 @@ export function CommunitiesScreen() {
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
   const [hubKey, setHubKey] = useState(0)
+  const [joinPickerRow, setJoinPickerRow] = useState<CommunityRow | null>(null)
+  const [joinBusy, setJoinBusy] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
   const [localJoined, setLocalJoined] = useState<string[]>(() => {
     if (typeof window === "undefined") return []
+    if (!communityLocalCacheAllowed()) return []
     try {
       const raw = window.localStorage.getItem("ghc.community.joinedIds")
       if (!raw) return []
@@ -274,6 +310,7 @@ export function CommunitiesScreen() {
   })
 
   useEffect(() => {
+    if (!communityLocalCacheAllowed()) return
     try {
       window.localStorage.setItem("ghc.community.joinedIds", JSON.stringify(localJoined))
     } catch {
@@ -295,6 +332,7 @@ export function CommunitiesScreen() {
     Record<string, NonNullable<CommunityRow["boardPosts"]>>
   >(() => {
     if (typeof window === "undefined") return {}
+    if (!communityLocalCacheAllowed()) return {}
     try {
       const raw = window.localStorage.getItem("ghc.community.boardPosts")
       if (!raw) return {}
@@ -306,6 +344,7 @@ export function CommunitiesScreen() {
   })
 
   useEffect(() => {
+    if (!communityLocalCacheAllowed()) return
     try {
       window.localStorage.setItem("ghc.community.boardPosts", JSON.stringify(localBoard))
     } catch {
@@ -326,7 +365,7 @@ export function CommunitiesScreen() {
     })
   }, [])
 
-  const seeds = useMemo(() => buildSeedCommunities(), [])
+  const seeds = useMemo(() => (isDemoDataAllowed() ? buildSeedCommunities() : []), [])
 
   const fromState = useMemo(() => {
     const seen = new Set<string>()
@@ -352,12 +391,9 @@ export function CommunitiesScreen() {
 
   const isJoined = useCallback(
     (c: CommunityRow) => {
-      const me = IdentityService.getCurrentUserId()
-      const members = c.members || []
-      if (members.includes(me) || members.includes("current-user")) return true
-      if (c.createdBy === me || c.createdBy === "current-user") return true
-      if (localJoined.includes(c.id)) return true
-      return false
+      const me = IdentityService.getCurrentUserId() || "current-user"
+      // Domain-first; Class D localJoined only when communityLocalCacheAllowed()
+      return isCommunityMemberWithOptionalCache(c as any, me, localJoined)
     },
     [localJoined]
   )
@@ -402,49 +438,108 @@ export function CommunitiesScreen() {
     ? communityGroups.find((c) => c.id === selectedCommunityId) || null
     : null
 
-  const ensureInStateAndJoin = async (row: CommunityRow) => {
-    const inState = conversations.some((c: any) => c.id === row.id)
-    if (inState && joinCommunity) {
+  /** Open join-reason picker; membership only after authoritative join succeeds */
+  const beginJoin = (row: CommunityRow) => {
+    const me = IdentityService.getCurrentUserId()
+    const state = resolveMembershipState(row, me)
+    const action = primaryMembershipAction(state)
+    if (action === "pending") {
+      addToast("Your request is already pending", "info")
+      return
+    }
+    if (action === "open") {
+      setSelectedCommunityId(row.id)
+      return
+    }
+    if (action === "none") {
+      addToast("This community is not available", "error")
+      return
+    }
+    setJoinError(null)
+    setJoinPickerRow(row)
+  }
+
+  const ensureInStateAndJoin = async (
+    row: CommunityRow,
+    reasons: CommunityJoinReasonId[] = []
+  ) => {
+    if (!joinCommunity) {
+      addToast("Joining is temporarily unavailable", "error")
+      return false
+    }
+    setJoinBusy(true)
+    setJoinError(null)
+    try {
+      const me = IdentityService.getCurrentUserId()
+      if (reasons.length) {
+        try {
+          saveLocalJoinReasons(me, row.id, reasons)
+        } catch {
+          /* non-authoritative */
+        }
+      }
       const ok = await joinCommunity(row.id)
       if (ok) {
-        setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
+        // Domain join succeeded. Mirror to Class D cache only in Studio for list hydration.
+        if (communityLocalCacheAllowed()) {
+          setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
+        }
         setHubKey((k) => k + 1)
+        setJoinPickerRow(null)
+        addToast(`Joined ${row.groupName || row.participantName}`, "success")
+        return true
       }
-      return ok
+      setJoinError(userFacingJoinError("join_failed"))
+      addToast(userFacingJoinError("join_failed"), "error")
+      return false
+    } catch (e: any) {
+      const msg = userFacingJoinError(e?.message || "join_failed")
+      setJoinError(msg)
+      addToast(msg, "error")
+      return false
+    } finally {
+      setJoinBusy(false)
     }
-    setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
-    if (joinCommunity) {
-      try {
-        await joinCommunity(row.id)
-      } catch {
-        /* seed membership still local */
-      }
-    }
-    addToast(`Joined ${row.groupName || row.participantName}`, "success")
-    setHubKey((k) => k + 1)
-    return true
   }
 
   const handleLeave = async (id: string, name: string) => {
     if (leaveCommunity) {
       const ok = await leaveCommunity(id)
-      if (!ok) {
-        setLocalJoined((prev) => prev.filter((x) => x !== id))
+      if (ok) {
+        // Mirror cache only after domain leave succeeds (Studio Class D)
+        if (communityLocalCacheAllowed()) {
+          setLocalJoined((prev) => prev.filter((x) => x !== id))
+        }
+        setLocalBoard((prev) => {
+          if (!prev[id]) return prev
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
         addToast(`Left ${name}`, "info")
+        if (selectedCommunityId === id) setSelectedCommunityId(null)
+        return
       }
-    } else {
-      setLocalJoined((prev) => prev.filter((x) => x !== id))
-      addToast(`Left ${name}`, "info")
+      addToast("Could not leave this community. Please try again.", "error")
+      return
     }
-    if (selectedCommunityId === id) setSelectedCommunityId(null)
+    // No domain leave API: Studio cache-only leave; production must not fake leave
+    if (communityLocalCacheAllowed()) {
+      setLocalJoined((prev) => prev.filter((x) => x !== id))
+      addToast(`Left ${name} (studio)`, "info")
+      if (selectedCommunityId === id) setSelectedCommunityId(null)
+      return
+    }
+    addToast("Leaving is temporarily unavailable.", "error")
   }
 
   const boardPostsFor = (row: CommunityRow) => {
     const fromConv = (row.boardPosts || []) as NonNullable<CommunityRow["boardPosts"]>
-    const extra = localBoard[row.id] || []
+    // Class D local board only in Studio/demo — never production authority
+    const extra = allowLocalBoardFallback() ? localBoard[row.id] || [] : []
     const map = new Map<string, (typeof fromConv)[0]>()
     ;[...fromConv, ...extra].forEach((p) => map.set(p.id, p))
-    return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt)
+    return Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
   }
 
   const handleBoardPost = async (
@@ -458,7 +553,15 @@ export function CommunitiesScreen() {
         setHubKey((k) => k + 1)
         return
       }
+      if (!allowLocalBoardFallback()) {
+        addToast("Could not post to the board. Please try again.", "error")
+        return
+      }
+    } else if (!allowLocalBoardFallback()) {
+      addToast("Board posting is unavailable right now.", "error")
+      return
     }
+    // Studio/demo only — Class D local board cache (not production authority)
     const post = {
       id: `local_${Date.now()}`,
       communityId,
@@ -469,12 +572,13 @@ export function CommunitiesScreen() {
       createdAt: Date.now(),
       likes: 0,
       comments: 0,
+      isLocalCache: true,
     }
     setLocalBoard((prev) => ({
       ...prev,
       [communityId]: [post, ...(prev[communityId] || [])],
     }))
-    addToast("Posted to board", "success")
+    addToast("Posted to board (studio cache)", "success")
     setHubKey((k) => k + 1)
   }
 
@@ -511,17 +615,69 @@ export function CommunitiesScreen() {
             welcomeMessage: selected.welcomeMessage,
             boardUnread: selected.boardUnread,
             chatUnread: selected.chatUnread,
+            isMuted: !!(selected as any).isMuted,
           }}
           boardPosts={boardPostsFor(selected)}
           canChat={joined}
           role={role}
           onBack={() => setSelectedCommunityId(null)}
-          onJoin={async () => {
-            await ensureInStateAndJoin(selected)
+          onJoin={() => {
+            beginJoin(selected)
+          }}
+          pendingJoinRequests={selected.pendingJoinRequests || []}
+          inviteCandidates={(Array.isArray(candidates) ? candidates : [])
+            .filter(
+              (c: any) =>
+                c?.id &&
+                !(selected.members || []).includes(c.id) &&
+                !((selected.invitedMembers || []) as string[]).includes(c.id)
+            )
+            .slice(0, 12)
+            .map((c: any) => ({
+              id: c.id,
+              name: c.name || c.id,
+              photo: c.photo,
+            }))}
+          onApproveRequest={async (userId: string) => {
+            if (!approveCommunityJoinRequest) {
+              addToast("Approval unavailable", "error")
+              return
+            }
+            const ok = await approveCommunityJoinRequest(selected.id, userId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onDeclineRequest={async (userId: string) => {
+            if (!declineCommunityJoinRequest) {
+              addToast("Decline unavailable", "error")
+              return
+            }
+            const ok = await declineCommunityJoinRequest(selected.id, userId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onInviteMember={async (userId: string) => {
+            if (!inviteCommunityMember) {
+              addToast("Invite unavailable", "error")
+              return
+            }
+            const ok = await inviteCommunityMember(selected.id, userId)
+            if (ok) setHubKey((k) => k + 1)
           }}
           onLeave={() =>
             handleLeave(selected.id, selected.groupName || selected.participantName)
           }
+          onMute={async () => {
+            const muted = !!(selected as any).isMuted
+            if (muted && unmuteConversation) {
+              await unmuteConversation(selected.id)
+              addToast("Community unmuted", "success")
+            } else if (muteConversation) {
+              await muteConversation(selected.id, 24 * 7)
+              addToast("Community muted — you remain a member", "info")
+            } else {
+              addToast("Mute unavailable", "error")
+            }
+            setHubKey((k) => k + 1)
+          }}
           onOpenChat={() => {
             if (!joined) {
               addToast("Join this community to use Chat", "info")
@@ -536,6 +692,57 @@ export function CommunitiesScreen() {
             }
             addToast("Opening community chat in Messages", "info")
           }}
+          onReplyToPost={async (postId, body) => {
+            if (!replyToBoardPost) {
+              addToast("Replies unavailable", "error")
+              return
+            }
+            const ok = await replyToBoardPost(selected.id, postId, body)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onReactToPost={async (postId) => {
+            if (!reactToBoardPost) return
+            const ok = await reactToBoardPost(selected.id, postId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onPinPost={async (postId) => {
+            if (!pinBoardPost) return
+            const ok = await pinBoardPost(selected.id, postId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onUnpinPost={async (postId) => {
+            if (!unpinBoardPost) return
+            const ok = await unpinBoardPost(selected.id, postId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onUnhidePost={async (postId) => {
+            if (!unhideBoardPost) return
+            const ok = await unhideBoardPost(selected.id, postId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onTransitionLifecycle={async (next) => {
+            if (!transitionCommunityLifecycle) return
+            const ok = await transitionCommunityLifecycle(selected.id, next)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onReportCommunity={async (input) => {
+            if (!reportCommunityContent) return
+            await reportCommunityContent(selected.id, input)
+          }}
+          onHidePost={async (postId) => {
+            if (!hideBoardPost) return
+            const ok = await hideBoardPost(selected.id, postId)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          onCreateAnnouncement={async (input) => {
+            if (!createCommunityAnnouncement) {
+              addToast("Announcements unavailable", "error")
+              return
+            }
+            const ok = await createCommunityAnnouncement(selected.id, input)
+            if (ok) setHubKey((k) => k + 1)
+          }}
+          announcements={(selected as any).announcements || []}
           onPost={(body: string, kind?: "text" | "question" | "resource") =>
             handleBoardPost(selected.id, body, kind)
           }
@@ -730,7 +937,7 @@ export function CommunitiesScreen() {
           ) : null}
 
           {directory === "discover" &&
-          communityGroups.every((c) => String(c.id).startsWith("demo-community-")) &&
+          isDemoDataAllowed() && communityGroups.every((c) => String(c.id).startsWith("demo-community-")) &&
           fromState.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
               Sample communities for preview — including local chapters. Create your own GreenHaven space anytime.
@@ -893,12 +1100,11 @@ export function CommunitiesScreen() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
+                onClick={() => {
                   const row = joinGate
                   setJoinGate(null)
                   if (!row) return
-                  const ok = await ensureInStateAndJoin(row)
-                  if (ok) setSelectedCommunityId(row.id)
+                  beginJoin(row)
                 }}
                 className="min-h-11 flex-1 rounded-2xl bg-emerald-600 font-bold text-white"
               >
@@ -916,7 +1122,10 @@ export function CommunitiesScreen() {
           const id = await createGroup(data)
           setShowCreate(false)
           if (id) {
-            setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
+            // Domain create succeeded — optional Class D mirror for Studio list hydration
+            if (communityLocalCacheAllowed()) {
+              setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
+            }
             setDirectory("my")
             setSelectedCommunityId(id)
             setHubKey((k) => k + 1)
@@ -925,5 +1134,23 @@ export function CommunitiesScreen() {
         }}
       />
     </div>
+
+      <CommunityJoinReasonPicker
+        open={!!joinPickerRow}
+        rules={normalizeRules(joinPickerRow?.rules)}
+        communityName={joinPickerRow?.groupName || joinPickerRow?.participantName}
+        busy={joinBusy}
+        error={joinError}
+        onConfirm={(reasons) => {
+          if (joinPickerRow) void ensureInStateAndJoin(joinPickerRow, reasons)
+        }}
+        onCancel={() => {
+          if (!joinBusy) {
+            setJoinPickerRow(null)
+            setJoinError(null)
+          }
+        }}
+      />
+
   )
 }

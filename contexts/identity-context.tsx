@@ -15,6 +15,9 @@ import {
   type VerificationState,
   type AccountStatus,
 } from "@/lib/identity/identity-service"
+import { createIdentitySeam } from "@/lib/domains/adapters/ghc-context-seams"
+import type { IdentitySnapshot } from "@/lib/domains/contracts/identity"
+import type { DomainResult } from "@/lib/domains/contracts/types"
 
 export interface IdentityContextValue {
   identity: SessionIdentity
@@ -26,6 +29,8 @@ export interface IdentityContextValue {
   getAccountStatus: () => AccountStatus
   isProductionIdentity: () => boolean
   getAuthHeaders: () => Record<string, string>
+  /** Domain-contract snapshot (profile fields when session profile is unknown) */
+  getProfileSnapshot: () => DomainResult<IdentitySnapshot>
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null)
@@ -40,17 +45,25 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<IdentityContextValue>(
-    () => ({
-      identity,
-      getCurrentUserId: () => IdentityService.getCurrentUserId(),
-      getPiUserId: () => IdentityService.getPiUserId(),
-      getUsername: () => IdentityService.getUsername(),
-      getAuthState: () => IdentityService.getAuthState(),
-      getVerificationState: () => IdentityService.getVerificationState(),
-      getAccountStatus: () => IdentityService.getAccountStatus(),
-      isProductionIdentity: () => IdentityService.isProductionIdentity(),
-      getAuthHeaders: () => IdentityService.getAuthHeaders(),
-    }),
+    () => {
+      const identitySeam = createIdentitySeam(() => ({
+        id: identity.userId,
+        displayName: identity.displayName || undefined,
+        username: identity.username || undefined,
+      }))
+      return {
+        identity,
+        getCurrentUserId: () => IdentityService.getCurrentUserId(),
+        getPiUserId: () => IdentityService.getPiUserId(),
+        getUsername: () => IdentityService.getUsername(),
+        getAuthState: () => IdentityService.getAuthState(),
+        getVerificationState: () => IdentityService.getVerificationState(),
+        getAccountStatus: () => IdentityService.getAccountStatus(),
+        isProductionIdentity: () => IdentityService.isProductionIdentity(),
+        getAuthHeaders: () => IdentityService.getAuthHeaders(),
+        getProfileSnapshot: () => identitySeam.getSnapshot(),
+      }
+    },
     [identity]
   )
 
@@ -73,6 +86,12 @@ export function useIdentity(): IdentityContextValue {
       getAccountStatus: () => IdentityService.getAccountStatus(),
       isProductionIdentity: () => IdentityService.isProductionIdentity(),
       getAuthHeaders: () => IdentityService.getAuthHeaders(),
+      getProfileSnapshot: () =>
+        createIdentitySeam(() => ({
+          id: IdentityService.getCurrentUserId(),
+          displayName: IdentityService.getIdentity().displayName || undefined,
+          username: IdentityService.getUsername() || undefined,
+        })).getSnapshot(),
     }
   }
   return ctx

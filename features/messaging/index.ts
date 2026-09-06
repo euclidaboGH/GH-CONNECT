@@ -9,3 +9,6 @@ export {
   ChatHeader,
   EmptyMessagesState,
 } from "@/components/ghc/message-components"
+
+export type { ConversationSummary } from "@/lib/domains/contracts/messaging"
+export { messagingEmptyState } from "@/lib/domains/contracts/messaging"

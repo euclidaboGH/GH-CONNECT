@@ -13,13 +13,14 @@ import { useEffect, useMemo } from "react"
 import {
   X,
   PenLine,
+  CircleDot,
   BarChart3,
   Users,
   Trophy,
   Lightbulb,
 } from "lucide-react"
 
-export type CreateHubAction = "post" | "poll" | "community" | "challenge"
+export type CreateHubAction = "post" | "story" | "poll" | "community" | "challenge"
 
 const ACTIONS: {
   id: CreateHubAction
@@ -34,6 +35,13 @@ const ACTIONS: {
     desc: "Text, photos, video & files",
     icon: PenLine,
     accent: "bg-emerald-600/15 text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    id: "story",
+    label: "Story",
+    desc: "24h status for friends & followers",
+    icon: CircleDot,
+    accent: "bg-violet-600/15 text-violet-700 dark:text-violet-300",
   },
   {
     id: "poll",
@@ -60,8 +68,9 @@ const ACTIONS: {
 
 const HUB_TIPS = [
   "Share a moment with text, photos, or video in one post",
+  "Stories disappear after 24 hours — great for casual updates",
   "💡 Ask a poll when you want a clear decision",
-  "Challenges turn activity into GHC progress",
+  "Challenges track meaningful participation (server-validated)",
   "Community boards keep group discussion organised",
 ] as const
 

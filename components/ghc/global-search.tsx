@@ -11,8 +11,13 @@ import { Search, X, Users, Newspaper, MessagesSquare, Hash, Clock, Trash2 } from
 import { useGHC } from "@/contexts/ghc-context"
 import { LazyImage } from "./lazy-image"
 import { resolveAvatarUrl } from "@/lib/avatar"
+import { runUniversalSearch, groupSearchResults } from "@/lib/domains/adapters/universal-search"
+import { resolveCommunitySearchAction } from "@/lib/domains/adapters/community-search-actions"
+import { IdentityService } from "@/lib/identity/identity-service"
+import { resolveUserIntents } from "@/lib/connection-intents"
+import { Calendar, Briefcase, Sparkles } from "lucide-react"
 
-type SearchTab = "all" | "people" | "posts" | "communities" | "ids"
+type SearchTab = "all" | "people" | "posts" | "communities" | "events" | "activities" | "services" | "ids"
 
 const RECENT_KEY = "ghc-search-recent-v1"
 const MAX_RECENT = 8
@@ -192,7 +197,29 @@ export function GlobalSearchModal({
       .slice(0, 12)
   }, [conversations, q, stale])
 
-  const commitRecent = useCallback((term: string) => {
+  const universal = useMemo(() => {
+    if (!q || stale) return { hits: [] as ReturnType<typeof runUniversalSearch> extends { data: infer D } ? D : never, groups: groupSearchResults([]) }
+    const me = IdentityService.getCurrentUserId()
+    const result = runUniversalSearch(
+      {
+        q,
+        category: tab === "people" || tab === "communities" || tab === "events" || tab === "activities" || tab === "services" ? tab : "all",
+        limit: 36,
+        blockedUserIds: Array.from(blocked),
+        mutedUserIds: Array.from(muted),
+      },
+      {
+        userId: me,
+        interests: [],
+        intents: resolveUserIntents(me, null),
+      },
+      (candidates || []) as any,
+    )
+    const hits = result.ok ? result.data : []
+    return { hits, groups: groupSearchResults(hits) }
+  }, [q, stale, tab, blocked, muted, candidates])
+
+    const commitRecent = useCallback((term: string) => {
     const t = term.trim()
     if (!t) return
     setRecent((prev) => {
@@ -216,11 +243,17 @@ export function GlobalSearchModal({
   const showPeople = tab === "all" || tab === "people"
   const showPosts = tab === "all" || tab === "posts"
   const showCommunities = tab === "all" || tab === "communities"
+  const showEvents = tab === "all" || tab === "events"
+  const showActivities = tab === "all" || tab === "activities"
+  const showServices = tab === "all" || tab === "services"
   const showIds = tab === "all" || tab === "ids"
   const hasAny =
-    (showPeople && people.length > 0) ||
+    (showPeople && (people.length > 0 || universal.groups.people.length > 0)) ||
     (showPosts && postHits.length > 0) ||
-    (showCommunities && communities.length > 0) ||
+    (showCommunities && (communities.length > 0 || universal.groups.communities.length > 0)) ||
+    (showEvents && universal.groups.events.length > 0) ||
+    (showActivities && universal.groups.activities.length > 0) ||
+    (showServices && universal.groups.services.length > 0) ||
     (showIds && idHits.length > 0)
 
   const tabBtn = (t: SearchTab, label: string) => (
@@ -277,6 +310,9 @@ export function GlobalSearchModal({
           {tabBtn("ids", "IDs")}
           {tabBtn("posts", "Posts")}
           {tabBtn("communities", "Communities")}
+          {tabBtn("events", "Events")}
+          {tabBtn("activities", "Activities")}
+          {tabBtn("services", "Services")}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-busy={query !== debouncedQuery}>
@@ -322,7 +358,82 @@ export function GlobalSearchModal({
 
           {q && !hasAny && !stale && (
             <div className="py-10 text-center">
-              <p className="text-sm font-semibold">No results for “{debouncedQuery}”</p>
+              <p className="text-sm font-semibold">
+          {(showEvents || showActivities || showServices) && (
+            <div className="space-y-3 px-3 pb-4">
+              {showEvents && universal.groups.events.length > 0 && (
+                <section aria-label="Events">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Calendar size={12} /> Events · {universal.groups.events.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.events.map((h) => (
+                      <li key={`ev-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                          {h.explanation ? <span className="text-[10px] text-primary/90">{h.explanation}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {showActivities && universal.groups.activities.length > 0 && (
+                <section aria-label="Activities">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Sparkles size={12} /> Activities · {universal.groups.activities.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.activities.map((h) => (
+                      <li key={`act-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {showServices && universal.groups.services.length > 0 && (
+                <section aria-label="Services">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Briefcase size={12} /> Services · {universal.groups.services.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.services.map((h) => (
+                      <li key={`svc-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { listingId: h.id } })) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
+          )}
+No results for “{debouncedQuery}”</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Private, blocked, or hidden profiles are not shown. Try another spelling or category.
               </p>
@@ -447,39 +558,126 @@ export function GlobalSearchModal({
             </section>
           )}
 
-          {showCommunities && communities.length > 0 && (
-            <section className="mb-4">
+          {showCommunities && (communities.length > 0 || universal.groups.communities.length > 0) && (
+            <section className="mb-4" aria-label="Communities">
               <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 <MessagesSquare size={12} /> Communities
               </p>
               <ul className="space-y-1">
-                {communities.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        closeAnd(() => {
-                          onSelectCommunity?.(c.id)
-                          try {
-                            window.dispatchEvent(
-                              new CustomEvent("ghc:navigate-tab", { detail: "communities" }),
-                            )
-                          } catch {
-                            /* */
+                {communities.map((c) => {
+                  const me = IdentityService.getCurrentUserId()
+                  const { action, label } = resolveCommunitySearchAction(c as any, me)
+                  return (
+                  <li key={`sess-${c.id}`}>
+                    <div className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-muted">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          closeAnd(() => {
+                            onSelectCommunity?.(c.id)
+                            try {
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:open-community", { detail: { groupId: c.id } }),
+                              )
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:navigate-tab", { detail: "communities" }),
+                              )
+                            } catch {
+                              /* */
+                            }
+                          })
+                        }
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <p className="text-sm font-semibold">
+                          {c.groupName || c.participantName || "Community"}
+                        </p>
+                        <p className="line-clamp-1 text-[11px] text-muted-foreground">
+                          {c.lastMessage || (c as { description?: string }).description || "Community"}
+                        </p>
+                      </button>
+                      {label ? (
+                        <button
+                          type="button"
+                          disabled={action === "pending"}
+                          onClick={() =>
+                            closeAnd(() => {
+                              try {
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:open-community", {
+                                    detail: {
+                                      groupId: c.id,
+                                      intent:
+                                        action === "join" || action === "request"
+                                          ? "join"
+                                          : action === "accept_invite"
+                                            ? "accept_invite"
+                                            : "open",
+                                    },
+                                  }),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:navigate-tab", { detail: "communities" }),
+                                )
+                              } catch {
+                                onSelectCommunity?.(c.id)
+                              }
+                            })
                           }
-                        })
-                      }
-                      className="w-full rounded-xl px-2 py-2 text-left hover:bg-muted"
-                    >
-                      <p className="text-sm font-semibold">
-                        {c.groupName || c.participantName || "Community"}
-                      </p>
-                      <p className="line-clamp-1 text-[11px] text-muted-foreground">
-                        {c.lastMessage || (c as { description?: string }).description || "Community"}
-                      </p>
-                    </button>
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                            action === "pending"
+                              ? "border border-border text-muted-foreground"
+                              : "bg-emerald-600 text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ) : null}
+                    </div>
                   </li>
-                ))}
+                  )
+                })}
+                {universal.groups.communities
+                  .filter((h) => !communities.some((c) => c.id === h.id))
+                  .map((h) => (
+                    <li key={`disc-${h.id}`}>
+                      <div className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-muted">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            closeAnd(() => {
+                              try {
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:open-community", {
+                                    detail: { groupId: h.id },
+                                  }),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:navigate-tab", {
+                                    detail: "communities",
+                                  }),
+                                )
+                              } catch {
+                                onSelectCommunity?.(h.id)
+                              }
+                            })
+                          }
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="text-sm font-semibold">{h.title}</p>
+                          {h.subtitle ? (
+                            <p className="line-clamp-1 text-[11px] text-muted-foreground">{h.subtitle}</p>
+                          ) : null}
+                          {h.explanation ? (
+                            <p className="text-[10px] text-primary/90">{h.explanation}</p>
+                          ) : null}
+                        </button>
+                        <span className="shrink-0 rounded-full border border-emerald-600 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                          Open
+                        </span>
+                      </div>
+                    </li>
+                  ))}
               </ul>
             </section>
           )}

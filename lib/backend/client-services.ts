@@ -1,3 +1,4 @@
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 /**
  * Client-side backend implementations (Pi SDK + local engines).
  * These are the default adapters until a remote API is wired.
@@ -60,7 +61,7 @@ export function createModerationService(): ModerationService {
 export function createMatchingService(getCandidates?: () => Candidate[]): MatchingService {
   return {
     async getCandidates(_viewer, limit = 20) {
-      const list = typeof getCandidates === "function" ? getCandidates() : seedCandidates()
+      const list = typeof getCandidates === "function" ? getCandidates() : (isDemoDataAllowed() ? seedCandidates() : [])
       return ok(list.slice(0, limit))
     },
     async swipe(viewerId, targetId, action) {
@@ -128,7 +129,7 @@ export function createProfileService(): ProfileService {
 export function createFeedService(getPosts?: () => Post[]): FeedService {
   return {
     async listPosts(_viewerId, _mode) {
-      const posts = typeof getPosts === "function" ? getPosts() : seedPosts()
+      const posts = typeof getPosts === "function" ? getPosts() : (isDemoDataAllowed() ? seedPosts() : [])
       return ok(posts)
     },
     async createPost(authorId, content, media) {

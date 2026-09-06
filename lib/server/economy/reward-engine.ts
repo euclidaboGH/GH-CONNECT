@@ -13,6 +13,7 @@ import type { RewardRule } from "@/lib/domains/economy-types"
 import {
   computeActivityEmission,
   commitActivityEmission,
+  computeAndCommitActivityEmissionDurable,
 } from "@/lib/server/economy/activity-emission"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 import { lagosDayKey } from "@/lib/server/economy/claim-engine"
@@ -275,7 +276,10 @@ export async function evaluateRewardAuthoritative(
   }
 
   const day = lagosDayKey()
-  const emission = computeActivityEmission({
+  // Caps + demand committed only after successful path; durable when DB configured.
+  // We compute durable grant early; if later anti-abuse fails, granted cap room is consumed
+  // (conservative). Prefer compute then ledger — durable try_grant is authoritative room.
+  const emission = await computeAndCommitActivityEmissionDurable({
     userId: input.userId,
     baseAmountGhc: baseAmount,
     dayKey: day,
@@ -359,12 +363,6 @@ export async function evaluateRewardAuthoritative(
   if (!result.ok) {
     return { ok: false, error: result.error || "PENDING_FAILED" }
   }
-
-  commitActivityEmission({
-    userId: input.userId,
-    result: emission,
-    dayKey: day,
-  })
 
   return {
     ok: true,

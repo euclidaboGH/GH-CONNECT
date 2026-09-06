@@ -89,8 +89,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
   vip: {
     id: "vip",
     label: "VIP",
-    priceGhcMonthly: 200,
-    priceGhcYearly: 1800,
+    priceGhcMonthly: 150,
+    priceGhcYearly: 1500,
     entitlements: [
       "badge_vip",
       "discovery_advanced_filters",
@@ -116,8 +116,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
   vvip: {
     id: "vvip",
     label: "VVIP",
-    priceGhcMonthly: 500,
-    priceGhcYearly: 4500,
+    priceGhcMonthly: 300,
+    priceGhcYearly: 3000,
     entitlements: [
       "badge_vvip",
       "badge_vip",

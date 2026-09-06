@@ -1,3 +1,4 @@
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 /**
  * First-class Community registry — not only Conversation.
  * Chat remains a linked channel (conversationId); Board / events / members live here.
@@ -109,6 +110,7 @@ function id(prefix: string) {
 }
 
 export function seedCommunities(): GHCCommunity[] {
+  if (!isDemoDataAllowed()) return []
   const now = Date.now()
   const mk = (
     partial: Omit<GHCCommunity, "boardPosts" | "events" | "announcements" | "joinRequests" | "mutedBy" | "settings" | "stats" | "lastActivityAt" | "roles" | "members"> & {
@@ -266,17 +268,25 @@ export function seedCommunities(): GHCCommunity[] {
 }
 
 export function loadCommunities(): GHCCommunity[] {
+  const stripDemo = (list: GHCCommunity[]) =>
+    isDemoDataAllowed()
+      ? list
+      : list.filter((c) => !String(c.id || "").startsWith("demo-community-"))
+
   if (typeof window === "undefined") return seedCommunities()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) {
       const seeds = seedCommunities()
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeds))
+      if (seeds.length) localStorage.setItem(STORAGE_KEY, JSON.stringify(seeds))
       return seeds
     }
     const parsed = JSON.parse(raw) as GHCCommunity[]
     if (!Array.isArray(parsed) || parsed.length === 0) return seedCommunities()
-    // Ensure seeds still present for discovery
+    // Production: never re-inject demo communities from localStorage or seed merge
+    if (!isDemoDataAllowed()) {
+      return stripDemo(parsed)
+    }
     const ids = new Set(parsed.map((c) => c.id))
     const missing = seedCommunities().filter((s) => !ids.has(s.id))
     return missing.length ? [...parsed, ...missing] : parsed

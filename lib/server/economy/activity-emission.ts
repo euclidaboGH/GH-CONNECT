@@ -1,8 +1,8 @@
 /**
- * ECONOMY_VERSION 1.2 — Activity / achievement / bonus emission under unified controller.
- *
- * Pre-control caps: 0.5 GHC/day, 2.5 GHC/week per user.
- * Then apply m × g. Never bypass global scarcity.
+ * ECONOMY_VERSION 1.2 — Activity emission under unified controller.
+ * Pre-control caps: 0.5 GHC/day, 2.5 GHC/week. Then m × g.
+ * Production authority: durable DB windows + global demand (multi-instance).
+ * Memory path: Studio/test only when DB is not configured.
  */
 
 import {
@@ -20,6 +20,12 @@ import {
 } from "@/lib/server/economy/network-scarcity"
 import { lagosDayKey } from "@/lib/server/economy/claim-engine"
 import { recordTelemetryEvent } from "@/lib/server/economy/telemetry"
+import {
+  durableGetGlobalDemand,
+  durableRecordGlobalDemand,
+  durableTryActivityGrant,
+} from "@/lib/server/economy/durable-emission"
+import { isDatabaseConfigured } from "@/lib/server/economy/http"
 
 type UserWindow = {
   dayKey: string
@@ -31,8 +37,6 @@ type UserWindow = {
 const windows = new Map<string, UserWindow>()
 
 function weekKeyFromDay(dayKey: string): string {
-  // ISO-like week bucket: use YYYY-MM + week-of-month approximation via day number
-  // Deterministic: year + floor(dayOfYear/7) via Date UTC parse of dayKey
   const d = new Date(`${dayKey}T12:00:00Z`)
   const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
   const dayOfYear =
@@ -83,9 +87,7 @@ export type ActivityEmissionResult =
       weekRemaining: number
     }
 
-/**
- * Compute activity grant. Does not write ledger — caller posts append-only event.
- */
+/** Memory-only compute (tests / Studio). Prefer computeAndCommitActivityEmissionDurable. */
 export function computeActivityEmission(input: {
   userId: string
   baseAmountGhc: number
@@ -127,10 +129,7 @@ export function computeActivityEmission(input: {
   const mOnly = applyNetworkEmission(cappedBase, n, demandSoFar)
   const demandAfterM = demandSoFar + cappedBase * mOnly.m
   const emitted = applyNetworkEmission(cappedBase, n, demandAfterM)
-
-  // Settle with micro precision
-  const grantedMicro = toMicro(emitted.grossGhc)
-  const grantedGhc = fromMicro(grantedMicro)
+  const grantedGhc = fromMicro(toMicro(emitted.grossGhc))
 
   return {
     ok: true,
@@ -145,7 +144,6 @@ export function computeActivityEmission(input: {
   }
 }
 
-/** Commit cap counters after successful ledger credit */
 export function commitActivityEmission(input: {
   userId: string
   result: Extract<ActivityEmissionResult, { ok: true }>
@@ -153,7 +151,6 @@ export function commitActivityEmission(input: {
 }): void {
   const dayKey = input.dayKey || lagosDayKey()
   const w = getWindow(input.userId, dayKey)
-  // Cap counters track pre-control base, not post-m amounts
   w.dayGranted += input.result.baseGhc
   w.weekGranted += input.result.baseGhc
   recordEmissionDemand(dayKey, input.result.baseGhc * input.result.m)
@@ -178,4 +175,95 @@ export function commitActivityEmission(input: {
       economicVersion: input.result.economicVersion,
     },
   })
+}
+
+/** Production path: durable caps + demand when DB configured */
+export async function computeAndCommitActivityEmissionDurable(input: {
+  userId: string
+  baseAmountGhc: number
+  dayKey?: string
+  eligibleEconomicUsers?: number
+}): Promise<ActivityEmissionResult> {
+  const dayKey = input.dayKey || lagosDayKey()
+  const base = Math.max(0, Number(input.baseAmountGhc) || 0)
+  if (base <= 0) {
+    return {
+      ok: false,
+      error: "INVALID_AMOUNT",
+      dayRemaining: ACTIVITY_DAILY_CAP_GHC,
+      weekRemaining: ACTIVITY_WEEKLY_CAP_GHC,
+    }
+  }
+
+  const n =
+    input.eligibleEconomicUsers != null
+      ? Math.max(1, Math.floor(input.eligibleEconomicUsers))
+      : getEligibleEconomicUsers()
+
+  if (isDatabaseConfigured()) {
+    const wk = weekKeyFromDay(dayKey)
+    const grant = await durableTryActivityGrant({
+      userId: input.userId,
+      dayKey,
+      weekKey: wk,
+      requested: base,
+      dailyCap: ACTIVITY_DAILY_CAP_GHC,
+      weeklyCap: ACTIVITY_WEEKLY_CAP_GHC,
+    })
+    if (!grant) {
+      return {
+        ok: false,
+        error: "ACTIVITY_DURABLE_UNAVAILABLE",
+        dayRemaining: 0,
+        weekRemaining: 0,
+      }
+    }
+    if (!grant.ok || grant.granted <= 0) {
+      return {
+        ok: false,
+        error: grant.error || "ACTIVITY_CAP_REACHED",
+        dayRemaining: grant.dayRemaining,
+        weekRemaining: grant.weekRemaining,
+      }
+    }
+    const cappedBase = grant.granted
+    const demandSoFar = (await durableGetGlobalDemand(dayKey)) ?? 0
+    const mOnly = applyNetworkEmission(cappedBase, n, demandSoFar)
+    const demandAfterM = demandSoFar + cappedBase * mOnly.m
+    const emitted = applyNetworkEmission(cappedBase, n, demandAfterM)
+    await durableRecordGlobalDemand(dayKey, cappedBase * emitted.m)
+    const grantedGhc = fromMicro(toMicro(emitted.grossGhc))
+    recordTelemetryEvent({
+      type: "activity_reward",
+      dayKey,
+      eligibleEconomicUsers: n,
+      m: emitted.m,
+      g: emitted.g,
+      demand: demandAfterM,
+      budget: emitted.budget,
+      userIssuance: grantedGhc,
+      reserveIssuance: 0,
+      grossIssuance: grantedGhc,
+      sinks: 0,
+      netCirculatingChange: grantedGhc,
+      meta: { userId: input.userId, durable: true, baseGhc: cappedBase },
+    })
+    return {
+      ok: true,
+      baseGhc: cappedBase,
+      grantedGhc,
+      m: emitted.m,
+      g: emitted.g,
+      dayRemaining: grant.dayRemaining,
+      weekRemaining: grant.weekRemaining,
+      economicVersion: ECONOMY_VERSION,
+      capped: cappedBase < base,
+    }
+  }
+
+  const computed = computeActivityEmission(input)
+  if (computed.ok) {
+    commitActivityEmission({ userId: input.userId, result: computed, dayKey })
+  }
+  return computed
 }
