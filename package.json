@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "vercel-build": "next build",
-    "ci": "npm ci",
+    "ci": "npm ci --legacy-peer-deps",
     "check:jsx": "node scripts/check-jsx-safety.mjs",
     "prebuild": "node scripts/check-jsx-safety.mjs",
     "test:economy": "node scripts/test-economy-v12.mjs",

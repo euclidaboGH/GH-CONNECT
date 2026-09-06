@@ -272,7 +272,6 @@ export function RelationshipActions({
           Message
         </button>
       )}
-    </div>
 
       <ConnectionIntentPicker
         open={pickerOpen}
@@ -318,6 +317,7 @@ export function RelationshipActions({
         }}
       />
 
+    </div>
   )
 }
 

@@ -41,7 +41,6 @@ import {
   submitConnectionFromPicker,
   userFacingConnectError,
 } from "@/lib/domains/adapters/connection-connect-flow"
-import type { ConnectionIntentId } from "@/lib/connection-intents"
 
 const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: string }[] = [
   { id: "people", label: "People" },
@@ -529,7 +528,6 @@ export function DiscoveryGridScreen() {
           </div>
         )}
       </div>
-    </div>
 
       <ConnectionIntentPicker
         open={!!pickerTarget}
@@ -545,7 +543,7 @@ export function DiscoveryGridScreen() {
           }
         }}
       />
-
+    </div>
   )
 }
 

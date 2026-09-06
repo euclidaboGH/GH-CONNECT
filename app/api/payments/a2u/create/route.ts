@@ -28,6 +28,9 @@ export async function POST(request: Request) {
   if (!apiKey) {
     return NextResponse.json(
       { ok: false, error: "PI_API_KEY not configured" },
+      { status: 503 }
+    )
+  }
 
   // Privileged A2U only — ordinary users cannot create platform payouts
   const adminKey = (process.env.GHC_A2U_ADMIN_KEY || process.env.GHC_ADMIN_CREDIT_KEY || "").trim()
@@ -36,9 +39,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { ok: false, error: "FORBIDDEN", message: "A2U requires server admin authorization" },
       { status: 403 }
-    )
-  }
-      { status: 503 }
     )
   }
 

@@ -293,7 +293,6 @@ export {
 } from "./adapters/connection-graph-adapter"
 export { buildProfileConnectionContext } from "./adapters/profile-connection-context"
 
-export { sendUnifiedConnectionRequest, acceptUnifiedConnectionRequest, declineUnifiedConnectionRequest } from "./adapters/unified-connection-request"
 export { runUniversalSearch, groupSearchResults } from "./adapters/universal-search"
 
 export {

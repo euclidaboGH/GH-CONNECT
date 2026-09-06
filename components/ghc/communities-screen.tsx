@@ -1133,7 +1133,6 @@ export function CommunitiesScreen() {
           }
         }}
       />
-    </div>
 
       <CommunityJoinReasonPicker
         open={!!joinPickerRow}
@@ -1151,6 +1150,6 @@ export function CommunitiesScreen() {
           }
         }}
       />
-
+    </div>
   )
 }
