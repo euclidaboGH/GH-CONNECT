@@ -30,12 +30,12 @@ export async function POST(
   if (intent.status === "CANCELLED") {
     return NextResponse.json({ ok: true, intent, idempotent: true })
   }
-  const result = transitionIntent(intentId, "CANCELLED", {
+  const updated = transitionIntent(intentId, "CANCELLED", {
     actor: auth.userId,
     detail: "User cancelled",
   })
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 })
+  if (!updated) {
+    return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
-  return NextResponse.json({ ok: true, intent: result.intent })
+  return NextResponse.json({ ok: true, intent: updated })
 }
