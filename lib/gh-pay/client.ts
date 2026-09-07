@@ -3,7 +3,7 @@
 /**
  * GH Pay client — U2A purchases via Pi Browser SDK.
  */
-import { startUserToAppPayment, isPiPaymentsAvailable } from "@/lib/pi-u2a-payment"
+import { startUserToAppPayment, isPiPaymentsAvailable, waitForPiPayments, probePiPayments } from "@/lib/pi-u2a-payment"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { getProduct, productForMembership, listProducts } from "./catalog"
 import { genOrderId, saveOrder, updateOrderStatus, listOrdersForUser, getOrder } from "./order-store"
@@ -13,7 +13,7 @@ export type GhPayResult =
   | { ok: true; order: GhPayOrder; paymentId: string; txid: string }
   | { ok: false; error: string; cancelled?: boolean }
 
-export { isPiPaymentsAvailable, productForMembership, listProducts, getProduct }
+export { isPiPaymentsAvailable, waitForPiPayments, probePiPayments, productForMembership, listProducts, getProduct }
 
 /**
  * User → App purchase for a catalog product.

@@ -31,9 +31,75 @@ function getPi() {
   return (window as unknown as PiWindow).Pi || null
 }
 
+/** True when the official Pi bridge exposes createPayment (Pi Browser + SDK init). */
 export function isPiPaymentsAvailable(): boolean {
-  const Pi = getPi()
+  const Pi = getPi() as { createPayment?: unknown; init?: unknown } | null
   return Boolean(Pi && typeof Pi.createPayment === "function")
+}
+
+export type PiPaymentsProbe = {
+  available: boolean
+  hasWindowPi: boolean
+  hasCreatePayment: boolean
+  hasInit: boolean
+  userAgentHint: "pi_browser" | "unknown"
+  sandboxHint: boolean | null
+}
+
+/** Diagnostic probe for UI — does not claim network success. */
+export function probePiPayments(): PiPaymentsProbe {
+  if (typeof window === "undefined") {
+    return {
+      available: false,
+      hasWindowPi: false,
+      hasCreatePayment: false,
+      hasInit: false,
+      userAgentHint: "unknown",
+      sandboxHint: null,
+    }
+  }
+  const Pi = getPi() as { createPayment?: unknown; init?: unknown } | null
+  const ua = (navigator.userAgent || "").toLowerCase()
+  const uaPi =
+    ua.includes("picloud") ||
+    ua.includes("pi browser") ||
+    ua.includes("pinetwork") ||
+    ua.includes("pi network")
+  return {
+    available: Boolean(Pi && typeof Pi.createPayment === "function"),
+    hasWindowPi: Boolean(Pi),
+    hasCreatePayment: Boolean(Pi && typeof Pi.createPayment === "function"),
+    hasInit: Boolean(Pi && typeof Pi.init === "function"),
+    userAgentHint: uaPi ? "pi_browser" : "unknown",
+    sandboxHint:
+      typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
+        ? process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
+        : null,
+  }
+}
+
+/**
+ * Wait for window.Pi.createPayment (SDK inject can lag first paint).
+ * Resolves true when ready, false on timeout.
+ */
+export function waitForPiPayments(timeoutMs = 12000, intervalMs = 250): Promise<boolean> {
+  if (isPiPaymentsAvailable()) return Promise.resolve(true)
+  if (typeof window === "undefined") return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const tick = () => {
+      if (isPiPaymentsAvailable()) {
+        resolve(true)
+        return
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false)
+        return
+      }
+      window.setTimeout(tick, intervalMs)
+    }
+    tick()
+  })
 }
 
 async function postJson(
@@ -50,7 +116,7 @@ async function postJson(
   return { res, data }
 }
 
-export function startUserToAppPayment(options?: {
+export async function startUserToAppPayment(options?: {
   amount?: number
   memo?: string
   metadata?: Record<string, unknown>
@@ -59,13 +125,30 @@ export function startUserToAppPayment(options?: {
   /** Auth headers for API calls */
   authHeaders?: Record<string, string>
 }): Promise<U2APaymentResult> {
+  // Give the injected SDK a moment if the user just opened the app
+  if (!isPiPaymentsAvailable()) {
+    await waitForPiPayments(6000, 200)
+  }
   const Pi = getPi()
   if (!Pi?.createPayment) {
-    return Promise.resolve({
+    const probe = probePiPayments()
+    return {
       ok: false,
-      error:
-        "Pi payments only work inside the Pi Browser. Open your production URL there (not App Studio).",
-    })
+      error: probe.hasWindowPi
+        ? "Pi bridge loaded but createPayment is unavailable. Re-open the app in Pi Browser after Pi.init completes."
+        : "Pi payments only work inside the Pi Browser. Open your Vercel URL there (Develop/sandbox or production app link), not Chrome or Studio alone.",
+    }
+  }
+  // Ensure init when available (sandbox flag from NEXT_PUBLIC_PI_SANDBOX)
+  try {
+    const anyPi = Pi as { init?: (c: { version: string; sandbox?: boolean }) => Promise<void> }
+    if (typeof anyPi.init === "function") {
+      const sandbox =
+        typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
+      await anyPi.init({ version: "2.0", sandbox })
+    }
+  } catch {
+    /* already initialized */
   }
 
   const amount = options?.amount ?? 0.01

@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import {
   isPiPaymentsAvailable,
+  waitForPiPayments,
+  probePiPayments,
   ghPayPurchase,
   ghPayMembership,
   ghPayListMyOrders,
@@ -83,7 +85,8 @@ export function GhPayPanel({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [orders, setOrders] = useState<GhPayOrder[]>([])
-  const inPi = typeof window !== "undefined" && isPiPaymentsAvailable()
+  const [inPi, setInPi] = useState(false)
+  const [piProbe, setPiProbe] = useState<ReturnType<typeof probePiPayments> | null>(null)
 
   const refreshOrders = useCallback(() => {
     try {
@@ -96,6 +99,24 @@ export function GhPayPanel({
   useEffect(() => {
     setVerified(readVerified())
     refreshOrders()
+    // Pi SDK often injects after first paint — poll until createPayment exists
+    let cancelled = false
+    const sync = () => {
+      if (cancelled) return
+      setInPi(isPiPaymentsAvailable())
+      setPiProbe(probePiPayments())
+    }
+    sync()
+    void waitForPiPayments(15000, 300).then((ok) => {
+      if (cancelled) return
+      setInPi(ok)
+      setPiProbe(probePiPayments())
+    })
+    const id = window.setInterval(sync, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
   }, [refreshOrders])
 
   const notify = useCallback(
@@ -108,9 +129,18 @@ export function GhPayPanel({
   const runProduct = useCallback(
     async (productId: string, label: string) => {
       setError(null)
-      if (!isPiPaymentsAvailable()) {
-        const msg =
-          "Open GreenHaven in the Pi Browser to pay with π. GHC stays in your wallet — separate from Pi."
+      let ready = isPiPaymentsAvailable()
+      if (!ready) {
+        notify("Connecting to Pi…", "info")
+        ready = await waitForPiPayments(8000, 250)
+        setInPi(ready)
+        setPiProbe(probePiPayments())
+      }
+      if (!ready) {
+        const probe = probePiPayments()
+        const msg = probe.hasWindowPi
+          ? "Pi is present but payments are not ready yet. Wait a moment, then try again. Confirm this URL is opened inside the Pi Browser (not Chrome/Safari)."
+          : "Pi payments need the Pi Browser. Open this same Vercel URL from inside the Pi Browser app (Develop → your app, or the production link). GHC stays separate from π."
         setError(msg)
         notify(msg, "error")
         return
@@ -279,8 +309,19 @@ export function GhPayPanel({
       )}
 
       {error ? (
-        <p className="mt-2 text-[11px] font-medium text-rose-600" role="alert">
-          {error}
+        <div className="mt-2 space-y-1" role="alert">
+          <p className="text-[11px] font-medium text-rose-600">{error}</p>
+          {piProbe ? (
+            <p className="text-[10px] text-muted-foreground">
+              Pi bridge={piProbe.hasWindowPi ? "yes" : "no"} · createPayment=
+              {piProbe.hasCreatePayment ? "yes" : "no"} · UA={piProbe.userAgentHint}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {!inPi && !error ? (
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Waiting for Pi payment bridge… Open this URL inside the Pi Browser if this message stays.
         </p>
       ) : null}
 
@@ -327,9 +368,11 @@ export async function runGhPayMembership(
   onToast?: ToastFn
 ): Promise<boolean> {
   try {
-    if (!isPiPaymentsAvailable()) {
+    let ready = isPiPaymentsAvailable()
+    if (!ready) ready = await waitForPiPayments(8000, 250)
+    if (!ready) {
       onToast?.(
-        "Open GreenHaven inside the Pi Browser to pay for membership with π",
+        "Pi payments need the Pi Browser. Open this Vercel URL inside Pi Browser, wait for the bridge, then retry.",
         "error"
       )
       return false
@@ -359,8 +402,13 @@ export async function runGhPayBoost(
   onToast?: ToastFn
 ): Promise<boolean> {
   try {
-    if (!isPiPaymentsAvailable()) {
-      onToast?.("Open GreenHaven in the Pi Browser to boost with π", "error")
+    let ready = isPiPaymentsAvailable()
+    if (!ready) ready = await waitForPiPayments(8000, 250)
+    if (!ready) {
+      onToast?.(
+        "Pi payments need the Pi Browser. Open this Vercel URL inside Pi Browser, wait for the bridge, then retry.",
+        "error"
+      )
       return false
     }
     const productId = target === "post" ? "post_boost" : "profile_boost"

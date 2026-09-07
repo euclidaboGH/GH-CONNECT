@@ -9,5 +9,7 @@ export {
   ghPayListMyOrders,
   ghPayGetOrder,
   isPiPaymentsAvailable,
+  waitForPiPayments,
+  probePiPayments,
 } from "./client"
 export { productForMembership, productForBoost, listProducts, getProduct } from "./catalog"
