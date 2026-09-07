@@ -52,7 +52,7 @@ import {
   resolveCommunityReport,
   resolveLifecycle,
   lifecycleLabel,
-  suggestLifecycleTransition,,
+  suggestLifecycleTransition,
   governanceDurabilityLabel,
 } from "@/lib/domains/adapters/community-governance"
 import { buildPeopleYouMayKnowInCommunity } from "@/lib/domains/adapters/community-people-you-may-know"
