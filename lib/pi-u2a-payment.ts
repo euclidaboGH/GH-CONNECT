@@ -34,7 +34,7 @@ function getPi() {
 /** True when the official Pi bridge exposes createPayment (Pi Browser + SDK init). */
 export function isPiPaymentsAvailable(): boolean {
   const Pi = getPi() as { createPayment?: unknown; init?: unknown } | null
-  return Boolean(Pi && typeof Pi.createPayment === "function")
+  return Boolean(typeof window !== "undefined" && (window as any).Pi && typeof (window as any).Pi.createPayment === "function")
 }
 
 export type PiPaymentsProbe = {
@@ -66,10 +66,10 @@ export function probePiPayments(): PiPaymentsProbe {
     ua.includes("pinetwork") ||
     ua.includes("pi network")
   return {
-    available: Boolean(Pi && typeof Pi.createPayment === "function"),
+    available: Boolean((window as any).Pi && typeof (window as any).Pi.createPayment === "function"),
     hasWindowPi: Boolean(Pi),
-    hasCreatePayment: Boolean(Pi && typeof Pi.createPayment === "function"),
-    hasInit: Boolean(Pi && typeof Pi.init === "function"),
+    hasCreatePayment: Boolean((window as any).Pi && typeof (window as any).Pi.createPayment === "function"),
+    hasInit: Boolean((window as any).Pi && typeof (window as any).Pi.init === "function"),
     userAgentHint: uaPi ? "pi_browser" : "unknown",
     sandboxHint:
       typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
@@ -172,7 +172,7 @@ export async function startUserToAppPayment(options?: {
     }
 
     try {
-      void Pi.createPayment(
+      void (window as any).Pi.createPayment(
         { amount, memo, metadata },
         {
           onReadyForServerApproval: (paymentId: string) => {

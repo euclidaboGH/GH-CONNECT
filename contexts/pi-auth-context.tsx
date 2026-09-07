@@ -163,14 +163,168 @@ function loadScript(src: string, timeoutMs: number): Promise<void> {
   })
 }
 
-const loadPiSDK = async (): Promise<void> => {
-  if (typeof window !== "undefined" && typeof (window as any).Pi !== "undefined") return
-  const timeout = PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000
-  await loadScript(PI_NETWORK_CONFIG.SDK_URL, timeout)
-  if (typeof (window as any).Pi === "undefined") {
-    throw new Error("Pi SDK loaded but window.Pi is undefined")
+
+/** Best-effort Pi Browser detection (UA + bridge). */
+function detectPiEnvironment(): {
+  hasWindowPi: boolean
+  uaLooksLikePi: boolean
+  userAgent: string
+} {
+  if (typeof window === "undefined") {
+    return { hasWindowPi: false, uaLooksLikePi: false, userAgent: "" }
+  }
+  const ua = String(window.navigator?.userAgent || "")
+  const uaLooksLikePi =
+    /PiBrowser/i.test(ua) ||
+    /Pi Network/i.test(ua) ||
+    /minepi/i.test(ua) ||
+    /Pi/i.test(ua)
+  return {
+    hasWindowPi: typeof (window as any).Pi !== "undefined",
+    uaLooksLikePi,
+    userAgent: ua.slice(0, 160),
   }
 }
+
+/**
+ * Pi Browser often injects window.Pi slightly after first paint.
+ * Poll briefly before treating the bridge as missing.
+ */
+async function waitForWindowPi(timeoutMs = 10000, intervalMs = 250): Promise<boolean> {
+  if (typeof window === "undefined") return false
+  if (typeof (window as any).Pi !== "undefined") return true
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, intervalMs))
+    if (typeof (window as any).Pi !== "undefined") return true
+  }
+  return typeof (window as any).Pi !== "undefined"
+}
+
+const loadPiSDK = async (): Promise<void> => {
+
+  if (typeof window === "undefined") {
+    throw new Error("Pi Browser required (no window)")
+  }
+  // Prefer native bridge (injected by Pi Browser)
+  if (typeof (window as any).Pi !== "undefined") return
+
+  const env = detectPiEnvironment()
+  console.info("[PiAuth] waiting for window.Pi", env)
+
+  const appeared = await waitForWindowPi(10000, 250)
+  if (appeared) {
+    console.info("[PiAuth] window.Pi appeared after wait")
+    return
+  }
+
+  // Optional CDN load — only helps when host already provides Pi host APIs
+  try {
+    const timeout = PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000
+    await loadScript(PI_NETWORK_CONFIG.SDK_URL, timeout)
+  } catch (e) {
+    console.warn("[PiAuth] CDN Pi SDK load issue:", e)
+  }
+
+  if (await waitForWindowPi(3000, 250)) return
+
+  const after = detectPiEnvironment()
+  console.warn("[PiAuth] window.Pi still missing", after)
+  throw new Error(
+    after.uaLooksLikePi
+      ? "Pi Browser detected but window.Pi is still missing. Wait a few seconds and Retry, or re-open the app from Pi → Develop using the exact URL registered in the Developer Portal. Check NEXT_PUBLIC_PI_SANDBOX matches sandbox/testnet."
+      : "Pi bridge (window.Pi) not found. Open GreenHaven from inside the Pi app (Develop → your app). Pasting the Vercel URL into Chrome/WhatsApp will not work."
+  )
+}
+
+/** Map raw SDK ReferenceErrors to a clear operator message */
+function humanizePiAuthError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || "Authentication failed")
+  if (/Pi is not defined/i.test(raw) || /window\.Pi/i.test(raw) || /bridge not found/i.test(raw) || /still missing/i.test(raw)) {
+    const env = typeof window !== "undefined" ? detectPiEnvironment() : null
+    if (env?.uaLooksLikePi) {
+      return "Almost there: Pi Browser is open, but the Pi bridge has not loaded yet. Tap Retry authentication. If it keeps failing, re-open from Pi → Develop with the registered app URL and confirm NEXT_PUBLIC_PI_SANDBOX=true for sandbox."
+    }
+    return "Pi Browser bridge not available. Open the Pi app → Develop → GreenHaven (do not use Chrome or WhatsApp). If you are already in Pi Browser, tap Retry."
+  }
+  return raw
+}
+
+
+
+/**
+ * Official Pi auth path (docs):
+ * 1) script tag loads window.Pi
+ * 2) Pi.init({ version: "2.0", sandbox })
+ * 3) Pi.authenticate(["username","payments"], onIncompletePaymentFound)
+ * Backend must verify accessToken via Platform API GET /me — never trust client uid alone.
+ */
+async function officialPiAuthenticate(): Promise<{
+  uid: string
+  username: string | null
+  accessToken: string | null
+}> {
+  if (typeof window === "undefined") {
+    throw new Error("No window")
+  }
+
+  // Ensure SDK global
+  if (typeof (window as any).Pi === "undefined") {
+    await waitForWindowPi(12000, 200)
+  }
+  if (typeof (window as any).Pi === "undefined") {
+    try {
+      await loadScript(PI_NETWORK_CONFIG.SDK_URL, PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000)
+      await waitForWindowPi(5000, 200)
+    } catch {
+      /* continue to final check */
+    }
+  }
+  const Pi = (window as any).Pi
+  if (!Pi) {
+    throw new Error(
+      "Pi SDK (window.Pi) is not available. Confirm pi-sdk.js loaded and open the app from Pi Browser / Sandbox."
+    )
+  }
+
+  if (typeof Pi.init === "function") {
+    await Pi.init({
+      version: "2.0",
+      sandbox: Boolean(PI_NETWORK_CONFIG.SANDBOX),
+    })
+  }
+
+  if (typeof Pi.authenticate !== "function") {
+    throw new Error("Pi.authenticate is not available on this host")
+  }
+
+  const authResult = await Pi.authenticate(
+    ["username", "payments"],
+    (payment: unknown) => {
+      void onIncompletePaymentFound(
+        payment as {
+          identifier?: string
+          paymentId?: string
+          transaction?: { txid?: string } | null
+        }
+      )
+    }
+  )
+
+  const resolvedUid = authResult?.user?.uid != null ? String(authResult.user.uid) : ""
+  if (!resolvedUid) {
+    throw new Error("Pi authentication did not return a user id")
+  }
+  const username = authResult?.user?.username ? String(authResult.user.username) : null
+  const accessToken = authResult?.accessToken ? String(authResult.accessToken) : null
+
+  return {
+    uid: resolvedUid,
+    username,
+    accessToken,
+  }
+}
+
 
 const loadSDKLite = async (): Promise<void> => {
   if (typeof window !== "undefined" && typeof (window as any).SDKLite !== "undefined") return
@@ -247,74 +401,67 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       setAuthMessage("Loading Pi SDK...");
       try {
         await loadPiSDK();
-        setAuthMessage("Initializing Pi Network...");
-        if (!window.Pi && !allowLocalAuthFallback()) {
-          throw new Error(
-            "Pi Browser bridge not found (window.Pi missing). Open this exact URL inside the Pi app — not Chrome, Safari, or WhatsApp."
+        setAuthMessage("Authenticating with Pi...");
+        const identity = await officialPiAuthenticate();
+        IdentityService.setFromPi({
+          uid: identity.uid,
+          username: identity.username,
+          displayName: identity.username,
+          accessToken: identity.accessToken,
+        });
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:pi-identity-ready", {
+              detail: {
+                uid: identity.uid,
+                username: identity.username,
+                accessToken: identity.accessToken,
+              },
+            })
           );
-        }
-        if (typeof window.Pi?.init === "function") {
-          await window.Pi.init({
-            version: "2.0",
-            sandbox: PI_NETWORK_CONFIG.SANDBOX,
-          });
-        }
-        // Official incomplete-payment recovery (production Pi Browser path)
-        const wPi = window.Pi as unknown as {
-          authenticate?: (
-            scopes: string[],
-            onIncomplete: (payment: unknown) => void
-          ) => Promise<{ user?: { uid?: string; username?: string }; accessToken?: string }>
-        }
-        if (typeof wPi.authenticate === "function") {
+        } catch { /* */ }
+
+        // Official path success — try SDKLite for optional commerce features, non-blocking
+        try {
+          setAuthMessage("Loading optional commerce SDK...");
+          await loadSDKLite();
+          const sdkLite = await (window as any).SDKLite.init();
+          let sdkInstance: SDKLiteInstance;
           try {
-            setAuthMessage("Authenticating with Pi...");
-            const authResult = await wPi.authenticate(
-              ["username", "payments"],
-              (payment) => {
-                void onIncompletePaymentFound(
-                  payment as {
-                    identifier?: string
-                    paymentId?: string
-                    transaction?: { txid?: string } | null
-                  }
-                )
-              }
-            )
-            const u = authResult?.user
-            if (u?.uid) {
-              IdentityService.setFromPi({
-                uid: u.uid,
-                username: u.username || null,
-                displayName: u.username || null,
-                accessToken: authResult?.accessToken || null,
-              })
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:pi-identity-ready", {
-                    detail: {
-                      uid: u.uid,
-                      username: u.username || null,
-                      accessToken: authResult?.accessToken || null,
-                    },
-                  })
-                )
-              } catch { /* */ }
-            } else if (!allowLocalAuthFallback()) {
-              throw new Error(
-                "Pi authentication did not return a user id. Sign in with your Pi account in Pi Browser."
-              )
-            }
-          } catch (authCbErr) {
-            console.warn(
-              "[PiAuth] Pi.authenticate (incomplete recovery) issue:",
-              authCbErr
-            )
+            const pi = buildPiSdk();
+            await pi.auth.login();
+            await sdkLite.login();
+            sdkInstance = createSdk(sdkLite, pi);
+          } catch {
+            sdkInstance = sdkLite;
           }
+          setSdk(sdkInstance);
+          await fetchProducts(sdkInstance);
+          try {
+            const { purchases } = await sdkInstance.state.restore();
+            setRestoredPurchases(purchases);
+          } catch {
+            setRestoredPurchases([]);
+          }
+        } catch (optionalErr) {
+          console.warn("[PiAuth] SDKLite optional path skipped:", optionalErr);
+          // Minimal sdk stub so consumers expecting sdk don't crash
+          setSdk(createLocalSdkLite(identity.uid));
+          setProducts([]);
+          setRestoredPurchases([]);
         }
+
+        setIsAuthenticated(true);
+        setAuthMessage("Signed in with Pi");
+        return;
       } catch (piErr) {
-        console.warn("[PiAuth] Pi SDK load/init issue:", piErr);
-        // Continue — SDKLite path or local fallback may still work
+        console.warn("[PiAuth] Official Pi auth failed:", piErr);
+        if (!allowLocalAuthFallback()) {
+          throw piErr instanceof Error
+            ? piErr
+            : new Error(humanizePiAuthError(piErr));
+        }
+        // Fall through to local / SDKLite only when allowed
       }
 
       setAuthMessage("Loading SDKLite...");
@@ -395,11 +542,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("SDKLite initialization failed:", err);
       setHasError(true);
-      setAuthMessage(
-        err instanceof Error
-          ? err.message
-          : "Authentication failed. Please try again.",
-      );
+      setAuthMessage(humanizePiAuthError(err));
     }
   };
 

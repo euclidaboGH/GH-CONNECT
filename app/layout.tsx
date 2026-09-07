@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
+import Script from "next/script"
 import { AppWrapper } from "@/components/app-wrapper"
 import "./globals.css"
 
@@ -73,6 +74,11 @@ html {
   --font-mono: ${GeistMono.variable};
 }
         `}</style>
+        {/* Official Pi SDK — required; Pi Browser does NOT inject window.Pi for you */}
+        <Script
+          src="https://sdk.minepi.com/pi-sdk.js"
+          strategy="beforeInteractive"
+        />
       </head>
       <body className="bg-background antialiased">
         <AppWrapper>{children}</AppWrapper>

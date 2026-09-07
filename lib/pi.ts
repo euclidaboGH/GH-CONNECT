@@ -48,10 +48,19 @@ export interface PiSdk {
  * against the build-time backend URL.
  */
 export function buildPiSdk(): PiSdk {
-  const pi = createPiSDK({ backendUrl: PI_NETWORK_CONFIG.BACKEND_URL });
-  pi.use(authPlugin());
-  pi.use(userStatePlugin());
-  return pi as unknown as PiSdk;
+  try {
+    const pi = createPiSDK({ backendUrl: PI_NETWORK_CONFIG.BACKEND_URL });
+    pi.use(authPlugin());
+    pi.use(userStatePlugin());
+    return pi as unknown as PiSdk;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(
+      /Pi is not defined/i.test(msg)
+        ? "Pi bridge unavailable while building SDK. Open inside Pi Browser and retry."
+        : msg
+    )
+  }
 }
 
 /**
