@@ -104,8 +104,12 @@ export async function verifyPiAccessToken(
  * Unsigned JWT decode is never accepted as proof of identity.
  */
 export async function resolveAuthenticatedUser(
-  headers: Headers
+  headersOrRequest: Headers | Request
 ): Promise<ServerAuthContext | null> {
+  const headers =
+    typeof Headers !== "undefined" && headersOrRequest instanceof Headers
+      ? headersOrRequest
+      : (headersOrRequest as Request).headers
   const env = readGhcServerEnv()
   const auth = headers.get("authorization") || headers.get("Authorization") || ""
   const m = auth.match(/^Bearer\s+(.+)$/i)
