@@ -531,6 +531,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Apply Pi Network identity onto profile when Pi.authenticate succeeds
+  useEffect(() => {
+    const onPi = (ev: Event) => {
+      const d = (ev as CustomEvent).detail as {
+        uid?: string
+        username?: string | null
+        accessToken?: string | null
+      }
+      if (!d?.uid) return
+      setState((prev) => {
+        const profile = { ...(prev.profile as Record<string, unknown>) }
+        if (!profile.id || profile.id === "current-user") profile.id = d.uid
+        if (d.username) {
+          if (!profile.username) profile.username = d.username
+          if (!profile.displayName) profile.displayName = d.username
+        }
+        return { ...prev, profile: profile as typeof prev.profile }
+      })
+    }
+    window.addEventListener("ghc:pi-identity-ready", onPi as EventListener)
+    return () => window.removeEventListener("ghc:pi-identity-ready", onPi as EventListener)
+  }, [])
+
   // Keep IdentityService aligned with profile (Pi UID always wins)
   useEffect(() => {
     const profile = state.profile as { id?: string; username?: string; displayName?: string } | undefined

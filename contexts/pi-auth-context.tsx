@@ -248,6 +248,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       try {
         await loadPiSDK();
         setAuthMessage("Initializing Pi Network...");
+        if (!window.Pi && !allowLocalAuthFallback()) {
+          throw new Error(
+            "Pi Browser bridge not found (window.Pi missing). Open this exact URL inside the Pi app — not Chrome, Safari, or WhatsApp."
+          );
+        }
         if (typeof window.Pi?.init === "function") {
           await window.Pi.init({
             version: "2.0",
@@ -284,6 +289,21 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 displayName: u.username || null,
                 accessToken: authResult?.accessToken || null,
               })
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:pi-identity-ready", {
+                    detail: {
+                      uid: u.uid,
+                      username: u.username || null,
+                      accessToken: authResult?.accessToken || null,
+                    },
+                  })
+                )
+              } catch { /* */ }
+            } else if (!allowLocalAuthFallback()) {
+              throw new Error(
+                "Pi authentication did not return a user id. Sign in with your Pi account in Pi Browser."
+              )
             }
           } catch (authCbErr) {
             console.warn(
@@ -349,9 +369,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       } catch (sdkLiteErr) {
         console.error("[PiAuth] SDKLite path failed:", sdkLiteErr);
 
-        // 3) Local fallback — App Studio preview / CDN blocked / offline
-        const allowFallback = PI_NETWORK_CONFIG.ALLOW_LOCAL_AUTH_FALLBACK !== false;
-        if (allowFallback && (isLikelyAppStudioPreview() || typeof window !== "undefined")) {
+        // 3) Local fallback — Studio / localhost only (never Vercel production)
+        if (allowLocalAuthFallback()) {
           setAuthMessage("Using local preview session...");
           const localSdk = createLocalSdkLite("preview-user");
           setSdk(localSdk);
@@ -361,10 +380,13 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           IdentityService.setFromPi({ uid: null, username: "preview" });
           IdentityService.setAuthState("authenticated");
           console.info(
-            "[PiAuth] Local auth fallback active — remote SDKLite unavailable. Onboarding will use local storage."
+            "[PiAuth] Local auth fallback active — remote SDKLite unavailable."
           );
           return;
         }
+        setAuthMessage(
+          "Could not load Pi authentication. Open GreenHaven inside the Pi Browser and try again."
+        );
 
         throw sdkLiteErr instanceof Error
           ? sdkLiteErr
@@ -382,6 +404,13 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const continueLocalPreview = () => {
+    if (!allowLocalAuthFallback()) {
+      setHasError(true);
+      setAuthMessage(
+        "Local preview is disabled on this host. Open GreenHaven in the Pi Browser and sign in with your Pi account."
+      );
+      return;
+    }
     setHasError(false);
     setAuthMessage("Opening local preview session...");
     const localSdk = createLocalSdkLite(
@@ -399,9 +428,16 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const hardTimeout = window.setTimeout(() => {
       if (cancelled) return;
-      // Never leave users stuck on the spinner longer than ~20s
       setIsAuthenticated((prev) => {
         if (prev) return prev;
+        // Production / Pi-required hosts: show error, do NOT fake a user
+        if (!allowLocalAuthFallback()) {
+          setHasError(true);
+          setAuthMessage(
+            "Pi Browser is required. Open this GreenHaven link inside the Pi app (Develop → your app, or the production URL). Sign in with your Pi account to continue."
+          );
+          return false;
+        }
         console.info("[PiAuth] Auth hard-timeout — activating local preview session");
         const localSdk = createLocalSdkLite("timeout-preview-user");
         setSdk(localSdk);

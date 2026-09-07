@@ -1,6 +1,7 @@
 "use client"
 
 import { usePiAuth } from "@/contexts/pi-auth-context"
+import { allowLocalAuthFallback } from "@/lib/system-config"
 
 export function AuthLoadingScreen() {
   const { authMessage, hasError, reinitialize, continueLocalPreview } = usePiAuth()
@@ -56,17 +57,25 @@ export function AuthLoadingScreen() {
             >
               Retry authentication
             </button>
-            <button
-              type="button"
-              onClick={continueLocalPreview}
-              className="rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-muted"
-            >
-              Continue in local preview
-            </button>
-            <p className="max-w-xs text-center text-xs text-muted-foreground">
-              Local preview works on Vercel and desktop browsers without the Pi
-              app. Use Retry when you open GreenHaven inside Pi Browser.
-            </p>
+            {allowLocalAuthFallback() ? (
+              <>
+                <button
+                  type="button"
+                  onClick={continueLocalPreview}
+                  className="rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-muted"
+                >
+                  Continue in local preview
+                </button>
+                <p className="max-w-xs text-center text-xs text-muted-foreground">
+                  Local preview is for development only. Production requires the Pi Browser.
+                </p>
+              </>
+            ) : (
+              <p className="max-w-xs text-center text-xs text-muted-foreground">
+                Open the Pi app → use Develop or your GreenHaven production link so Pi can sign you in.
+                Chrome and WhatsApp browsers cannot access Pi payments or real Pi identity.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">

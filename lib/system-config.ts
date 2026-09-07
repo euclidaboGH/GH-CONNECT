@@ -23,14 +23,29 @@ export const PI_NETWORK_CONFIG = {
     typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
       ? process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
       : false,
-  /**
-   * When remote SDKLite cannot load (App Studio preview, offline, CDN block),
-   * allow a local authenticated session so onboarding is not blocked.
-   * Real Pi Browser production should still load the official scripts.
-   */
+  /** @deprecated use allowLocalAuthFallback() */
   ALLOW_LOCAL_AUTH_FALLBACK: true,
   /** Parent postMessage credential probe timeout (ms) */
   PARENT_CREDENTIAL_TIMEOUT_MS: 4000,
   /** Script load timeout (ms) */
   SCRIPT_LOAD_TIMEOUT_MS: 12000,
 } as const
+
+
+/** True only for Studio/localhost — never for Vercel production or pinet hosts. */
+export function allowLocalAuthFallback(): boolean {
+  if (typeof window === "undefined") return true
+  if (process.env.NEXT_PUBLIC_REQUIRE_PI_BROWSER === "true") return false
+  if (process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH === "true") return true
+  const host = window.location.hostname.toLowerCase()
+  if (host === "localhost" || host === "127.0.0.1") return true
+  if (host.endsWith(".vercel.app")) return false
+  if (host.endsWith("pinet.com") || host.endsWith("minepi.com")) return false
+  // Custom production domains: require Pi unless explicitly allowed
+  if (process.env.NODE_ENV === "production") return false
+  return true
+}
+
+export function isProductionPiHost(): boolean {
+  return !allowLocalAuthFallback()
+}
