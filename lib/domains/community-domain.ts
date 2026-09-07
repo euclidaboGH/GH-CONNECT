@@ -112,6 +112,10 @@ export function canCommunityAction(
   return ROLE_PERMISSIONS[r]?.has(action) ?? false
 }
 
+/** @deprecated alias — prefer canCommunityAction */
+export const canPerform = canCommunityAction
+
+
 export function isCommunityConversation(c: Conversation | undefined | null): boolean {
   if (!c) return false
   if (c.conversationType !== "group") return false

@@ -1,24 +1,36 @@
 import { dirname } from "path"
 import { fileURLToPath } from "url"
+import { FlatCompat } from "@eslint/eslintrc"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
-/** @type {import('eslint').Linter.Config[]} */
-const config = [
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+})
+
+/** @type {import("eslint").Linter.Config[]} */
+const eslintConfig = [
   {
-    ignores: [".next/**", "node_modules/**", "pnpm-lock.yaml"],
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "coverage/**",
+      "dist/**",
+      "public/**",
+      "*.config.js",
+      "*.config.mjs",
+    ],
   },
+  ...compat.extends("next/core-web-vitals"),
   {
-    files: ["**/*.{js,jsx,ts,tsx}"],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: "module",
-    },
     rules: {
-      "no-unused-vars": "off",
-      "no-undef": "off",
+      // Non-blocking for release; tighten later
+      "react/no-unescaped-entities": "off",
+      "@next/next/no-img-element": "off",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ]
 
-export default config
+export default eslintConfig
