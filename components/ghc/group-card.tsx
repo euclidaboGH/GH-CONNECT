@@ -227,4 +227,6 @@ function GroupCardContent({
 }
 
 export const GroupCard = memo(GroupCardContent)
+GroupCard.displayName = "GroupCard"
+
 export default GroupCard

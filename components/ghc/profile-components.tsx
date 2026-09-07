@@ -170,10 +170,10 @@ export function ProfileCompletionCard({
   onCompleteClick: () => void
   onAddCover?: () => void
 }) {
-  if (percentage === 100) return null
-
-  // Default collapsed when profile is already meaningfully filled (reduces noise)
+  // Hooks must run unconditionally (rules-of-hooks)
   const [expanded, setExpanded] = useState(percentage < 60)
+
+  if (percentage === 100) return null
 
   // Ordered journey — not a long unordered missing dump
   const JOURNEY: { id: string; label: string; match: RegExp; action: "cover" | "edit"; reward?: string }[] = [

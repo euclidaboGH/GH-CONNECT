@@ -169,6 +169,8 @@ const Toast = memo(({ message, type }: { message: string; type: string }) => {
   )
 })
 
+Toast.displayName = "Toast"
+
 // Memoized navigation items to prevent recalculation
 /** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
 const NAV_ITEMS = [

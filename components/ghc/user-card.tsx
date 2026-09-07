@@ -503,4 +503,6 @@ export function DiscoverListRow({
 }
 
 export const UserCard = memo(UserCardInner)
+UserCard.displayName = "UserCard"
+
 export default UserCard

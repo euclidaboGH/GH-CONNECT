@@ -514,6 +514,8 @@ function EnhancedPostCardInner({
 }
 
 export const EnhancedPostCard = memo(EnhancedPostCardInner)
+EnhancedPostCard.displayName = "EnhancedPostCard"
+
 
 // Visibility reason tooltip
 /** Compact contribution signal for quality-first ranking transparency */

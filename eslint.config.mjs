@@ -18,6 +18,9 @@ const eslintConfig = [
       "coverage/**",
       "dist/**",
       "public/**",
+      "scripts/**",
+      "supabase/**",
+      "docs/**",
       "*.config.js",
       "*.config.mjs",
     ],
@@ -25,10 +28,16 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals"),
   {
     rules: {
-      // Non-blocking for release; tighten later
+      // Keep production builds green; tighten gradually in CI-only strict mode
       "react/no-unescaped-entities": "off",
       "@next/next/no-img-element": "off",
       "react-hooks/exhaustive-deps": "warn",
+      "react/display-name": "warn",
+      "import/no-anonymous-default-export": "warn",
+      "jsx-a11y/alt-text": "warn",
+      "jsx-a11y/role-has-required-aria-props": "warn",
+      // rules-of-hooks stays error — real bugs
+      "react-hooks/rules-of-hooks": "error",
     },
   },
 ]

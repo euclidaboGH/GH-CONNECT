@@ -81,17 +81,7 @@ export function RelationshipActions({
     }
   }, [userId, following, friends, matches, blockedUsers])
 
-  if (state.isBlocked) {
-    return (
-      <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-        <span className="rounded-full bg-muted px-3 py-1.5 text-[12px] font-semibold text-muted-foreground">
-          Blocked
-        </span>
-      </div>
-    )
-  }
-
-    const run = useCallback(
+  const run = useCallback(
     async (action: ProfileRelationshipAction) => {
       if (busy) return
       setBusy(action)
@@ -157,6 +147,16 @@ export function RelationshipActions({
     },
     [busy, userId, userName, userPhoto, followUser, swipe, startConversation, addToast, blockedUsers]
   )
+
+  if (state.isBlocked) {
+    return (
+      <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+        <span className="rounded-full bg-muted px-3 py-1.5 text-[12px] font-semibold text-muted-foreground">
+          Blocked
+        </span>
+      </div>
+    )
+  }
 
   if (state.isSelf) return null
 

@@ -141,6 +141,8 @@ const ReactionPill = memo(function ReactionPill({
     </button>
   )
 })
+ReactionPill.displayName = "ReactionPill"
+
 
 const EnhancedGroupMessageComponent = ({
   message,
@@ -319,3 +321,5 @@ const EnhancedGroupMessageComponent = ({
 
 // Export memoized version for performance
 export const EnhancedGroupMessage = memo(EnhancedGroupMessageComponent)
+EnhancedGroupMessage.displayName = "EnhancedGroupMessage"
+

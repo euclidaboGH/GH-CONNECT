@@ -405,6 +405,8 @@ export const PostCard = memo(function PostCard({
     </article>
   )
 })
+PostCard.displayName = "PostCard"
+
 
 // Mode filter chips
 interface ModeFilterProps {
