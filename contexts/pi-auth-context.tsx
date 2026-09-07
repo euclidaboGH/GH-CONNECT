@@ -7,7 +7,7 @@ import React, {
   useEffect,
   type ReactNode,
 } from "react";
-import { PI_NETWORK_CONFIG } from "@/lib/system-config"
+import { PI_NETWORK_CONFIG, allowLocalAuthFallback } from "@/lib/system-config"
 import { onIncompletePaymentFound } from "@/lib/pi-incomplete-payment";
 import { IdentityService } from "@/lib/identity/identity-service";
 import { buildPiSdk, createSdk } from "@/lib/pi";
