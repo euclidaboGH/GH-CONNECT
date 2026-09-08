@@ -26,7 +26,14 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    const auth = await resolveAuthenticatedUser(request.headers)
+    // Auth is best-effort (ownership checks). Approval must still proceed for
+    // unbound / pipeline-verification payments so the Pi wallet unlocks.
+    let auth: Awaited<ReturnType<typeof resolveAuthenticatedUser>> = null
+    try {
+      auth = await resolveAuthenticatedUser(request.headers)
+    } catch {
+      auth = null
+    }
     const body = await request.json().catch(() => ({}))
     const paymentId = typeof body.paymentId === "string" ? body.paymentId.trim() : ""
     const intentId = typeof body.intentId === "string" ? body.intentId.trim() : ""
@@ -35,8 +42,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "paymentId required" }, { status: 400 })
     }
     if (!getPiApiKey()) {
+      console.error("[payments/approve] PI_API_KEY missing on this deployment")
       return NextResponse.json(
-        { ok: false, error: "PI_API_KEY is not configured on the server" },
+        {
+          ok: false,
+          error: "PI_API_KEY is not configured on the server",
+          hint: "Set PI_API_KEY (Secret) for both Preview and Production in Vercel, then redeploy the matching environment.",
+        },
         { status: 503 }
       )
     }
@@ -110,8 +122,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // Always call Pi approve — this is what unlocks the wallet UI for the user.
+    // Do this even when there is no intent (pipeline verification / unbound check).
     const appr = await piApprovePayment(paymentId)
     if (!appr.ok) {
+      console.error("[payments/approve] Pi Platform reject", {
+        paymentId,
+        status: appr.status,
+        error: appr.error,
+        hasIntent: Boolean(intent),
+      })
       if (intent) {
         transitionIntent(intent.id, "FAILED", {
           actor: "system",
@@ -120,7 +140,18 @@ export async function POST(request: Request) {
         })
       }
       return NextResponse.json(
-        { ok: false, error: "Pi approve failed", status: appr.status, detail: appr.error },
+        {
+          ok: false,
+          error: "Pi approve failed",
+          status: appr.status,
+          detail: appr.error,
+          hint:
+            appr.status === 401 || appr.status === 403
+              ? "PI_API_KEY may be wrong or belongs to a different app in the Pi Developer Portal."
+              : appr.status === 404
+                ? "Payment ID not found on Pi — ensure sandbox/production match (NEXT_PUBLIC_PI_SANDBOX)."
+                : undefined,
+        },
         { status: 502 }
       )
     }

@@ -116,6 +116,55 @@ async function postJson(
   return { res, data }
 }
 
+/**
+ * Fire approve with retries. Pi SDK may invoke onReadyForServerApproval multiple
+ * times (~every 10s) until the developer approves or the timer expires.
+ * We must succeed quickly so the wallet UI unlocks for the user to sign.
+ */
+async function approveWithRetry(
+  paymentId: string,
+  intentId: string | undefined,
+  authHeaders: Record<string, string>,
+  maxAttempts = 4
+): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }> {
+  let lastError = "unknown"
+  let lastStatus = 0
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const { res, data } = await postJson(
+        "/api/payments/approve",
+        { paymentId, intentId },
+        authHeaders
+      )
+      lastStatus = res.status
+      if (res.ok) {
+        console.info("[gh-pay] approve ok", { paymentId, attempt, intentId: intentId || null })
+        return { ok: true, status: res.status, data }
+      }
+      lastError =
+        (data as { error?: string; detail?: string })?.error ||
+        (data as { detail?: string })?.detail ||
+        `HTTP ${res.status}`
+      console.warn("[gh-pay] approve attempt failed", {
+        paymentId,
+        attempt,
+        status: res.status,
+        error: lastError,
+        data,
+      })
+      // 503 = missing PI_API_KEY — do not spin forever
+      if (res.status === 503) break
+      // brief backoff before retry (SDK also retries the callback)
+      await new Promise((r) => setTimeout(r, 400 + attempt * 300))
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : "network"
+      console.warn("[gh-pay] approve network error", { paymentId, attempt, error: lastError })
+      await new Promise((r) => setTimeout(r, 500 + attempt * 300))
+    }
+  }
+  return { ok: false, status: lastStatus, error: lastError }
+}
+
 export async function startUserToAppPayment(options?: {
   amount?: number
   memo?: string
@@ -176,13 +225,15 @@ export async function startUserToAppPayment(options?: {
         { amount, memo, metadata },
         {
           onReadyForServerApproval: (paymentId: string) => {
-            void postJson(
-              "/api/payments/approve",
-              { paymentId, intentId },
-              authHeaders
-            ).then(({ res, data }) => {
-              if (!res.ok) {
-                console.error("[gh-pay] approve failed", data)
+            // Critical path: must reach Pi Platform /approve before the ~60s timer.
+            // SDK may re-invoke this callback; our side also retries.
+            void approveWithRetry(paymentId, intentId, authHeaders).then((result) => {
+              if (!result.ok) {
+                console.error("[gh-pay] approve ultimately failed", {
+                  paymentId,
+                  status: result.status,
+                  error: result.error,
+                })
               }
             })
           },
