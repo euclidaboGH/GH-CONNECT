@@ -439,14 +439,27 @@ export function GHConnectApp() {
   }, [])
 
   useEffect(() => {
+    const resolveTab = (detail: unknown): string | null => {
+      if (typeof detail === "string" && detail.trim()) return detail.trim()
+      if (detail && typeof detail === "object" && "tab" in (detail as object)) {
+        const t = (detail as { tab?: unknown }).tab
+        if (typeof t === "string" && t.trim()) return t.trim()
+      }
+      return null
+    }
     const handleNavigate = (event: Event) => {
-      const target = (event as CustomEvent<string>).detail
-      if (NAV_IDS.includes(target as (typeof NAV_IDS)[number])) {
+      const target = resolveTab((event as CustomEvent).detail)
+      if (target && NAV_IDS.includes(target as (typeof NAV_IDS)[number])) {
         startTransition(() => setTab(target as any))
       }
     }
+    // Canonical event (string detail) + legacy object detail { tab }
     window.addEventListener("ghc:navigate-tab", handleNavigate)
-    return () => window.removeEventListener("ghc:navigate-tab", handleNavigate)
+    window.addEventListener("ghc:navigate", handleNavigate)
+    return () => {
+      window.removeEventListener("ghc:navigate-tab", handleNavigate)
+      window.removeEventListener("ghc:navigate", handleNavigate)
+    }
   }, [setTab])
 
   useEffect(() => {

@@ -431,6 +431,16 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                   : identity.username
               needsOnboarding = Boolean(bridge.needsOnboarding)
               isReturning = Boolean(bridge.isReturning)
+              if (bridge.durabilityWarning) {
+                console.warn(
+                  "[PiAuth] identity/session not durable on this deployment:",
+                  bridge.durabilityWarning,
+                  {
+                    durable: bridge.durable,
+                    sessionDurable: bridge.sessionDurable,
+                  }
+                )
+              }
             } else {
               console.warn("[PiAuth] /api/auth/pi did not verify:", bridge)
             }

@@ -43,6 +43,9 @@ function firstName(displayName?: string | null): string {
 
 function goTab(tab: string) {
   try {
+    // Shell listens for "ghc:navigate-tab" with string detail (app.tsx).
+    // Also emit legacy "ghc:navigate" with { tab } for older listeners.
+    window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
     window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab } }))
   } catch {
     /* */

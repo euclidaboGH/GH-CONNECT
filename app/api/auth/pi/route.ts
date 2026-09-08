@@ -71,6 +71,19 @@ export async function POST(request: Request) {
       userAgent: ua,
     })
 
+    const identityDurable = isPiIdentityDurable()
+    const sessionDurable = isSessionStoreDurable()
+    const prod =
+      process.env.NODE_ENV === "production" ||
+      process.env.VERCEL_ENV === "production"
+    // In production without Supabase, onboarding flags are not durable across
+    // instances — clients should treat needsOnboarding carefully and operators
+    // must set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+    const durabilityWarning =
+      prod && (!identityDurable || !sessionDurable)
+        ? "IDENTITY_OR_SESSION_NOT_DURABLE: configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and apply gh_pi_identities / gh_sessions migrations."
+        : undefined
+
     const res = NextResponse.json(
       {
         ok: true,
@@ -78,8 +91,9 @@ export async function POST(request: Request) {
         isNew,
         isReturning,
         needsOnboarding,
-        durable: isPiIdentityDurable(),
-        sessionDurable: isSessionStoreDurable(),
+        durable: identityDurable,
+        sessionDurable,
+        ...(durabilityWarning ? { durabilityWarning } : {}),
         session: {
           id: issued.record.id,
           expiresAt: issued.record.expiresAt,

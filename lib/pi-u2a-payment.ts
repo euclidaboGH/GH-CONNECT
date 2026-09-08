@@ -227,12 +227,30 @@ export async function startUserToAppPayment(options?: {
           onReadyForServerApproval: (paymentId: string) => {
             // Critical path: must reach Pi Platform /approve before the ~60s timer.
             // SDK may re-invoke this callback; our side also retries.
+            // If approve fails, surface a clear error to the caller instead of
+            // only waiting for the wallet "Payment Expired" screen.
             void approveWithRetry(paymentId, intentId, authHeaders).then((result) => {
               if (!result.ok) {
                 console.error("[gh-pay] approve ultimately failed", {
                   paymentId,
                   status: result.status,
                   error: result.error,
+                })
+                const statusHint =
+                  result.status === 503
+                    ? " Server PI_API_KEY is missing or this environment cannot reach Pi approve."
+                    : result.status === 401 || result.status === 403
+                      ? " Session or payment intent authorization failed."
+                      : result.status === 404
+                        ? " Payment not found on Pi — check sandbox vs mainnet match."
+                        : ""
+                finish({
+                  ok: false,
+                  error:
+                    (result.error || "Developer approve failed") +
+                    statusHint +
+                    " Fix Vercel PI_API_KEY and NEXT_PUBLIC_PI_SANDBOX, then retry.",
+                  paymentId,
                 })
               }
             })
