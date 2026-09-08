@@ -215,17 +215,21 @@ const fieldClass =
 export function Onboarding() {
   const { profile, updateProfile, completeOnboarding } = useGHC()
   const safeProfile = profile || ({} as typeof profile)
+  const piUsername =
+    IdentityService.getUsername() ||
+    IdentityService.getIdentity().displayName ||
+    ""
   const [phase, setPhase] = useState<"splash" | "welcome" | "flow">("splash")
   const [introPage, setIntroPage] = useState(0)
 
   useEffect(() => {
     if (phase !== "splash") return
-    const timer = window.setTimeout(() => setPhase("welcome"), 3000)
+    const timer = window.setTimeout(() => setPhase("welcome"), 2200)
     return () => window.clearTimeout(timer)
   }, [phase])
   const [step, setStep] = useState<OnboardingStep>(1)
   const [formData, setFormData] = useState({
-    displayName: safeProfile.displayName || "",
+    displayName: safeProfile.displayName || piUsername || "",
     age: safeProfile.age || 18,
     bornDate: (safeProfile as any).bornDate || "",
     gender: safeProfile.gender && safeProfile.gender !== "prefer-not-to-say" ? safeProfile.gender : "",
@@ -431,6 +435,12 @@ export function Onboarding() {
                 Skip
               </button>
             </div>
+
+            {piUsername && introPage === 0 ? (
+              <p className="mb-1 text-center text-[13px] font-medium text-emerald-300/90">
+                Welcome, {piUsername}
+              </p>
+            ) : null}
 
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-emerald-400/90">

@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { PiAuthProvider, usePiAuth } from "@/contexts/pi-auth-context";
 import { IdentityProvider } from "@/contexts/identity-context";
+import { SessionLockProvider } from "@/contexts/session-lock-context";
+import { SessionLockGate } from "@/components/ghc/session-lock-screen";
 import { AuthLoadingScreen } from "./auth-loading-screen";
 import { ErrorBoundary } from "@/lib/error-boundary";
 import { a11y } from "@/lib/accessibility";
@@ -11,10 +13,8 @@ import { offlineSupport } from "@/lib/offline";
 
 function AccessibilitySetup() {
   useEffect(() => {
-    // Add skip link
     a11y.addSkipLink();
 
-    // Add aria-live region for screen readers
     if (typeof document !== "undefined") {
       if (!document.getElementById("aria-live-region")) {
         const liveRegion = document.createElement("div");
@@ -54,19 +54,21 @@ function OfflineListener() {
 function AppContent({ children }: { children: ReactNode }) {
   const { isAuthenticated } = usePiAuth();
   if (!isAuthenticated) return <AuthLoadingScreen />;
-  return <>{children}</>;
+  return <SessionLockGate>{children}</SessionLockGate>;
 }
 
 export function AppWrapper({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
       <PiAuthProvider>
-      <IdentityProvider>
-        <AccessibilitySetup />
-        <OfflineListener />
-        <AppContent>{children}</AppContent>
-      </IdentityProvider>
-    </PiAuthProvider>
+        <IdentityProvider>
+          <SessionLockProvider>
+            <AccessibilitySetup />
+            <OfflineListener />
+            <AppContent>{children}</AppContent>
+          </SessionLockProvider>
+        </IdentityProvider>
+      </PiAuthProvider>
     </ErrorBoundary>
   );
 }

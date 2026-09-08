@@ -403,19 +403,60 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         await loadPiSDK();
         setAuthMessage("Authenticating with Pi...");
         const identity = await officialPiAuthenticate();
+
+        // Strict compliance: never treat client uid as final.
+        // Verify accessToken with Platform GET /me via our backend, then map to GH identity.
+        let serverVerified = false
+        let needsOnboarding = true
+        let isReturning = false
+        let ghUserId = identity.uid
+        let verifiedUsername = identity.username
+
+        if (identity.accessToken) {
+          try {
+            setAuthMessage("Verifying Pi identity with server...");
+            const bridgeRes = await fetch("/api/auth/pi", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ accessToken: identity.accessToken }),
+            })
+            const bridge = await bridgeRes.json().catch(() => ({}))
+            if (bridgeRes.ok && bridge?.ok && bridge?.identity?.piAppUid) {
+              serverVerified = true
+              ghUserId = String(bridge.identity.ghUserId || bridge.identity.piAppUid)
+              verifiedUsername =
+                bridge.identity.piUsername != null
+                  ? String(bridge.identity.piUsername)
+                  : identity.username
+              needsOnboarding = Boolean(bridge.needsOnboarding)
+              isReturning = Boolean(bridge.isReturning)
+            } else {
+              console.warn("[PiAuth] /api/auth/pi did not verify:", bridge)
+            }
+          } catch (bridgeErr) {
+            console.warn("[PiAuth] identity bridge network error:", bridgeErr)
+          }
+        }
+
         IdentityService.setFromPi({
-          uid: identity.uid,
-          username: identity.username,
-          displayName: identity.username,
+          uid: ghUserId,
+          username: verifiedUsername,
+          displayName: verifiedUsername,
           accessToken: identity.accessToken,
+          verifiedByServer: serverVerified,
+          needsOnboarding: serverVerified ? needsOnboarding : true,
         });
         try {
           window.dispatchEvent(
             new CustomEvent("ghc:pi-identity-ready", {
               detail: {
-                uid: identity.uid,
-                username: identity.username,
+                uid: ghUserId,
+                username: verifiedUsername,
                 accessToken: identity.accessToken,
+                serverVerified,
+                needsOnboarding,
+                isReturning,
               },
             })
           );

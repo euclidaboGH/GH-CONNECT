@@ -17,10 +17,17 @@ import {
 } from "@/lib/server/economy/http"
 import { notifyTransferCompleted } from "@/lib/server/economy/notifications"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  // Phase 4: server-verifiable step-up required for transfers
+  const stepUpErr = await requireRecentStepUp(auth)
+  if (stepUpErr) {
+    return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
+  }
 
   pruneRateLimitBuckets()
   const rl = checkRateLimit(`transfer:${auth.userId}`, 30, 60_000)
@@ -35,8 +42,13 @@ export async function POST(request: Request) {
     return jsonErr("TRANSFER_FAILED", "Invalid JSON body", 400)
   }
 
+  // Sender is ONLY auth.userId — ignore client-supplied sender/user fields
+  void body.senderId
+  void body.fromUserId
+  void body.userId
+  void body.balance
+
   const toUserId = String(body.toUserId || "").trim()
-  const amount = Number(body.amount)
   const referenceId = String(body.referenceId || "").trim()
   const note = body.note != null ? String(body.note) : undefined
   const requestId = body.requestId != null ? String(body.requestId) : undefined
@@ -44,12 +56,14 @@ export async function POST(request: Request) {
 
   if (!toUserId) return jsonErr("INVALID_RECIPIENT", "Recipient required", 400)
   if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return jsonErr("INVALID_AMOUNT", "Enter a valid amount greater than 0", 400)
+
+  const { validatePositiveGhcAmount } = await import("@/lib/server/economy/amount")
+  const amt = validatePositiveGhcAmount(body.amount, { max: 5_000 })
+  if (!amt.ok) {
+    return jsonErr(amt.code, amt.message, 400)
   }
-  if (amount > 5_000) {
-    return jsonErr("INVALID_AMOUNT", "Amount exceeds maximum transfer limit", 400)
-  }
+  const amount = amt.amount
+
   if (toUserId === auth.userId) {
     return jsonErr("SELF_TRANSFER", "Cannot send to yourself", 400)
   }

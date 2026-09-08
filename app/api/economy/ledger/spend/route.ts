@@ -17,6 +17,7 @@ import {
   executeAuthoritativeSpend,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
+import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 
 async function rpcSpend(input: {
   userId: string
@@ -69,6 +70,12 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
+  // Phase 4: server-verifiable step-up required for GHC spends
+  const stepUpErr = await requireRecentStepUp(auth)
+  if (stepUpErr) {
+    return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
+  }
+
   pruneRateLimitBuckets()
   const rl = checkRateLimit(`spend:${auth.userId}`, 20, 60_000)
   if (!rl.ok) {
@@ -82,6 +89,12 @@ export async function POST(request: Request) {
     return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
   }
 
+  // Buyer is ONLY auth.userId — ignore client identity/balance/price claims
+  void body.userId
+  void body.senderId
+  void body.balance
+  void body.price
+
   const purpose = String(body.purpose || body.sourceEvent || "").trim()
   const clientAmount = Number(body.amount)
   const referenceId = String(body.referenceId || "").trim()
@@ -90,6 +103,7 @@ export async function POST(request: Request) {
 
   if (!referenceId) return jsonErr("INVALID_INPUT", "referenceId required", 400)
 
+  // Catalog resolves authoritative price for fixed purposes (client amount ignored/mismatched)
   const resolved = resolveSpendAmount(purpose, clientAmount)
   if (!resolved.ok) {
     return jsonErr(resolved.error, resolved.error, 400)

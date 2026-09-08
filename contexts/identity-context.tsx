@@ -29,6 +29,8 @@ export interface IdentityContextValue {
   getAccountStatus: () => AccountStatus
   isProductionIdentity: () => boolean
   getAuthHeaders: () => Record<string, string>
+  /** True until GreenHaven onboarding is completed for this Pi-linked identity */
+  needsOnboarding: () => boolean
   /** Domain-contract snapshot (profile fields when session profile is unknown) */
   getProfileSnapshot: () => DomainResult<IdentitySnapshot>
 }
@@ -61,6 +63,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         getAccountStatus: () => IdentityService.getAccountStatus(),
         isProductionIdentity: () => IdentityService.isProductionIdentity(),
         getAuthHeaders: () => IdentityService.getAuthHeaders(),
+        needsOnboarding: () => IdentityService.needsOnboarding(),
         getProfileSnapshot: () => identitySeam.getSnapshot(),
       }
     },
@@ -86,6 +89,7 @@ export function useIdentity(): IdentityContextValue {
       getAccountStatus: () => IdentityService.getAccountStatus(),
       isProductionIdentity: () => IdentityService.isProductionIdentity(),
       getAuthHeaders: () => IdentityService.getAuthHeaders(),
+      needsOnboarding: () => IdentityService.needsOnboarding(),
       getProfileSnapshot: () =>
         createIdentitySeam(() => ({
           id: IdentityService.getCurrentUserId(),

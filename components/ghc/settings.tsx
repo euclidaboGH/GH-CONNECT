@@ -25,8 +25,14 @@ import {
   Gift,
   User,
   Ban,
+  Lock,
 } from "lucide-react"
+import { useSessionLock } from "@/contexts/session-lock-context"
+import { hasPinConfigured, clearPin } from "@/lib/session-security"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
+import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
+import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -56,6 +62,7 @@ function SectionFallback({ label }: { label: string }) {
 export type SettingsSection =
   | "main"
   | "privacy"
+  | "device-lock"
   | "preferences"
   | "notifications"
   | "appearance"
@@ -77,6 +84,7 @@ export function SettingsScreen({
   initialSection?: SettingsSection
 }) {
   const { settings, updateSettings, logout, blockedUsers, unblockUser, candidates } = useGHC()
+  const sessionLock = useSessionLock()
   const [navStack, setNavStack] = useState<SettingsSection[]>(() =>
     initialSection && initialSection !== "main" ? ["main", initialSection] : ["main"],
   )
@@ -361,6 +369,111 @@ export function SettingsScreen({
             <p className="font-bold text-[15px]">Email Support</p>
             <p className="text-[13px] text-muted-foreground">{SUPPORT_CONTACTS.email}</p>
           </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (section === "device-lock") {
+    const uid = IdentityService.getCurrentUserId()
+    const hasPin = hasPinConfigured(uid)
+    const { lockNow, configurePin, idleLockMs, policy, setPolicy } = sessionLock
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+          <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
+            <ChevronLeft size={24} />
+          </button>
+          <h2 className="text-[18px] font-bold">Device lock</h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            Protects this device after idle or when you leave the app. Your real account identity is
+            still Pi Network — the PIN never replaces Pi sign-in or Pi Wallet approval for payments.
+          </p>
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <p className="text-[14px] font-bold">
+              Status:{" "}
+              <span className={hasPin ? "text-emerald-600" : "text-amber-600"}>
+                {hasPin ? "PIN enabled on this device" : "No PIN yet"}
+              </span>
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              Policy: <span className="font-semibold text-foreground">{policy.label}</span>
+              {" · "}
+              idle ~{Math.round(idleLockMs / 60000)} min
+              {policy.lockOnBackground
+                ? policy.backgroundGraceMs === 0
+                  ? " · lock on background"
+                  : ` · background grace ${Math.round(policy.backgroundGraceMs / 1000)}s`
+                : ""}
+            </p>
+            <div className="flex flex-col gap-2">
+              {(
+                [
+                  ["high", "High security"],
+                  ["balanced", "Balanced"],
+                  ["convenience", "Convenience"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPolicy(id)}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-[13px] font-semibold transition ${
+                    policy.id === id
+                      ? "border-emerald-500/50 bg-emerald-500/10 text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {hasPin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => lockNow()}
+                  className="w-full rounded-full bg-primary px-4 py-3 text-sm font-bold text-primary-foreground"
+                >
+                  Lock now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearPin(uid)
+                    window.location.reload()
+                  }}
+                  className="w-full rounded-full border border-border px-4 py-3 text-sm font-semibold"
+                >
+                  Remove PIN from this device
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const pin = window.prompt("Choose a 4–8 digit PIN")
+                  if (pin) void configurePin(pin)
+                }}
+                className="w-full rounded-full bg-primary px-4 py-3 text-sm font-bold text-primary-foreground"
+              >
+                Create device PIN
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            PIN is stored only on this device as a one-way hash. After 5 wrong attempts, GreenHaven
+            requires a full Pi sign-in again. GHC transfers and Pi payments still require server
+            checks and Pi Wallet — the app PIN is not financial authorization.
+          </p>
+
+          {/* Phase 5: server sessions (separate from local App Lock) */}
+          <ActiveSessionsPanel />
+
+          {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
+          <PasskeysPanel />
         </div>
       </div>
     )
@@ -1004,6 +1117,13 @@ export function SettingsScreen({
           icon: <Shield size={20} strokeWidth={1.75} />,
           action: () => goToSection("privacy"),
           keywords: "privacy block blocked safety message discover follow",
+        },
+        {
+          title: "Device lock",
+          subtitle: "PIN after idle · bank-style session protection",
+          icon: <Lock size={20} strokeWidth={1.75} />,
+          action: () => goToSection("device-lock"),
+          keywords: "pin lock password security idle session device",
         },
       ],
     },

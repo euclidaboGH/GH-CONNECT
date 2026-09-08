@@ -531,21 +531,37 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Apply Pi Network identity onto profile when Pi.authenticate succeeds
+  // Apply Pi Network identity + returning-user onboarding gate when Pi.authenticate succeeds
   useEffect(() => {
     const onPi = (ev: Event) => {
       const d = (ev as CustomEvent).detail as {
         uid?: string
         username?: string | null
         accessToken?: string | null
+        serverVerified?: boolean
+        needsOnboarding?: boolean
+        isReturning?: boolean
       }
       if (!d?.uid) return
       setState((prev) => {
         const profile = { ...(prev.profile as Record<string, unknown>) }
-        if (!profile.id || profile.id === "current-user") profile.id = d.uid
+        if (!profile.id || profile.id === "current-user" || profile.id === "preview-user") {
+          profile.id = d.uid
+        }
         if (d.username) {
           if (!profile.username) profile.username = d.username
           if (!profile.displayName) profile.displayName = d.username
+        }
+        // Server-authoritative onboarding (Phase 2A):
+        // profile.onboarded is UI/cache only — never security proof.
+        // When serverVerified, durable server mapping wins over local SDK state.
+        if (d.serverVerified) {
+          if (d.isReturning === true || d.needsOnboarding === false) {
+            profile.onboarded = true
+          } else if (d.needsOnboarding === true) {
+            // Force onboarding when server says incomplete (even if local cache was true)
+            profile.onboarded = false
+          }
         }
         return { ...prev, profile: profile as typeof prev.profile }
       })
@@ -937,10 +953,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(result.error, "error")
         return
       }
+      // Persist on server identity bridge (Pi-verified mapping)
+      try {
+        const headers = {
+          "Content-Type": "application/json",
+          ...IdentityService.getAuthHeaders(),
+        }
+        await fetch("/api/auth/onboarding-complete", {
+          method: "POST",
+          headers,
+        })
+      } catch {
+        /* offline / preview — local state still advances */
+      }
+      IdentityService.setOnboardingCompleted()
       setState((s) => ({ ...s, profile: { ...s.profile, onboarded: true } }))
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
-      // Fallback: preserve prior behavior
+      // Fallback: preserve prior behavior so user is not stuck on onboarding
+      try {
+        IdentityService.setOnboardingCompleted()
+      } catch {
+        /* */
+      }
       setState((s) => ({ ...s, profile: { ...s.profile, onboarded: true } }))
     }
   }
@@ -3678,8 +3713,30 @@ const dismissMatchCelebration = useCallback(() => {
   const logout = useCallback(async () => {
     try {
       backupRecoveryManager.createBackup(state.profile, state.settings, state.posts, state.conversations, "manual")
+      // Server-side GH session revoke + clear HttpOnly cookie (Phase 2B)
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        })
+      } catch {
+        /* network — still clear local state */
+      }
+      // Clear local App Lock session flags (keeps PIN hash for next login)
+      try {
+        const { clearLockSessionState } = await import("@/lib/session-security")
+        clearLockSessionState()
+      } catch {
+        /* */
+      }
       // Identity domain session signal (does not replace Pi auth transport)
       await domains.identity.clearSession()
+      try {
+        IdentityService.clear()
+      } catch {
+        /* */
+      }
       setState(() => ({
         ...initialState,
         ready: true,

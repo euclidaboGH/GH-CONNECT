@@ -186,6 +186,20 @@ export async function executeAuthoritativeTransfer(
 
     const existing = store.findByReference(ref)
     if (existing.debit) {
+      // Idempotency conflict: same reference, different amount or recipient
+      const prevAmt = Math.abs(Number(existing.debit.amount))
+      const prevCp =
+        (existing.debit.metadata as { counterpartyId?: string } | undefined)?.counterpartyId ||
+        existing.credit?.userId
+      if (Math.abs(prevAmt - amount) > 1e-9 || (prevCp && prevCp !== toUserId)) {
+        return {
+          ok: false,
+          error: mapTransferFailure(
+            "idempotency conflict",
+            "TRANSFER_FAILED"
+          ),
+        }
+      }
       return {
         ok: true,
         idempotent: true,

@@ -1,3 +1,11 @@
+import { resolvePiSandbox } from "@/lib/pi-env"
+
+function currentSandboxFlag(): boolean {
+  const host =
+    typeof window !== "undefined" ? window.location.hostname : null
+  return resolvePiSandbox({ hostname: host })
+}
+
 export const PI_NETWORK_CONFIG = {
   SDK_URL: "https://sdk.minepi.com/pi-sdk.js",
   /** Primary SDKLite CDN (may fail in App Studio iframe / network policy) */
@@ -16,20 +24,19 @@ export const PI_NETWORK_CONFIG = {
    */
   CONNECTED_APP: "GDF4JBEOAYRGMUVDFPNUHWOSLY6EDFQYDBDEJ7EV2LCL6FZXNFGZ3VDZ",
   /**
-   * Production checklist (item 10) needs sandbox: false on the live URL.
-   * Override with NEXT_PUBLIC_PI_SANDBOX=true for Develop/sandbox only.
+   * Sandbox / Testnet vs Mainnet for Pi SDK (read at use time via getter).
+   * Prefer NEXT_PUBLIC_PI_SANDBOX; otherwise environment-aware (lib/pi-env.ts).
    */
-  SANDBOX:
-    typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
-      ? process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
-      : false,
+  get SANDBOX(): boolean {
+    return currentSandboxFlag()
+  },
   /** @deprecated use allowLocalAuthFallback() */
   ALLOW_LOCAL_AUTH_FALLBACK: true,
   /** Parent postMessage credential probe timeout (ms) */
   PARENT_CREDENTIAL_TIMEOUT_MS: 4000,
   /** Script load timeout (ms) */
   SCRIPT_LOAD_TIMEOUT_MS: 12000,
-} as const
+}
 
 
 /** True only for Studio/localhost — never for Vercel production or pinet hosts. */

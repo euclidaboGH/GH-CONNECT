@@ -30,7 +30,7 @@ export type AccountStatus =
   | "suspended"
 
 export interface SessionIdentity {
-  /** Canonical app user id — prefer Pi UID */
+  /** Canonical app user id — prefer verified Pi app uid */
   userId: string
   piUserId: string | null
   username: string | null
@@ -41,6 +41,13 @@ export interface SessionIdentity {
   accountStatus: AccountStatus
   /** true when userId is only a local studio placeholder */
   isLocalStudioId: boolean
+  /**
+   * GreenHaven onboarding (interests / intent / first profile) still required.
+   * Set from POST /api/auth/pi response. Returning Pioneers should be false.
+   */
+  needsOnboarding: boolean
+  /** Last successful server /me verification timestamp (client clock) */
+  serverVerifiedAt: number | null
   updatedAt: number
 }
 
@@ -56,6 +63,8 @@ const defaultIdentity = (): SessionIdentity => ({
   verificationState: "unverified",
   accountStatus: "setup",
   isLocalStudioId: true,
+  needsOnboarding: true,
+  serverVerifiedAt: null,
   updatedAt: Date.now(),
 })
 
@@ -153,6 +162,8 @@ export const IdentityService = {
     displayName?: string | null
     accessToken?: string | null
     verifiedByServer?: boolean
+    /** From POST /api/auth/pi — false for returning Pioneers who finished GH onboarding */
+    needsOnboarding?: boolean
   }): SessionIdentity {
     const piUid = String(input.uid || "").trim() || null
     const userId = resolveCanonicalUserId({
@@ -175,6 +186,57 @@ export const IdentityService = {
           : identity.verificationState,
       accountStatus: identity.accountStatus === "setup" && piUid ? "active" : identity.accountStatus,
       isLocalStudioId: isStudioPlaceholderId(userId),
+      needsOnboarding:
+        typeof input.needsOnboarding === "boolean"
+          ? input.needsOnboarding
+          : identity.needsOnboarding,
+      serverVerifiedAt: input.verifiedByServer ? Date.now() : identity.serverVerifiedAt,
+      updatedAt: Date.now(),
+    }
+    emit()
+    return this.getIdentity()
+  },
+
+  /** Call after GreenHaven first-time onboarding finishes (server already marked via API). */
+  setOnboardingCompleted() {
+    identity = {
+      ...identity,
+      needsOnboarding: false,
+      accountStatus: "active",
+      updatedAt: Date.now(),
+    }
+    emit()
+  },
+
+  needsOnboarding(): boolean {
+    return identity.needsOnboarding
+  },
+
+  /**
+   * Soft merge from GH profile hydration — does NOT override a server-verified Pi uid
+   * or force needsOnboarding false/true (bridge owns that).
+   */
+  setFromProfile(input: {
+    userId?: string | null
+    username?: string | null
+    displayName?: string | null
+  }) {
+    const profileId = String(input.userId || "").trim()
+    const keepPi =
+      identity.verificationState === "server_verified" && Boolean(identity.piUserId)
+    const nextUserId = keepPi
+      ? identity.userId
+      : resolveCanonicalUserId({
+          piUid: identity.piUserId,
+          profileUserId: profileId || null,
+          explicitUserId: identity.userId !== LOCAL_STUDIO_USER_ID ? identity.userId : null,
+        })
+    identity = {
+      ...identity,
+      userId: nextUserId,
+      username: input.username?.trim() || identity.username,
+      displayName: input.displayName?.trim() || identity.displayName,
+      isLocalStudioId: isStudioPlaceholderId(nextUserId),
       updatedAt: Date.now(),
     }
     emit()

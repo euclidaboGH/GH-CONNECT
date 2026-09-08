@@ -502,6 +502,9 @@ export function GHConnectApp() {
     )
   }
 
+  // Onboarding gate — profile.onboarded is set true for returning Pioneers
+  // via ghc:pi-identity-ready (server /api/auth/pi → isReturning).
+  // New users keep onboarded false until completeOnboarding().
   if (!profile?.onboarded) {
     return (
       <>

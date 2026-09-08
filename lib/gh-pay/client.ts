@@ -33,6 +33,35 @@ export async function ghPayPurchase(
     }
   }
 
+  // Step-up: local app lock must be unlocked recently when PIN is configured.
+  // Does not replace Pi Wallet authorization or server approve/complete.
+  try {
+    const { canPerformSensitiveAction, hasPinConfigured, setSoftLocked } = await import(
+      "@/lib/session-security"
+    )
+    const uid = IdentityService.getCurrentUserId()
+    const step = canPerformSensitiveAction("pi_payment", {
+      pinConfigured: hasPinConfigured(uid),
+    })
+    if (!step.allowed) {
+      setSoftLocked(true)
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:security-lock-required", { detail: { action: "pi_payment" } }))
+      } catch {
+        /* */
+      }
+      return {
+        ok: false,
+        error:
+          step.reason === "locked"
+            ? "Unlock GreenHaven with your PIN, then try payment again."
+            : "Confirm your device PIN to continue with this payment.",
+      }
+    }
+  } catch {
+    /* lock module unavailable — server + Pi Wallet still protect funds */
+  }
+
   const amount =
     options?.amountPi != null && product.category === "donation"
       ? Math.min(Math.max(Number(options.amountPi), 0.01), 100)

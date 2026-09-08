@@ -36,6 +36,8 @@ export function readGhcServerEnv(): GhcServerEnv {
       "https://api.minepi.com"
     ).replace(/\/$/, ""),
     authJwtSecret: process.env.GHC_AUTH_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || null,
+    // Dev tokens require ALL of: non-production runtime AND explicit flag (or test).
+    // VERCEL_ENV=production / NODE_ENV=production / GHC_ENV=production always deny.
     allowDevAuth:
       !isProduction &&
       (process.env.GHC_ALLOW_DEV_AUTH === "1" || process.env.NODE_ENV === "test"),
