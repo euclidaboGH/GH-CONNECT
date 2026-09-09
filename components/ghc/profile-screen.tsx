@@ -31,6 +31,8 @@ import {
   formatGreenHavenIdDisplay,
   getOrCreateGreenHavenId,
 } from "@/lib/domains/greenhaven-id"
+import { shareText } from "@/lib/pi-native"
+import { PiSupporterBadge } from "./pi-supporter-badge"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -152,16 +154,26 @@ export function ProfileScreen({
   )
 
   const shareProfile = async () => {
-    const text = `${name} · ${ghDisplay} on GreenHaven`
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "GreenHaven Profile", text })
-        return
+    const text = `${name} · ${ghDisplay} on GreenHaven — connect on Pi Browser`
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "https://connect-tau.vercel.app"
+    const result = await shareText({
+      title: "GreenHaven Profile",
+      message: text,
+      url: `${origin}/`,
+    })
+    if (result.ok) {
+      if (result.method === "clipboard") {
+        ghc.addToast?.("Profile link copied", "success")
+      } else if (result.method === "pi.openShareDialog" || result.method === "pi.shareFile") {
+        ghc.addToast?.("Opened Pi share sheet", "success")
+      } else {
+        ghc.addToast?.("Share sheet opened", "success")
       }
-      await navigator.clipboard.writeText(text)
-      ghc.addToast?.("Profile link copied", "success")
-    } catch {
-      ghc.addToast?.("Share profile", "info")
+      return
+    }
+    if (!result.cancelled) {
+      ghc.addToast?.(result.error || "Could not share profile", "info")
     }
   }
 
@@ -265,6 +277,7 @@ export function ProfileScreen({
               {p.verified ? (
                 <BadgeCheck size={18} className="shrink-0 text-sky-600" aria-label="Verified" />
               ) : null}
+              <PiSupporterBadge showCtaWhenNone />
             </h2>
             <p className="mt-0.5 text-[13px] font-semibold text-muted-foreground">{handle}</p>
             <p className="mt-0.5 font-mono text-[12px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">

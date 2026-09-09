@@ -583,13 +583,24 @@ export function CommunitiesScreen() {
   }
 
   if (selected) {
-    const joined = isJoined(selected)
+    const me = IdentityService.getCurrentUserId() || "current-user"
+    const joined =
+      isJoined(selected) ||
+      selected.createdBy === me ||
+      selected.createdBy === "current-user" ||
+      Boolean(selected.groupRoles?.[me]) ||
+      Boolean(selected.groupRoles?.["current-user"])
     const rules = normalizeRules(selected.rules)
     const role =
-      selected.createdBy === "current-user"
+      selected.createdBy === me ||
+      selected.createdBy === "current-user" ||
+      selected.groupRoles?.[me] === "owner" ||
+      selected.groupRoles?.["current-user"] === "owner"
         ? "owner"
         : joined
-          ? ((selected.groupRoles?.["current-user"] as string) || "member")
+          ? ((selected.groupRoles?.[me] as string) ||
+              (selected.groupRoles?.["current-user"] as string) ||
+              "member")
           : "guest"
     return (
       <div className="flex h-full min-h-0 flex-col">
@@ -1122,10 +1133,9 @@ export function CommunitiesScreen() {
           const id = await createGroup(data)
           setShowCreate(false)
           if (id) {
-            // Domain create succeeded — optional Class D mirror for Studio list hydration
-            if (communityLocalCacheAllowed()) {
-              setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
-            }
+            // Creator is always a member — mirror join id so My list updates even when
+            // identity id drifts between "current-user" and Pi uid before rehydrate.
+            setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
             setDirectory("my")
             setSelectedCommunityId(id)
             setHubKey((k) => k + 1)

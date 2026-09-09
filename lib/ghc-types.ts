@@ -71,6 +71,44 @@ export interface Profile {
   socialLinks?: Record<string, string>
   isPublic?: boolean
   profileViews?: number
+  /**
+   * Optional profile presentation mode — same account, not a second identity.
+   * Verification badges still require profile.verified / server state.
+   */
+  profileMode?: "social" | "professional" | "business"
+  /** Optional professional layer (see lib/profile/professional-identity.ts) */
+  professional?: {
+    title?: string
+    about?: string
+    skills?: string[]
+    education?: string[]
+    experience?: Array<{
+      role: string
+      organization?: string
+      from?: string
+      to?: string | null
+      summary?: string
+    }>
+    services?: string[]
+    portfolio?: Array<{ title: string; url?: string; description?: string }>
+    locationLabel?: string
+    professionalInterests?: string[]
+    contactPreferences?: {
+      allowInAppMessage?: boolean
+      showProfessionOnSocial?: boolean
+    }
+    /** Server-authoritative only — do not set true from client alone */
+    professionalVerified?: boolean
+  }
+  business?: {
+    businessName?: string
+    category?: string
+    about?: string
+    services?: string[]
+    locationLabel?: string
+    hours?: string
+    businessVerified?: boolean
+  }
 }
 
 export interface Settings {

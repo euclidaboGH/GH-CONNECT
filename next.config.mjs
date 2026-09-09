@@ -5,11 +5,10 @@ const nextConfig = {
   },
   typescript: {
     /**
-     * Temporary: allow Vercel production compile while latent TS issues are fixed offline.
-     * Always run `npm run typecheck` locally / in CI. Do not treat this as "types are clean".
-     * ESLint remains enforced (ignoreDuringBuilds: false).
+     * Production builds must fail on TypeScript errors.
+     * Run `npm run typecheck` in CI before deploy. Do not re-enable ignoreBuildErrors.
      */
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,

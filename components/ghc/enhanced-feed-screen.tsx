@@ -28,6 +28,7 @@ import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
 import { PostComposer } from "./post-composer"
 import ProfileStorySection from "./profile-story-section"
 import { HomeCommandCentre } from "./home-command-centre"
+import { TrustDurabilityBanner } from "./trust-durability-banner"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
@@ -548,6 +549,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
             }}
           />
+          <TrustDurabilityBanner />
           <ProfileStorySection scope="feed" />
 
           {displayPosts.length === 0 ? (

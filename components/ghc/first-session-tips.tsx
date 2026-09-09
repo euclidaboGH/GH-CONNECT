@@ -1,14 +1,17 @@
 "use client"
 
 /**
- * First-session guidance — shown once after onboarding (or until dismissed).
- * Helps new users take meaningful first actions without cluttering permanent UI.
+ * First-session guidance — progressive disclosure after onboarding.
+ * One activation path: profile → community → message (not a 12-step tour).
+ *
+ * Research: first meaningful outcome under ~60s; max 3 primary tips;
+ * dismissible; modeless (does not block feed).
  */
 
 import { useEffect, useState } from "react"
-import { Compass, Users, MessageCircle, UserRound, X, Sparkles } from "lucide-react"
+import { Compass, Users, UserRound, X, Sparkles } from "lucide-react"
 
-const STORAGE_KEY = "ghc-first-session-tips-v1"
+const STORAGE_KEY = "ghc-first-session-tips-v2"
 
 export function FirstSessionTips({
   onNavigate,
@@ -20,7 +23,10 @@ export function FirstSessionTips({
   useEffect(() => {
     try {
       if (typeof window === "undefined") return
-      const dismissed = window.localStorage.getItem(STORAGE_KEY)
+      // Prefer v2 key; also honor prior dismiss so we don't re-nag
+      const dismissed =
+        window.localStorage.getItem(STORAGE_KEY) ||
+        window.localStorage.getItem("ghc-first-session-tips-v1")
       if (!dismissed) setVisible(true)
     } catch {
       setVisible(true)
@@ -38,30 +44,25 @@ export function FirstSessionTips({
 
   if (!visible) return null
 
+  // Three layers only — Identity · Social · Belonging
   const tips = [
     {
-      id: "discover" as const,
-      icon: Compass,
-      title: "Find people",
-      body: "Follow or connect with people who share your interests.",
+      id: "profile" as const,
+      icon: UserRound,
+      title: "1 · Identity",
+      body: "Photo + bio so people know who you are.",
     },
     {
       id: "communities" as const,
       icon: Users,
-      title: "Join a community",
-      body: "Belong to groups for discussion, events, and member chat.",
+      title: "2 · Belong",
+      body: "Join one community — board, events, member chat.",
     },
     {
-      id: "messages" as const,
-      icon: MessageCircle,
-      title: "Start a chat",
-      body: "Message matches and connections when you’re ready.",
-    },
-    {
-      id: "profile" as const,
-      icon: UserRound,
-      title: "Finish your profile",
-      body: "Photo, bio, and interests help others recognize you.",
+      id: "discover" as const,
+      icon: Compass,
+      title: "3 · Connect",
+      body: "Find people by interests and goals.",
     },
   ]
 
@@ -69,7 +70,7 @@ export function FirstSessionTips({
     <div
       className="mx-3 mb-3 rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-teal-50/50 p-3.5 shadow-sm dark:border-emerald-900/50 dark:from-emerald-950/50 dark:via-card dark:to-teal-950/30"
       role="region"
-      aria-label="Getting started tips"
+      aria-label="Getting started"
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -77,8 +78,10 @@ export function FirstSessionTips({
             <Sparkles size={16} aria-hidden />
           </span>
           <div>
-            <p className="text-sm font-bold text-foreground">Welcome to GreenHaven</p>
-            <p className="text-[11px] text-muted-foreground">Follow 3 · Join 1 community · Share 1 post</p>
+            <p className="text-sm font-bold text-foreground">Your first 3 steps</p>
+            <p className="text-[11px] text-muted-foreground">
+              Identity · Community · People — then explore freely
+            </p>
           </div>
         </div>
         <button
@@ -90,7 +93,7 @@ export function FirstSessionTips({
           <X size={16} />
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {tips.map(({ id, icon: Icon, title, body }) => (
           <button
             key={id}
@@ -106,11 +109,16 @@ export function FirstSessionTips({
             </span>
             <span>
               <span className="block text-[12px] font-bold text-foreground">{title}</span>
-              <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">{body}</span>
+              <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                {body}
+              </span>
             </span>
           </button>
         ))}
       </div>
+      <p className="mt-2 px-0.5 text-[10px] text-muted-foreground">
+        Wallet & rewards live under Profile → Value when you need them.
+      </p>
     </div>
   )
 }

@@ -58,6 +58,59 @@ export function SetupChecklist({
 
   const doneCount = items.filter((i) => i.done).length
   const allDone = doneCount === items.length
+  const [celebrated, setCelebrated] = useState(false)
+
+  useEffect(() => {
+    if (!allDone || dismissed) return
+    try {
+      const key = "ghc-setup-celebrated-v1"
+      if (window.localStorage.getItem(key) === "1") {
+        setCelebrated(true)
+        return
+      }
+      window.localStorage.setItem(key, "1")
+    } catch {
+      /* */
+    }
+  }, [allDone, dismissed])
+
+  // After completion: one calm confirmation, then stay out of the way
+  if (!dismissed && allDone && !celebrated) {
+    return (
+      <div
+        className={`rounded-2xl border border-emerald-300/90 bg-gradient-to-br from-emerald-50 to-teal-50/80 p-3 dark:border-emerald-800 dark:from-emerald-950/50 dark:to-teal-950/30 ${compact ? "" : "mx-3 mb-3"}`}
+        role="status"
+        aria-label="Setup complete"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
+              You’re set
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Profile basics are in place. Your progress stays with your Pi identity on this app.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            aria-label="Dismiss"
+            onClick={() => {
+              setCelebrated(true)
+              setDismissed(true)
+              try {
+                window.localStorage.setItem(DISMISS_KEY, "1")
+              } catch {
+                /* */
+              }
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (dismissed || allDone) return null
 

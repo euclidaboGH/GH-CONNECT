@@ -24,12 +24,27 @@ export type IncompleteRecoveryResult = {
   needsFulfillment?: boolean
 }
 
+function emitRecoveryEvent(result: IncompleteRecoveryResult) {
+  try {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(
+      new CustomEvent("ghc:payment-recovery", {
+        detail: result,
+      })
+    )
+  } catch {
+    /* */
+  }
+}
+
 export async function recoverIncompletePayment(
   payment: IncompletePaymentDTO
 ): Promise<IncompleteRecoveryResult> {
   const paymentId = String(payment.identifier || payment.paymentId || "").trim()
   if (!paymentId) {
-    return { ok: false, error: "paymentId missing" }
+    const fail = { ok: false, error: "paymentId missing" }
+    emitRecoveryEvent(fail)
+    return fail
   }
   const txid =
     payment.transaction && typeof payment.transaction === "object"
@@ -53,14 +68,16 @@ export async function recoverIncompletePayment(
       message?: string
     }
     if (!res.ok) {
-      return {
+      const fail = {
         ok: false,
         error: data.error || data.message || `HTTP ${res.status}`,
         paymentId,
         action: data.action,
       }
+      emitRecoveryEvent(fail)
+      return fail
     }
-    return {
+    const ok: IncompleteRecoveryResult = {
       ok: Boolean(data.ok),
       action: data.action,
       paymentId,
@@ -68,12 +85,16 @@ export async function recoverIncompletePayment(
       needsFulfillment: data.needsFulfillment,
       error: data.error,
     }
+    emitRecoveryEvent(ok)
+    return ok
   } catch (e) {
-    return {
+    const fail = {
       ok: false,
       error: e instanceof Error ? e.message : "network",
       paymentId,
     }
+    emitRecoveryEvent(fail)
+    return fail
   }
 }
 
@@ -82,4 +103,25 @@ export function onIncompletePaymentFound(
   payment: IncompletePaymentDTO
 ): Promise<IncompleteRecoveryResult> {
   return recoverIncompletePayment(payment)
+}
+
+/** Human message for recovery UI / toasts */
+export function recoveryToastMessage(result: IncompleteRecoveryResult): {
+  text: string
+  type: "success" | "error" | "info"
+} {
+  if (result.ok) {
+    return {
+      text: result.needsFulfillment
+        ? "Previous Pi payment recovered — finishing fulfillment…"
+        : "Previous incomplete Pi payment recovered successfully.",
+      type: "success",
+    }
+  }
+  return {
+    text: result.error
+      ? `Could not recover a previous Pi payment: ${result.error}`
+      : "A previous Pi payment needs attention. Try the payment again from Wallet.",
+    type: "error",
+  }
 }

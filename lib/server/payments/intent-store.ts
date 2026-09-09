@@ -231,6 +231,21 @@ export function createPaymentIntent(input: CreatePaymentIntentInput): PaymentInt
     }
   }
 
+  // Bind intent to deployment network (sandbox vs mainnet) for cross-env rejection on approve.
+  let networkEnv: "sandbox" | "mainnet" = "sandbox"
+  try {
+    const { resolvePiSandbox } = require("@/lib/pi-env") as {
+      resolvePiSandbox: (o?: { hostname?: string | null }) => boolean
+    }
+    networkEnv = resolvePiSandbox() ? "sandbox" : "mainnet"
+  } catch {
+    networkEnv =
+      process.env.NEXT_PUBLIC_PI_SANDBOX === "false" ||
+      (process.env.VERCEL_ENV === "production" && process.env.NEXT_PUBLIC_PI_SANDBOX !== "true")
+        ? "mainnet"
+        : "sandbox"
+  }
+
   const intent: PaymentIntent = {
     id: genId(),
     userId: input.userId,
@@ -241,14 +256,18 @@ export function createPaymentIntent(input: CreatePaymentIntentInput): PaymentInt
     currency: input.currency || "PI",
     status: "CREATED",
     referenceId: input.referenceId,
-    metadata: input.metadata || {},
+    metadata: {
+      ...(input.metadata || {}),
+      environment: networkEnv,
+      currency: input.currency || "PI",
+    },
     createdAt: Date.now(),
     txid: null,
     lastError: null,
     audit: [],
     idempotencyKey: input.idempotencyKey || null,
   }
-  audit(intent, "CREATED", input.userId, "Payment intent created")
+  audit(intent, "CREATED", input.userId, `Payment intent created (${networkEnv})`)
   cachePut(intent)
   void persist(intent)
   return intent

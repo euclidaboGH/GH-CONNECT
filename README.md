@@ -39,16 +39,35 @@ Copy `.env.example` → `.env.local`.
 
 See `.env.example` for variable names.
 
+## Foundation readiness (release gate)
+
+Stabilize config **before** shipping more product features.
+
+| Endpoint | Role |
+|----------|------|
+| `GET /api/health/live` | Process liveness only |
+| `GET /api/health` | Full readiness (Client ID, API key, Supabase durability, network mode) |
+| `GET /api/payments/health` | Pi payment rail readiness |
+
+On **Production**, `/api/health` returns **HTTP 503** when critical blockers exist (`status: "not_ready"`).
+
+**Ship only when** Production shows `"status": "ready"` and payments health `ready: true`.
+
+Full sandbox vs mainnet matrix and checklist: [`docs/FOUNDATION_READINESS.md`](docs/FOUNDATION_READINESS.md).
+
+In the app: **Settings → About** shows a non-secret foundation status card.
+
 ## Product pillars
 
-| Area | Notes |
-|------|--------|
-| Feed / Home | Command centre, stories, create hub |
-| Discover | Multi-intent discovery (not dating-only) |
-| Messages | DMs separate from community boards |
-| Communities | Belonging, board, events, governance |
-| Wallet / GHC | Internal utility; not Pi |
-| Pi payments | Separate rail; Testnet vs Mainnet by config |
+| Layer | Surfaces |
+|-------|----------|
+| Identity | Pi sign-in, profile, GH ID |
+| Social | Feed, Discover, Messages, Matches |
+| Belonging | Communities (board + member chat) |
+| Value | Wallet, Rewards, Membership (GHC — not π) |
+
+Home prioritizes one **next action**; Profile groups **Social · Value · Tools**.  
+See [`docs/PRODUCT_CLARITY.md`](docs/PRODUCT_CLARITY.md).
 | Marketplace | Listings; shareable to feed |
 
 Architecture notes: `docs/SOCIAL_OS_ROADMAP.md`, `docs/HUMAN_CONNECTION_OS_COMMUNITY_ROADMAP.md`, `docs/HUMAN_CONNECTION_OS_AUDIT_60.md`

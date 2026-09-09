@@ -1,30 +1,40 @@
+/**
+ * GET /api/health
+ *
+ * Foundation readiness probe (not a dumb { ok: true } liveness ping).
+ * - runtime=nodejs (same as auth/payments)
+ * - Cache-Control: no-store
+ * - 503 when production AND critical blockers (Client ID, API key, durable identity)
+ * - 200 with status=degraded|ready otherwise
+ *
+ * For process-only liveness use GET /api/health/live
+ */
+
 import { NextResponse } from "next/server"
-import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
+import {
+  evaluateReadiness,
+  readinessHttpStatus,
+} from "@/lib/server/readiness"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-export async function GET() {
-  const piKey = Boolean(
-    (process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
-  )
-  const sandbox = resolvePiSandbox()
-  const clientIdConfigured = Boolean(getPiClientId())
+export async function GET(request: Request) {
+  let hostname: string | null = null
+  try {
+    hostname = new URL(request.url).hostname
+  } catch {
+    /* */
+  }
 
-  return NextResponse.json(
-    {
-      ok: true,
-      service: "gh-connect",
-      version: "0.54.0",
-      pi: {
-        apiKeyConfigured: piKey,
-        clientIdConfigured,
-        sandbox,
-        validationPath: "/validation-key.txt",
-        signInCallback: "/signin/callback",
-      },
-      ts: new Date().toISOString(),
+  const report = evaluateReadiness({ hostname })
+  const status = readinessHttpStatus(report)
+
+  return NextResponse.json(report, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "X-GH-Readiness": report.status,
     },
-    { headers: { "Cache-Control": "no-store" } }
-  )
+  })
 }

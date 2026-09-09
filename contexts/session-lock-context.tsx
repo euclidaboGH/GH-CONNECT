@@ -279,13 +279,15 @@ export function SessionLockProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       }
       if (result.forcePiReauth) {
-        // Stay locked until Pi reauth completes — do not unlock UI
+        // Stay locked until Pi reauth completes — do not unlock UI.
+        // IMPORTANT: Do NOT IdentityService.clear() here — that resets needsOnboarding
+        // and sends completed users back through full GreenHaven registration.
+        // Soft-clear activity only; keep userId / onboarding / profile binding.
         setSecurityState("REAUTH_REQUIRED")
         setSoftLocked(true)
         setIsLocked(true)
         try {
           clearLockSessionState()
-          IdentityService.clear()
         } catch {
           /* */
         }

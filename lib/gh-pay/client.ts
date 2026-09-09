@@ -112,8 +112,13 @@ export async function ghPayPurchase(
     /* offline ok */
   }
 
-  // Server Payment Intent — binds approve/complete to authenticated order
+  // Server Payment Intent — REQUIRED before depending on Pi.createPayment when authenticated.
+  // Durable intent binds user, amount, purpose, environment; prevents unbound approve races.
   let intentId: string | undefined
+  const hasAuthHeader = Boolean(
+    (headers as Record<string, string>).Authorization ||
+      (headers as Record<string, string>).authorization
+  )
   try {
     const ir = await fetch("/api/payments/intents", {
       method: "POST",
@@ -136,9 +141,36 @@ export async function ghPayPurchase(
     if (ir.ok) {
       const ij = await ir.json()
       intentId = ij?.intent?.id
+    } else if (hasAuthHeader) {
+      const errBody = await ir.json().catch(() => ({}))
+      updateOrderStatus(orderId, "failed")
+      return {
+        ok: false,
+        error:
+          (errBody as { error?: string }).error ||
+          `Could not create payment intent (HTTP ${ir.status}). Payment was not started.`,
+      }
     }
-  } catch {
-    /* Studio without auth — U2A may still run unbound */
+  } catch (e) {
+    if (hasAuthHeader) {
+      updateOrderStatus(orderId, "failed")
+      return {
+        ok: false,
+        error:
+          e instanceof Error
+            ? `Payment intent failed: ${e.message}`
+            : "Payment intent could not be created. Payment was not started.",
+      }
+    }
+    /* Unauthenticated studio probe may still attempt unbound U2A */
+  }
+
+  if (hasAuthHeader && !intentId) {
+    updateOrderStatus(orderId, "failed")
+    return {
+      ok: false,
+      error: "Payment intent missing. Payment was not started.",
+    }
   }
 
   updateOrderStatus(orderId, "awaiting_approval")

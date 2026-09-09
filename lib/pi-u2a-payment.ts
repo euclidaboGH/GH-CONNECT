@@ -6,6 +6,8 @@
  * Works without intent for Pi Developer checklist / 0.01 π verification.
  */
 
+import { getPiSandbox } from "@/lib/pi-runtime"
+
 export type U2APaymentResult =
   | { ok: true; paymentId: string; txid: string; intentId?: string }
   | { ok: false; error: string; cancelled?: boolean }
@@ -71,10 +73,7 @@ export function probePiPayments(): PiPaymentsProbe {
     hasCreatePayment: Boolean((window as any).Pi && typeof (window as any).Pi.createPayment === "function"),
     hasInit: Boolean((window as any).Pi && typeof (window as any).Pi.init === "function"),
     userAgentHint: uaPi ? "pi_browser" : "unknown",
-    sandboxHint:
-      typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX != null
-        ? process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
-        : null,
+    sandboxHint: getPiSandbox(),
   }
 }
 
@@ -188,16 +187,12 @@ export async function startUserToAppPayment(options?: {
         : "Pi payments only work inside the Pi Browser. Open your Vercel URL there (Develop/sandbox or production app link), not Chrome or Studio alone.",
     }
   }
-  // Ensure init when available (sandbox flag from NEXT_PUBLIC_PI_SANDBOX)
+  // Single runtime init — sandbox from lib/pi-env (Preview/dev → sandbox, Production → mainnet)
   try {
-    const anyPi = Pi as { init?: (c: { version: string; sandbox?: boolean }) => Promise<void> }
-    if (typeof anyPi.init === "function") {
-      const sandbox =
-        typeof process !== "undefined" && process.env.NEXT_PUBLIC_PI_SANDBOX === "true"
-      await anyPi.init({ version: "2.0", sandbox })
-    }
+    const { ensurePiInitialized } = await import("@/lib/pi-runtime")
+    await ensurePiInitialized()
   } catch {
-    /* already initialized */
+    /* already initialized or unavailable — createPayment path may still fail below */
   }
 
   const amount = options?.amount ?? 0.01

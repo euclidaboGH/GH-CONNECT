@@ -26,6 +26,7 @@ import {
   type ShareContext,
   type ShareResult,
 } from "@/lib/share-service"
+import { shareText, shareFile, canShareFile } from "@/lib/pi-native"
 
 type DestTab = "timeline" | "story" | "private" | "group" | "link"
 
@@ -110,17 +111,31 @@ export function ShareSheet({
         result = ShareService.shareToGroupChats(shareContext, post.id, selectedIds, caption)
       } else {
         result = ShareService.copyPostLink(shareContext, post.id)
-        if (result.ok && result.link && typeof navigator !== "undefined") {
-          try {
-            if (navigator.share) {
-              await navigator.share({ title: "GreenHaven", text: "Check this post", url: result.link })
-            } else if (navigator.clipboard) {
-              await navigator.clipboard.writeText(result.link)
+        if (result.ok && result.link) {
+          const preview = String(post.content || "Shared from GreenHaven").slice(0, 160)
+          // Prefer Pi native share (openShareDialog / shareFile) → Web Share → clipboard
+          const imageUrl = post.images?.[0]
+          if (imageUrl && canShareFile()) {
+            const fileShare = await shareFile({
+              fileUrl: imageUrl,
+              title: "GreenHaven",
+              message: preview,
+              filename: "greenhaven-post.jpg",
+              mimeType: "image/jpeg",
+            })
+            if (!fileShare.ok && !fileShare.cancelled) {
+              await shareText({
+                title: "GreenHaven",
+                message: preview,
+                url: result.link,
+              })
             }
-          } catch {
-            try {
-              if (navigator.clipboard) await navigator.clipboard.writeText(result.link)
-            } catch { /* ignore */ }
+          } else {
+            await shareText({
+              title: "GreenHaven",
+              message: preview,
+              url: result.link,
+            })
           }
         }
       }

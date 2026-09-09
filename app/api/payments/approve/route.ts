@@ -78,6 +78,38 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
+      // Cross-environment guard: intent stamped at create must match this server's network mode
+      try {
+        const { resolvePiSandbox } = await import("@/lib/pi-env")
+        const serverSandbox = resolvePiSandbox()
+        const intentEnv = String(intent.metadata?.environment || "")
+        if (
+          intentEnv === "sandbox" ||
+          intentEnv === "mainnet"
+        ) {
+          const expected = serverSandbox ? "sandbox" : "mainnet"
+          if (intentEnv !== expected) {
+            transitionIntent(intent.id, "FAILED", {
+              actor: "system",
+              detail: "Cross-environment payment blocked",
+              error: `intent ${intentEnv} vs server ${expected}`,
+            })
+            return NextResponse.json(
+              {
+                ok: false,
+                error: "environment_mismatch",
+                intentEnvironment: intentEnv,
+                serverEnvironment: expected,
+                hint: "Align NEXT_PUBLIC_PI_SANDBOX, Pi Developer Portal app network, and PI_API_KEY.",
+              },
+              { status: 409 }
+            )
+          }
+        }
+      } catch {
+        /* resolver unavailable — amount + ownership checks still apply */
+      }
+
       const bound = bindProviderPayment(intent.id, paymentId, auth?.userId)
       if (!bound) {
         return NextResponse.json(

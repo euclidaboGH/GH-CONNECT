@@ -680,3 +680,24 @@ body {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+
+/* Accessibility: cut motion that feels like scroll "jacking" on mobile WebViews */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Stabilize main scroll surfaces (Pi Browser / mobile) */
+.gh-scroll-root,
+.gh-scroll-stable {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+  touch-action: pan-y;
+}

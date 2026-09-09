@@ -153,14 +153,56 @@ function ConversationItemBase({
       <button onClick={onClick} className="flex min-h-[68px] w-full items-center px-3.5 py-2.5 text-left transition active:bg-emerald-50/50 sm:px-4" aria-label={`Open conversation with ${conversation.participantName}`}>
         <div className="flex items-center gap-3">
           <div className="relative shrink-0">
-            <button type="button" onClick={(event) => { event.stopPropagation(); onOpenProfile?.() }} className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Open ${conversation.participantName}'s profile`}>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenProfile?.()
+              }}
+              className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              aria-label={
+                conversation.conversationType === "group" ||
+                (conversation as { isCommunity?: boolean }).isCommunity ||
+                (conversation as { kind?: string }).kind === "community"
+                  ? `Open community ${conversation.groupName || conversation.participantName}`
+                  : `Open ${conversation.participantName}'s profile`
+              }
+            >
               <LazyImage
-                src={conversation.participantPhoto}
-                alt={`${conversation.participantName} profile photo`}
-                className="h-12 w-12 rounded-full bg-gray-100 object-cover ring-1 ring-black/5"
+                src={
+                  conversation.groupPhoto ||
+                  conversation.participantPhoto
+                }
+                alt={
+                  conversation.conversationType === "group" ||
+                  (conversation as { isCommunity?: boolean }).isCommunity
+                    ? `${conversation.groupName || conversation.participantName} community`
+                    : `${conversation.participantName} profile photo`
+                }
+                className={
+                  conversation.conversationType === "group" ||
+                  (conversation as { isCommunity?: boolean }).isCommunity ||
+                  (conversation as { kind?: string }).kind === "community"
+                    ? "h-12 w-12 rounded-xl bg-emerald-50 object-cover ring-1 ring-emerald-200/80"
+                    : "h-12 w-12 rounded-full bg-gray-100 object-cover ring-1 ring-black/5"
+                }
               />
             </button>
-            <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${conversation.online ? "bg-emerald-500" : "bg-gray-300"}`} aria-label={conversation.online ? "Online" : "Offline"} />
+            {conversation.conversationType === "group" ||
+            (conversation as { isCommunity?: boolean }).isCommunity ||
+            (conversation as { kind?: string }).kind === "community" ? (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-md border-2 border-white bg-sky-500 text-[8px] font-bold text-white"
+                aria-label="Community"
+              >
+                C
+              </span>
+            ) : (
+              <span
+                className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${conversation.online ? "bg-emerald-500" : "bg-gray-300"}`}
+                aria-label={conversation.online ? "Online" : "Offline"}
+              />
+            )}
           </div>
 
           <div className="min-w-0 flex-1">

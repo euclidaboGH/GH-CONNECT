@@ -53,7 +53,16 @@ export function isCommunityMemberWithOptionalCache(
   localJoinedIds: string[] | undefined
 ): boolean {
   if (isCommunityMemberDomain(row, viewerId)) return true
-  if (!communityLocalCacheAllowed()) return false
+  // Creator / owner markers (handles current-user → Pi uid drift after create)
+  if (row?.createdBy && (row.createdBy === viewerId || row.createdBy === "current-user")) {
+    return true
+  }
+  if (row?.groupRoles) {
+    const r = row.groupRoles[viewerId] || row.groupRoles["current-user"]
+    if (r && MEMBER_STATES.has(String(r).toLowerCase())) return true
+  }
+  // Allow localJoined so "My communities" updates immediately after create
+  // (not Studio-only — creator session needs this when identity id drifts).
   if (!row?.id || !localJoinedIds?.length) return false
   return localJoinedIds.includes(row.id)
 }

@@ -265,6 +265,7 @@ export function createCommunityDomain(deps: {
             // Canonical markers — community org + linked chat channel is this conversation
             kind: "community",
             communityId: id,
+            isCommunity: true,
           } as Conversation
           return { community }
         },

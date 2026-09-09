@@ -33,7 +33,7 @@ export function SessionLockGate({ children }: { children: React.ReactNode }) {
       <PinSheet
         mode="setup"
         title="Protect this device"
-        subtitle={`Create a ${PIN_MIN_LEN}–${PIN_MAX_LEN} digit PIN. After ${Math.round(idleLockMs / 60000)} minutes idle, GreenHaven will ask for it — like a banking app. Your Pi account stays the real identity.`}
+        subtitle={`Create a ${PIN_MIN_LEN}–${PIN_MAX_LEN} digit PIN. After ${Math.round(idleLockMs / 60000)} min idle we’ll ask for it to unlock this device — not to log you out of Pi. Your Pi account remains the real identity.`}
         primaryLabel="Save PIN"
         onSubmit={async (pin) => {
           const r = await configurePin(pin)
@@ -49,32 +49,24 @@ export function SessionLockGate({ children }: { children: React.ReactNode }) {
     return (
       <PinSheet
         mode="unlock"
-        title="Session locked"
+        title="Unlock this device"
         subtitle={
           pinConfigured
-            ? "Enter your GreenHaven PIN to continue. This protects your account if someone else picks up your phone."
-            : "This session was locked for safety. Sign in again with Pi Network."
+            ? "Enter your GreenHaven PIN to continue on this phone. You are not logged out — this only unlocks the app, like a banking app lock."
+            : "This device was locked for safety. Confirm with Pi Network to continue. Your profile and onboarding stay saved."
         }
-        primaryLabel={pinConfigured ? "Unlock" : "Sign in with Pi"}
+        primaryLabel={pinConfigured ? "Unlock device" : "Continue with Pi"}
         onSubmit={async (pin) => {
           if (!pinConfigured) {
-            try {
-              IdentityService.clear()
-            } catch {
-              /* */
-            }
+            // Re-auth with Pi without wiping identity / onboarding flags
             void reinitialize()
             return { ok: true }
           }
           return unlockWithPin(pin)
         }}
-        secondaryLabel="Use Pi sign-in instead"
+        secondaryLabel="Use Pi instead"
         onSecondary={() => {
-          try {
-            IdentityService.clear()
-          } catch {
-            /* */
-          }
+          // Do not IdentityService.clear() — preserves onboarded profile after PIN unlock path
           void reinitialize()
         }}
       />

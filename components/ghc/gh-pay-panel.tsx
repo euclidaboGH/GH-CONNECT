@@ -19,6 +19,7 @@ import {
   Loader2,
   CheckCircle2,
 } from "lucide-react"
+import { classifyPaymentError } from "@/lib/pi-payment-errors"
 import {
   isPiPaymentsAvailable,
   waitForPiPayments,
@@ -84,6 +85,8 @@ export function GhPayPanel({
   const [verified, setVerified] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lastProductId, setLastProductId] = useState<string | null>(null)
+  const [lastLabel, setLastLabel] = useState<string | null>(null)
   const [orders, setOrders] = useState<GhPayOrder[]>([])
   const [inPi, setInPi] = useState(false)
   const [piProbe, setPiProbe] = useState<ReturnType<typeof probePiPayments> | null>(null)
@@ -129,6 +132,8 @@ export function GhPayPanel({
   const runProduct = useCallback(
     async (productId: string, label: string) => {
       setError(null)
+      setLastProductId(productId)
+      setLastLabel(label)
       let ready = isPiPaymentsAvailable()
       if (!ready) {
         notify("Connecting to Pi…", "info")
@@ -142,7 +147,7 @@ export function GhPayPanel({
           ? "Pi is present but payments are not ready yet. Wait a moment, then try again. Confirm this URL is opened inside the Pi Browser (not Chrome/Safari)."
           : "Pi payments need the Pi Browser. Open this same Vercel URL from inside the Pi Browser app (Develop → your app, or the production link). GHC stays separate from π."
         setError(msg)
-        notify(msg, "error")
+        notify(classifyPaymentError(msg).title, "error")
         return
       }
       setBusy(productId)
@@ -162,11 +167,11 @@ export function GhPayPanel({
         }
         const msg = result.error || "Payment failed"
         setError(msg)
-        notify(msg, "error")
+        notify(classifyPaymentError(msg).title, "error")
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Payment failed"
         setError(msg)
-        notify(msg, "error")
+        notify(classifyPaymentError(msg).title, "error")
       } finally {
         setBusy(null)
       }
@@ -309,12 +314,38 @@ export function GhPayPanel({
       )}
 
       {error ? (
-        <div className="mt-2 space-y-1" role="alert">
-          <p className="text-[11px] font-medium text-rose-600">{error}</p>
+        <div
+          className="mt-2 space-y-2 rounded-xl border border-rose-200/80 bg-rose-50/80 p-2.5 dark:border-rose-900/50 dark:bg-rose-950/30"
+          role="alert"
+        >
+          {(() => {
+            const human = classifyPaymentError(error)
+            return (
+              <>
+                <p className="text-[12px] font-bold text-rose-800 dark:text-rose-200">
+                  {human.title}
+                </p>
+                <p className="text-[11px] leading-snug text-rose-700/90 dark:text-rose-200/90">
+                  {human.body}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{human.actionHint}</p>
+                {human.retryable && lastProductId ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(busy)}
+                    onClick={() => void runProduct(lastProductId, lastLabel || "Payment")}
+                    className="mt-1 rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-800 disabled:opacity-60"
+                  >
+                    {busy ? "Retrying…" : "Retry payment"}
+                  </button>
+                ) : null}
+              </>
+            )
+          })()}
           {piProbe ? (
             <p className="text-[10px] text-muted-foreground">
-              Pi bridge={piProbe.hasWindowPi ? "yes" : "no"} · createPayment=
-              {piProbe.hasCreatePayment ? "yes" : "no"} · UA={piProbe.userAgentHint}
+              Diagnostic: bridge={piProbe.hasWindowPi ? "yes" : "no"} · createPayment=
+              {piProbe.hasCreatePayment ? "yes" : "no"}
             </p>
           ) : null}
         </div>

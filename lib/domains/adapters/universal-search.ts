@@ -12,6 +12,11 @@ import { searchDiscoveryObjects } from "@/lib/domains/adapters/multi-object-disc
 import type { ViewerDiscoveryContext } from "@/lib/domains/adapters/discovery-adapter"
 import type { RawDiscoveryCandidate } from "@/lib/domains/adapters/discovery-adapter"
 import { resolveBlockedIds } from "@/lib/block-enforcement"
+import {
+  scoreDocument,
+  isSearchVisible,
+  type RankableDocument,
+} from "@/lib/search/unified-search-engine"
 
 export type UniversalSearchCategory =
   | "all"
@@ -146,14 +151,48 @@ export function runUniversalSearch(
         const life = String((c as any).lifecycle || "active").toLowerCase()
         if (life === "draft" || life === "archived") continue
       }
-      if (!matchesQuery(c, q)) continue
+      if (!matchesQuery(c, q) && q.length > 0) {
+        // Allow typo-tolerant path via unified scorer
+        const doc: RankableDocument = {
+          id: c.id,
+          kind: c.kind === "person" ? "person" : (c.kind as RankableDocument["kind"]),
+          title: c.displayName || "",
+          body: c.subtitle || "",
+          verified: Boolean((c as any).verified),
+          visibility: c.kind === "community" ? String((c as any).privacy || "public") : "public",
+          authorId: c.kind === "person" ? c.id : undefined,
+        }
+        if (scoreDocument(doc, q) <= 0) continue
+      }
+      // Privacy gate (blocks already applied; enforce visibility)
+      const privacyDoc: RankableDocument = {
+        id: c.id,
+        kind: c.kind === "person" ? "person" : (c.kind as RankableDocument["kind"]),
+        title: c.displayName || "",
+        visibility: c.kind === "community" ? String((c as any).privacy || "public") : "public",
+        authorId: c.kind === "person" ? c.id : undefined,
+        verified: Boolean((c as any).verified),
+      }
+      if (
+        !isSearchVisible(privacyDoc, {
+          viewerId: viewer.userId || null,
+          blockedIds: blocked,
+        })
+      ) {
+        continue
+      }
       const hit = toHit(c)
-      // Relevance: exact name prefix > explanation presence > kind priority
+      // Unified relevance (typo tolerance + partial + verified boost)
       const name = (c.displayName || "").toLowerCase()
-      let relevance = 0
-      if (q && name === q) relevance += 100
-      else if (q && name.startsWith(q)) relevance += 50
-      else if (q && name.includes(q)) relevance += 25
+      const doc: RankableDocument = {
+        id: c.id,
+        kind: c.kind === "person" ? "person" : (c.kind as RankableDocument["kind"]),
+        title: c.displayName || "",
+        body: [c.subtitle, hit.explanation].filter(Boolean).join(" "),
+        aliases: name !== (c.displayName || "").toLowerCase() ? [name] : undefined,
+        verified: Boolean((c as any).verified),
+      }
+      let relevance = scoreDocument(doc, q)
       if (hit.explanation) relevance += 5
       if (c.kind === "community") relevance += Math.min(10, Number((c as any).memberCount || 0) * 0.1)
       if (c.kind === "event") relevance += 3

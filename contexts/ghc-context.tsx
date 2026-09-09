@@ -554,13 +554,52 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         }
         // Server-authoritative onboarding (Phase 2A):
         // profile.onboarded is UI/cache only — never security proof.
-        // When serverVerified, durable server mapping wins over local SDK state.
+        // When serverVerified AND durable, server mapping wins.
+        // If the user already completed local profile registration this session,
+        // do not force them back through onboarding solely because a non-durable
+        // (memory) identity store still has needsOnboarding=true after PIN unlock / Pi reinit.
         if (d.serverVerified) {
-          if (d.isReturning === true || d.needsOnboarding === false) {
+          if (
+            d.onboardingStatus === "complete" ||
+            d.isReturning === true ||
+            d.needsOnboarding === false
+          ) {
             profile.onboarded = true
-          } else if (d.needsOnboarding === true) {
-            // Force onboarding when server says incomplete (even if local cache was true)
-            profile.onboarded = false
+          } else if (d.onboardingStatus === "required" || d.needsOnboarding === true) {
+            let alreadyLocal =
+              profile.onboarded === true ||
+              (typeof profile.displayName === "string" &&
+                profile.displayName.trim().length > 0 &&
+                Array.isArray(profile.photos) &&
+                (profile.photos as unknown[]).length > 0)
+            // Also consult local profile store (PIN unlock / cold start race)
+            if (!alreadyLocal) {
+              try {
+                const { findCompletedLocalProfileForUser, isCompletedProfileShape } =
+                  require("@/lib/onboarding-local") as typeof import("@/lib/onboarding-local")
+                if (isCompletedProfileShape(profile as never)) alreadyLocal = true
+                const found = findCompletedLocalProfileForUser({
+                  userId: String(d.uid || profile.id || ""),
+                  username: d.username || (profile.username as string) || null,
+                })
+                if (found) {
+                  alreadyLocal = true
+                  // Merge stable fields so UI is not empty
+                  if (!profile.displayName && found.displayName) profile.displayName = found.displayName
+                  if ((!profile.photos || (profile.photos as unknown[]).length === 0) && found.photos) {
+                    profile.photos = found.photos
+                  }
+                  if (!profile.interests && found.interests) profile.interests = found.interests
+                }
+              } catch {
+                /* */
+              }
+            }
+            if (!alreadyLocal) {
+              profile.onboarded = false
+            } else {
+              profile.onboarded = true
+            }
           }
         }
         return { ...prev, profile: profile as typeof prev.profile }

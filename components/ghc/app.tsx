@@ -5,6 +5,7 @@ import { IdentityService } from "@/lib/identity/identity-service"
 
 import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
 import { useGHCShell, useGHCProfile, useGHCDiscovery } from "@/contexts/ghc-context"
+import { usePiAuth } from "@/contexts/pi-auth-context"
 import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
@@ -12,6 +13,7 @@ import { ConsentGate } from "./consent-gate"
 import { BrandLogo } from "./brand-logo"
 import { ThemeApplier } from "./theme-applier"
 import { OfflineBanner } from "./offline-banner"
+import { PaymentRecoveryListener } from "./payment-recovery-listener"
 import { afterFirstPaint } from "@/lib/mobile-performance"
 import { closeAllActionSheets } from "./action-sheet"
 import { dispatchCloseTransientUI } from "@/lib/transient-ui"
@@ -228,6 +230,7 @@ export function GHConnectApp() {
   const { ready, tab, setTab, toasts, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
+  const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
   const [connectionRequestBadge, setConnectionRequestBadge] = useState(0)
   useEffect(() => {
     const refresh = () => {
@@ -515,10 +518,44 @@ export function GHConnectApp() {
     )
   }
 
-  // Onboarding gate — profile.onboarded is set true for returning Pioneers
-  // via ghc:pi-identity-ready (server /api/auth/pi → isReturning).
-  // New users keep onboarded false until completeOnboarding().
-  if (!profile?.onboarded) {
+  // Onboarding gate — never force registration for users with a completed local profile
+  // (returning Pioneer after PIN unlock / non-durable identity memory).
+  const profileLooksComplete =
+    profile?.onboarded === true ||
+    (typeof profile?.displayName === "string" &&
+      profile.displayName.trim().length > 0 &&
+      Array.isArray(profile?.photos) &&
+      (profile.photos?.length ?? 0) > 0)
+
+  const effectiveOnboarding = profileLooksComplete
+    ? "complete"
+    : piOnboardingStatus !== "unknown"
+      ? piOnboardingStatus
+      : profile?.onboarded === false && authLifecycle.serverVerified
+        ? "required"
+        : "unknown"
+
+  if (effectiveOnboarding === "unknown") {
+    return (
+      <>
+        {themeLayer}
+        <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050a08] px-6">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.18)_0%,transparent_60%)]" />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="relative">
+              <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
+              <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+            </div>
+            <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
+            <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
+            <p className="mt-1 text-[11px] text-white/40">Confirming your GreenHaven identity…</p>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (effectiveOnboarding === "required") {
     return (
       <>
         {themeLayer}
@@ -613,6 +650,7 @@ export function GHConnectApp() {
       data-nav-in-flow="true"
     >
       <OfflineBanner />
+      <PaymentRecoveryListener />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"

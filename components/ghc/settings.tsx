@@ -33,6 +33,8 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
 import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
+import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
+import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -293,9 +295,14 @@ export function SettingsScreen({
             <ChevronLeft size={24} />
           </button>
           <h2 className="text-[18px] font-bold">About GreenHaven</h2>
-          <p className="text-[12px] text-muted-foreground">Version 0.36</p>
+          <p className="text-[12px] text-muted-foreground">Version 0.56</p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
+          <FoundationStatusCard />
+          <div className="rounded-xl border border-border bg-muted/30 p-3">
+            <p className="text-[12px] font-bold text-foreground">Pi Directory staking</p>
+            <PiStakingStatusNote className="mt-1" />
+          </div>
           <div className="space-y-4 text-[15px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.about}</div>
         </div>
       </div>

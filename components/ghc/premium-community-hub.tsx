@@ -25,7 +25,9 @@ import {
   VolumeX,
   Timer,
   MessageCircle,
+  Share2,
 } from "lucide-react"
+import { shareText } from "@/lib/pi-native"
 import {
   AnnouncementCard,
   PollCard,
@@ -414,6 +416,36 @@ export function PremiumCommunityHub({
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0 flex-1" />
+            <button
+              type="button"
+              onClick={() => {
+                const origin =
+                  typeof window !== "undefined"
+                    ? window.location.origin
+                    : "https://connect-tau.vercel.app"
+                void shareText({
+                  title: community.name || "GreenHaven Community",
+                  message: `Join ${community.name || "this community"} on GreenHaven — board, events, and member chat.`,
+                  url: `${origin}/`,
+                }).then((r) => {
+                  try {
+                    if (r.ok && r.method === "clipboard") {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:toast", {
+                          detail: { message: "Community link copied", type: "success" },
+                        })
+                      )
+                    }
+                  } catch {
+                    /* */
+                  }
+                })
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm hover:bg-black/50"
+              aria-label="Share community"
+            >
+              <Share2 size={16} />
+            </button>
             {community.role && community.role !== "guest" && (
               <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${ROLE_BADGE[community.role] || ROLE_BADGE.member}`}>
                 {community.role}

@@ -23,7 +23,8 @@ import {
   createFeedSeam,
 } from "@/lib/domains/adapters/ghc-context-seams"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
-import { Users, MessagesSquare, Compass } from "lucide-react"
+import { Users, MessagesSquare, Compass, ArrowRight, Sparkles } from "lucide-react"
+import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
 // community home strip
 
 function timeGreeting(now = new Date()): string {
@@ -171,6 +172,21 @@ export function HomeCommandCentre({
       ? `${needAttention.data.length} need attention`
       : inbox.emptyInboxState().description
 
+  const attentionCount =
+    needAttention.ok && Array.isArray(needAttention.data) ? needAttention.data.length : 0
+  const friendsOrFollowing =
+    summary.ok
+      ? (summary.data.friendsCount || 0) + (summary.data.followingCount || 0)
+      : 0
+  const nextAction = resolveHomeNextAction({
+    profileCompletionPercent: completion,
+    messagesNeedingAttention: attentionCount,
+    myCommunitiesCount: myCommunities.length,
+    friendsOrFollowingCount: friendsOrFollowing,
+    hasDisplayName: Boolean(profile?.displayName?.trim()),
+    hasPhoto: Boolean(avatar),
+  })
+
   return (
     <section className="space-y-2.5" aria-label="Home command centre">
       <header className="flex items-center gap-2.5 px-0.5">
@@ -189,18 +205,54 @@ export function HomeCommandCentre({
             {greet}, {name}
           </p>
           <p className="truncate text-[11px] text-muted-foreground">
-            Connect · participate · belong
+            Social · Communities · Value
             {completion !== null ? ` · profile ${completion}%` : ""}
           </p>
         </div>
       </header>
 
+      {/* One clear next step — progressive disclosure (not a feature dump) */}
+      <button
+        type="button"
+        onClick={() => {
+          if (nextAction.event) {
+            try {
+              window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} }))
+            } catch {
+              /* */
+            }
+            return
+          }
+          if (nextAction.target !== "home") goTab(nextAction.target)
+        }}
+        className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
+          nextAction.urgency === "high"
+            ? "border-emerald-300/90 bg-gradient-to-r from-emerald-50 to-teal-50/80 dark:border-emerald-800 dark:from-emerald-950/60 dark:to-teal-950/40"
+            : "border-border/60 bg-card/80 hover:border-emerald-200 dark:hover:border-emerald-800"
+        }`}
+        aria-label={`${nextAction.title}. ${nextAction.cta}`}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+          <Sparkles className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12px] font-bold text-foreground">{nextAction.title}</span>
+          <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+            {nextAction.body}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+          {nextAction.cta}
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </span>
+      </button>
+
       <DailyRewardHomeExperience />
 
-      {/* Command-centre foundation — real session signals only */}
-      <div className="grid grid-cols-3 gap-1.5" role="region" aria-label="Quick overview">
+      {/* Social layer shortcuts — flat IA, ≤2 taps from home */}
+      <div className="grid grid-cols-3 gap-1.5" role="region" aria-label="Social shortcuts">
         <MiniCard
-          title="Network"
+          title="People"
           body={networkBody}
           action="Discover"
           onAction={() => goTab("discover")}
@@ -214,14 +266,14 @@ export function HomeCommandCentre({
           icon={MessagesSquare}
         />
         <MiniCard
-          title="Discover"
+          title="Communities"
           body={
-            isDemoDataAllowed()
-              ? "Studio may show samples. Production lists real members only."
-              : "People & goals with clear reasons — not fake scores."
+            myCommunities.length > 0
+              ? `${myCommunities.length} joined · board & chat`
+              : "Join a group to belong"
           }
-          action="Explore"
-          onAction={() => goTab("discover")}
+          action={myCommunities.length > 0 ? "Open" : "Explore"}
+          onAction={() => goTab("communities")}
           icon={Compass}
         />
       </div>

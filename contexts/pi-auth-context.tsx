@@ -12,6 +12,18 @@ import { onIncompletePaymentFound } from "@/lib/pi-incomplete-payment";
 import { IdentityService } from "@/lib/identity/identity-service";
 import { buildPiSdk, createSdk } from "@/lib/pi";
 import { createLocalSdkLite, isLikelyAppStudioPreview } from "@/lib/local-pi-sdk";
+import {
+  ensurePiInitialized,
+  piAuthenticateOfficial,
+} from "@/lib/pi-runtime";
+import {
+  INITIAL_AUTH_LIFECYCLE,
+  transitionAuth,
+  onboardingFromServerFlags,
+  type AuthLifecycleState,
+  type OnboardingStatus,
+} from "@/lib/auth/auth-lifecycle";
+import { resolveClientOnboardingStatus } from "@/lib/onboarding-local";
 import type {
   Product,
   SDKLiteInstance,
@@ -119,6 +131,9 @@ interface PiAuthContextType {
   reinitialize: () => Promise<void>;
   /** Open a local session when Pi SDK is unavailable (Vercel / desktop browser) */
   continueLocalPreview: () => void;
+  /** Deterministic auth lifecycle (server verify required before READY) */
+  authLifecycle: AuthLifecycleState;
+  onboardingStatus: OnboardingStatus;
 }
 
 const PiAuthContext = createContext<PiAuthContextType | undefined>(undefined);
@@ -253,11 +268,9 @@ function humanizePiAuthError(err: unknown): string {
 
 
 /**
- * Official Pi auth path (docs):
- * 1) script tag loads window.Pi
- * 2) Pi.init({ version: "2.0", sandbox })
- * 3) Pi.authenticate(["username","payments"], onIncompletePaymentFound)
- * Backend must verify accessToken via Platform API GET /me — never trust client uid alone.
+ * Official Pi auth path via unified pi-runtime:
+ * ensurePiInitialized (once) → Pi.authenticate
+ * Backend must still verify accessToken via Platform API GET /me.
  */
 async function officialPiAuthenticate(): Promise<{
   uid: string
@@ -267,62 +280,14 @@ async function officialPiAuthenticate(): Promise<{
   if (typeof window === "undefined") {
     throw new Error("No window")
   }
-
-  // Ensure SDK global
-  if (typeof (window as any).Pi === "undefined") {
-    await waitForWindowPi(12000, 200)
+  try {
+    await ensurePiInitialized()
+  } catch {
+    // Fallback wait if script race
+    await waitForWindowPi(8000, 200)
+    await ensurePiInitialized()
   }
-  if (typeof (window as any).Pi === "undefined") {
-    try {
-      await loadScript(PI_NETWORK_CONFIG.SDK_URL, PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000)
-      await waitForWindowPi(5000, 200)
-    } catch {
-      /* continue to final check */
-    }
-  }
-  const Pi = (window as any).Pi
-  if (!Pi) {
-    throw new Error(
-      "Pi SDK (window.Pi) is not available. Confirm pi-sdk.js loaded and open the app from Pi Browser / Sandbox."
-    )
-  }
-
-  if (typeof Pi.init === "function") {
-    await Pi.init({
-      version: "2.0",
-      sandbox: Boolean(PI_NETWORK_CONFIG.SANDBOX),
-    })
-  }
-
-  if (typeof Pi.authenticate !== "function") {
-    throw new Error("Pi.authenticate is not available on this host")
-  }
-
-  const authResult = await Pi.authenticate(
-    ["username", "payments"],
-    (payment: unknown) => {
-      void onIncompletePaymentFound(
-        payment as {
-          identifier?: string
-          paymentId?: string
-          transaction?: { txid?: string } | null
-        }
-      )
-    }
-  )
-
-  const resolvedUid = authResult?.user?.uid != null ? String(authResult.user.uid) : ""
-  if (!resolvedUid) {
-    throw new Error("Pi authentication did not return a user id")
-  }
-  const username = authResult?.user?.username ? String(authResult.user.username) : null
-  const accessToken = authResult?.accessToken ? String(authResult.accessToken) : null
-
-  return {
-    uid: resolvedUid,
-    username,
-    accessToken,
-  }
+  return piAuthenticateOfficial(["username", "payments"])
 }
 
 
@@ -361,6 +326,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   const [restoredPurchases, setRestoredPurchases] = useState<
     UserPurchaseBalance[] | null
   >(null);
+  const [authLifecycle, setAuthLifecycle] = useState<AuthLifecycleState>(INITIAL_AUTH_LIFECYCLE);
 
   const fetchProducts = async (sdkInstance: SDKLiteInstance): Promise<void> => {
     try {
@@ -375,9 +341,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   const initialize = async () => {
     setHasError(false);
     setRestoredPurchases(null);
+    setAuthLifecycle(INITIAL_AUTH_LIFECYCLE);
     try {
       // 1) App Studio parent credentials (iframe)
       setAuthMessage("Connecting to Pi Network...");
+      setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
       const parentCredentials = await requestParentCredentials();
       if (parentCredentials?.accessToken) {
         setAuthMessage("Authenticated via App Studio...");
@@ -402,7 +370,13 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       try {
         await loadPiSDK();
         setAuthMessage("Authenticating with Pi...");
+        setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
         const identity = await officialPiAuthenticate();
+        setAuthLifecycle((s) =>
+          transitionAuth(s, "PI_AUTHENTICATED", {
+            piUid: identity.uid,
+          })
+        );
 
         // Strict compliance: never treat client uid as final.
         // Verify accessToken with Platform GET /me via our backend, then map to GH identity.
@@ -411,10 +385,12 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         let isReturning = false
         let ghUserId = identity.uid
         let verifiedUsername = identity.username
+        let onboardingStatus: OnboardingStatus = "unknown"
 
         if (identity.accessToken) {
           try {
             setAuthMessage("Verifying Pi identity with server...");
+            setAuthLifecycle((s) => transitionAuth(s, "SERVER_VERIFYING"));
             const bridgeRes = await fetch("/api/auth/pi", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -449,6 +425,28 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        onboardingStatus = onboardingFromServerFlags({
+          serverVerified,
+          needsOnboarding,
+          isReturning,
+        })
+        // Returning-user fix: if server identity is non-durable / lost onboardingCompleted
+        // but this device already has a completed GreenHaven profile, do not force registration.
+        if (serverVerified && onboardingStatus === "required") {
+          const resolved = resolveClientOnboardingStatus({
+            serverVerified,
+            needsOnboarding,
+            isReturning,
+            userId: ghUserId,
+            username: verifiedUsername,
+          })
+          if (resolved === "complete") {
+            onboardingStatus = "complete"
+            isReturning = true
+            needsOnboarding = false
+          }
+        }
+
         IdentityService.setFromPi({
           uid: ghUserId,
           username: verifiedUsername,
@@ -457,6 +455,39 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           verifiedByServer: serverVerified,
           needsOnboarding: serverVerified ? needsOnboarding : true,
         });
+
+        if (serverVerified) {
+          setAuthLifecycle((s) =>
+            transitionAuth(s, "SERVER_VERIFIED", {
+              serverVerified: true,
+              ghUserId,
+              piUid: identity.uid,
+              onboardingStatus,
+            })
+          )
+          setAuthLifecycle((s) =>
+            transitionAuth(s, "SESSION_READY", {
+              sessionReady: true,
+              serverVerified: true,
+              onboardingStatus,
+            })
+          )
+          setAuthLifecycle((s) =>
+            transitionAuth(s, "ONBOARDING_STATUS_RESOLVED", {
+              onboardingStatus,
+              serverVerified: true,
+              sessionReady: true,
+            })
+          )
+          setAuthLifecycle((s) =>
+            transitionAuth(s, "READY", {
+              onboardingStatus,
+              serverVerified: true,
+              sessionReady: true,
+            })
+          )
+        }
+
         try {
           window.dispatchEvent(
             new CustomEvent("ghc:pi-identity-ready", {
@@ -467,6 +498,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 serverVerified,
                 needsOnboarding,
                 isReturning,
+                onboardingStatus,
               },
             })
           );
@@ -594,6 +626,13 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       console.error("SDKLite initialization failed:", err);
       setHasError(true);
       setAuthMessage(humanizePiAuthError(err));
+      setAuthLifecycle((s) =>
+        transitionAuth(s, "ERROR", {
+          error: humanizePiAuthError(err),
+          onboardingStatus: "unknown",
+          serverVerified: false,
+        })
+      );
     }
   };
 
@@ -616,6 +655,15 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     setProducts([]);
     setRestoredPurchases([]);
     setIsAuthenticated(true);
+    // Local preview is not server-verified; mark onboarding required so UI can proceed
+    // without infinite "unknown" wait (production Pi path still uses server flags).
+    setAuthLifecycle((s) =>
+      transitionAuth(s, "READY", {
+        onboardingStatus: "required",
+        serverVerified: false,
+        sessionReady: false,
+      })
+    );
   };
 
   useEffect(() => {
@@ -662,6 +710,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     restoredPurchases,
     reinitialize: initialize,
     continueLocalPreview,
+    authLifecycle,
+    onboardingStatus: authLifecycle.onboardingStatus,
   };
 
   return (
