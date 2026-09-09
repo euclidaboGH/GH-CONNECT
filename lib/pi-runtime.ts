@@ -186,7 +186,7 @@ export async function piAuthenticateOfficial(
         transaction?: { txid?: string } | null
       }
     )
-  }))
+  })
 
   const uid = authResult?.user?.uid != null ? String(authResult.user.uid) : ""
   if (!uid) {
