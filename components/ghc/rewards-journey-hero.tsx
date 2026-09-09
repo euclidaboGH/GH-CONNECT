@@ -82,6 +82,20 @@ export function RewardsJourneyHero({
       }
       const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
       const day = data.cycleDay ?? data.day ?? ""
+      // Server ledger → client wallet (no optimistic credit)
+      try {
+        const { syncWalletAfterServerClaim } = await import(
+          "@/lib/domains/adapters/wallet-sync-after-claim"
+        )
+        await syncWalletAfterServerClaim({
+          userId,
+          claimedAmount: Number(amt) || null,
+          alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
+          referenceId: data.referenceId != null ? String(data.referenceId) : null,
+        })
+      } catch {
+        /* keep last known balance */
+      }
       ghc.addToast?.(
         data.alreadyClaimed || data.idempotent
           ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`

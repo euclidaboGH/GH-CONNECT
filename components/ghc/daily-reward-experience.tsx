@@ -268,11 +268,24 @@ export function DailyRewardFeedCard({
         setTick((t) => t + 1)
         return
       }
-      // Local streak UX only after server success
+      // Local streak UX only after server success (does not invent wallet balance)
       const res = claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
+      // Re-hydrate wallet from server ledger — never optimistically add GHC
+      try {
+        const { syncWalletAfterServerClaim } = await import(
+          "@/lib/domains/adapters/wallet-sync-after-claim"
+        )
+        await syncWalletAfterServerClaim({
+          userId,
+          claimedAmount: server.serverAmount ?? null,
+          alreadyClaimed: server.alreadyClaimed,
+        })
+      } catch {
+        /* keep last known balance; do not fabricate */
+      }
       ghc.addToast?.(
         server.alreadyClaimed
           ? `Already claimed · ${amt} GHC`
@@ -283,7 +296,14 @@ export function DailyRewardFeedCard({
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:daily-reward-claimed", {
-            detail: { ...res, ghc: amt, cycleDay: day, server: true },
+            detail: {
+              ...res,
+              ghc: amt,
+              cycleDay: day,
+              server: true,
+              serverAmount: server.serverAmount,
+              alreadyClaimed: server.alreadyClaimed,
+            },
           })
         )
       } catch {
@@ -381,6 +401,18 @@ export function DailyRewardSheet({
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
+      try {
+        const { syncWalletAfterServerClaim } = await import(
+          "@/lib/domains/adapters/wallet-sync-after-claim"
+        )
+        await syncWalletAfterServerClaim({
+          userId,
+          claimedAmount: server.serverAmount ?? null,
+          alreadyClaimed: server.alreadyClaimed,
+        })
+      } catch {
+        /* last known balance only */
+      }
       ghc.addToast?.(
         server.alreadyClaimed
           ? `Already claimed · ${amt} GHC`
@@ -388,7 +420,17 @@ export function DailyRewardSheet({
         "success"
       )
       try {
-        window.dispatchEvent(new CustomEvent("ghc:daily-reward-claimed", { detail: res }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:daily-reward-claimed", {
+            detail: {
+              ...res,
+              ghc: amt,
+              server: true,
+              serverAmount: server.serverAmount,
+              alreadyClaimed: server.alreadyClaimed,
+            },
+          })
+        )
       } catch {
         /* */
       }

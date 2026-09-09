@@ -502,15 +502,40 @@ export async function cancelTransferRequest(
   return { ok: true }
 }
 
-/** Process-local store for Studio API when DATABASE is not configured — tests only */
+/** Process-local store for Studio API when DATABASE is not configured — tests/dev only */
 let singletonStore: GhcAuthoritativeStore | null = null
 
 export function getProcessGhcStore(): GhcAuthoritativeStore {
+  // Hard guard: never hand out process memory as ledger authority on Vercel/production
+  try {
+    // Lazy require to avoid circular import at module load
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { allowMemoryServer } = require("./http") as {
+      allowMemoryServer: () => boolean
+    }
+    if (!allowMemoryServer()) {
+      throw new Error(
+        "GHC process-memory store is disabled on this deployment. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+      )
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("GHC process-memory")) throw e
+    // If http import fails in extreme edge cases, still refuse in production-like envs
+    if (
+      process.env.VERCEL === "1" ||
+      process.env.VERCEL_ENV ||
+      process.env.NODE_ENV === "production"
+    ) {
+      throw new Error(
+        "GHC process-memory store is disabled on this deployment. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+      )
+    }
+  }
   if (!singletonStore) singletonStore = createMemoryGhcStore()
   return singletonStore
 }
 
-/** Alias used by reward-engine and payment fulfillment */
+/** Alias used by reward-engine and payment fulfillment — memory only when allowed */
 export function getGhcAuthoritativeStore(): GhcAuthoritativeStore {
   return getProcessGhcStore()
 }

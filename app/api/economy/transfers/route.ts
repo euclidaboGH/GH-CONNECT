@@ -112,7 +112,7 @@ export async function POST(request: Request) {
   if (!allowMemoryServer()) {
     return jsonErr(
       "SERVER_UNAVAILABLE",
-      "Authoritative GHC transfers require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (or DATABASE_URL) after applying migrations. Set GHC_SERVER_MEMORY=1 only for local API tests.",
+      "Authoritative GHC transfers require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (or DATABASE_URL) after applying migrations. In-memory transfers are disabled on this deployment.",
       503
     )
   }

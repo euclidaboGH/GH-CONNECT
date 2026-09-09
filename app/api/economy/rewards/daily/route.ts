@@ -61,10 +61,10 @@ export async function POST(request: Request) {
   void body.m
   void body.g
 
-  if (!allowMemoryServer() && !isDatabaseConfigured()) {
+  if (!isDatabaseConfigured() && !allowMemoryServer()) {
     return jsonErr(
       "SERVER_UNAVAILABLE",
-      "Authoritative daily rewards require GHC_SERVER_MEMORY=1 or a configured database",
+      "GHC daily rewards require SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY with ghc_execute_daily_claim_v12 applied. In-memory claims are disabled on this deployment.",
       503
     )
   }

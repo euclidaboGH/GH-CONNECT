@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   if (!allowMemoryServer()) {
     return jsonErr(
       "SERVER_UNAVAILABLE",
-      "Authoritative credit requires database or GHC_SERVER_MEMORY=1",
+      "Authoritative GHC credit requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. In-memory credit is disabled on this deployment.",
       503
     )
   }

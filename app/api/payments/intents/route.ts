@@ -74,6 +74,22 @@ export async function POST(request: Request) {
     provider: "pi",
   })
 
+  // Production must persist intent before client may create Pi payment
+  const { assertDurableWrite } = await import("@/lib/server/payments/intent-store")
+  const durable = await assertDurableWrite(intent)
+  if (!durable.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "SERVER_UNAVAILABLE",
+        message:
+          durable.error ||
+          "Payment intents require SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY with pi_payment_intents migration applied.",
+      },
+      { status: 503 }
+    )
+  }
+
   return NextResponse.json({ ok: true, intent })
 }
 

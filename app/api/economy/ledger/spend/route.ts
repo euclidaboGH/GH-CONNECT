@@ -135,7 +135,7 @@ export async function POST(request: Request) {
   if (!allowMemoryServer()) {
     return jsonErr(
       "SERVER_UNAVAILABLE",
-      "Authoritative spend requires database or GHC_SERVER_MEMORY=1",
+      "Authoritative GHC spend requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. In-memory spend is disabled on this deployment.",
       503
     )
   }

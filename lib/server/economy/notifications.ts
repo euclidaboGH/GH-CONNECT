@@ -42,7 +42,12 @@ function isDb(): boolean {
 
 function allowMemory(): boolean {
   if (isDb()) return false
-  return process.env.GHC_SERVER_MEMORY === "1" || process.env.NODE_ENV === "test"
+  // Align with economy http.allowMemoryServer — never on Vercel/production
+  if (process.env.VERCEL === "1" || process.env.VERCEL_ENV) return false
+  if (process.env.NODE_ENV === "production" || process.env.GHC_ENV === "production") {
+    return false
+  }
+  return process.env.GHC_SERVER_MEMORY === "1" || process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development"
 }
 
 function buildDedupe(

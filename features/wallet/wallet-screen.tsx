@@ -498,9 +498,25 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         void refresh()
       }
     })
+    const onClaimOrSync = () => {
+      setTick((x) => x + 1)
+      void refresh()
+    }
+    try {
+      window.addEventListener("ghc:daily-reward-claimed", onClaimOrSync)
+      window.addEventListener("ghc:wallet-synced", onClaimOrSync)
+    } catch {
+      /* */
+    }
     return () => {
       try {
         unsub?.()
+      } catch {
+        /* */
+      }
+      try {
+        window.removeEventListener("ghc:daily-reward-claimed", onClaimOrSync)
+        window.removeEventListener("ghc:wallet-synced", onClaimOrSync)
       } catch {
         /* */
       }

@@ -54,10 +54,29 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
         refresh()
       })
     )
+    const onClaimed = () => {
+      // Claim path already hydrates; refresh display from repo after event
+      refresh()
+    }
+    const onSynced = () => {
+      refresh()
+    }
+    try {
+      window.addEventListener("ghc:daily-reward-claimed", onClaimed)
+      window.addEventListener("ghc:wallet-synced", onSynced)
+    } catch {
+      /* */
+    }
     const id = setInterval(refresh, 30000)
     return () => {
       unsubs.forEach((u) => u())
       clearInterval(id)
+      try {
+        window.removeEventListener("ghc:daily-reward-claimed", onClaimed)
+        window.removeEventListener("ghc:wallet-synced", onSynced)
+      } catch {
+        /* */
+      }
     }
   }, [refresh])
 

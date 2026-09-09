@@ -14,6 +14,7 @@
     "check:jsx": "node scripts/check-jsx-safety.mjs",
     "prebuild": "node scripts/check-jsx-safety.mjs",
     "test:economy": "node scripts/test-economy-v12.mjs",
+    "test:daily-wallet": "node scripts/test-daily-claim-wallet-pipeline.mjs",
     "test:release": "node scripts/verify-production-release.mjs",
     "test:safety": "node scripts/scan-production-safety.mjs"
   },

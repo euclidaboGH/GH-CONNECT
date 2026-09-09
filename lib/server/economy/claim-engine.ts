@@ -113,6 +113,14 @@ export async function loadClaimStreakState(userId: string): Promise<ClaimStreakS
         lastIdempotencyKey: row.lastIdempotencyKey,
       }
     }
+    // Fail closed: never invent empty streak in memory when DB is configured
+    // (would allow double daily claims across Vercel instances).
+    throw new Error("STREAK_BACKEND_UNAVAILABLE")
+  }
+  // Memory only when durable DB is not configured (local/dev/test paths).
+  const { allowMemoryServer } = await import("@/lib/server/economy/http")
+  if (!allowMemoryServer()) {
+    throw new Error("STREAK_BACKEND_UNAVAILABLE")
   }
   return getClaimStreakStateMemory(userId)
 }
@@ -235,13 +243,23 @@ export async function computeDailyClaim(input: {
       ? Math.max(1, Math.floor(input.eligibleEconomicUsers))
       : await resolveEligibleEconomicUsers()
   cacheEligibleEconomicUsers(n)
-  const state = await loadClaimStreakState(input.userId)
-  return computeDailyClaimFromState({
-    userId: input.userId,
-    state,
-    now: input.now,
-    eligibleEconomicUsers: n,
-  })
+  try {
+    const state = await loadClaimStreakState(input.userId)
+    return computeDailyClaimFromState({
+      userId: input.userId,
+      state,
+      now: input.now,
+      eligibleEconomicUsers: n,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "STREAK_BACKEND_UNAVAILABLE"
+    return {
+      ok: false,
+      error: msg === "STREAK_BACKEND_UNAVAILABLE" ? "SERVER_UNAVAILABLE" : msg,
+      cycleDay: 0,
+      dayKey: lagosDayKey(input.now || new Date()),
+    }
+  }
 }
 
 /**

@@ -16,7 +16,13 @@ function isDatabaseConfigured(): boolean {
 
 function allowMemoryServer(): boolean {
   if (isDatabaseConfigured()) return false
-  return process.env.GHC_SERVER_MEMORY === "1" || process.env.NODE_ENV === "test"
+  if (process.env.VERCEL === "1" || process.env.VERCEL_ENV) return false
+  if (process.env.NODE_ENV === "production" || process.env.GHC_ENV === "production") return false
+  return (
+    process.env.GHC_SERVER_MEMORY === "1" ||
+    process.env.NODE_ENV === "test" ||
+    process.env.NODE_ENV === "development"
+  )
 }
 
 export type PublicIdentity = {

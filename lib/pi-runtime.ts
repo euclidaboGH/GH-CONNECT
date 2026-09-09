@@ -172,13 +172,16 @@ export async function piAuthenticateOfficial(
     throw new Error("Pi.authenticate is not available on this host")
   }
 
-  const authResult = (await (Pi.authenticate as (
+  type PiAuthFn = (
     scopes: string[],
     onIncomplete: (payment: unknown) => void
   ) => Promise<{
     user?: { uid?: string | number; username?: string }
     accessToken?: string
-  }>))(scopes, (payment: unknown) => {
+  }>
+
+  const authenticate = Pi.authenticate as PiAuthFn
+  const authResult = await authenticate(scopes, (payment: unknown) => {
     void onIncompletePaymentFound(
       payment as {
         identifier?: string

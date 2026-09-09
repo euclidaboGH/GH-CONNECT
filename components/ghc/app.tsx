@@ -308,9 +308,11 @@ export function GHConnectApp() {
     const onStartChat = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
       const userId = String(d.userId || "").trim()
+      const userName = String(d.userName || d.name || d.displayName || "Pioneer").trim()
+      const userPhoto = String(d.userPhoto || d.photo || d.avatar || "").trim()
       if (userId && startConversation) {
         try {
-          void startConversation(userId)
+          void startConversation(userId, userName || "Pioneer", userPhoto || "")
         } catch {
           /* */
         }
