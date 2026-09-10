@@ -782,15 +782,7 @@ export function GHConnectApp() {
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
-                aria-label={
-                  id === "matches" && connectionRequestBadge > 0
-                    ? isActive
-                      ? `${label}, ${connectionRequestBadge} connection requests, current tab`
-                      : `Go to ${label}, ${connectionRequestBadge} connection requests`
-                    : isActive
-                      ? `${label}, current tab`
-                      : `Go to ${label}`
-                }
+                aria-label={isActive ? `${label}, current tab` : `Go to ${label}`}
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
@@ -812,18 +804,11 @@ export function GHConnectApp() {
                     <Icon
                       size={id === "create" ? 22 : 20}
                       strokeWidth={id === "create" ? 2.5 : isActive ? 2.5 : 2}
-                      fill={isActive && id === "matches" ? "currentColor" : "none"}
+                      fill="none"
                       aria-hidden="true"
                       className={id === "create" ? "text-white" : undefined}
                     />
-                    {id === "matches" && connectionRequestBadge > 0 ? (
-                      <span
-                        className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal-600 px-1 text-[9px] font-bold text-white"
-                        aria-label={`${connectionRequestBadge} connection requests`}
-                      >
-                        {connectionRequestBadge > 9 ? "9+" : connectionRequestBadge}
-                      </span>
-                    ) : null}
+                    {/* Connection-request badge was for matches tab; primary NAV_ITEMS has no matches id */}
                   </span>
                 </span>
                 <span
