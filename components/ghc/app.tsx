@@ -431,12 +431,14 @@ export function GHConnectApp() {
         void import("./message-screen")
         void import("./profile-screen")
       }
-      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-        ;(window as any).requestIdleCallback(warm, { timeout: 1800 })
+      // Use Window typing explicitly — `in` narrowing can yield never on window.setTimeout
+      const w: Window = window
+      if (typeof w.requestIdleCallback === "function") {
+        w.requestIdleCallback(warm, { timeout: 1800 })
       } else {
-        window.setTimeout(warm, 400)
+        w.setTimeout(warm, 400)
       }
-      window.setTimeout(() => {
+      w.setTimeout(() => {
         void import("./settings")
         void import("@/features/wallet")
       }, 2200)
