@@ -11,7 +11,7 @@ export const CURRENT_USER_ID = "current-user"
 export function isOwnAuthor(
   authorId?: string | null,
   authorName?: string | null,
-  profile?: Pick<Profile, "displayName" | "id"> | null,
+  profile?: Pick<Profile, "displayName" | "id"> | Profile | null,
 ): boolean {
   if (authorId === CURRENT_USER_ID) return true
   if (profile?.id && authorId && authorId === profile.id) return true
@@ -23,18 +23,18 @@ export function isOwnAuthor(
   return false
 }
 
-export function canEditPost(authorId?: string | null, authorName?: string | null, profile?: Pick<Profile, "displayName" | "id"> | null) {
+export function canEditPost(authorId?: string | null, authorName?: string | null, profile?: Pick<Profile, "displayName" | "id"> | Profile | null) {
   return isOwnAuthor(authorId, authorName, profile)
 }
 
-export function canDeletePost(authorId?: string | null, authorName?: string | null, profile?: Pick<Profile, "displayName" | "id"> | null) {
+export function canDeletePost(authorId?: string | null, authorName?: string | null, profile?: Pick<Profile, "displayName" | "id"> | Profile | null) {
   return isOwnAuthor(authorId, authorName, profile)
 }
 
 export function canEditComment(
   commentAuthorId?: string | null,
   commentAuthorName?: string | null,
-  profile?: Pick<Profile, "displayName" | "id"> | null,
+  profile?: Pick<Profile, "displayName" | "id"> | Profile | null,
 ) {
   return isOwnAuthor(commentAuthorId, commentAuthorName, profile)
 }
@@ -44,7 +44,7 @@ export function canDeleteComment(
   commentAuthorId?: string | null,
   commentAuthorName?: string | null,
   postAuthorId?: string | null,
-  profile?: Pick<Profile, "displayName" | "id"> | null,
+  profile?: Pick<Profile, "displayName" | "id"> | Profile | null,
 ) {
   if (isOwnAuthor(commentAuthorId, commentAuthorName, profile)) return true
   if (isOwnAuthor(postAuthorId, null, profile)) return true

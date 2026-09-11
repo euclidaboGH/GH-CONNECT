@@ -41,6 +41,11 @@ export interface StoryItem {
 }
 
 export interface Profile {
+  /**
+   * Canonical user id (Pi uid / GH identity).
+   * Optional until auth hydration; ownership helpers treat missing id safely.
+   */
+  id?: string
   displayName: string
   age: number
   gender: Gender
