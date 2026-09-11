@@ -83,10 +83,13 @@ type CommunityRow = {
     pinned?: boolean
   }>
   pendingJoinRequests?: string[]
+  /** User ids invited but not yet members */
+  invitedMembers?: string[]
   groupRoles?: Record<string, string>
   isMuted?: boolean
   events?: unknown[]
   announcements?: unknown[]
+  polls?: unknown[]
 }
 
 function buildSeedCommunities(): CommunityRow[] {
@@ -673,7 +676,7 @@ export function CommunitiesScreen() {
               (c: any) =>
                 c?.id &&
                 !(selected.members || []).includes(c.id) &&
-                !((selected.invitedMembers || []) as string[]).includes(c.id)
+                !(selected.invitedMembers || []).includes(c.id)
             )
             .slice(0, 12)
             .map((c: any) => ({
