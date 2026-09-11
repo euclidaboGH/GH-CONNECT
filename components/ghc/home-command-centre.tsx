@@ -194,7 +194,6 @@ export function HomeCommandCentre({
       <header className="flex items-center gap-2.5 px-0.5">
         <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-emerald-200/70 dark:bg-emerald-950 dark:ring-emerald-800">
           {avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={avatar} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-xs font-bold text-emerald-800 dark:text-emerald-200">
@@ -394,7 +393,6 @@ export function HomeCommandCentre({
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-100 text-xs font-bold text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
                     {c.coverImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={c.coverImage} alt="" className="h-full w-full object-cover" />
                     ) : (
                       (c.name || "C").slice(0, 1)

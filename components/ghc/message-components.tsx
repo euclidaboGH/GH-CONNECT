@@ -149,7 +149,10 @@ function ConversationItemBase({
   const timestamp = conversation.lastMessageTime ? timeAgo(conversation.lastMessageTime) : ""
 
   return (
-    <div className={`group border-b border-gray-50 transition-colors ${isSelected ? "bg-emerald-50/60" : "bg-white hover:bg-gray-50"}`}>
+    <div
+      className={`group border-b border-border/40 transition-colors ${isSelected ? "bg-emerald-50/60 dark:bg-emerald-950/30" : "bg-card hover:bg-muted/40"}`}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}
+    >
       <button onClick={onClick} className="flex min-h-[68px] w-full items-center px-3.5 py-2.5 text-left transition active:bg-emerald-50/50 sm:px-4" aria-label={`Open conversation with ${conversation.participantName}`}>
         <div className="flex items-center gap-3">
           <div className="relative shrink-0">

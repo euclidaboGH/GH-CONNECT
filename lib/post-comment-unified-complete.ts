@@ -714,7 +714,8 @@ export function sanitizeCommentText(text: string): string {
     .substring(0, 5000) // Cap length
 }
 
-export default {
+const postCommentUnifiedComplete = {
+
   // Threading
   createThreadedComment,
   addReplyToComment,
@@ -766,3 +767,5 @@ export default {
   validateComment,
   sanitizeCommentText,
 }
+
+export default postCommentUnifiedComplete

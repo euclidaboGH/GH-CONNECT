@@ -320,7 +320,7 @@ export function GHConnectApp() {
           /* */
         }
       }
-      startTransition(() => setTab("messages" as any))
+      startTransition(() => setTab("messages"))
     }
     window.addEventListener("ghc:open-wallet", onWallet)
     window.addEventListener("ghc:open-rewards", onRewards)
@@ -330,7 +330,7 @@ export function GHConnectApp() {
     const onOpenCommunity = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
       const groupId = String(d.groupId || d.id || "").trim()
-      startTransition(() => setTab("communities" as any))
+      startTransition(() => setTab("communities"))
       if (!groupId) return
       window.setTimeout(() => {
         try {
@@ -482,8 +482,8 @@ export function GHConnectApp() {
       if (!raw) return
       const dest = resolveDestination(raw) || raw
       // Primary tabs → shell tab state
-      if (isPrimaryTab(dest) || NAV_IDS.includes(dest as (typeof NAV_IDS)[number])) {
-        startTransition(() => setTab(dest as any))
+      if (isPrimaryTab(dest)) {
+        startTransition(() => setTab(dest))
         return
       }
       // Overlays / aliases (wallet, marketplace, rewards, …)
@@ -807,7 +807,9 @@ export function GHConnectApp() {
                   } catch {
                     /* */
                   }
-                  startTransition(() => setTab(id as any))
+                  if (isPrimaryTab(id)) {
+                    startTransition(() => setTab(id))
+                  }
                 }}
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
@@ -908,7 +910,7 @@ export function GHConnectApp() {
         onClose={() => dismissMatchCelebration?.()}
         onContinue={() => {
           dismissMatchCelebration?.()
-          setTab("discover" as any)
+          setTab("discover")
         }}
         onMessage={() => {
           const id = matchCelebration?.userId
@@ -917,7 +919,7 @@ export function GHConnectApp() {
           dismissMatchCelebration?.()
           if (id) {
             void startConversation?.(id, name, photo)
-            setTab("messages" as any)
+            setTab("messages")
             try {
               window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
             } catch {

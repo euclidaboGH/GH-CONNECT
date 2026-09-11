@@ -214,7 +214,6 @@ export function ProfileScreen({
           aria-label="Change cover photo"
         >
           {cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={cover} alt="" className="h-full w-full object-cover" />
           ) : null}
           <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">

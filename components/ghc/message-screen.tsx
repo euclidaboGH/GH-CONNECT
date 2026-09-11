@@ -48,9 +48,14 @@ export function MessageScreen() {
     friends: [] as unknown[],
   }
 
-  const conversations = Array.isArray(rawConversations) ? (rawConversations as Conversation[]) : []
+  const conversations = useMemo(
+    () => (Array.isArray(rawConversations) ? (rawConversations as Conversation[]) : []),
+    [rawConversations],
+  )
 
   const [query, setQuery] = useState("")
+  /** Debounced query for filtering — keeps typing responsive on long inboxes */
+  const [queryDebounced, setQueryDebounced] = useState("")
   const [filter, setFilter] = useState<InboxFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
@@ -58,6 +63,12 @@ export function MessageScreen() {
   const [windowSize, setWindowSize] = useState(MESSAGE_WINDOW)
   const bottomRef = useRef<HTMLDivElement>(null)
   const markedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setQueryDebounced(query), 180)
+    return () => window.clearTimeout(handle)
+  }, [query])
+
 
   useEffect(() => {
     const onTab = (e: Event) => {
@@ -98,7 +109,7 @@ export function MessageScreen() {
   )
 
   const list = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = queryDebounced.trim().toLowerCase()
     let rows = conversations.filter((c) => c && !c.isArchived)
     if (filter === "unread") {
       rows = rows.filter((c) => Boolean(c.unread) || (c.unreadCount || 0) > 0)
@@ -119,7 +130,7 @@ export function MessageScreen() {
       if (pin !== 0) return pin
       return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
     })
-  }, [conversations, query, filter])
+  }, [conversations, queryDebounced, filter])
 
   const selected = useMemo(() => {
     if (!selectedId) return null
@@ -196,11 +207,9 @@ export function MessageScreen() {
   }, [draft, selectedId, sending, sendMessage])
 
   const goMatches = useCallback(() => {
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "matches" }))
-    } catch {
+    if (!navigateTo("matches")) {
       try {
-        window.dispatchEvent(new CustomEvent("ghc:open-matches"))
+        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "matches" }))
       } catch {
         /* */
       }
@@ -208,10 +217,12 @@ export function MessageScreen() {
   }, [])
 
   const goDiscover = useCallback(() => {
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
-    } catch {
-      /* */
+    if (!navigateTo("discover")) {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
+      } catch {
+        /* */
+      }
     }
   }, [])
 

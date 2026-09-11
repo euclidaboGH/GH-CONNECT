@@ -472,7 +472,7 @@ No results for “{debouncedQuery}”</p>
                         closeAnd(() => {
                           onSelectPerson?.(c.id)
                           try {
-                            setTab?.("discover" as any)
+                            setTab?.("discover")
                             window.dispatchEvent(
                               new CustomEvent("ghc:navigate-tab", { detail: "discover" }),
                             )

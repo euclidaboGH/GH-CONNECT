@@ -47,7 +47,14 @@ const request = async <T = any>(
     ...(init.headers as Record<string, string> | undefined),
   };
 
-  const response = await fetch(url, { ...init, headers });
+  // Bound hung requests — caller may override via init.signal
+  const signal =
+    init.signal ??
+    (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(30_000)
+      : undefined)
+
+  const response = await fetch(url, { ...init, headers, signal });
 
   const contentType = response.headers.get("content-type") || "";
   const isJson = contentType.includes("application/json");

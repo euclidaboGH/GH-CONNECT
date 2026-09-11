@@ -357,6 +357,7 @@ export function RequestGhcFlow({
                     <button
                       type="button"
                       role="option"
+                      aria-selected={payer?.id === r.id}
                       onClick={() => selectPayer(r)}
                       className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-muted/50"
                     >

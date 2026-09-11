@@ -533,7 +533,6 @@ export function Onboarding() {
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-white ring-2 ring-emerald-400/30">
                     {formData.photos[0] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={formData.photos[0]} alt="" className="h-full w-full object-cover" />
                     ) : (
                       (formData.displayName || "?").slice(0, 1).toUpperCase()

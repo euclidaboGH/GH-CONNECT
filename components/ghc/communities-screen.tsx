@@ -292,7 +292,10 @@ export function CommunitiesScreen() {
     unmuteConversation,
   } = ctx
 
-  const conversations = Array.isArray(conversationsRaw) ? conversationsRaw : []
+  const conversations = useMemo(
+    () => (Array.isArray(conversationsRaw) ? conversationsRaw : []),
+    [conversationsRaw],
+  )
   const [directory, setDirectory] = useState<DirectoryTab>("discover")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")

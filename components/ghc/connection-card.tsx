@@ -15,6 +15,26 @@ import {
 import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
 
+
+/** Safe media/location accessors for the DiscoveryCandidate discriminated union */
+function candidateAvatarUrl(candidate: DiscoveryCandidate): string | null | undefined {
+  if (candidate.kind === "person") return candidate.avatarUrl
+  if (candidate.kind === "community") return candidate.coverImage
+  return undefined
+}
+
+function candidateLocationLabel(candidate: DiscoveryCandidate): string | null | undefined {
+  if (
+    candidate.kind === "person" ||
+    candidate.kind === "event" ||
+    candidate.kind === "service"
+  ) {
+    return candidate.locationLabel
+  }
+  if (candidate.kind === "community" && candidate.region) return candidate.region
+  return undefined
+}
+
 export interface ConnectionCardProps {
   candidate: DiscoveryCandidate
   connectionState?: ConnectionUiState
@@ -34,6 +54,8 @@ export function ConnectionCard({
   const reasonText = formatReasonsForUi(candidate, 2)
   const stateLabel = connectionStateLabel(connectionState)
   const initials = (candidate.displayName || "M").slice(0, 1).toUpperCase()
+  const avatarUrl = candidateAvatarUrl(candidate)
+  const locationLabel = candidateLocationLabel(candidate)
 
   return (
     <article
@@ -43,10 +65,9 @@ export function ConnectionCard({
     >
       <div className="flex gap-3">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
-          {candidate.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
+          {avatarUrl ? (
             <img
-              src={candidate.avatarUrl}
+              src={avatarUrl}
               alt=""
               className="h-full w-full object-cover"
             />
@@ -68,8 +89,8 @@ export function ConnectionCard({
           {candidate.subtitle ? (
             <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{candidate.subtitle}</p>
           ) : null}
-          {candidate.locationLabel ? (
-            <p className="mt-0.5 text-[11px] text-muted-foreground/90">{candidate.locationLabel}</p>
+          {locationLabel ? (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/90">{locationLabel}</p>
           ) : null}
         </div>
       </div>

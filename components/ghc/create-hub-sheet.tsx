@@ -89,7 +89,7 @@ export function CreateHubSheet({
     } catch {
       return HUB_TIPS[0]
     }
-  }, [open])
+  }, [])
 
   useEffect(() => {
     if (!open) return

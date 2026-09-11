@@ -426,12 +426,12 @@ export function SendGhcFlow({
                     <button
                       type="button"
                       role="option"
+                      aria-selected={recipient?.id === r.id}
                       onClick={() => selectRecipient(r)}
                       className="flex w-full items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 text-left transition hover:border-border hover:bg-muted/50"
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
                         {r.photo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={r.photo} alt="" className="h-full w-full object-cover" />
                         ) : (
                           <User size={18} className="text-muted-foreground" />

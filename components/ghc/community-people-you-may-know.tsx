@@ -56,7 +56,6 @@ export function CommunityPeopleYouMayKnow({
               aria-label={`View ${s.displayName}`}
             >
               {s.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={s.avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="text-xs font-bold">{s.displayName.slice(0, 1)}</span>

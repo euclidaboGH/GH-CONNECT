@@ -1339,7 +1339,6 @@ export function PremiumCommunityHub({
                 >
                   <div className="h-9 w-9 overflow-hidden rounded-full bg-muted">
                     {m.photo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.photo} alt="" className="h-full w-full object-cover" />
                     ) : null}
                   </div>

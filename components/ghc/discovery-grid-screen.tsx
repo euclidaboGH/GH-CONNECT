@@ -266,7 +266,7 @@ export function DiscoveryGridScreen() {
       if (action === "message") {
         startTransition(() => {
           try {
-            ghc.startConversation?.(id, candidate.displayName, candidate.avatarUrl || undefined)
+            ghc.startConversation?.(id, candidate.displayName, isPersonCandidate(candidate) ? (candidate.avatarUrl || undefined) : undefined)
             window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
           } catch {
             window.dispatchEvent(
@@ -490,15 +490,16 @@ export function DiscoveryGridScreen() {
                   </div>
                 )
               }
+              const person = isPersonCandidate(candidate) ? candidate : null
               const legacy = {
                 id: candidate.id,
                 name: candidate.displayName,
                 displayName: candidate.displayName,
                 bio: candidate.subtitle || "",
-                interests: candidate.interests || [],
-                location: candidate.locationLabel || "",
-                avatar: candidate.avatarUrl,
-                photos: candidate.avatarUrl ? [candidate.avatarUrl] : [],
+                interests: person?.interests || [],
+                location: person?.locationLabel || "",
+                avatar: person?.avatarUrl || undefined,
+                photos: person?.avatarUrl ? [person.avatarUrl] : [],
                 _reason: formatReasonsForUi(candidate),
                 _sharedInterests: candidate.reasons
                   .filter((r) => r.code === "shared_interest")

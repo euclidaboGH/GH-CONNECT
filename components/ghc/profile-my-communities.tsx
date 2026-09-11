@@ -70,7 +70,6 @@ export function ProfileMyCommunities({
               >
                 <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-muted">
                   {c.photo || c.cover ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={c.photo || c.cover}
                       alt=""
