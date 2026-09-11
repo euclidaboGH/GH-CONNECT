@@ -39,18 +39,30 @@ export const PI_NETWORK_CONFIG = {
 }
 
 
-/** True only for Studio/localhost — never for Vercel production or pinet hosts. */
+/**
+ * True only for Studio/localhost development.
+ * Never for Vercel production, Pi Browser hosts, or production NODE_ENV —
+ * even if NEXT_PUBLIC_ALLOW_LOCAL_AUTH is accidentally set.
+ */
 export function allowLocalAuthFallback(): boolean {
-  if (typeof window === "undefined") return true
+  // Server: never enable local auth on production runtimes
+  if (typeof window === "undefined") {
+    if (process.env.VERCEL_ENV === "production") return false
+    if (process.env.NODE_ENV === "production") return false
+    if (process.env.NEXT_PUBLIC_REQUIRE_PI_BROWSER === "true") return false
+    return true
+  }
   if (process.env.NEXT_PUBLIC_REQUIRE_PI_BROWSER === "true") return false
-  if (process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH === "true") return true
   const host = window.location.hostname.toLowerCase()
-  if (host === "localhost" || host === "127.0.0.1") return true
+  // Production hosts first — env override cannot weaken this
   if (host.endsWith(".vercel.app")) return false
   if (host.endsWith("pinet.com") || host.endsWith("minepi.com")) return false
-  // Custom production domains: require Pi unless explicitly allowed
-  if (process.env.NODE_ENV === "production") return false
-  return true
+  if (process.env.NODE_ENV === "production" && host !== "localhost" && host !== "127.0.0.1") {
+    return false
+  }
+  if (host === "localhost" || host === "127.0.0.1") return true
+  if (process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH === "true") return true
+  return false
 }
 
 export function isProductionPiHost(): boolean {

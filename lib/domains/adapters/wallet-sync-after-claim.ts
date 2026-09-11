@@ -21,9 +21,11 @@ function parseBalance(payload: unknown): number | undefined {
     o.balance,
     o.available,
     o.availableBalance,
+    (o.snapshot as Record<string, unknown> | undefined)?.balance,
     (o.wallet as Record<string, unknown> | undefined)?.balance,
     (o.wallet as Record<string, unknown> | undefined)?.available,
     (o.data as Record<string, unknown> | undefined)?.balance,
+    ((o.data as Record<string, unknown> | undefined)?.snapshot as Record<string, unknown> | undefined)?.balance,
   ]
   for (const c of candidates) {
     const n = Number(c)

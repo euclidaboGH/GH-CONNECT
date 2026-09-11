@@ -39,6 +39,7 @@ export async function piGetPayment(paymentId: string): Promise<{
     const res = await fetch(`${PI_API_BASE}/payments/${encodeURIComponent(paymentId)}`, {
       method: "GET",
       headers: { Authorization: `Key ${apiKey}` },
+      signal: AbortSignal.timeout(15_000),
     })
     const text = await res.text()
     let data: PiPaymentDTO = {}
@@ -74,6 +75,7 @@ export async function piApprovePayment(paymentId: string): Promise<{
           Authorization: `Key ${apiKey}`,
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(15_000),
       }
     )
     const text = await res.text()
@@ -112,6 +114,7 @@ export async function piCompletePayment(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ txid }),
+        signal: AbortSignal.timeout(15_000),
       }
     )
     const text = await res.text()

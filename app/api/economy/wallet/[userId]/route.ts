@@ -1,6 +1,6 @@
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { getProcessGhcStore } from "@/lib/server/economy/store"
-import { rpcListTransactions } from "@/lib/server/economy/db"
+import { rpcListTransactions, rpcWalletSnapshot } from "@/lib/server/economy/db"
 import {
   allowMemoryServer,
   isDatabaseConfigured,
@@ -39,7 +39,22 @@ export async function GET(
   }
 
   const limits = getServerEconomyLimits()
-  const snapshot = computeWalletFromLedger(userId, transactions, limits)
+  // Prefer full-ledger RPC snapshot; fall back to compute from returned rows
+  let snapshot = computeWalletFromLedger(userId, transactions, limits)
+  if (isDatabaseConfigured()) {
+    const full = await rpcWalletSnapshot(userId)
+    if (full) {
+      snapshot = {
+        userId: full.userId,
+        balance: full.balance,
+        pending: full.pending,
+        lifetimeEarned: full.lifetimeEarned,
+        lifetimeSpent: full.lifetimeSpent,
+        lifetimePurchased: full.lifetimePurchased,
+        updatedAt: full.updatedAt,
+      }
+    }
+  }
 
   return jsonOk({
     transactions,
@@ -50,7 +65,8 @@ export async function GET(
       : allowMemoryServer()
         ? getProcessGhcStore().listRequests(userId, "all")
         : [],
-    updatedAt: Date.now(),
+    updatedAt: snapshot.updatedAt || Date.now(),
     snapshot,
+    balance: snapshot.balance,
   })
 }

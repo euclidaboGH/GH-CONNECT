@@ -152,6 +152,49 @@ export async function rpcListTransactions(
   }
 }
 
+/** Full-ledger wallet totals via SECURITY DEFINER RPC (not limited to recent N rows). */
+export async function rpcWalletSnapshot(
+  userId: string,
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<{
+  userId: string
+  balance: number
+  pending: number
+  lifetimeEarned: number
+  lifetimeSpent: number
+  lifetimePurchased: number
+  updatedAt: number
+} | null> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_wallet_snapshot`
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: userId }),
+      signal: AbortSignal.timeout?.(12_000),
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as Record<string, unknown>
+    if (!data || typeof data !== "object") return null
+    return {
+      userId: String(data.userId || userId),
+      balance: Number(data.balance) || 0,
+      pending: Number(data.pending) || 0,
+      lifetimeEarned: Number(data.lifetimeEarned) || 0,
+      lifetimeSpent: Number(data.lifetimeSpent) || 0,
+      lifetimePurchased: Number(data.lifetimePurchased) || 0,
+      updatedAt: Number(data.updatedAt) || Date.now(),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function rpcFindTransferByReference(
   referenceId: string,
   env: GhcServerEnv = readGhcServerEnv()
