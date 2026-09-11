@@ -415,10 +415,10 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
             <input ref={imageRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void readMedia(event.target.files?.[0], "image"); event.currentTarget.value = "" }} />
             <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={(event) => { void readMedia(event.target.files?.[0], "video"); event.currentTarget.value = "" }} />
             <button type="button" onClick={() => imageRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 disabled:cursor-wait disabled:opacity-60">
-              <Image size={15} /> {uploading === "image" ? "Loading…" : "Photo"}
+              <Image size={15} aria-hidden /> {uploading === "image" ? "Loading…" : "Photo"}
             </button>
             <button type="button" onClick={() => videoRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 disabled:cursor-wait disabled:opacity-60">
-              <Video size={15} /> {uploading === "video" ? "Loading…" : "Video"}
+              <Video size={15} aria-hidden /> {uploading === "video" ? "Loading…" : "Video"}
             </button>
             <button type="button" onClick={() => void publish()} disabled={uploading !== null || publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:bg-gray-300">
               {publishing ? "Sharing…" : "Share"}

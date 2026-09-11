@@ -67,7 +67,7 @@ export function ConsentGate({ children }: { children: React.ReactNode }) {
       <div className="relative z-10 flex flex-1 flex-col justify-center gap-6 py-6">
         {/* Hero */}
         <div className="flex flex-col items-center text-center">
-          <BrandLogo size="lg" priority className="drop-shadow-[0_0_28px_rgba(16,185,129,0.35)]" />
+          <BrandLogo size="hero" priority className="drop-shadow-[0_0_28px_rgba(16,185,129,0.35)]" />
           <h1 className="mt-5 text-[1.65rem] font-black tracking-tight text-white">
             Welcome to GreenHaven
           </h1>
