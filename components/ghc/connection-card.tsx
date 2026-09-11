@@ -100,21 +100,23 @@ export function ConnectionCard({
         {reasonText}
       </p>
 
-      {(candidate.interests && candidate.interests.length > 0) || selectedIntent ? (
+      {((candidate.kind === "person" && candidate.interests && candidate.interests.length > 0) || selectedIntent) ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {selectedIntent ? (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
               Intent: {selectedIntent}
             </span>
           ) : null}
-          {(candidate.interests || []).slice(0, 4).map((i) => (
-            <span
-              key={i}
-              className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {i}
-            </span>
-          ))}
+          {candidate.kind === "person"
+            ? (candidate.interests || []).slice(0, 4).map((interest) => (
+                <span
+                  key={interest}
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {interest}
+                </span>
+              ))
+            : null}
         </div>
       ) : null}
 
