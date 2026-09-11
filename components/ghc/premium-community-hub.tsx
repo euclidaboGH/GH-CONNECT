@@ -98,6 +98,8 @@ type CommunitySummary = {
   welcomeMessage?: string
   boardUnread?: number
   chatUnread?: number
+  /** User muted this community's notifications */
+  isMuted?: boolean
   samplePosts?: { id: string; author: string; excerpt: string }[]
 }
 
@@ -1768,9 +1770,9 @@ export function PremiumCommunityHub({
                   type="button"
                   onClick={onMute}
                   className="min-h-10 rounded-xl border border-border text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                  aria-pressed={!!(community as any).isMuted}
+                  aria-pressed={!!community.isMuted}
                 >
-                  {(community as any).isMuted ? "Unmute community" : "Mute community"}
+                  {community.isMuted ? "Unmute community" : "Mute community"}
                 </button>
               )}
               {onLeave && community.isJoined && community.role !== "owner" && (

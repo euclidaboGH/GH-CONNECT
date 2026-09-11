@@ -84,6 +84,9 @@ type CommunityRow = {
   }>
   pendingJoinRequests?: string[]
   groupRoles?: Record<string, string>
+  isMuted?: boolean
+  events?: unknown[]
+  announcements?: unknown[]
 }
 
 function buildSeedCommunities(): CommunityRow[] {
@@ -596,16 +599,26 @@ export function CommunitiesScreen() {
       Boolean(selected.groupRoles?.[me]) ||
       Boolean(selected.groupRoles?.["current-user"])
     const rules = normalizeRules(selected.rules)
-    const role =
+    const rawRole =
       selected.createdBy === me ||
       selected.createdBy === "current-user" ||
       selected.groupRoles?.[me] === "owner" ||
       selected.groupRoles?.["current-user"] === "owner"
         ? "owner"
         : joined
-          ? ((selected.groupRoles?.[me] as string) ||
-              (selected.groupRoles?.["current-user"] as string) ||
+          ? (selected.groupRoles?.[me] ||
+              selected.groupRoles?.["current-user"] ||
               "member")
+          : "guest"
+    const role: "owner" | "admin" | "moderator" | "member" | "guest" =
+      rawRole === "owner" ||
+      rawRole === "admin" ||
+      rawRole === "moderator" ||
+      rawRole === "member" ||
+      rawRole === "guest"
+        ? rawRole
+        : joined
+          ? "member"
           : "guest"
     return (
       <div className="flex h-full min-h-0 flex-col">
@@ -627,14 +640,14 @@ export function CommunitiesScreen() {
             rules,
             tags: selected.tags,
             region: selected.region,
-            role: role as any,
+            role,
             welcomeMessage: selected.welcomeMessage,
             boardUnread: selected.boardUnread,
             chatUnread: selected.chatUnread,
-            isMuted: !!(selected as any).isMuted,
+            isMuted: !!selected.isMuted,
           }}
           boardPosts={boardPostsFor(selected)}
-          events={((selected as any).events || []) as any[]}
+          events={selected.events || []}
           onRsvp={async (eventId) => {
             if (rsvpCommunityEvent) await rsvpCommunityEvent(selected.id, eventId)
             setHubKey((k) => k + 1)
@@ -696,7 +709,7 @@ export function CommunitiesScreen() {
             handleLeave(selected.id, selected.groupName || selected.participantName)
           }
           onMute={async () => {
-            const muted = !!(selected as any).isMuted
+            const muted = !!selected.isMuted
             if (muted && unmuteConversation) {
               await unmuteConversation(selected.id)
               addToast("Community unmuted", "success")
@@ -782,7 +795,7 @@ export function CommunitiesScreen() {
             const ok = await createCommunityAnnouncement(selected.id, input)
             if (ok) setHubKey((k) => k + 1)
           }}
-          announcements={(selected as any).announcements || []}
+          announcements={(selected.announcements || []) as never[]}
           onPost={(body: string, kind?: "text" | "question" | "resource") =>
             handleBoardPost(selected.id, body, kind)
           }
@@ -1045,7 +1058,7 @@ export function CommunitiesScreen() {
                   isJoined={joined}
                   category={community.category || "community"}
                   region={community.region}
-                  role={role as any}
+                  role={role}
                   isSample={isSample}
                   coverImage={community.groupPhoto || community.photo}
                   groupAvatar={community.participantPhoto || community.groupPhoto}
