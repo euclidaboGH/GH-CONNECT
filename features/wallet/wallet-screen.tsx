@@ -473,8 +473,17 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       } | null
       if (eco?.hydrate) {
         await eco.hydrate()
-      } else {
-        await new Promise((r) => setTimeout(r, 400))
+      }
+      // Prefer durable server wallet when available (multi-instance safe)
+      try {
+        const { syncWalletAfterServerClaim } = await import(
+          "@/lib/domains/adapters/wallet-sync-after-claim"
+        )
+        await syncWalletAfterServerClaim()
+      } catch {
+        if (!eco?.hydrate) {
+          await new Promise((r) => setTimeout(r, 300))
+        }
       }
       setTick((t) => t + 1)
       setLastSynced(Date.now())

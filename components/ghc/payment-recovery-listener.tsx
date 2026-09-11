@@ -21,6 +21,15 @@ export function PaymentRecoveryListener() {
       if (!detail) return
       const { text, type } = recoveryToastMessage(detail)
       ghc.addToast?.(text, type)
+      if (detail.ok) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:payment-recovered", { detail }),
+          )
+        } catch {
+          /* */
+        }
+      }
     }
     window.addEventListener("ghc:payment-recovery", handler as EventListener)
     return () => {

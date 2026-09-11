@@ -10,6 +10,7 @@
  */
 
 import type { Notification, NotificationType } from "./notifications"
+import { navigateTo, openCommunity, openChat, openWallet } from "@/lib/navigation/navigate"
 import {
   isCommunityNotification,
   communityNotificationLabel,
@@ -365,44 +366,47 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
   try {
     const surface = link.open || link.tab
 
+    // Primary surface via canonical navigation map
     if (surface === "wallet" || link.tab === "wallet") {
-      window.dispatchEvent(new CustomEvent("ghc:open-wallet", { detail: link }))
+      openWallet()
     } else if (surface === "rewards" || link.tab === "rewards") {
-      window.dispatchEvent(new CustomEvent("ghc:open-rewards", { detail: link }))
+      navigateTo("rewards")
     } else if (surface === "membership" || link.tab === "membership") {
-      window.dispatchEvent(new CustomEvent("ghc:open-membership", { detail: link }))
+      navigateTo("membership")
     } else if (surface === "settings" || link.tab === "settings") {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-settings", {
-          detail: { section: link.section || "main" },
-        })
-      )
+      navigateTo("settings", {
+        section: (link.section as "main" | "wallet" | "rewards" | "membership" | "help") || "main",
+      })
+    } else if (surface === "communities" || link.tab === "communities") {
+      if (link.groupId) openCommunity(link.groupId)
+      else navigateTo("communities")
+    } else if (surface === "messages" || surface === "chat" || link.tab === "messages") {
+      navigateTo("messages")
+    } else if (surface === "matches" || link.tab === "matches") {
+      navigateTo("matches")
+    } else if (surface === "discover" || link.tab === "discover") {
+      navigateTo("discover")
+    } else if (surface === "profile" || link.tab === "profile") {
+      navigateTo("profile")
+    } else if (surface === "feed" || surface === "home" || link.tab === "home") {
+      navigateTo("home")
     } else if (link.tab) {
-      const tab =
-        link.tab === "home" || surface === "feed" || surface === "home"
-          ? "home"
-          : link.tab
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
+      navigateTo(String(link.tab))
     } else {
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+      navigateTo("home")
     }
 
     if (link.conversationId) {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-conversation", {
-          detail: { conversationId: link.conversationId },
-        })
-      )
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("ghc:open-conversation", {
+            detail: { conversationId: link.conversationId },
+          })
+        )
+      }, 60)
     }
-    if (link.groupId) {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-community", {
-          detail: {
-            groupId: link.groupId,
-            invite: link.section === "group-request" || link.section === "community_invite",
-          },
-        })
-      )
+    if (link.groupId && surface !== "communities" && link.tab !== "communities") {
+      openCommunity(link.groupId)
     }
     if (link.userId && (link.tab === "discover" || link.section === "friend-request")) {
       window.dispatchEvent(
@@ -415,7 +419,10 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
         })
       )
     }
-    if (link.postId && (link.tab === "home" || link.open === "feed")) {
+    if (link.userId && (surface === "messages" || surface === "chat") && !link.conversationId) {
+      openChat(link.userId)
+    }
+    if (link.postId && (link.tab === "home" || link.open === "feed" || surface === "home" || surface === "feed")) {
       window.dispatchEvent(
         new CustomEvent("ghc:open-post", {
           detail: { postId: link.postId },
@@ -423,10 +430,7 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       )
     }
 
-    if (
-      link.section === "connection_requests" ||
-      link.section === "friend-request"
-    ) {
+    if (link.section === "connection_requests" || link.section === "friend-request") {
       window.dispatchEvent(
         new CustomEvent("ghc:open-connection-inbox", {
           detail: { focus: "incoming", userId: link.userId },
@@ -438,15 +442,10 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
 
     if (link.section === "listing" || (link as { listingId?: string }).listingId) {
       const listingId = (link as { listingId?: string }).listingId || link.id
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-listing", {
-          detail: { listingId },
-        })
-      )
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
+      navigateTo("marketplace", { listingId: listingId || undefined })
     }
     if (link.open === "matches" || link.tab === "matches" || link.section === "match") {
-      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "matches" }))
+      navigateTo("matches")
       if (link.userId) {
         window.dispatchEvent(
           new CustomEvent("ghc:open-match", {
@@ -455,7 +454,6 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
         )
       }
     }
-
   } catch {
     /* */
   }

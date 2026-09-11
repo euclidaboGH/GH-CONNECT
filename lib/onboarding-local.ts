@@ -8,6 +8,8 @@
 import type { Profile } from "@/lib/ghc-types"
 import { readLocalProfiles, findLocalProfile } from "@/lib/local-profiles"
 
+export type ClientOnboardingStatus = "unknown" | "required" | "complete"
+
 export function isCompletedProfileShape(p: Partial<Profile> | null | undefined): boolean {
   if (!p) return false
   if (p.onboarded === true) return true
@@ -15,6 +17,16 @@ export function isCompletedProfileShape(p: Partial<Profile> | null | undefined):
   const photos = Array.isArray(p.photos) ? p.photos : []
   if (name.length > 0 && photos.length > 0) return true
   if (name.length > 0 && Array.isArray(p.interests) && p.interests.length >= 2) return true
+  // Name + city + mode is enough signal of a finished registration form
+  if (
+    name.length > 0 &&
+    typeof p.city === "string" &&
+    p.city.trim().length > 0 &&
+    typeof p.primaryMode === "string" &&
+    p.primaryMode.length > 0
+  ) {
+    return true
+  }
   return false
 }
 
@@ -41,7 +53,7 @@ export function findCompletedLocalProfileForUser(input: {
     try {
       const activeRaw = window.localStorage.getItem("ghc.active-profile.v1")
       if (activeRaw) {
-        let activeId = activeRaw
+        let activeId: unknown = activeRaw
         try {
           activeId = JSON.parse(activeRaw)
         } catch {
@@ -60,6 +72,17 @@ export function findCompletedLocalProfileForUser(input: {
       const p = JSON.parse(raw) as Profile
       if (isCompletedProfileShape(p)) return p
     }
+    // Session / legacy keys sometimes used after PIN unlock
+    for (const key of ["ghc.profile.v1", "greenhaven.profile", "gh-connect.profile"]) {
+      try {
+        const r = window.localStorage.getItem(key)
+        if (!r) continue
+        const p = JSON.parse(r) as Profile
+        if (isCompletedProfileShape(p)) return p
+      } catch {
+        /* */
+      }
+    }
   } catch {
     /* */
   }
@@ -76,7 +99,7 @@ export function resolveClientOnboardingStatus(input: {
   isReturning: boolean
   userId?: string | null
   username?: string | null
-}): "unknown" | "required" | "complete" {
+}): ClientOnboardingStatus {
   if (!input.serverVerified) return "unknown"
   if (input.isReturning || input.needsOnboarding === false) return "complete"
   const local = findCompletedLocalProfileForUser({
@@ -85,5 +108,39 @@ export function resolveClientOnboardingStatus(input: {
   })
   if (local) return "complete"
   if (input.needsOnboarding) return "required"
+  return "unknown"
+}
+
+/**
+ * UI gate authority used by app shell.
+ * Never treat "unknown" as "required". Never flash registration for completed locals.
+ */
+export function resolveUiOnboardingGate(input: {
+  profile: Partial<Profile> | null | undefined
+  piOnboardingStatus: ClientOnboardingStatus | string
+  serverVerified: boolean
+  userId?: string | null
+  username?: string | null
+}): ClientOnboardingStatus {
+  const profileComplete = isCompletedProfileShape(input.profile)
+  if (profileComplete) return "complete"
+
+  const local = findCompletedLocalProfileForUser({
+    userId: input.userId || (input.profile as { id?: string } | undefined)?.id,
+    username:
+      input.username ||
+      (input.profile as { username?: string } | undefined)?.username ||
+      (input.profile as { displayName?: string } | undefined)?.displayName,
+  })
+  if (local) return "complete"
+
+  const pi = input.piOnboardingStatus
+  if (pi === "complete") return "complete"
+  if (pi === "required") {
+    // Server says required, but wait for verification before forcing form
+    if (!input.serverVerified) return "unknown"
+    return "required"
+  }
+  // unknown or anything else while loading
   return "unknown"
 }

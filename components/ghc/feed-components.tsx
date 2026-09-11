@@ -12,6 +12,8 @@ import { timeAgo } from "@/lib/ghc-data"
 import { PostMenu, CommentReactions, EnhancedComment, EnhancedPostContent, LinkPreview, QuoteRepost, ShareMenu } from "./feed-enhancements"
 import { LazyImage } from "./lazy-image"
 import { closeAllActionSheets } from "./action-sheet"
+import { navigateTo } from "@/lib/navigation/navigate"
+import { openListing, messageListingSeller } from "@/lib/marketplace/commerce-actions"
 
 // Skeleton loader for posts
 export function PostSkeleton() {
@@ -186,39 +188,50 @@ export const PostCard = memo(function PostCard({
         />
         </div>
 
-        {/* Marketplace listing share */}
+        {/* Marketplace listing share — view + message seller */}
         {post.listingId ? (
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:open-listing", {
-                    detail: { listingId: post.listingId },
-                  })
-                )
-                window.dispatchEvent(
-                  new CustomEvent("ghc:navigate-tab", { detail: "marketplace" })
-                )
-              } catch {
-                /* */
-              }
-            }}
-            className="flex w-full items-center gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40"
-          >
-            <span className="text-sm" aria-hidden>🛒</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-bold text-foreground">
-                {post.listingKind === "service"
-                  ? "Service on Marketplace"
-                  : post.listingKind === "opportunity"
-                    ? "Opportunity on Marketplace"
-                    : "Listing on Marketplace"}
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  openListing(String(post.listingId))
+                } catch {
+                  navigateTo("marketplace", { listingId: String(post.listingId) })
+                }
+              }}
+              className="flex w-full items-center gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40"
+            >
+              <span className="text-sm" aria-hidden>🛒</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-bold text-foreground">
+                  {post.listingKind === "service"
+                    ? "Service on Marketplace"
+                    : post.listingKind === "opportunity"
+                      ? "Opportunity on Marketplace"
+                      : "Listing on Marketplace"}
+                </span>
+                <span className="block text-[11px] text-muted-foreground">Tap to view details</span>
               </span>
-              <span className="block text-[11px] text-muted-foreground">Tap to view details</span>
-            </span>
-            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">View</span>
-          </button>
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">View</span>
+            </button>
+            {post.userId || (post as { authorId?: string }).authorId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  messageListingSeller({
+                    listingId: String(post.listingId),
+                    sellerId: String(post.userId || (post as { authorId?: string }).authorId || ""),
+                    sellerName: post.userName || (post as { authorName?: string }).authorName,
+                    title: (post.content || "").slice(0, 80) || "listing",
+                  })
+                }}
+                className="flex w-full items-center justify-center rounded-xl border border-border bg-card px-3 py-2 text-[11px] font-bold text-foreground transition hover:bg-muted"
+              >
+                Message seller
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         {/* Link preview */}

@@ -1433,6 +1433,18 @@ export function PremiumCommunityHub({
                 <h2 className="text-xs font-bold text-foreground">Invite code</h2>
                 <p className="mt-1 font-mono text-lg font-bold tracking-widest text-emerald-700">{(community as any).inviteCode}</p>
                 <p className="text-[11px] text-muted-foreground">Share for private / invite-only joins</p>
+                <button
+                  type="button"
+                  className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white"
+                  onClick={() => {
+                    void shareText({
+                      title: community.name || "GreenHaven community",
+                      message: `Join ${community.name || "this community"} on GreenHaven. Invite code: ${(community as any).inviteCode}`,
+                    })
+                  }}
+                >
+                  <Share2 size={14} aria-hidden /> Share invite
+                </button>
               </section>
             )}
             <section className="rounded-2xl border border-border bg-card p-4" aria-label="Community activity digest">

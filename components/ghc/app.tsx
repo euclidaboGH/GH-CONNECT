@@ -18,6 +18,9 @@ import { afterFirstPaint } from "@/lib/mobile-performance"
 import { closeAllActionSheets } from "./action-sheet"
 import { dispatchCloseTransientUI } from "@/lib/transient-ui"
 import type { CreateHubAction } from "./create-hub-sheet"
+import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation/destinations"
+import { navigateTo } from "@/lib/navigation/navigate"
+import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -184,7 +187,7 @@ const NAV_ITEMS = [
 ] as const
 
 /** Keyboard + deep-link still support secondary tabs */
-const NAV_IDS = ["home", "discover", "matches", "communities", "messages", "profile"] as const
+const NAV_IDS = PRIMARY_TABS
 
 function scrollActiveTabToTop() {
   try {
@@ -323,11 +326,31 @@ export function GHConnectApp() {
     window.addEventListener("ghc:open-rewards", onRewards)
     window.addEventListener("ghc:open-settings", onSettings)
     window.addEventListener("ghc:start-chat", onStartChat)
+    // Ensure Communities tab mounts before community deep-link is applied
+    const onOpenCommunity = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      const groupId = String(d.groupId || d.id || "").trim()
+      startTransition(() => setTab("communities" as any))
+      if (!groupId) return
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:open-community", { detail: { groupId } })
+          )
+        } catch {
+          /* */
+        }
+      }, 80)
+    }
+    // Use capture-free secondary event from navigateTo; direct open-community
+    // still works when communities is already mounted (communities-screen listener).
+    window.addEventListener("ghc:ensure-community-tab", onOpenCommunity)
     return () => {
       window.removeEventListener("ghc:open-wallet", onWallet)
       window.removeEventListener("ghc:open-rewards", onRewards)
       window.removeEventListener("ghc:open-settings", onSettings)
       window.removeEventListener("ghc:start-chat", onStartChat)
+      window.removeEventListener("ghc:ensure-community-tab", onOpenCommunity)
     }
   }, [openWallet, openSettings, startConversation, setTab])
   /** Mount a tab once visited so switches stay instant without loading all 6 at boot */
@@ -455,10 +478,16 @@ export function GHConnectApp() {
       return null
     }
     const handleNavigate = (event: Event) => {
-      const target = resolveTab((event as CustomEvent).detail)
-      if (target && NAV_IDS.includes(target as (typeof NAV_IDS)[number])) {
-        startTransition(() => setTab(target as any))
+      const raw = resolveTab((event as CustomEvent).detail)
+      if (!raw) return
+      const dest = resolveDestination(raw) || raw
+      // Primary tabs → shell tab state
+      if (isPrimaryTab(dest) || NAV_IDS.includes(dest as (typeof NAV_IDS)[number])) {
+        startTransition(() => setTab(dest as any))
+        return
       }
+      // Overlays / aliases (wallet, marketplace, rewards, …)
+      navigateTo(dest)
     }
     // Canonical event (string detail) + legacy object detail { tab }
     window.addEventListener("ghc:navigate-tab", handleNavigate)
@@ -522,22 +551,23 @@ export function GHConnectApp() {
     )
   }
 
-  // Onboarding gate — never force registration for users with a completed local profile
-  // (returning Pioneer after PIN unlock / non-durable identity memory).
-  const profileLooksComplete =
-    profile?.onboarded === true ||
-    (typeof profile?.displayName === "string" &&
-      profile.displayName.trim().length > 0 &&
-      Array.isArray(profile?.photos) &&
-      (profile.photos?.length ?? 0) > 0)
-
-  const effectiveOnboarding = profileLooksComplete
-    ? "complete"
-    : piOnboardingStatus !== "unknown"
-      ? piOnboardingStatus
-      : profile?.onboarded === false && authLifecycle.serverVerified
-        ? "required"
-        : "unknown"
+  // Onboarding gate — server + local profile authority.
+  // Never treat hydration "unknown" as "required".
+  // Returning users with a completed local profile must not see registration after PIN unlock.
+  const effectiveOnboarding = resolveUiOnboardingGate({
+    profile,
+    piOnboardingStatus: piOnboardingStatus || "unknown",
+    serverVerified: Boolean(authLifecycle?.serverVerified),
+    userId:
+      (profile as { id?: string } | null | undefined)?.id ||
+      authLifecycle?.ghUserId ||
+      authLifecycle?.piUid ||
+      null,
+    username:
+      (profile as { username?: string } | null | undefined)?.username ||
+      (profile as { displayName?: string } | null | undefined)?.displayName ||
+      null,
+  })
 
   if (effectiveOnboarding === "unknown") {
     return (

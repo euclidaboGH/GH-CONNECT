@@ -516,17 +516,47 @@ export function createMessagingDomain(deps: {
       })
     },
 
-    async markRead(conversationId: string): Promise<MutationResult<{ conversationId: string }>> {
+    async markRead(conversationId: string): Promise<MutationResult<{ conversationId: string; readMessageIds: string[] }>> {
       return runMutation({
         name: "messaging.markRead",
         actorId,
         input: { conversationId },
         mutate: (i) => {
+          const conv = deps.getConversation?.(i.conversationId)
+          const readMessageIds: string[] = []
+          const now = Date.now()
+          // Peer read receipts: messages sent by others become "read" for this actor
+          if (conv?.messages?.length && deps.repository) {
+            for (const message of conv.messages) {
+              const fromPeer =
+                message.senderId &&
+                message.senderId !== actorId &&
+                message.senderId !== "current-user"
+              if (!fromPeer) continue
+              const current = resolveMessageStatus(message)
+              if (current === "sent" || current === "delivered") {
+                if (canTransitionMessageStatus(current, "read")) {
+                  const patch: Message = {
+                    ...message,
+                    status: "read",
+                    readAt: now,
+                    readBy: Array.from(new Set([...(message.readBy || []), actorId])),
+                  }
+                  deps.repository.update(i.conversationId, message.id, patch)
+                  readMessageIds.push(message.id)
+                }
+              }
+            }
+          }
           deps.patchConversation?.(i.conversationId, { unread: false, unreadCount: 0 })
-          return { conversationId: i.conversationId }
+          return { conversationId: i.conversationId, readMessageIds }
         },
         eventType: "MESSAGE_READ",
-        eventPayload: (d) => ({ conversationId: d.conversationId }),
+        eventPayload: (d) => ({
+          conversationId: d.conversationId,
+          readMessageIds: d.readMessageIds,
+          readerId: actorId,
+        }),
       })
     },
 

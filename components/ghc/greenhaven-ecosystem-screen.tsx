@@ -22,6 +22,8 @@ import {
   Crown,
   Wallet,
 } from "lucide-react"
+import { PiSupporterBadge, PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+import { navigateTo } from "@/lib/navigation/navigate"
 
 const JOURNEY = [
   { id: "connect", label: "Connect", hint: "People & identity" },
@@ -181,14 +183,37 @@ export function GreenHavenEcosystemScreen({ onBack }: { onBack: () => void }) {
           </div>
         </section>
 
+        {/* Pi Directory staking recognition (optional, non-financial) */}
+        <section className="mt-4 px-4" aria-label="Pi ecosystem support">
+          <div className="rounded-[var(--gh-radius-sm)] border border-border/70 bg-card/80 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
+                  Pi Directory
+                </p>
+                <p className="mt-0.5 text-[13px] font-bold text-foreground">
+                  Support GreenHaven
+                </p>
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  Stake Pi for this app in the Ecosystem Directory to boost ranking.
+                  Recognition only — does not change GHC balances or unlock pay.
+                </p>
+              </div>
+              <PiSupporterBadge showCtaWhenNone className="shrink-0" />
+            </div>
+            <div className="mt-2">
+              <PiStakingStatusNote />
+            </div>
+          </div>
+        </section>
+
         {/* Quick hubs */}
         <section className="mt-4 grid grid-cols-3 gap-2 px-4" aria-label="Quick hubs">
           {[
             {
               label: "Wallet",
               icon: Wallet,
-              onClick: () =>
-                window.dispatchEvent(new CustomEvent("ghc:open-wallet", { detail: {} })),
+              onClick: () => navigateTo("wallet"),
             },
             {
               label: "Rewards",

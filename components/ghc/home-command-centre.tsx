@@ -25,6 +25,7 @@ import {
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { Users, MessagesSquare, Compass, ArrowRight, Sparkles } from "lucide-react"
 import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
+import { navigateTo, openCommunity } from "@/lib/navigation/navigate"
 // community home strip
 
 function timeGreeting(now = new Date()): string {
@@ -43,13 +44,14 @@ function firstName(displayName?: string | null): string {
 }
 
 function goTab(tab: string) {
-  try {
-    // Shell listens for "ghc:navigate-tab" with string detail (app.tsx).
-    // Also emit legacy "ghc:navigate" with { tab } for older listeners.
-    window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
-    window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab } }))
-  } catch {
-    /* */
+  // Canonical destination map (tabs + overlays)
+  if (!navigateTo(tab)) {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
+      window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab } }))
+    } catch {
+      /* */
+    }
   }
 }
 
@@ -217,6 +219,11 @@ export function HomeCommandCentre({
         onClick={() => {
           if (nextAction.event) {
             try {
+              // Prefer destination map when event is a known overlay
+              if (nextAction.event === "ghc:open-wallet") {
+                navigateTo("wallet")
+                return
+              }
               window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} }))
             } catch {
               /* */
@@ -297,13 +304,9 @@ export function HomeCommandCentre({
               }
               onOpen={() => {
                 try {
-                  window.dispatchEvent(
-                    new CustomEvent("ghc:open-community", {
-                      detail: { groupId: inv.communityId },
-                    })
-                  )
+                  openCommunity(inv.communityId)
                 } catch {
-                  goTab("discover")
+                  goTab("communities")
                 }
               }}
             />
@@ -324,11 +327,7 @@ export function HomeCommandCentre({
                     type="button"
                     onClick={() => {
                       try {
-                        window.dispatchEvent(
-                          new CustomEvent("ghc:open-community", {
-                            detail: { groupId: item.communityId, tab: "events" },
-                          })
-                        )
+                        openCommunity(String(item.communityId || ""))
                       } catch {
                         goTab("communities")
                       }
@@ -386,11 +385,9 @@ export function HomeCommandCentre({
                   type="button"
                   onClick={() => {
                     try {
-                      window.dispatchEvent(
-                        new CustomEvent("ghc:open-community", { detail: { groupId: c.id } })
-                      )
+                      openCommunity(c.id)
                     } catch {
-                      goTab("discover")
+                      goTab("communities")
                     }
                   }}
                   className="flex w-full min-h-12 items-center gap-2.5 rounded-2xl border border-border/70 bg-card px-2.5 py-2 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"

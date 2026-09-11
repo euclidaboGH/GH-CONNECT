@@ -34,6 +34,10 @@ import {
 } from "@/lib/local-profiles"
 import { usePiAuth } from "./pi-auth-context"
 import { IdentityService } from "@/lib/identity/identity-service"
+import {
+  findCompletedLocalProfileForUser,
+  isCompletedProfileShape,
+} from "@/lib/onboarding-local"
 import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
@@ -325,6 +329,18 @@ interface GHCContextType {
     communityId: string,
     input: { title: string; content: string; type?: "info" | "important" | "celebration" | "maintenance" }
   ) => Promise<boolean>
+  createCommunityEvent: (
+    communityId: string,
+    input: {
+      title: string
+      description: string
+      startTime: number
+      endTime: number
+      location?: string
+      category?: "meeting" | "social" | "workshop" | "discussion" | "celebration"
+    }
+  ) => Promise<boolean>
+  rsvpCommunityEvent: (communityId: string, eventId: string) => Promise<boolean>
   createBoardPost: (
     communityId: string,
     body: string,
@@ -541,6 +557,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         serverVerified?: boolean
         needsOnboarding?: boolean
         isReturning?: boolean
+        onboardingStatus?: "unknown" | "required" | "complete"
       }
       if (!d?.uid) return
       setState((prev) => {
@@ -575,8 +592,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             // Also consult local profile store (PIN unlock / cold start race)
             if (!alreadyLocal) {
               try {
-                const { findCompletedLocalProfileForUser, isCompletedProfileShape } =
-                  require("@/lib/onboarding-local") as typeof import("@/lib/onboarding-local")
                 if (isCompletedProfileShape(profile as never)) alreadyLocal = true
                 const found = findCompletedLocalProfileForUser({
                   userId: String(d.uid || profile.id || ""),
@@ -590,6 +605,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                     profile.photos = found.photos
                   }
                   if (!profile.interests && found.interests) profile.interests = found.interests
+                  if (!profile.city && found.city) profile.city = found.city
+                  if (!profile.primaryMode && found.primaryMode) profile.primaryMode = found.primaryMode
                 }
               } catch {
                 /* */
@@ -1006,7 +1023,17 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         /* offline / preview — local state still advances */
       }
       IdentityService.setOnboardingCompleted()
-      setState((s) => ({ ...s, profile: { ...s.profile, onboarded: true } }))
+      setState((s) => {
+        const profile = { ...s.profile, onboarded: true as const }
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
+          }
+        } catch {
+          /* */
+        }
+        return { ...s, profile }
+      })
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       // Fallback: preserve prior behavior so user is not stuck on onboarding
@@ -1015,7 +1042,17 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       } catch {
         /* */
       }
-      setState((s) => ({ ...s, profile: { ...s.profile, onboarded: true } }))
+      setState((s) => {
+        const profile = { ...s.profile, onboarded: true as const }
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
+          }
+        } catch {
+          /* */
+        }
+        return { ...s, profile }
+      })
     }
   }
 
@@ -2429,17 +2466,47 @@ const dismissMatchCelebration = useCallback(() => {
     async (conversationId: string) => {
       // Skip work when already read — avoids full list remap freezes
       let alreadyRead = false
+      const me = (() => {
+        try {
+          return IdentityService.getCurrentUserId() || "current-user"
+        } catch {
+          return "current-user"
+        }
+      })()
       setState((s) => {
         const current = (s.conversations || []).find((c) => c.id === conversationId)
         if (current && !current.unread && !(current.unreadCount && current.unreadCount > 0)) {
           alreadyRead = true
           return s
         }
+        const now = Date.now()
         return {
           ...s,
-          conversations: (s.conversations || []).map((c) =>
-            c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
-          ),
+          conversations: (s.conversations || []).map((c) => {
+            if (c.id !== conversationId) return c
+            return {
+              ...c,
+              unread: false,
+              unreadCount: 0,
+              // Advance peer-sent messages to read so the sender sees ✓✓ when sharing state
+              messages: (c.messages || []).map((m) => {
+                const fromPeer =
+                  m.senderId && m.senderId !== me && m.senderId !== "current-user"
+                if (!fromPeer) return m
+                if (m.status === "sent" || m.status === "delivered" || !m.status) {
+                  return {
+                    ...m,
+                    status: "read" as const,
+                    readAt: now,
+                    readBy: Array.from(
+                      new Set([...((m as { readBy?: string[] }).readBy || []), me]),
+                    ),
+                  }
+                }
+                return m
+              }),
+            }
+          }),
         }
       })
       if (alreadyRead) return
@@ -3657,7 +3724,71 @@ const dismissMatchCelebration = useCallback(() => {
     [addToast, domains, state.conversations, state.profile.displayName]
   )
 
-  const addGroupMember = useCallback(
+  const createCommunityEvent = useCallback(
+    async (
+      communityId: string,
+      input: {
+        title: string
+        description: string
+        startTime: number
+        endTime: number
+        location?: string
+        category?: "meeting" | "social" | "workshop" | "discussion" | "celebration"
+      }
+    ): Promise<boolean> => {
+      try {
+        const result = await domains.community.createEvent(communityId, input)
+        if (!result.ok) {
+          addToast(result.error || "Could not create event", "error")
+          return false
+        }
+        const event = result.data.event
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const existing = ((c as any).events || []) as any[]
+            return { ...c, events: [event, ...existing] }
+          }),
+        }))
+        addToast("Event scheduled", "success")
+        return true
+      } catch {
+        addToast("Could not create event", "error")
+        return false
+      }
+    },
+    [addToast, domains]
+  )
+
+  const rsvpCommunityEvent = useCallback(
+    async (communityId: string, eventId: string): Promise<boolean> => {
+      try {
+        // Best-effort local RSVP until server calendar exists
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const events = (((c as any).events || []) as any[]).map((e) => {
+              if (e.id !== eventId) return e
+              const attendees = Array.from(
+                new Set([...(e.attendees || []), IdentityService.getCurrentUserId() || "current-user"]),
+              )
+              return { ...e, attendees, rsvpCount: attendees.length }
+            })
+            return { ...c, events }
+          }),
+        }))
+        addToast("You're attending", "success")
+        return true
+      } catch {
+        return false
+      }
+    },
+    [addToast]
+  )
+
+    const addGroupMember = useCallback(
     async (conversationId: string, userId: string) => {
       setState((s) => ({
         ...s,
@@ -4056,6 +4187,8 @@ const dismissMatchCelebration = useCallback(() => {
       replyToBoardPost,
       reactToBoardPost,
       createCommunityAnnouncement,
+      createCommunityEvent,
+      rsvpCommunityEvent,
       replyToBoardPost,
       reactToBoardPost,
       pinBoardPost,
@@ -4065,6 +4198,8 @@ const dismissMatchCelebration = useCallback(() => {
       transitionCommunityLifecycle,
       reportCommunityContent,
       createCommunityAnnouncement,
+      createCommunityEvent,
+      rsvpCommunityEvent,
       createBoardPost,
       addGroupMember,
       removeGroupMember,
@@ -4202,6 +4337,8 @@ const dismissMatchCelebration = useCallback(() => {
       transitionCommunityLifecycle,
       reportCommunityContent,
       createCommunityAnnouncement,
+      createCommunityEvent,
+      rsvpCommunityEvent,
       createBoardPost,
       startConversation,
       addToast,
@@ -4230,6 +4367,8 @@ const dismissMatchCelebration = useCallback(() => {
       transitionCommunityLifecycle,
       reportCommunityContent,
       createCommunityAnnouncement,
+      createCommunityEvent,
+      rsvpCommunityEvent,
       createBoardPost,
       startConversation,
       addToast,

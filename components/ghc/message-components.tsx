@@ -501,12 +501,45 @@ function MessageBubbleBase({
               <p className="opacity-80">View original in feed · ref {(message as any).sharedPostId.slice(0, 8)}…</p>
             </div>
           )}
-          <p className={`mt-1 text-xs opacity-70 ${isSentByCurrentUser ? "text-emerald-100" : "text-gray-600"}`}>
-            {timestamp}
-            {message.status === "failed" && isSentByCurrentUser && (
+          <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-100" : "text-gray-600"}`}>
+            <span>{timestamp}</span>
+            {message.isEdited ? <span>(edited)</span> : null}
+            {isSentByCurrentUser && message.status && message.status !== "failed" ? (
+              <span
+                className="font-semibold tracking-tight"
+                aria-label={
+                  message.status === "read"
+                    ? "Read"
+                    : message.status === "delivered"
+                      ? "Delivered"
+                      : message.status === "sending"
+                        ? "Sending"
+                        : "Sent"
+                }
+                title={
+                  message.status === "read"
+                    ? "Read"
+                    : message.status === "delivered"
+                      ? "Delivered"
+                      : message.status === "sending"
+                        ? "Sending"
+                        : "Sent"
+                }
+              >
+                {message.status === "read"
+                  ? "✓✓"
+                  : message.status === "delivered"
+                    ? "✓✓"
+                    : message.status === "sending"
+                      ? "…"
+                      : "✓"}
+              </span>
+            ) : null}
+          </p>
+        {message.status === "failed" && isSentByCurrentUser ? (
           <div className="mt-1 flex items-center justify-end gap-2 px-1">
             <span className="text-[10px] font-semibold text-red-600">Not delivered</span>
-            {onRetry && (
+            {onRetry ? (
               <button
                 type="button"
                 className="min-h-8 rounded-full bg-red-50 px-2.5 text-[10px] font-bold text-red-700 dark:bg-red-950/40"
@@ -514,14 +547,12 @@ function MessageBubbleBase({
               >
                 Retry
               </button>
-            )}
+            ) : null}
           </div>
-        )}
-        {message.status === "sending" && isSentByCurrentUser && (
+        ) : null}
+        {message.status === "sending" && isSentByCurrentUser ? (
           <p className="mt-0.5 text-right text-[10px] text-muted-foreground">Queued · sending…</p>
-        )}
-        {message.isEdited && " (edited)"}
-          </p>
+        ) : null}
         </div>
         )}
 

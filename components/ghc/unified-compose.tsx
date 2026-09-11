@@ -6,6 +6,7 @@ import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import type { StoryItem } from "@/lib/ghc-types"
+import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
 export type ComposeMode = "post" | "story"
 export type Audience = "public" | "followers" | "mutuals" | "private"
@@ -105,14 +106,22 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     if (open) {
       setMode(initialMode)
       if (initialMode === "post") {
-        try {
-          const raw = window.localStorage.getItem("ghc-post-draft-v1")
-          if (raw) {
-            const d = JSON.parse(raw) as { text?: string; audience?: Audience }
-            if (d.text) setText(d.text)
-            if (d.audience) setAudience(d.audience)
+        void (async () => {
+          try {
+            const raw =
+              (await piLocalGet("post-draft-v1")) ||
+              (typeof window !== "undefined"
+                ? window.localStorage.getItem("ghc-post-draft-v1")
+                : null)
+            if (raw) {
+              const d = JSON.parse(raw) as { text?: string; audience?: Audience }
+              if (d.text) setText(d.text)
+              if (d.audience) setAudience(d.audience)
+            }
+          } catch {
+            /* ignore */
           }
-        } catch { /* ignore */ }
+        })()
       }
       setPromptHint(pickComposePrompt())
       const t = window.setTimeout(() => textareaRef.current?.focus(), 80)
@@ -120,14 +129,22 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
   }, [open, initialMode])
 
-  // Autosave post draft
+  // Autosave post draft — Pi local storage when available, else web localStorage
+  // Never stores tokens, PIN, or payment secrets (safe key enforced by pi-local-storage)
   useEffect(() => {
     if (!open || mode !== "post") return
-    try {
-      if (text.trim()) {
-        window.localStorage.setItem("ghc-post-draft-v1", JSON.stringify({ text, audience, at: Date.now() }))
-      }
-    } catch { /* ignore */ }
+    if (!text.trim()) return
+    const payload = JSON.stringify({ text, audience, at: Date.now() })
+    const tId = window.setTimeout(() => {
+      void piLocalSet("post-draft-v1", payload).catch(() => {
+        try {
+          window.localStorage.setItem("ghc-post-draft-v1", payload)
+        } catch {
+          /* */
+        }
+      })
+    }, 400)
+    return () => window.clearTimeout(tId)
   }, [text, audience, open, mode])
 
   if (!open) return null
@@ -277,7 +294,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           community,
         )
         if (created) {
-          try { window.localStorage.removeItem("ghc-post-draft-v1") } catch { /* ignore */ }
+          try { void piLocalRemove("post-draft-v1"); window.localStorage.removeItem("ghc-post-draft-v1") } catch { /* ignore */ }
           if (scheduleFor) {
             try {
               const when = new Date(scheduleFor).getTime()
@@ -507,7 +524,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 <button
                   type="button"
                   onClick={() => {
-                    try { window.localStorage.setItem("ghc-post-draft-v1", JSON.stringify({ text, audience, at: Date.now() })) } catch {}
+                    try { void piLocalSet("post-draft-v1", JSON.stringify({ text, audience, at: Date.now() })) } catch {}
                     addToast("Draft saved on this device", "success")
                   }}
                   className="rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"

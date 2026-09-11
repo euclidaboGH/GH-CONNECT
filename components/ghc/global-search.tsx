@@ -16,6 +16,9 @@ import { resolveCommunitySearchAction } from "@/lib/domains/adapters/community-s
 import { IdentityService } from "@/lib/identity/identity-service"
 import { resolveUserIntents } from "@/lib/connection-intents"
 import { Calendar, Briefcase, Sparkles } from "lucide-react"
+import { navigateTo, openCommunity, openChat } from "@/lib/navigation/navigate"
+import { openListing } from "@/lib/marketplace/commerce-actions"
+import { piLocalGet, piLocalSet } from "@/lib/pi-local-storage"
 
 type SearchTab = "all" | "people" | "posts" | "communities" | "events" | "activities" | "services" | "ids"
 
@@ -34,11 +37,26 @@ function loadRecent(): string[] {
 }
 
 function saveRecent(items: string[]) {
+  const payload = JSON.stringify(items.slice(0, MAX_RECENT))
   try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, MAX_RECENT)))
+    localStorage.setItem(RECENT_KEY, payload)
   } catch {
     /* ignore */
   }
+  void piLocalSet("search-recent-v1", payload).catch(() => {})
+}
+
+async function loadRecentAsync(): Promise<string[]> {
+  try {
+    const fromPi = await piLocalGet("search-recent-v1")
+    if (fromPi) {
+      const parsed = JSON.parse(fromPi) as string[]
+      if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === "string").slice(0, MAX_RECENT)
+    }
+  } catch {
+    /* */
+  }
+  return loadRecent()
 }
 
 export function GlobalSearchButton({ onOpen }: { onOpen: () => void }) {
@@ -88,7 +106,7 @@ export function GlobalSearchModal({
   }, [query])
 
   useEffect(() => {
-    if (open) setRecent(loadRecent())
+    if (open) void loadRecentAsync().then(setRecent)
     else {
       setQuery("")
       setDebouncedQuery("")
@@ -420,7 +438,7 @@ export function GlobalSearchModal({
                           type="button"
                           className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
                           onClick={() => closeAnd(() => {
-                            try { window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { listingId: h.id } })) } catch { /* */ }
+                            try { openListing(String(h.id)) } catch { /* */ }
                           })}
                         >
                           <span className="text-sm font-semibold">{h.title}</span>

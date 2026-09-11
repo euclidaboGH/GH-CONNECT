@@ -269,6 +269,8 @@ export function CommunitiesScreen() {
     replyToBoardPost,
     reactToBoardPost,
     createCommunityAnnouncement,
+    createCommunityEvent,
+    rsvpCommunityEvent,
     pinBoardPost,
     unpinBoardPost,
     hideBoardPost,
@@ -291,6 +293,8 @@ export function CommunitiesScreen() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
+  /** Snapshot so hub opens immediately after create (before conversations state catches up) */
+  const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
   const [hubKey, setHubKey] = useState(0)
   const [joinPickerRow, setJoinPickerRow] = useState<CommunityRow | null>(null)
@@ -435,7 +439,8 @@ export function CommunitiesScreen() {
   }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, sortBy])
 
   const selected = selectedCommunityId
-    ? communityGroups.find((c) => c.id === selectedCommunityId) || null
+    ? communityGroups.find((c) => c.id === selectedCommunityId) ||
+      (createdSnapshot && createdSnapshot.id === selectedCommunityId ? createdSnapshot : null)
     : null
 
   /** Open join-reason picker; membership only after authoritative join succeeds */
@@ -629,9 +634,23 @@ export function CommunitiesScreen() {
             isMuted: !!(selected as any).isMuted,
           }}
           boardPosts={boardPostsFor(selected)}
+          events={((selected as any).events || []) as any[]}
+          onRsvp={async (eventId) => {
+            if (rsvpCommunityEvent) await rsvpCommunityEvent(selected.id, eventId)
+            setHubKey((k) => k + 1)
+          }}
+          onCreateEvent={
+            createCommunityEvent
+              ? async (input) => {
+                  const ok = await createCommunityEvent(selected.id, input)
+                  if (ok) setHubKey((k) => k + 1)
+                  return ok
+                }
+              : undefined
+          }
           canChat={joined}
           role={role}
-          onBack={() => setSelectedCommunityId(null)}
+          onBack={() => { setSelectedCommunityId(null); setCreatedSnapshot(null) }}
           onJoin={() => {
             beginJoin(selected)
           }}
@@ -694,10 +713,20 @@ export function CommunitiesScreen() {
               addToast("Join this community to use Chat", "info")
               return
             }
+            const communityId = selected.id
             // Unmount heavy hub before switching tabs — reduces freeze risk
             setSelectedCommunityId(null)
+            setCreatedSnapshot(null)
             try {
               window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
+              // Open the community conversation thread (not a DM-looking blank inbox)
+              window.setTimeout(() => {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-conversation", {
+                    detail: { conversationId: communityId },
+                  })
+                )
+              }, 80)
             } catch {
               setTab?.("messages")
             }
@@ -1132,15 +1161,43 @@ export function CommunitiesScreen() {
         onSubmit={async (data: CreateGroupFormData) => {
           const id = await createGroup(data)
           setShowCreate(false)
-          if (id) {
-            // Creator is always a member — mirror join id so My list updates even when
-            // identity id drifts between "current-user" and Pi uid before rehydrate.
-            setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
-            setDirectory("my")
-            setSelectedCommunityId(id)
-            setHubKey((k) => k + 1)
-            addToast(`“${data.name}” is live — your Board is ready`, "success")
-          }
+          if (!id) return
+          // Creator is always a member — mirror join id so My list updates even when
+          // identity id drifts between "current-user" and Pi uid before rehydrate.
+          setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
+          setDirectory("my")
+          const me = IdentityService.getCurrentUserId() || "current-user"
+          const snapshot = {
+            id,
+            participantId: "",
+            participantName: data.name,
+            participantPhoto: data.coverImage || "/placeholder.svg?height=80&width=80",
+            groupName: data.name,
+            groupPhoto: data.coverImage,
+            photo: data.coverImage,
+            conversationType: "group" as const,
+            kind: "community",
+            communityId: id,
+            isCommunity: true,
+            description: data.description,
+            privacy: data.privacy || "public",
+            category: data.category,
+            welcomeMessage: data.welcomeMessage,
+            rules: data.rules,
+            members: [me],
+            groupRoles: { [me]: "owner" },
+            createdBy: me,
+            messages: [],
+            lastMessage: "Community created · Board is ready",
+            lastMessageTime: Date.now(),
+            unread: false,
+            online: false,
+            boardPosts: [],
+          } as CommunityRow
+          setCreatedSnapshot(snapshot)
+          setSelectedCommunityId(id)
+          setHubKey((k) => k + 1)
+          // Toast already fired in createGroup — avoid double toast
         }}
       />
 

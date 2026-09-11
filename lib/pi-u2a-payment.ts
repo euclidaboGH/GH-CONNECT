@@ -7,10 +7,11 @@
  */
 
 import { getPiSandbox } from "@/lib/pi-runtime"
+import { recoverIncompletePayment } from "@/lib/pi-incomplete-payment"
 
 export type U2APaymentResult =
-  | { ok: true; paymentId: string; txid: string; intentId?: string }
-  | { ok: false; error: string; cancelled?: boolean }
+  | { ok: true; paymentId: string; txid?: string; intentId?: string; recovered?: boolean }
+  | { ok: false; error: string; cancelled?: boolean; paymentId?: string }
 
 type PiPaymentCallbacks = {
   onReadyForServerApproval: (paymentId: string) => void
@@ -224,30 +225,49 @@ export async function startUserToAppPayment(options?: {
             // SDK may re-invoke this callback; our side also retries.
             // If approve fails, surface a clear error to the caller instead of
             // only waiting for the wallet "Payment Expired" screen.
-            void approveWithRetry(paymentId, intentId, authHeaders).then((result) => {
-              if (!result.ok) {
-                console.error("[gh-pay] approve ultimately failed", {
+            void approveWithRetry(paymentId, intentId, authHeaders).then(async (result) => {
+              if (result.ok) return
+              console.error("[gh-pay] approve ultimately failed", {
+                paymentId,
+                status: result.status,
+                error: result.error,
+              })
+              // One recovery attempt — Pi may still hold an incomplete payment we can reconcile
+              try {
+                const recovered = await recoverIncompletePayment({
                   paymentId,
-                  status: result.status,
-                  error: result.error,
+                  identifier: paymentId,
+                  metadata: intentId ? { intentId } : undefined,
                 })
-                const statusHint =
-                  result.status === 503
-                    ? " Server PI_API_KEY is missing or this environment cannot reach Pi approve."
-                    : result.status === 401 || result.status === 403
-                      ? " Session or payment intent authorization failed."
-                      : result.status === 404
-                        ? " Payment not found on Pi — check sandbox vs mainnet match."
-                        : ""
-                finish({
-                  ok: false,
-                  error:
-                    (result.error || "Developer approve failed") +
-                    statusHint +
-                    " Fix Vercel PI_API_KEY and NEXT_PUBLIC_PI_SANDBOX, then retry.",
-                  paymentId,
-                })
+                if (recovered.ok) {
+                  finish({
+                    ok: true,
+                    paymentId,
+                    txid: recovered.txid || undefined,
+                    intentId,
+                    recovered: true,
+                  } as U2APaymentResult)
+                  return
+                }
+              } catch {
+                /* fall through to error */
               }
+              const statusHint =
+                result.status === 503
+                  ? " Server PI_API_KEY is missing or this environment cannot reach Pi approve."
+                  : result.status === 401 || result.status === 403
+                    ? " Session or payment intent authorization failed."
+                    : result.status === 404
+                      ? " Payment not found on Pi — check sandbox vs mainnet match."
+                      : ""
+              finish({
+                ok: false,
+                error:
+                  (result.error || "Developer approve failed") +
+                  statusHint +
+                  " You can retry, or use Recover if Pi shows a pending payment.",
+                paymentId,
+              })
             })
           },
           onReadyForServerCompletion: (paymentId: string, txid: string) => {
@@ -265,11 +285,33 @@ export async function startUserToAppPayment(options?: {
                 await new Promise((r) => setTimeout(r, 800))
                 return tryComplete(attempt + 1)
               }
+              // Try incomplete recovery before surfacing failure
+              try {
+                const recovered = await recoverIncompletePayment({
+                  paymentId,
+                  identifier: paymentId,
+                  transaction: { txid },
+                  metadata: intentId ? { intentId } : undefined,
+                })
+                if (recovered.ok) {
+                  finish({
+                    ok: true,
+                    paymentId,
+                    txid: recovered.txid || txid,
+                    intentId,
+                    recovered: true,
+                  } as U2APaymentResult)
+                  return
+                }
+              } catch {
+                /* */
+              }
               finish({
                 ok: false,
                 error:
                   (data as { error?: string }).error ||
                   "Server could not complete payment with Pi",
+                paymentId,
               })
             }
             void tryComplete(0).catch((err) => {

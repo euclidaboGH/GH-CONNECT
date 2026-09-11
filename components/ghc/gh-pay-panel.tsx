@@ -20,6 +20,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { classifyPaymentError } from "@/lib/pi-payment-errors"
+import { recoverIncompletePayment } from "@/lib/pi-incomplete-payment"
 import {
   isPiPaymentsAvailable,
   waitForPiPayments,
@@ -87,6 +88,8 @@ export function GhPayPanel({
   const [error, setError] = useState<string | null>(null)
   const [lastProductId, setLastProductId] = useState<string | null>(null)
   const [lastLabel, setLastLabel] = useState<string | null>(null)
+  const [lastPaymentId, setLastPaymentId] = useState<string | null>(null)
+  const [recovering, setRecovering] = useState(false)
   const [orders, setOrders] = useState<GhPayOrder[]>([])
   const [inPi, setInPi] = useState(false)
   const [piProbe, setPiProbe] = useState<ReturnType<typeof probePiPayments> | null>(null)
@@ -167,6 +170,8 @@ export function GhPayPanel({
         }
         const msg = result.error || "Payment failed"
         setError(msg)
+        const pid = (result as { paymentId?: string }).paymentId
+        if (pid) setLastPaymentId(String(pid))
         notify(classifyPaymentError(msg).title, "error")
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Payment failed"
@@ -178,6 +183,44 @@ export function GhPayPanel({
     },
     [notify, refreshOrders]
   )
+
+  const tryRecover = useCallback(async () => {
+    if (!lastPaymentId || recovering) return
+    setRecovering(true)
+    setError(null)
+    try {
+      notify("Checking Pi for an incomplete payment…", "info")
+      const result = await recoverIncompletePayment({
+        paymentId: lastPaymentId,
+        identifier: lastPaymentId,
+      })
+      if (result.ok) {
+        notify(
+          result.action === "already_fulfilled" || result.action === "already_completed"
+            ? "Payment already completed"
+            : "Previous Pi payment recovered",
+          "success",
+        )
+        setLastPaymentId(null)
+        refreshOrders()
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:payment-recovered", { detail: result }))
+        } catch {
+          /* */
+        }
+      } else {
+        const msg = result.error || "Could not recover payment"
+        setError(msg)
+        notify(classifyPaymentError(msg).title, "error")
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Recovery failed"
+      setError(msg)
+      notify(classifyPaymentError(msg).title, "error")
+    } finally {
+      setRecovering(false)
+    }
+  }, [lastPaymentId, recovering, notify, refreshOrders])
 
   const products = [
     {
@@ -329,16 +372,28 @@ export function GhPayPanel({
                   {human.body}
                 </p>
                 <p className="text-[10px] text-muted-foreground">{human.actionHint}</p>
-                {human.retryable && lastProductId ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(busy)}
-                    onClick={() => void runProduct(lastProductId, lastLabel || "Payment")}
-                    className="mt-1 rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-800 disabled:opacity-60"
-                  >
-                    {busy ? "Retrying…" : "Retry payment"}
-                  </button>
-                ) : null}
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {lastPaymentId ? (
+                    <button
+                      type="button"
+                      disabled={recovering}
+                      onClick={() => void tryRecover()}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+                    >
+                      {recovering ? "Recovering…" : "Recover previous payment"}
+                    </button>
+                  ) : null}
+                  {human.retryable && lastProductId ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(busy)}
+                      onClick={() => void runProduct(lastProductId, lastLabel || "Payment")}
+                      className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-800 disabled:opacity-60"
+                    >
+                      {busy ? "Retrying…" : "Retry payment"}
+                    </button>
+                  ) : null}
+                </div>
               </>
             )
           })()}

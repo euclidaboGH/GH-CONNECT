@@ -18,18 +18,23 @@ import {
 } from "./message-components"
 import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
+import { navigateTo } from "@/lib/navigation/navigate"
 
-const MESSAGE_WINDOW = 40
-const WINDOW_STEP = 30
+const MESSAGE_WINDOW = 36
+const WINDOW_STEP = 24
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"
 
 function isCommunityConversation(c: Conversation): boolean {
-  return (
-    c.conversationType === "group" ||
-    Boolean(c.groupName) ||
-    String(c.participantName || "").startsWith("Community")
-  )
+  const any = c as Conversation & {
+    kind?: string
+    communityId?: string
+    isCommunity?: boolean
+  }
+  if (any.kind === "community" || any.isCommunity === true || Boolean(any.communityId)) return true
+  if (c.conversationType === "group" && Boolean(c.groupName)) return true
+  if (String(c.participantName || "").startsWith("Community")) return true
+  return false
 }
 
 export function MessageScreen() {
@@ -237,8 +242,8 @@ export function MessageScreen() {
         />
 
         <div
-          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3"
-          style={{ WebkitOverflowScrolling: "touch" }}
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3 contain-paint"
+          style={{ WebkitOverflowScrolling: "touch", contentVisibility: "auto" }}
         >
           {allMessages.length > windowSize && (
             <button
@@ -359,6 +364,20 @@ export function MessageScreen() {
                 View all chats
               </button>
             </div>
+          ) : filter === "dms" ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <p className="text-[14px] font-bold">No direct messages yet</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Find people on Discover or Matches, then start a chat.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigateTo("discover")}
+                className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+              >
+                Discover people
+              </button>
+            </div>
           ) : filter === "communities" ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <p className="text-[14px] font-bold">No community chats yet</p>
@@ -367,13 +386,7 @@ export function MessageScreen() {
               </p>
               <button
                 type="button"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
-                  } catch {
-                    /* */
-                  }
-                }}
+                onClick={() => navigateTo("communities")}
                 className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
               >
                 Browse communities
@@ -388,9 +401,9 @@ export function MessageScreen() {
             />
           )
         ) : (
-          <ul>
+          <ul className="contain-content">
             {list.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
                 <ConversationItem
                   conversation={c}
                   isSelected={false}

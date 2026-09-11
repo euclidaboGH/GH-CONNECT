@@ -139,9 +139,11 @@ async function creditDailyToWallet(
       return { ok: true, serverAmount: Number(data.amount) || undefined }
     }
   } catch {
-    /* fall through to domain */
+    /* fall through */
   }
 
+  // Domain path is studio-only fallback — never report success without a server credit
+  // when the daily API was unavailable. Prevents "claimed" UI without ledger write.
   try {
     const eco = getBoundDomainServices()?.economy as {
       evaluateReward?: (input: {
@@ -157,7 +159,10 @@ async function creditDailyToWallet(
     } | null
 
     if (!eco?.evaluateReward) {
-      return { ok: true }
+      return {
+        ok: false,
+        error: "Daily reward service unavailable. Check connection and try again.",
+      }
     }
 
     const evaluated = await eco.evaluateReward({
@@ -168,9 +173,12 @@ async function creditDailyToWallet(
 
     if (!evaluated?.ok) {
       if (String(evaluated?.error || "").toLowerCase().includes("duplicate")) {
-        return { ok: true }
+        return { ok: true, alreadyClaimed: true }
       }
-      return { ok: true, error: evaluated?.error }
+      return {
+        ok: false,
+        error: evaluated?.error || "Claim could not be completed",
+      }
     }
 
     const rewards = evaluated.data?.rewards || []
@@ -182,8 +190,8 @@ async function creditDailyToWallet(
     return { ok: true, serverAmount: rewards[0]?.amount }
   } catch (e) {
     return {
-      ok: true,
-      error: e instanceof Error ? e.message : "Wallet sync deferred",
+      ok: false,
+      error: e instanceof Error ? e.message : "Claim failed — please retry",
     }
   }
 }
@@ -282,6 +290,7 @@ export function DailyRewardFeedCard({
           userId,
           claimedAmount: server.serverAmount ?? null,
           alreadyClaimed: server.alreadyClaimed,
+          referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
       } catch {
         /* keep last known balance; do not fabricate */
@@ -409,6 +418,7 @@ export function DailyRewardSheet({
           userId,
           claimedAmount: server.serverAmount ?? null,
           alreadyClaimed: server.alreadyClaimed,
+          referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
       } catch {
         /* last known balance only */
