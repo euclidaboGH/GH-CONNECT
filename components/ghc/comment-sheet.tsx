@@ -301,11 +301,13 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                   void reportContent("comment", c.id, reason)
                   addToast("Report submitted", "success")
                 }}
-                onBlockAfterReport={
-                  c.authorId && c.authorId !== "current-user"
-                    ? () => void blockUser(c.authorId)
-                    : undefined
-                }
+                onBlockAfterReport={(() => {
+                  const authorId = c.authorId
+                  if (!authorId || authorId === "current-user") return undefined
+                  return () => {
+                    void blockUser(authorId)
+                  }
+                })()}
               />
             </div>
 
