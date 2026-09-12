@@ -60,8 +60,7 @@ export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boole
             s?.verification?.isVerified?.("organization")
         ),
         isCommunityLeader: Boolean(
-          s?.verification?.isVerified?.("community_leader") ||
-            (s?.community as { isLeader?: () => boolean } | undefined)?.isLeader?.()
+          (s?.community as { isLeader?: () => boolean } | undefined)?.isLeader?.()
         ),
       }
     } catch {
