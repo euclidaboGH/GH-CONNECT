@@ -8,6 +8,26 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { Award, BadgeCheck, Briefcase, ChevronDown, ChevronUp, Shield, Sparkles, Star, Store } from "lucide-react"
 import { getBoundDomainServices } from "@/lib/domains/compat"
+import { TYPE_LABELS, type VerificationType } from "@/lib/domains/verification-domain"
+
+function labelsFromSnapshot(ver: {
+  records?: Partial<Record<VerificationType, { status?: string }>>
+  anyVerified?: boolean
+  identityVerified?: boolean
+} | null | undefined): string[] {
+  if (!ver?.records) {
+    if (ver?.identityVerified) return [TYPE_LABELS.identity]
+    if (ver?.anyVerified) return ["Verified"]
+    return []
+  }
+  const out: string[] = []
+  for (const type of Object.keys(TYPE_LABELS) as VerificationType[]) {
+    if (ver.records[type]?.status === "verified") {
+      out.push(TYPE_LABELS[type])
+    }
+  }
+  return out
+}
 
 export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boolean }) {
   const [expanded, setExpanded] = useState(false)
@@ -18,7 +38,7 @@ export function ProfileTrustStrip({ profileVerified }: { profileVerified?: boole
       const membership = s?.membership?.getStatus?.()
       const plan = s?.membership?.getPlan?.()
       const ver = s?.verification?.getSnapshot?.()
-      const labels = s?.verification?.getLabels?.() || []
+      const labels = labelsFromSnapshot(ver)
       const rep = s?.reputation?.getSnapshot?.()
       const achievements = s?.achievements?.getUnlockedForProfile?.() || []
       const seller = s?.marketplace?.getSellerProfile?.("current-user")
