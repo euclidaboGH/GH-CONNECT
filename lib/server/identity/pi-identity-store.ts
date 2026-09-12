@@ -299,7 +299,18 @@ export async function findOrCreateFromVerifiedPi(input: {
         lastSeenAt: now(),
         verifiedAt: now(),
       }
-      const saved = (await dbUpsert(updated)) || updated
+      const saved = await dbUpsert(updated)
+      if (!saved) {
+        const isProd =
+          process.env.VERCEL_ENV === "production" ||
+          process.env.NODE_ENV === "production"
+        if (isProd) {
+          console.error("[pi-identity] durable upsert failed; refusing memory identity in production")
+          throw new Error("IDENTITY_DURABILITY_UNAVAILABLE")
+        }
+        memoryPut(updated)
+        return { record: updated, isNew: false }
+      }
       memoryPut(saved)
       return { record: saved, isNew: false }
     }
@@ -327,7 +338,18 @@ export async function findOrCreateFromVerifiedPi(input: {
       verifiedAt: now(),
       greenhavenProfileId: null,
     }
-    const saved = (await dbUpsert(created)) || created
+    const saved = await dbUpsert(created)
+    if (!saved) {
+      const isProd =
+        process.env.VERCEL_ENV === "production" ||
+        process.env.NODE_ENV === "production"
+      if (isProd) {
+        console.error("[pi-identity] durable upsert failed; refusing memory identity in production")
+        throw new Error("IDENTITY_DURABILITY_UNAVAILABLE")
+      }
+      memoryPut(created)
+      return { record: created, isNew: true }
+    }
     memoryPut(saved)
     return { record: saved, isNew: true }
   }

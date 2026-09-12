@@ -290,7 +290,16 @@ export async function createSession(input: {
   if (dbConfigured()) {
     const ok = await dbInsert(rec)
     if (!ok) {
-      console.error("[session] durable insert failed; using memory fallback")
+      // Production / privileged DB configured: fail closed — never issue a session that
+      // only exists in this serverless process memory (lost on cold start / other instances).
+      const isProd =
+        process.env.VERCEL_ENV === "production" ||
+        process.env.NODE_ENV === "production"
+      if (isProd) {
+        console.error("[session] durable insert failed; refusing memory session in production")
+        throw new Error("SESSION_DURABILITY_UNAVAILABLE")
+      }
+      console.error("[session] durable insert failed; using memory fallback (non-production only)")
     }
   }
 

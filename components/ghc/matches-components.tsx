@@ -5,6 +5,7 @@ import { useState } from "react"
 import type { Candidate, MatchIntention } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "@/components/ghc/lazy-image"
+import type { ConnectionUiState } from "@/lib/domains/adapters/connection-graph-adapter"
 
 export const MATCH_INTENTION_META: Record<
   MatchIntention,
@@ -177,7 +178,7 @@ export function MatchCard({
   onOpenProfile?: () => void
   /** Explicit connection request — never a silent swipe("like") */
   onConnect?: () => void
-  connectionState?: "none" | "suggested" | "outgoing_pending" | "incoming_pending" | "connected" | "mutual" | "matched" | "blocked" | "declined"
+  connectionState?: ConnectionUiState
   animationDelay?: number
   mutualConnectionCount?: number
 }) {
