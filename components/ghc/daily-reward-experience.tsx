@@ -23,18 +23,15 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { IdentityService } from "@/lib/identity/identity-service"
+import type { Profile } from "@/lib/ghc-types"
 
-function resolveUserId(profile?: Record<string, unknown> | null): string {
+function resolveUserId(profile?: Profile | null): string {
   const fromIdentity = IdentityService.getCurrentUserId()
   if (fromIdentity && fromIdentity !== "current-user" && fromIdentity !== "anonymous") {
     return fromIdentity
   }
   try {
-    const id = String(
-      (profile as { id?: string } | null)?.id ||
-        (profile as { userId?: string } | null)?.userId ||
-        ""
-    ).trim()
+    const id = String(profile?.id || "").trim()
     if (id && id !== "current-user" && id !== "anonymous") return id
   } catch {
     /* */
@@ -245,10 +242,7 @@ export function DailyRewardFeedCard({
   onOpenFull?: () => void
   refreshKey?: number
 }) {
-  const ghc = useGHC() as {
-    profile?: Record<string, unknown>
-    addToast?: (message: string, type?: string) => void
-  }
+  const ghc = useGHC()
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [tick, setTick] = useState(0)
@@ -383,10 +377,7 @@ export function DailyRewardSheet({
   onClose: () => void
   onClaimed?: () => void
 }) {
-  const ghc = useGHC() as {
-    profile?: Record<string, unknown>
-    addToast?: (message: string, type?: string) => void
-  }
+  const ghc = useGHC()
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [claiming, setClaiming] = useState(false)
@@ -555,7 +546,7 @@ export function DailyRewardSheet({
 
 /** Feed-level controller: delayed sheet + card */
 export function DailyRewardHomeExperience() {
-  const ghc = useGHC() as { profile?: Record<string, unknown> }
+  const ghc = useGHC()
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [sheetOpen, setSheetOpen] = useState(false)
