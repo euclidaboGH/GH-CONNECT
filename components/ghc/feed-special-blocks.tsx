@@ -36,8 +36,8 @@ function parseChallenge(content: string) {
   const title = titleLine.replace(/^🏆\s*CHALLENGE\s*[·•-]?\s*/i, "").trim() || "Challenge"
   const blurb = lines.find((l, i) => i > 0 && !l.startsWith("🎯") && !l.startsWith("📅") && !l.startsWith("👥")) || ""
   const goal = lines.find((l) => l.startsWith("🎯"))?.replace(/^🎯\s*/, "") || ""
-  const window = lines.find((l) => l.startsWith("📅"))?.replace(/^📅\s*/, "") || ""
-  return { title, blurb, goal, window }
+  const timeWindow = lines.find((l) => l.startsWith("📅"))?.replace(/^📅\s*/, "") || ""
+  return { title, blurb, goal, timeWindow }
 }
 
 export function SpecialPostBody({ content }: { content: string }) {
@@ -91,7 +91,7 @@ export function SpecialPostBody({ content }: { content: string }) {
   }
 
   if (kind === "challenge") {
-    const { title, blurb, goal, window } = parseChallenge(content)
+    const { title, blurb, goal, timeWindow } = parseChallenge(content)
     return (
       <div className="mt-1 overflow-hidden rounded-2xl border border-rose-200/90 bg-gradient-to-br from-rose-600 via-rose-500 to-amber-500 text-white shadow-md dark:border-rose-900">
         <div className="px-3 py-3">
@@ -109,8 +109,8 @@ export function SpecialPostBody({ content }: { content: string }) {
             {goal ? (
               <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm">{goal}</span>
             ) : null}
-            {window ? (
-              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm">{window}</span>
+            {timeWindow ? (
+              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm">{timeWindow}</span>
             ) : null}
           </div>
           <button
