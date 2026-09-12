@@ -401,7 +401,7 @@ export function DiscoveryGridScreen() {
               },
             }}
           />
-        ) : (adapted.mode === "typed" ? adapted.typedList.length === 0 : adapted.list.length === 0) ? (
+        ) : (adapted.list.length === 0) ? (
           <EmptyState
             variant="discover"
             title={emptyCopy.title}
@@ -437,7 +437,7 @@ export function DiscoveryGridScreen() {
           <div className="mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col gap-2.5 pb-2">
             <div className="flex items-center justify-between gap-2 px-0.5">
               <p className="text-[11px] font-medium text-muted-foreground">
-                {adapted.mode === "typed" ? adapted.typedList.length : adapted.list.length} {category} · explainable — real sources only
+                {adapted.list.length} {category} · explainable — real sources only
               </p>
               <button
                 type="button"
