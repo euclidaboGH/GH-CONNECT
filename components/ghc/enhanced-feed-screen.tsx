@@ -730,7 +730,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   <p className="text-sm font-bold text-foreground">You&apos;re all caught up</p>
   <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">Find people or share a moment.</p>
   <div className="mt-4 flex flex-wrap justify-center gap-2">
-  <button type="button" onClick={() => setTab?.("discover") || onProfile?.()} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Find people</button>
+  <button type="button" onClick={() => { setTab?.("discover") }} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Find people</button>
   <div className="flex flex-wrap justify-center gap-2">
   <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { setShowComposer(true) } }} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Create</button>
   <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "story" } })) } catch { setShowComposer(true) } }} className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95">Add story</button>
