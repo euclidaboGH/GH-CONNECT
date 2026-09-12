@@ -44,7 +44,7 @@ export async function POST(
     )
   }
 
-  bindProviderPayment(intentId, paymentId, auth.userId)
+  await bindProviderPayment(intentId, paymentId, auth.userId)
 
   const lookup = await piGetPayment(paymentId)
   if (!lookup.ok || !lookup.payment) {
@@ -56,7 +56,7 @@ export async function POST(
 
   const payment = lookup.payment
   if (!amountsMatch(intent.amount, payment.amount)) {
-    transitionIntent(intentId, "FAILED", {
+    await transitionIntent(intentId, "FAILED", {
       actor: "system",
       detail: "Amount mismatch on recover",
       error: `expected ${intent.amount} got ${payment.amount}`,
@@ -69,7 +69,7 @@ export async function POST(
 
   const st = payment.status || {}
   if (st.cancelled || st.user_cancelled) {
-    transitionIntent(intentId, "CANCELLED", {
+    await transitionIntent(intentId, "CANCELLED", {
       actor: "system",
       detail: "Pi reports cancelled",
     })
@@ -78,7 +78,7 @@ export async function POST(
 
   if (st.developer_completed) {
     const txid = payment.transaction?.txid || intent.txid || undefined
-    transitionIntent(intentId, "COMPLETED", {
+    await transitionIntent(intentId, "COMPLETED", {
       actor: "system",
       detail: "Recovered completed from Pi",
       txid: txid || undefined,
@@ -89,7 +89,7 @@ export async function POST(
 
   if (st.developer_approved) {
     if (intent.status === "CREATED" || intent.status === "APPROVAL_PENDING") {
-      transitionIntent(intentId, "APPROVED", {
+      await transitionIntent(intentId, "APPROVED", {
         actor: "system",
         detail: "Recovered approved from Pi",
         providerPaymentId: paymentId,

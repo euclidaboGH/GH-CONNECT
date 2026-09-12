@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const intent = createPaymentIntent({
+  const intent = await createPaymentIntent({
     userId: auth.userId,
     purpose,
     amount,

@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     // Idempotent if already approved/completed
     if (intent && (intent.status === "APPROVED" || intent.status === "COMPLETED" || intent.status === "COMPLETION_PENDING" || intent.status === "USER_SUBMITTED")) {
       if (intent.providerPaymentId === paymentId || !intent.providerPaymentId) {
-        if (!intent.providerPaymentId) bindProviderPayment(intent.id, paymentId, auth?.userId)
+        if (!intent.providerPaymentId) await bindProviderPayment(intent.id, paymentId, auth?.userId)
         // Still ensure Pi approved (retry-safe)
         const appr = await piApprovePayment(paymentId)
         return NextResponse.json({
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
         ) {
           const expected = serverSandbox ? "sandbox" : "mainnet"
           if (intentEnv !== expected) {
-            transitionIntent(intent.id, "FAILED", {
+            await transitionIntent(intent.id, "FAILED", {
               actor: "system",
               detail: "Cross-environment payment blocked",
               error: `intent ${intentEnv} vs server ${expected}`,
@@ -123,14 +123,14 @@ export async function POST(request: Request) {
         /* resolver unavailable — amount + ownership checks still apply */
       }
 
-      const bound = bindProviderPayment(intent.id, paymentId, auth?.userId)
+      const bound = await bindProviderPayment(intent.id, paymentId, auth?.userId)
       if (!bound) {
         return NextResponse.json(
           { ok: false, error: "provider_payment_bind_conflict" },
           { status: 409 }
         )
       }
-      transitionIntent(intent.id, "APPROVAL_PENDING", {
+      await transitionIntent(intent.id, "APPROVAL_PENDING", {
         actor: auth?.userId || "system",
         detail: "Approval requested",
         providerPaymentId: paymentId,
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
       const lookup = await piGetPayment(paymentId)
       if (lookup.ok && lookup.payment) {
         if (!amountsMatch(intent.amount, lookup.payment.amount)) {
-          transitionIntent(intent.id, "FAILED", {
+          await transitionIntent(intent.id, "FAILED", {
             actor: "system",
             detail: "Amount mismatch",
             error: `expected ${intent.amount} got ${lookup.payment.amount}`,
@@ -167,8 +167,27 @@ export async function POST(request: Request) {
       }
     }
 
-    // Always call Pi approve — this is what unlocks the wallet UI for the user.
-    // Do this even when there is no intent (pipeline verification / unbound check).
+    // Unbound approve (no GreenHaven intent): only for explicit non-production pipeline checks.
+    // Never grants GH benefits; still must not use PI_API_KEY as an open proxy in production.
+    if (!intent) {
+      const allowUnbound =
+        process.env.PI_ALLOW_UNBOUND_APPROVE === "true" &&
+        process.env.VERCEL_ENV !== "production"
+      if (!allowUnbound) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "INTENT_REQUIRED",
+            message:
+              "Approve requires a GreenHaven payment intent bound to this payment. Unbound approve is disabled in production.",
+          },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Call Pi approve to unlock the wallet UI for payments with a verified intent
+    // (or explicit non-production unbound pipeline when PI_ALLOW_UNBOUND_APPROVE=true).
     const appr = await piApprovePayment(paymentId)
     if (!appr.ok) {
       console.error("[payments/approve] Pi Platform reject", {
@@ -178,7 +197,7 @@ export async function POST(request: Request) {
         hasIntent: Boolean(intent),
       })
       if (intent) {
-        transitionIntent(intent.id, "FAILED", {
+        await transitionIntent(intent.id, "FAILED", {
           actor: "system",
           detail: "Pi approve failed",
           error: appr.error,
@@ -202,7 +221,7 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      transitionIntent(intent.id, "APPROVED", {
+      await transitionIntent(intent.id, "APPROVED", {
         actor: auth?.userId || "system",
         detail: "Pi developer approved",
         providerPaymentId: paymentId,

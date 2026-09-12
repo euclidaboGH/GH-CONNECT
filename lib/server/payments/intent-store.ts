@@ -148,6 +148,20 @@ function cachePut(intent: PaymentIntent): void {
   }
 }
 
+
+async function persistCritical(intent: PaymentIntent): Promise<PaymentIntent | null> {
+  const pr = await persist(intent)
+  if (pr.ok) return intent
+  const isProd =
+    process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production"
+  if (isProd || dbConfigured()) {
+    console.error("[payment-intent] durable persist failed", pr.error)
+    return null
+  }
+  // Studio without DB: memory cache already updated in persist()
+  return intent
+}
+
 async function persist(intent: PaymentIntent): Promise<{ ok: boolean; error?: string }> {
   cachePut(intent)
   if (!dbConfigured()) {
@@ -222,7 +236,7 @@ export async function loadByProviderPaymentId(
   return loadFromDbByProvider(providerPaymentId)
 }
 
-export function createPaymentIntent(input: CreatePaymentIntentInput): PaymentIntent {
+export async function createPaymentIntent(input: CreatePaymentIntentInput): Promise<PaymentIntent> {
   if (input.idempotencyKey) {
     const existingId = byIdempotency().get(`${input.userId}:${input.idempotencyKey}`)
     if (existingId) {
@@ -269,15 +283,20 @@ export function createPaymentIntent(input: CreatePaymentIntentInput): PaymentInt
   }
   audit(intent, "CREATED", input.userId, `Payment intent created (${networkEnv})`)
   cachePut(intent)
-  void persist(intent)
-  return intent
+  const durable = await persistCritical(intent)
+  if (!durable) {
+    throw new Error(process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+      ? "PAYMENT_INTENT_DURABILITY_UNAVAILABLE"
+      : "payment intent persist failed")
+  }
+  return durable
 }
 
-export function bindProviderPayment(
+export async function bindProviderPayment(
   intentId: string,
   providerPaymentId: string,
   actor?: string
-): PaymentIntent | null {
+): Promise<PaymentIntent | null> {
   const intent = map().get(intentId)
   if (!intent) return null
   const existingId = byProvider().get(providerPaymentId)
@@ -285,7 +304,7 @@ export function bindProviderPayment(
     const existing = map().get(existingId)
     if (existing && existing.userId !== intent.userId) {
       audit(intent, "BIND_CONFLICT", actor, `providerPaymentId owned by ${existing.id}`)
-      void persist(intent)
+      await persistCritical(intent)
       return null
     }
   }
@@ -295,11 +314,10 @@ export function bindProviderPayment(
     intent.status = "APPROVAL_PENDING"
   }
   audit(intent, "BIND_PROVIDER", actor, providerPaymentId)
-  void persist(intent)
-  return intent
+  return (await persistCritical(intent)) || intent
 }
 
-export function transitionIntent(
+export async function transitionIntent(
   intentId: string,
   next: PaymentIntentStatus,
   opts?: {
@@ -310,7 +328,7 @@ export function transitionIntent(
     error?: string
     meta?: Record<string, unknown>
   }
-): PaymentIntent | null {
+): Promise<PaymentIntent | null> {
   const intent = map().get(intentId)
   if (!intent) return null
 
@@ -351,24 +369,25 @@ export function transitionIntent(
   if (next === "REFUNDED") intent.refundedAt = now
 
   audit(intent, `STATUS_${next}`, opts?.actor, opts?.detail, opts?.meta)
-  void persist(intent)
-  return intent
+  const durable = await persistCritical(intent)
+  if (!durable) return null
+  return durable
 }
 
 /** Mark fulfilled exactly once after COMPLETED */
-export function markIntentFulfilled(
+export async function markIntentFulfilled(
   intentId: string,
   actor?: string
-): PaymentIntent | null {
+): Promise<PaymentIntent | null> {
   const intent = map().get(intentId)
   if (!intent) return null
   if (intent.status === "FULFILLED") return intent
   if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
     audit(intent, "FULFILL_BLOCKED", actor, `status=${intent.status}`)
-    void persist(intent)
+    await persistCritical(intent)
     return intent
   }
-  return transitionIntent(intentId, "FULFILLED", {
+  return await transitionIntent(intentId, "FULFILLED", {
     actor,
     detail: "Benefit granted",
   })

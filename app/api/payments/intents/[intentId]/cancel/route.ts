@@ -30,7 +30,7 @@ export async function POST(
   if (intent.status === "CANCELLED") {
     return NextResponse.json({ ok: true, intent, idempotent: true })
   }
-  const updated = transitionIntent(intentId, "CANCELLED", {
+  const updated = await transitionIntent(intentId, "CANCELLED", {
     actor: auth.userId,
     detail: "User cancelled",
   })

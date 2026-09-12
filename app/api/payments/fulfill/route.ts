@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const fulfilled = markIntentFulfilled(intent.id, auth.userId)
+    const fulfilled = await markIntentFulfilled(intent.id, auth.userId)
     return NextResponse.json({
       ok: true,
       paymentId: intent.providerPaymentId,

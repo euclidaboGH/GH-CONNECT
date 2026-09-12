@@ -64,8 +64,8 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      bindProviderPayment(intent.id, paymentId, auth?.userId)
-      transitionIntent(intent.id, "COMPLETION_PENDING", {
+      await bindProviderPayment(intent.id, paymentId, auth?.userId)
+      await transitionIntent(intent.id, "COMPLETION_PENDING", {
         actor: auth?.userId || "system",
         detail: "Completion requested",
         providerPaymentId: paymentId,
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       const lookup = await piGetPayment(paymentId)
       if (lookup.ok && lookup.payment) {
         if (!amountsMatch(intent.amount, lookup.payment.amount)) {
-          transitionIntent(intent.id, "FAILED", {
+          await transitionIntent(intent.id, "FAILED", {
             actor: "system",
             detail: "Amount mismatch on complete",
             error: `expected ${intent.amount} got ${lookup.payment.amount}`,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     if (!done.ok) {
       // Retry-friendly: leave COMPLETION_PENDING if intent exists
       if (intent) {
-        transitionIntent(intent.id, "COMPLETION_PENDING", {
+        await transitionIntent(intent.id, "COMPLETION_PENDING", {
           actor: "system",
           detail: "Pi complete failed — retryable",
           error: done.error,
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      transitionIntent(intent.id, "COMPLETED", {
+      await transitionIntent(intent.id, "COMPLETED", {
         actor: auth?.userId || "system",
         detail: "Pi developer completed",
         providerPaymentId: paymentId,

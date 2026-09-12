@@ -101,7 +101,7 @@ export async function POST(request: Request) {
   const lookup = await piGetPayment(paymentId)
   if (!lookup.ok || !lookup.payment) {
     if (intent) {
-      transitionIntent(intent.id, "INCOMPLETE", {
+      await transitionIntent(intent.id, "INCOMPLETE", {
         actor: auth.userId,
         detail: "Pi lookup failed during recovery",
         providerPaymentId: paymentId,
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
   // Cancelled on Pi
   if (st.cancelled || st.user_cancelled) {
     if (intent) {
-      transitionIntent(intent.id, "CANCELLED", {
+      await transitionIntent(intent.id, "CANCELLED", {
         actor: "pi_platform",
         detail: "Cancelled on Pi during recovery",
         providerPaymentId: paymentId,
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
         paymentId,
       })
     }
-    intent = createPaymentIntent({
+    intent = await createPaymentIntent({
       userId: auth.userId,
       purpose: "other",
       amount,
@@ -165,15 +165,15 @@ export async function POST(request: Request) {
         piPaymentId: paymentId,
       },
     })
-    bindProviderPayment(intent.id, paymentId, auth.userId)
+    await bindProviderPayment(intent.id, paymentId, auth.userId)
   } else {
-    bindProviderPayment(intent.id, paymentId, auth.userId)
+    await bindProviderPayment(intent.id, paymentId, auth.userId)
   }
 
   // Amount guard when we have expected amount
   if (intent.amount > 0 && payment.amount != null) {
     if (!amountsMatch(intent.amount, payment.amount)) {
-      transitionIntent(intent.id, "FAILED", {
+      await transitionIntent(intent.id, "FAILED", {
         actor: "system",
         detail: "Amount mismatch on incomplete recovery",
         error: `expected ${intent.amount} got ${payment.amount}`,
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
 
   // Developer completed already on Pi
   if (st.developer_completed) {
-    transitionIntent(intent.id, "COMPLETED", {
+    await transitionIntent(intent.id, "COMPLETED", {
       actor: "pi_platform",
       detail: "Already completed on Pi",
       providerPaymentId: paymentId,
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
   // Has blockchain tx → complete
   if (piTxid || st.transaction_verified) {
     if (!piTxid) {
-      transitionIntent(intent.id, "INCOMPLETE", {
+      await transitionIntent(intent.id, "INCOMPLETE", {
         actor: auth.userId,
         detail: "Verified on chain but txid missing",
         providerPaymentId: paymentId,
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
       })
     }
 
-    transitionIntent(intent.id, "COMPLETION_PENDING", {
+    await transitionIntent(intent.id, "COMPLETION_PENDING", {
       actor: auth.userId,
       detail: "Incomplete recovery completing",
       providerPaymentId: paymentId,
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
 
     const completed = await piCompletePayment(paymentId, piTxid)
     if (!completed.ok) {
-      transitionIntent(intent.id, "INCOMPLETE", {
+      await transitionIntent(intent.id, "INCOMPLETE", {
         actor: "system",
         detail: "Pi complete failed",
         error: completed.error,
@@ -253,7 +253,7 @@ export async function POST(request: Request) {
       })
     }
 
-    transitionIntent(intent.id, "COMPLETED", {
+    await transitionIntent(intent.id, "COMPLETED", {
       actor: "system",
       detail: "Completed via incomplete recovery",
       providerPaymentId: paymentId,
@@ -271,7 +271,7 @@ export async function POST(request: Request) {
   }
 
   // Approved but no tx yet — user must finish in wallet; do not create new payment
-  transitionIntent(intent.id, "INCOMPLETE", {
+  await transitionIntent(intent.id, "INCOMPLETE", {
     actor: auth.userId,
     detail: "Awaiting user transaction",
     providerPaymentId: paymentId,

@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { getOrder, transitionOrder } from "@/lib/server/marketplace/order-store"
+import { loadOrder, transitionOrder } from "@/lib/server/marketplace/order-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,7 +19,7 @@ export async function POST(
   }
 
   const { orderId } = await ctx.params
-  const order = getOrder(orderId)
+  const order = await loadOrder(orderId)
   if (!order) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
@@ -41,7 +41,7 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "ALREADY_COMPLETED" }, { status: 409 })
   }
 
-  const result = transitionOrder(orderId, to as Parameters<typeof transitionOrder>[1], auth.userId)
+  const result = await transitionOrder(orderId, to as Parameters<typeof transitionOrder>[1], auth.userId)
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 })
   }
