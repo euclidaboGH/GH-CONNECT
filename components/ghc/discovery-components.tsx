@@ -403,6 +403,7 @@ export function ProfilePreviewModal({
       ? candidate.location.trim()
       : "Global"
   const safeAge = Number.isFinite(Number(candidate.age)) ? Number(candidate.age) : null
+  const safeOnline = Boolean(candidate.online)
   const score = calculateMatchScore(candidate, userInterests, userAge, userLocation)
 
   return (
