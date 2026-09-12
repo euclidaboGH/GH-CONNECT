@@ -177,7 +177,7 @@ export function MatchCard({
   onOpenProfile?: () => void
   /** Explicit connection request — never a silent swipe("like") */
   onConnect?: () => void
-  connectionState?: "none" | "outgoing_pending" | "incoming_pending" | "connected" | "mutual" | "matched" | "blocked" | "declined"
+  connectionState?: "none" | "suggested" | "outgoing_pending" | "incoming_pending" | "connected" | "mutual" | "matched" | "blocked" | "declined"
   animationDelay?: number
   mutualConnectionCount?: number
 }) {
