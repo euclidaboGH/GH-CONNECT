@@ -485,7 +485,7 @@ No results for “{debouncedQuery}”</p>
                     >
                       <div className="h-10 w-10 overflow-hidden rounded-full bg-muted">
                         <LazyImage
-                          src={resolveAvatarUrl(c.photo, c.name)}
+                          src={resolveAvatarUrl(c.photo, { seed: c.name || c.id || "member", size: 80 })}
                           alt=""
                           className="h-full w-full object-cover"
                         />
