@@ -293,7 +293,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     if (tier === "free" || tier === currentTier) return
     setBusy(tier)
     try {
-      const ok = await runGhPayMembership(tier as "vip" | "vvip", period, addToast)
+      const ok = await runGhPayMembership(tier as "vip" | "vvip", period, (msg, type) => {
+        const t =
+          type === "error" || type === "success" || type === "info" ? type : "info"
+        addToast(msg, t)
+      })
       if (ok) {
         setConfirmTier(null)
         setTick((t) => t + 1)
