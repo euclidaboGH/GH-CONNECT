@@ -258,6 +258,8 @@ interface GHCContextType {
   unblockUser: (userId: string) => Promise<void>
   /** Merged block list for UI filters (state + settings) */
   blockedUsers: string[]
+  /** Merged mute list for UI filters (state + settings) */
+  mutedUsers: string[]
   /** Returns conversation id when opened/found, or null if blocked by privacy */
   startConversation: (userId: string, userName: string, userPhoto: string) => Promise<string | null>
 
@@ -4153,6 +4155,7 @@ const dismissMatchCelebration = useCallback(() => {
       blockUser,
       unblockUser,
       blockedUsers: blockedIdsForUi,
+      mutedUsers: mutedIdsForUi,
       startConversation,
       acceptMatch,
       rejectMatch,
@@ -4232,6 +4235,7 @@ const dismissMatchCelebration = useCallback(() => {
       state.matchCelebration,
       visibleSession,
       blockedIdsForUi,
+      mutedIdsForUi,
     ],
   )
 
@@ -4421,6 +4425,7 @@ const dismissMatchCelebration = useCallback(() => {
       shares: state.shares,
       reposts: state.reposts,
       blockedUsers: blockedIdsForUi,
+    mutedUsers: mutedIdsForUi,
     }),
     [
       visibleSession.posts,
@@ -4434,6 +4439,7 @@ const dismissMatchCelebration = useCallback(() => {
       state.shares,
       state.reposts,
       blockedIdsForUi,
+      mutedIdsForUi,
       createPost,
       likePost,
       deletePost,
