@@ -32,10 +32,7 @@ export function RewardsJourneyHero({
   onClaimed?: () => void
   onOpenWallet?: () => void
 }) {
-  const ghc = useGHC() as {
-    profile?: Record<string, unknown>
-    addToast?: (m: string, t?: string) => void
-  }
+  const ghc = useGHC()
   const [tick, setTick] = useState(0)
 
   const membershipTier = useMemo(() => {

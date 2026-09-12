@@ -112,19 +112,14 @@ export function RewardsCentreScreen({
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
-  const ghc = useGHC() as {
-    profile?: Record<string, unknown>
-    communities?: Array<{ id: string; membership?: string }>
-    groups?: Array<{ id: string; membership?: string }>
-    addToast?: (message: string, type?: string) => void
-  }
+  const ghc = useGHC()
   const profile = ghc.profile
-  const communities = ghc.communities || ghc.groups || []
+  const communities =
+    (ghc as { communities?: Array<{ id: string; membership?: string }> }).communities ||
+    (ghc as { groups?: Array<{ id: string; membership?: string }> }).groups ||
+    []
 
-  const userId =
-    (profile?.id as string) ||
-    (profile?.userId as string) ||
-    "current-user"
+  const userId = String(profile?.id || "").trim() || "current-user"
 
   const signals = useMemo(() => {
     void tick

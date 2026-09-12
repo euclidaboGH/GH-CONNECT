@@ -390,7 +390,7 @@ export function DiscoveryGridScreen() {
             variant="generic"
             title="Could not load discovery"
             description={String(error)}
-            primaryAction={{
+            action={{
               label: "Try again",
               onClick: () => {
                 try {
@@ -410,7 +410,7 @@ export function DiscoveryGridScreen() {
                 ? "No members match this search. Try different keywords or intents."
                 : emptyCopy.description
             }
-            primaryAction={{
+            action={{
               label: emptyCopy.primaryAction?.label || "Update connection goals",
               onClick: () => {
                 try {
