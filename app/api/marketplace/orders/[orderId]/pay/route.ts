@@ -95,6 +95,20 @@ export async function POST(
   if (order.buyerId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
+
+  // Idempotent recovery must run BEFORE the payable-status narrow.
+  // After a successful pay, status is no longer created|payment_pending.
+  if (
+    order.paymentStatus === "verified" &&
+    order.ghcSpendRef &&
+    (order.status === "payment_verified" ||
+      order.status === "confirmed" ||
+      order.status === "fulfilling" ||
+      order.status === "completed")
+  ) {
+    return NextResponse.json({ ok: true, order, idempotent: true, recovered: true })
+  }
+
   if (order.status !== "payment_pending" && order.status !== "created") {
     return NextResponse.json(
       { ok: false, error: "NOT_PAYABLE", status: order.status },
@@ -110,10 +124,6 @@ export async function POST(
   void body.userId
 
   if (method === "ghc") {
-    // Idempotent recovery: already paid with same order
-    if (order.paymentStatus === "verified" && order.ghcSpendRef && (order.status === "payment_verified" || order.status === "confirmed" || order.status === "fulfilling" || order.status === "completed")) {
-      return NextResponse.json({ ok: true, order, idempotent: true, recovered: true })
-    }
     const amount = Number(order.totalAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ ok: false, error: "INVALID_ORDER_AMOUNT" }, { status: 400 })
