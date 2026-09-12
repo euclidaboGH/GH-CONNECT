@@ -329,7 +329,7 @@ export function PremiumCommunityHub({
     }
   })()
   const welcomeModel =
-    isJoined && viewerId
+    community.isJoined && viewerId
       ? buildMemberWelcomeModel({
           userId: viewerId,
           communityId: community.id,
