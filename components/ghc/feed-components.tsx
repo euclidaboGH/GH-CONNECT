@@ -215,14 +215,14 @@ export const PostCard = memo(function PostCard({
               </span>
               <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">View</span>
             </button>
-            {post.userId || (post as { authorId?: string }).authorId ? (
+            {post.authorId ? (
               <button
                 type="button"
                 onClick={() => {
                   messageListingSeller({
                     listingId: String(post.listingId),
-                    sellerId: String(post.userId || (post as { authorId?: string }).authorId || ""),
-                    sellerName: post.userName || (post as { authorName?: string }).authorName,
+                    sellerId: String(post.authorId || ""),
+                    sellerName: post.authorName,
                     title: (post.content || "").slice(0, 80) || "listing",
                   })
                 }}
