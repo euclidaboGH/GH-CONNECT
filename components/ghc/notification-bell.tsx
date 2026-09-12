@@ -108,7 +108,7 @@ export function NotificationBell({
 }) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notification[]>([])
-  const [unread, setUnread] = useState(0)
+  const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
 
   const refresh = useCallback(() => {

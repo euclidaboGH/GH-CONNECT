@@ -234,7 +234,7 @@ export function GHConnectApp() {
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
-  const [connectionRequestBadge, setConnectionRequestBadge] = useState(0)
+  const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   useEffect(() => {
     const refresh = () => {
       try {

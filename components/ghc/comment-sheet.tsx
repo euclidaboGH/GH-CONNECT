@@ -44,7 +44,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const [editText, setEditText] = useState("")
   const [busy, setBusy] = useState(false)
   const submittingRef = useRef(false)
-  const [visibleCount, setVisibleCount] = useState(40)
+  const [visibleCount, setVisibleCount] = useState<number>(40)
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({})
   const [sortMode, setSortMode] = useState<"newest" | "oldest">("newest")
   const listRef = useRef<HTMLDivElement | null>(null)

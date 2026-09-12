@@ -113,7 +113,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [feedBootstrapped, setFeedBootstrapped] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [displayedPostsCount, setDisplayedPostsCount] = useState(MOBILE_PAGE_SIZES.feed)
+  const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
   const [likedPosts, setLikedPosts] = useState<string[]>([])
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<string[]>([])

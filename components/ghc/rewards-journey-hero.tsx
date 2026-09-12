@@ -33,7 +33,7 @@ export function RewardsJourneyHero({
   onOpenWallet?: () => void
 }) {
   const ghc = useGHC()
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
 
   const membershipTier = useMemo(() => {
     try {

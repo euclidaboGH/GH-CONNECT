@@ -134,7 +134,7 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
   }
   const [tab, setTab] = useState<"incoming" | "outgoing">(initialTab)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
 
   const inbox = useMemo(() => {
     void tick

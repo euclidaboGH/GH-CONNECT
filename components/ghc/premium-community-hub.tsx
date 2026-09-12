@@ -195,7 +195,7 @@ export function PremiumCommunityHub({
   canChat?: boolean
   role?: string
 }) {
-  const [welcomeTick, setWelcomeTick] = useState(0)
+  const [welcomeTick, setWelcomeTick] = useState<number>(0)
   const [tab, setTab] = useState<CommunityHubTab>(community.isJoined ? "board" : "about")
   const [showJoinConfirm, setShowJoinConfirm] = useState(false)
 
@@ -226,7 +226,7 @@ export function PremiumCommunityHub({
   const [announceBody, setAnnounceBody] = useState("")
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
-  const [safetyTick, setSafetyTick] = useState(0)
+  const [safetyTick, setSafetyTick] = useState<number>(0)
 
   const membersWithRoles = (() => {
     if (memberPreview.length > 0) return memberPreview

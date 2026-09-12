@@ -108,7 +108,7 @@ export function RewardsCentreScreen({
   onOpenWallet?: () => void
 }) {
   const [tab, setTab] = useState<Tab>("challenges")
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)

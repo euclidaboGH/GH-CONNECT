@@ -219,7 +219,7 @@ function SmartSuggestionsSection({
   userAge?: number
   userLocation?: string
 }) {
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentIndex, setCurrentIndex] = useState<number>(0)
   const [actionToast, setActionToast] = useState("")
   const confirmAction = (message: string, action: () => void) => {
     action()

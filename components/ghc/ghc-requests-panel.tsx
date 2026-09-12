@@ -41,7 +41,7 @@ export function GhcRequestsPanel({ open, onClose, availableBalance, onChanged }:
   const [busyId, setBusyId] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [payConfirm, setPayConfirm] = useState<GhcTransferRequest | null>(null)
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
 
   const { incoming, outgoing } = useMemo(() => {
     void tick

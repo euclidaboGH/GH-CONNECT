@@ -92,7 +92,7 @@ export function GlobalSearchModal({
   const [tab, setSearchTab] = useState<SearchTab>("all")
   const [recent, setRecent] = useState<string[]>([])
   const requestGen = useRef(0)
-  const [resultGen, setResultGen] = useState(0)
+  const [resultGen, setResultGen] = useState<number>(0)
 
   // Debounce — prevents stale rapid typing results
   useEffect(() => {

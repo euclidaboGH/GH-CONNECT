@@ -36,7 +36,7 @@ const PRIVACY_OPTIONS = [
 ]
 
 export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading = false, error = null }: CreateGroupModalProps) {
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState<number>(1)
   const [formData, setFormData] = useState<CreateGroupFormData>({
     name: "",
     description: "",

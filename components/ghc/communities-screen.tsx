@@ -305,7 +305,7 @@ export function CommunitiesScreen() {
   /** Snapshot so hub opens immediately after create (before conversations state catches up) */
   const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
-  const [hubKey, setHubKey] = useState(0)
+  const [hubKey, setHubKey] = useState<number>(0)
   const [joinPickerRow, setJoinPickerRow] = useState<CommunityRow | null>(null)
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)

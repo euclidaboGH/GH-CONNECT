@@ -245,7 +245,7 @@ export function DailyRewardFeedCard({
   const ghc = useGHC()
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
   const [claiming, setClaiming] = useState(false)
 
   const daily = useMemo(() => {
@@ -550,7 +550,7 @@ export function DailyRewardHomeExperience() {
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState<number>(0)
 
   useEffect(() => {
     const daily = getDailyStreak(userId, tier)

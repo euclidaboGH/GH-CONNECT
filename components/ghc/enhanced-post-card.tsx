@@ -74,13 +74,13 @@ function EnhancedPostCardInner({
   onOpenProfile,
 }: EnhancedPostCardProps) {
   const [showReactions, setShowReactions] = useState(false)
-  const [lastTapTime, setLastTapTime] = useState(0)
-  const [tapCount, setTapCount] = useState(0)
+  const [lastTapTime, setLastTapTime] = useState<number>(0)
+  const [tapCount, setTapCount] = useState<number>(0)
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
-  const [imageIndex, setImageIndex] = useState(0)
+  const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
   const pressTimerRef = useRef<NodeJS.Timeout>()
   const doubleTapTimerRef = useRef<NodeJS.Timeout>()

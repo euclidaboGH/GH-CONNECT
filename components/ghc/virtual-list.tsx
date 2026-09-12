@@ -41,7 +41,7 @@ export function VirtualList<T>({
   empty,
 }: VirtualListProps<T>) {
   const parentRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
+  const [scrollTop, setScrollTop] = useState<number>(0)
 
   const safeItems = Array.isArray(items) ? items : []
   const total = safeItems.length

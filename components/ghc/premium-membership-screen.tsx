@@ -235,7 +235,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const [confirmTier, setConfirmTier] = useState<MembershipTierId | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
-  const [tick, setTick] = useState(0)
+  const [tick, setTick] = useState<number>(0)
 
   // Prefer server entitlement over local-only cache
   useEffect(() => {

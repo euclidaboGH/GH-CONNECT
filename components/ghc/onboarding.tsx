@@ -220,7 +220,7 @@ export function Onboarding() {
     IdentityService.getIdentity().displayName ||
     ""
   const [phase, setPhase] = useState<"splash" | "welcome" | "flow">("splash")
-  const [introPage, setIntroPage] = useState(0)
+  const [introPage, setIntroPage] = useState<number>(0)
 
   useEffect(() => {
     if (phase !== "splash") return
