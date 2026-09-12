@@ -381,7 +381,11 @@ export function DailyRewardSheet({
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [claiming, setClaiming] = useState(false)
-  const daily = useMemo(() => getDailyStreak(userId, tier), [userId, tier, open])
+  const daily = useMemo(() => {
+    // Recompute when sheet opens so claimability is current
+    void open
+    return getDailyStreak(userId, tier)
+  }, [userId, tier, open])
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
@@ -440,7 +444,7 @@ export function DailyRewardSheet({
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed])
+  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed])
 
   const handleDismiss = useCallback(() => {
     markDailyRewardDismissed(userId)

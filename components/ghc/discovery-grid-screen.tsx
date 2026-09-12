@@ -103,7 +103,10 @@ export function DiscoveryGridScreen() {
   const [connectBusy, setConnectBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const userInterests = Array.isArray(ghc.profile?.interests) ? ghc.profile!.interests! : []
+  const userInterests = useMemo(
+    () => (Array.isArray(ghc.profile?.interests) ? ghc.profile!.interests! : []),
+    [ghc.profile?.interests],
+  )
   const userLocation = [ghc.profile?.city, ghc.profile?.country].filter(Boolean).join(", ")
 
   const graphSnap = useMemo(

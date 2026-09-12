@@ -55,7 +55,7 @@ export function ProfileScreen({
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
   const p = ghc.profile || ({} as Profile)
   const name = p.displayName || "Member"
-  const photos = Array.isArray(p.photos) ? p.photos.filter(Boolean) : []
+  const photos = useMemo(() => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []), [p.photos])
   const photo = photos[0] || ""
   const cover = p.coverPhoto || ""
   const interests = Array.isArray(p.interests) ? p.interests.filter(Boolean) : []
