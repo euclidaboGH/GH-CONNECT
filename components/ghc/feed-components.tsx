@@ -331,7 +331,7 @@ export const PostCard = memo(function PostCard({
             <ShareMenu
               postId={post.id}
               isOpen={showShareMenu}
-              onShare={onShare || (() => {})}
+              onShare={(platform) => onShare?.(post.id, platform)}
               onClose={() => setShowShareMenu(false)}
             />
           )}
