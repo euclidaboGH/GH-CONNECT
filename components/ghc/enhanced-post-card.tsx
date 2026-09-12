@@ -82,8 +82,8 @@ function EnhancedPostCardInner({
   const [draftContent, setDraftContent] = useState(post.content ?? "")
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
-  const pressTimerRef = useRef<NodeJS.Timeout>()
-  const doubleTapTimerRef = useRef<NodeJS.Timeout>()
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Double-tap to like

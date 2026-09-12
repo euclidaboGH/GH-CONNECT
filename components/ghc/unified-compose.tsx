@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Image, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
+import { Image as ImageIcon, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
@@ -739,7 +739,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             onClick={() => imageInputRef.current?.click()}
             className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 active:scale-[0.98]"
           >
-            <Image size={18} aria-hidden /> Photo
+            <ImageIcon size={18} aria-hidden /> Photo
           </button>
           <button
             type="button"
