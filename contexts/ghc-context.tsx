@@ -182,6 +182,8 @@ interface GHCContextType {
   conversations: Conversation[]
   friendRequests: FriendRequest[]
   following: string[]
+  /** Mutual connections (explicit friends graph) */
+  friends: string[]
   shares: import("@/lib/share-types").ShareRecord[]
   reposts: import("@/lib/share-types").RepostFeedItem[]
   likedPostIds: string[]
