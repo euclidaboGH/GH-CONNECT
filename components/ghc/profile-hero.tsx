@@ -168,7 +168,17 @@ export function ProfileHeroMeta({
             displayName={displayName}
             preferredId={preferredId}
             verified={verified}
-            onToast={onToast}
+            onToast={
+              onToast
+                ? (msg, type) => {
+                    const t =
+                      type === "error" || type === "success" || type === "info"
+                        ? type
+                        : "info"
+                    onToast(msg, t)
+                  }
+                : undefined
+            }
           />
         </div>
       </div>
