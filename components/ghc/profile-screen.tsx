@@ -328,7 +328,17 @@ export function ProfileScreen({
           <SignatureGhIdCard
             userId={meId}
             displayName={name}
-            onToast={ghc.addToast}
+            onToast={
+              ghc.addToast
+                ? (msg, type) => {
+                    const t =
+                      type === "error" || type === "success" || type === "info"
+                        ? type
+                        : "info"
+                    ghc.addToast(msg, t)
+                  }
+                : undefined
+            }
           />
         </div>
 
