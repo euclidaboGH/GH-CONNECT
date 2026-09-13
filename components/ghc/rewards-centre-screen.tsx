@@ -114,24 +114,28 @@ export function RewardsCentreScreen({
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const ghc = useGHC()
   const profile = ghc.profile
-  const communities =
-    (ghc as { communities?: Array<{ id: string; membership?: string }> }).communities ||
-    (ghc as { groups?: Array<{ id: string; membership?: string }> }).groups ||
-    []
+  const communities = useMemo(() => {
+    return (
+      (ghc as { communities?: Array<{ id: string; membership?: string }> }).communities ||
+      (ghc as { groups?: Array<{ id: string; membership?: string }> }).groups ||
+      []
+    )
+  }, [ghc])
 
   const userId = String(profile?.id || "").trim() || "current-user"
 
   const signals = useMemo(() => {
-    void tick
+    const version = tick
     const pct = computeProfileCompletionPct(profile)
     const joined = Array.isArray(communities)
       ? communities.filter((c) => c.membership === "member" || c.membership === "joined" || !c.membership).length
       : 0
     // Quality metrics stay conservative without backend; progress comes from challenge storage + profile
+    // version forces recompute after claims/refreshes
     return {
       profileCompletionPct: pct,
       communitiesJoined: joined,
-      qualityPostsOrComments: 0,
+      qualityPostsOrComments: version >= 0 ? 0 : 0,
       marketplaceOrdersCompleted: 0,
       verifiedReferrals: 0,
       communityActivities: 0,

@@ -51,6 +51,9 @@ export function GhcRequestsPanel({ open, onClose, availableBalance, onChanged }:
         listOutgoingTransferRequests?: () => GhcTransferRequest[]
         expireStaleTransferRequests?: () => number
       } | null
+      if (!open) {
+        return { incoming: [], outgoing: [] }
+      }
       eco?.expireStaleTransferRequests?.()
       return {
         incoming: eco?.listIncomingTransferRequests?.() || [],

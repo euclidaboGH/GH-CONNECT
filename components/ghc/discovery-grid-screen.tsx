@@ -299,7 +299,7 @@ export function DiscoveryGridScreen() {
         return
       }
     },
-    [ghc, onLike, onPass, onConnect, meId],
+    [ghc, onConnect, meId],
   )
 
   const emptyCopy = discoveryEmptyState(category)

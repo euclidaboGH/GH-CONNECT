@@ -234,7 +234,7 @@ export function SendGhcFlow({
     setStep("review")
   }
 
-  const reconcileAndFinish = async (ref: string, to: SendRecipient, amt: number, noteText?: string) => {
+  const reconcileAndFinish = useCallback(async (ref: string, to: SendRecipient, amt: number, noteText?: string) => {
     setStep("reconciling")
     try {
       const eco = getBoundDomainServices()?.economy as {
@@ -243,7 +243,7 @@ export function SendGhcFlow({
       } | null
       if (eco?.hydrate) await eco.hydrate()
       const txs = eco?.getTransactions?.(40) || []
-      const found = txs.find((t) => t.referenceId === ref && t.kind === "transfer_out")
+      const found = txs.find((tx) => tx.referenceId === ref && tx.kind === "transfer_out")
       if (found) {
         setReceipt({
           amount: amt,
@@ -263,7 +263,7 @@ export function SendGhcFlow({
     setErrorTitle(mapped.title)
     setErrorBody(mapped.body)
     setStep("error")
-  }
+  }, [onCompleted])
 
   const confirmSend = useCallback(async () => {
     if (inFlightRef.current) return
@@ -348,7 +348,7 @@ export function SendGhcFlow({
     } finally {
       inFlightRef.current = false
     }
-  }, [recipient, amount, note, currentUserId, onCompleted])
+  }, [recipient, amount, note, currentUserId, onCompleted, reconcileAndFinish])
 
   if (!open) return null
 

@@ -166,7 +166,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
 
     return () => observer.disconnect()
-  }, [isLoadingMore, displayedPostsCount])
+  }, [isLoadingMore, displayedPostsCount, loadMorePosts])
 
   // Rank posts based on filter
   useEffect(() => {
@@ -261,7 +261,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
   }
 
-  const loadMorePosts = async () => {
+  const loadMorePosts = useCallback(async () => {
     try {
       setIsLoadingMore(true)
       // Simulate loading
@@ -274,7 +274,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     } finally {
       setIsLoadingMore(false)
     }
-  }
+  }, [addToast])
 
   // Post interaction handlers
   const handleLike = useCallback(

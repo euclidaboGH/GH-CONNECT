@@ -171,7 +171,7 @@ export function RequestGhcFlow({
     setStep("review")
   }
 
-  const reconcileRequest = async (ref: string, from: SendRecipient, amt: number, noteText?: string) => {
+  const reconcileRequest = useCallback(async (ref: string, from: SendRecipient, amt: number, noteText?: string) => {
     setStep("reconciling")
     try {
       const eco = getBoundDomainServices()?.economy as {
@@ -199,7 +199,7 @@ export function RequestGhcFlow({
     setErrorTitle(m.title)
     setErrorBody(m.body)
     setStep("error")
-  }
+  }, [onCompleted])
 
   const submitRequest = useCallback(async () => {
     if (inFlightRef.current) return
@@ -282,7 +282,7 @@ export function RequestGhcFlow({
     } finally {
       inFlightRef.current = false
     }
-  }, [payer, amount, note, currentUserId, onCompleted, limits.requestExpiryMs])
+  }, [payer, amount, note, currentUserId, onCompleted, limits.requestExpiryMs, reconcileRequest])
 
   if (!open) return null
 

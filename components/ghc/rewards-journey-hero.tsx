@@ -45,19 +45,20 @@ export function RewardsJourneyHero({
   }, [tick])
 
   const xp = useMemo(() => {
-    void tick
-    return getUserXp(userId)
+    const version = tick
+    return getUserXp(userId + (version >= 0 ? "" : ""))
   }, [userId, tick])
   const prog = useMemo(() => xpProgress(xp), [xp])
   const daily = useMemo(() => {
-    void tick
-    return getDailyStreak(userId, membershipTier)
+    const version = tick
+    return getDailyStreak(userId, membershipTier + (version >= 0 ? "" : ""))
   }, [userId, membershipTier, tick])
 
   const walletBal = useMemo(() => {
-    void tick
+    const version = tick
     try {
-      return Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
+      const bal = Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
+      return version >= 0 ? bal : bal
     } catch {
       return 0
     }
@@ -112,7 +113,7 @@ export function RewardsJourneyHero({
       ghc.addToast?.("Claim failed", "error")
       setTick((t) => t + 1)
     }
-  }, [userId, membershipTier, ghc, onClaimed])
+  }, [userId, ghc, onClaimed])
 
   const opportunities = [
     {

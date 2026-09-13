@@ -61,7 +61,7 @@ export function RecommendedGroupsSection({
       setError("Failed to generate recommendations. Please try again.")
       return []
     }
-  }, [profile.interests, profile.city, profile.country, settings.locationRadius, allGroups.length, joinedStates])
+  }, [profile, settings, allGroups, joinedStates])
 
   // Generate recommendations on mount or when data changes
   useEffect(() => {

@@ -329,15 +329,17 @@ export function ProfileScreen({
             userId={meId}
             displayName={name}
             onToast={
-              ghc.addToast
-                ? (msg, type) => {
-                    const t =
-                      type === "error" || type === "success" || type === "info"
-                        ? type
-                        : "info"
-                    ghc.addToast(msg, t)
-                  }
-                : undefined
+              (() => {
+                const addToast = ghc.addToast
+                if (!addToast) return undefined
+                return (msg: string, type?: string) => {
+                  const kind =
+                    type === "error" || type === "success" || type === "info"
+                      ? type
+                      : "info"
+                  addToast(msg, kind)
+                }
+              })()
             }
           />
         </div>

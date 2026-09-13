@@ -145,7 +145,7 @@ export function RelationshipActions({
         setBusy(null)
       }
     },
-    [busy, userId, userName, userPhoto, followUser, swipe, startConversation, addToast, blockedUsers]
+    [busy, userId, userName, userPhoto, followUser, swipe, startConversation, addToast]
   )
 
   if (state.isBlocked) {
