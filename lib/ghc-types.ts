@@ -46,6 +46,11 @@ export interface Profile {
    * Optional until auth hydration; ownership helpers treat missing id safely.
    */
   id?: string
+  /**
+   * Optional public handle (often from Pi username).
+   * Display as @handle; not a second account identity.
+   */
+  username?: string | null
   displayName: string
   age: number
   gender: Gender
