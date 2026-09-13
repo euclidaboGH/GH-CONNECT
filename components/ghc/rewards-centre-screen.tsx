@@ -21,7 +21,7 @@ import {
   type ChallengeStatus,
   type ChallengeCard,
 } from "@/lib/domains/reward-challenges"
-import type { RewardRecord } from "@/lib/domains/economy-types"
+import type { RewardRecord, RewardRule } from "@/lib/domains/economy-types"
 import {
   getUserXp,
   xpProgress,
@@ -149,7 +149,7 @@ export function RewardsCentreScreen({
       const eco = services?.economy
       const wallet = eco?.getWallet?.()
       const rewards = (eco?.getRewards?.(50) || []) as RewardRecord[]
-      const rules = eco?.getRules?.() || []
+      const rules: RewardRule[] = eco?.getRules?.() || []
       const pending = rewards.filter(
         (r) =>
           r.validationStatus === "pending_validation" ||
@@ -165,7 +165,7 @@ export function RewardsCentreScreen({
       return {
         wallet: null,
         rewards: [] as RewardRecord[],
-        rules: [] as unknown[],
+        rules: [] as RewardRule[],
         pending: [] as RewardRecord[],
         challenges: [] as ChallengeCard[],
         achievements: [] as unknown[],
@@ -441,7 +441,7 @@ export function RewardsCentreScreen({
               {snapshot.rules.length === 0 ? (
                 <Empty title="No active rules" body="Reward rules load from the economy domain." />
               ) : (
-                snapshot.rules.map((rule: { id: string; description?: string; category?: string; amount?: number; dailyLimit?: number; requiresValidation?: boolean }) => (
+                snapshot.rules.map((rule) => (
                   <div
                     key={rule.id}
                     className="rounded-2xl border border-border bg-card px-3 py-3"
