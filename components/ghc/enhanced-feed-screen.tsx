@@ -151,6 +151,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   // Infinite scroll detection
   const observerTargetRef = useRef<HTMLDivElement>(null)
 
+  const loadMorePosts = useCallback(async () => {
+    try {
+      setIsLoadingMore(true)
+      // Simulate loading
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      setDisplayedPostsCount((prev) => prev + 5)
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error("Failed to load more posts")
+      console.error("[Load More Error]", err)
+      addToast("Failed to load more posts.", "error")
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [addToast])
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -260,21 +275,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       setIsRefreshing(false)
     }
   }
-
-  const loadMorePosts = useCallback(async () => {
-    try {
-      setIsLoadingMore(true)
-      // Simulate loading
-      await new Promise((resolve) => setTimeout(resolve, 800))
-      setDisplayedPostsCount((prev) => prev + 5)
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error("Failed to load more posts")
-      console.error("[Load More Error]", err)
-      addToast("Failed to load more posts.", "error")
-    } finally {
-      setIsLoadingMore(false)
-    }
-  }, [addToast])
 
   // Post interaction handlers
   const handleLike = useCallback(

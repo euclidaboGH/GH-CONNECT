@@ -36,9 +36,12 @@ export function RewardsJourneyHero({
   const [tick, setTick] = useState<number>(0)
 
   const membershipTier = useMemo(() => {
+    // tick versions external membership status reads after claim/refresh
+    const version = tick
     try {
       const st = getBoundDomainServices()?.membership?.getStatus?.() as { tier?: string } | null
-      return String(st?.tier || "free").toLowerCase()
+      const tier = String(st?.tier || "free").toLowerCase()
+      return version >= 0 ? tier : tier
     } catch {
       return "free"
     }
