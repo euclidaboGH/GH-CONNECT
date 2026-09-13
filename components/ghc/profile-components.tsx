@@ -574,7 +574,9 @@ export function OwnPostCard({
       post={post}
       isLiked={isLiked}
       isOwnPost
-      onLike={onLike}
+      onLike={(postId, _isDouble) => {
+        onLike?.(postId)
+      }}
       onComment={() => onComment?.(post.id)}
       onShare={() => onShare?.(post.id)}
       onDelete={onDelete}
