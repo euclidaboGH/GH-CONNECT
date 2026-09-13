@@ -153,8 +153,7 @@ export function RewardsCentreScreen({
       const pending = rewards.filter(
         (r) =>
           r.validationStatus === "pending_validation" ||
-          r.validationStatus === "eligible" ||
-          (r as { status?: string }).status === "pending"
+          r.validationStatus === "eligible"
       )
       const engine = createChallengeEngine(userId)
       const challenges = engine.getChallengeCards(signals)
@@ -499,16 +498,14 @@ export function RewardsCentreScreen({
                 />
               ) : (
                 snapshot.rewards.map((r) => {
-                  const status =
-                    r.validationStatus ||
-                    (r as { status?: string }).status ||
-                    "posted"
+                  // Canonical RewardValidationStatus only (no legacy "pending")
+                  const status = r.validationStatus
                   const claimLabel =
-                    status === "eligible" || status === "approved"
+                    status === "eligible" ||
+                    status === "approved" ||
+                    status === "pending_validation"
                       ? "Ready to claim"
-                      : status === "pending_validation" || status === "pending"
-                        ? "Ready to claim"
-                        : "Under review"
+                      : "Under review"
                   return (
                     <div
                       key={r.id}
@@ -516,7 +513,7 @@ export function RewardsCentreScreen({
                     >
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                          {status === "pending" || status === "pending_validation" ? (
+                          {status === "pending_validation" || status === "eligible" ? (
                             <Clock size={14} />
                           ) : (
                             <CheckCircle2 size={14} />
@@ -548,7 +545,7 @@ export function RewardsCentreScreen({
                             <li>
                               <span className="font-semibold text-foreground/80">Status:</span>{" "}
                               <span className="font-bold capitalize">{String(status).replace(/_/g, " ")}</span>
-                              {(status === "pending_validation" || status === "eligible" || status === "pending") && (
+                              {(status === "pending_validation" || status === "eligible") && (
                                 <span className="ml-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
                                   {claimLabel}
                                 </span>
@@ -560,8 +557,7 @@ export function RewardsCentreScreen({
                           </p>
                           {(status === "pending_validation" ||
                             status === "eligible" ||
-                            status === "approved" ||
-                            status === "pending") && (
+                            status === "approved") && (
                             <button
                               type="button"
                               onClick={() => void claimPendingReward(String(r.id))}
