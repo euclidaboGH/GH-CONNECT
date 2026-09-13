@@ -594,7 +594,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               (typeof profile.displayName === "string" &&
                 profile.displayName.trim().length > 0 &&
                 Array.isArray(profile.photos) &&
-                (profile.photos as unknown[]).length > 0)
+                profile.photos.length > 0)
             // Also consult local profile store (PIN unlock / cold start race)
             if (!alreadyLocal) {
               try {
@@ -607,7 +607,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                   alreadyLocal = true
                   // Merge stable fields so UI is not empty
                   if (!profile.displayName && found.displayName) profile.displayName = found.displayName
-                  if ((!profile.photos || (profile.photos as unknown[]).length === 0) && found.photos) {
+                  if ((!profile.photos || profile.photos.length === 0) && found.photos) {
                     profile.photos = found.photos
                   }
                   if (!profile.interests && found.interests) profile.interests = found.interests

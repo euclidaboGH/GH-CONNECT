@@ -44,8 +44,8 @@ export function MessageScreen() {
     pinConversation: messaging.pinConversation,
     archiveConversation: messaging.archiveConversation,
     muteConversation: messaging.muteConversation,
-    matches: [] as unknown[],
-    friends: [] as unknown[],
+    matches: [] as string[],
+    friends: [] as string[],
   }
 
   const conversations = useMemo(

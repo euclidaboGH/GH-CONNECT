@@ -21,7 +21,8 @@ import {
   type ChallengeStatus,
   type ChallengeCard,
 } from "@/lib/domains/reward-challenges"
-import type { RewardRecord, RewardRule } from "@/lib/domains/economy-types"
+import type { RewardRecord, RewardRule, GhcWalletSnapshot } from "@/lib/domains/economy-types"
+import type { AchievementDefinition } from "@/lib/domains/achievement-domain"
 import {
   getUserXp,
   xpProgress,
@@ -33,6 +34,24 @@ import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
+
+/** Canonical unlocked achievement row from achievement domain */
+type UnlockedAchievementRow = AchievementDefinition & { unlockedAt: number }
+
+type RewardsSnapshot = {
+  wallet: GhcWalletSnapshot | null | undefined
+  rewards: RewardRecord[]
+  rules: RewardRule[]
+  pending: RewardRecord[]
+  challenges: ChallengeCard[]
+  achievements: UnlockedAchievementRow[]
+  streak: {
+    weekKey: string
+    qualityDays: number
+    lastQualityDayKey: string | null
+    note: string
+  }
+}
 
 function formatGhc(n: number) {
   if (!Number.isFinite(n)) return "0.00"
@@ -114,12 +133,15 @@ export function RewardsCentreScreen({
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const ghc = useGHC()
   const profile = ghc.profile
+  // Optional community lists may be present on the provider value without being
+  // declared on GHCContextType; read them via a narrow intersection (no unknown[]).
   const communities = useMemo(() => {
-    return (
-      (ghc as { communities?: Array<{ id: string; membership?: string }> }).communities ||
-      (ghc as { groups?: Array<{ id: string; membership?: string }> }).groups ||
-      []
-    )
+    type CommunityRow = { id: string; membership?: string }
+    const bag = ghc as typeof ghc & {
+      communities?: CommunityRow[]
+      groups?: CommunityRow[]
+    }
+    return bag.communities || bag.groups || []
   }, [ghc])
 
   const userId = String(profile?.id || "").trim() || "current-user"
@@ -142,13 +164,13 @@ export function RewardsCentreScreen({
     }
   }, [profile, communities, tick])
 
-  const snapshot = useMemo(() => {
+  const snapshot = useMemo((): RewardsSnapshot => {
     void tick
     try {
       const services = getBoundDomainServices()
       const eco = services?.economy
-      const wallet = eco?.getWallet?.()
-      const rewards = (eco?.getRewards?.(50) || []) as RewardRecord[]
+      const wallet = eco?.getWallet?.() ?? null
+      const rewards: RewardRecord[] = eco?.getRewards?.(50) || []
       const rules: RewardRule[] = eco?.getRules?.() || []
       const pending = rewards.filter(
         (r) =>
@@ -158,16 +180,17 @@ export function RewardsCentreScreen({
       const engine = createChallengeEngine(userId)
       const challenges = engine.getChallengeCards(signals)
       const streak = engine.getQualityStreak()
-      const achievements = services?.achievements?.getUnlockedForProfile?.() || []
+      const achievements: UnlockedAchievementRow[] =
+        services?.achievements?.getUnlockedForProfile?.() || []
       return { wallet, rewards, rules, pending, challenges, achievements, streak }
     } catch {
       return {
         wallet: null,
-        rewards: [] as RewardRecord[],
-        rules: [] as RewardRule[],
-        pending: [] as RewardRecord[],
-        challenges: [] as ChallengeCard[],
-        achievements: [] as unknown[],
+        rewards: [],
+        rules: [],
+        pending: [],
+        challenges: [],
+        achievements: [],
         streak: {
           weekKey: "",
           qualityDays: 0,
@@ -189,7 +212,7 @@ export function RewardsCentreScreen({
   const stackedPending = useMemo(() => {
     const map = new Map<string, { sample: RewardRecord; ids: string[]; amount: number }>()
     for (const r of snapshot.pending) {
-      const key = `${(r as { reason?: string }).reason || (r as { category?: string }).category || "reward"}|${r.amount}`
+      const key = `${r.reason || r.category || "reward"}|${r.amount}`
       const cur = map.get(key)
       if (cur) {
         cur.ids.push(String(r.id))
@@ -224,9 +247,7 @@ export function RewardsCentreScreen({
       if (claimingId) return
       setClaimingId(rewardId)
       try {
-        const eco = getBoundDomainServices()?.economy as
-          | { claimReward?: (id: string) => Promise<{ ok: boolean; error?: string }> }
-          | undefined
+        const eco = getBoundDomainServices()?.economy
         if (!eco?.claimReward) {
           ghc.addToast?.("Claim unavailable right now", "error")
           return
@@ -587,7 +608,7 @@ export function RewardsCentreScreen({
                   body="Profile Builder, Community Builder and others unlock through verified activity."
                 />
               ) : (
-                snapshot.achievements.map((a: { id: string; title?: string; name?: string; description?: string }) => (
+                snapshot.achievements.map((a) => (
                   <div
                     key={a.id}
                     className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3"
@@ -595,11 +616,11 @@ export function RewardsCentreScreen({
                     <Award size={18} className="text-amber-600" />
                     <div>
                       <p className="text-sm font-semibold text-foreground">
-                        {a.title || a.name || a.id}
+                        {a.title || a.id}
                       </p>
-                      {a.description && (
+                      {a.description ? (
                         <p className="text-[11px] text-muted-foreground">{a.description}</p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ))
