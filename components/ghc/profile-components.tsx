@@ -552,37 +552,50 @@ export function OwnPostCard({
   post,
   onDelete,
   isLiked = false,
+  isSaved = false,
   onLike,
   onComment,
   onShare,
+  onSave,
   onEdit,
   onArchive,
   onInsights,
+  onShowVisibilityReason,
 }: {
   post: Post
   onDelete: (postId: string) => void
   isLiked?: boolean
+  isSaved?: boolean
   onLike?: (postId: string) => void
   onComment?: (postId: string) => void
   onShare?: (postId: string) => void
+  onSave?: (postId: string) => void
   onEdit?: (postId: string, content: string) => void
   onArchive?: (postId: string) => void
   onInsights?: (postId: string) => void
+  onShowVisibilityReason?: (postId: string) => void
 }) {
   return (
     <EnhancedPostCard
       post={post}
       isLiked={isLiked}
+      isSaved={isSaved}
       isOwnPost
       onLike={(postId, _isDouble) => {
         onLike?.(postId)
       }}
       onComment={() => onComment?.(post.id)}
       onShare={() => onShare?.(post.id)}
+      onSave={(postId) => {
+        onSave?.(postId)
+      }}
       onDelete={onDelete}
       onEdit={onEdit}
       onArchive={onArchive}
       onInsights={onInsights}
+      onShowVisibilityReason={(postId) => {
+        onShowVisibilityReason?.(postId)
+      }}
     />
   )
 }
