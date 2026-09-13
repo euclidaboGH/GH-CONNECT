@@ -223,8 +223,6 @@ interface GHCContextType {
   createQuoteRepost: (originalPostId: string, quoteText: string) => Promise<void>
   sharePost: (postId: string, platform: "twitter" | "facebook" | "linkedin" | "copy" | "timeline" | "story" | "private" | "group") => Promise<string>
   applyShareResult: (result: any) => void
-  shares: any[]
-  reposts: any[]
   savePost: (postId: string, collection?: string) => Promise<void>
   unsavePost: (postId: string) => Promise<void>
   hidePost: (postId: string) => Promise<void>
@@ -247,7 +245,6 @@ interface GHCContextType {
 
   // Discovery
   swipe: (candidateId: string, action: "like" | "pass" | "superlike") => Promise<void>
-  matchCelebration: null | { userId: string; userName: string; userPhoto: string }
   dismissMatchCelebration: () => void
   followUser: (userId: string) => Promise<void>
   addFriend: (userId: string) => Promise<void>
