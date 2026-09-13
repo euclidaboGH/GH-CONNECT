@@ -7,6 +7,7 @@
 
 import { listMyCommunitiesForHome } from "@/lib/domains/adapters/my-communities-home"
 import type { CommunitySummary } from "@/lib/domains/contracts/communities"
+import { membershipStateLabel } from "@/lib/domains/contracts/communities"
 
 export function ProfileMyCommunities({
   conversations,
@@ -84,11 +85,9 @@ export function ProfileMyCommunities({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-bold text-foreground">{c.name}</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    {c.role && c.role !== "guest" ? (
-                      <span className="capitalize">{c.role}</span>
-                    ) : (
-                      "Member"
-                    )}
+                    <span className="capitalize">
+                      {membershipStateLabel(c.membershipState ?? "member")}
+                    </span>
                     {c.description ? ` · ${c.description.slice(0, 48)}` : ""}
                   </p>
                 </div>
