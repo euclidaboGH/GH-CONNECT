@@ -69,9 +69,9 @@ export function ProfileMyCommunities({
                 className="flex w-full min-h-[3.25rem] items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               >
                 <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-muted">
-                  {c.photo || c.cover ? (
+                  {c.coverImage ? (
                     <img
-                      src={c.photo || c.cover}
+                      src={c.coverImage}
                       alt=""
                       className="h-full w-full object-cover"
                     />
