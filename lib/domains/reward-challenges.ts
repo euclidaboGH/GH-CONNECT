@@ -258,8 +258,30 @@ export function isChallengeOpen(c: RewardChallenge, now = Date.now()): boolean {
   return true
 }
 
+/** Fields used for profile-completion scoring (compatible with Profile + legacy shapes). */
+export type ProfileCompletionInput = {
+  displayName?: string | null
+  name?: string | null
+  photos?: unknown[] | null
+  photo?: unknown
+  bio?: string | null
+  interests?: unknown[] | null
+  location?: unknown
+  homeLocation?: unknown
+  city?: string | null
+  country?: string | null
+  profession?: string | null
+  occupation?: string | null
+  education?: string | null
+  school?: string | null
+  coverPhoto?: string | null
+  cover?: string | null
+}
+
 /** Derive 0–100 profile completion from common fields */
-export function computeProfileCompletionPct(profile: Record<string, unknown> | null | undefined): number {
+export function computeProfileCompletionPct(
+  profile: ProfileCompletionInput | null | undefined
+): number {
   if (!profile) return 0
   const checks: boolean[] = [
     !!(profile.displayName || profile.name),

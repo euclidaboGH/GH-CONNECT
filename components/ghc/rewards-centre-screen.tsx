@@ -125,17 +125,17 @@ export function RewardsCentreScreen({
   const userId = String(profile?.id || "").trim() || "current-user"
 
   const signals = useMemo(() => {
-    const version = tick
+    // tick: recompute after claim/refresh (external challenge/progress stores)
+    void tick
     const pct = computeProfileCompletionPct(profile)
     const joined = Array.isArray(communities)
       ? communities.filter((c) => c.membership === "member" || c.membership === "joined" || !c.membership).length
       : 0
     // Quality metrics stay conservative without backend; progress comes from challenge storage + profile
-    // version forces recompute after claims/refreshes
     return {
       profileCompletionPct: pct,
       communitiesJoined: joined,
-      qualityPostsOrComments: version >= 0 ? 0 : 0,
+      qualityPostsOrComments: 0,
       marketplaceOrdersCompleted: 0,
       verifiedReferrals: 0,
       communityActivities: 0,

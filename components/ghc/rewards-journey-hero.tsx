@@ -36,32 +36,30 @@ export function RewardsJourneyHero({
   const [tick, setTick] = useState<number>(0)
 
   const membershipTier = useMemo(() => {
-    // tick versions external membership status reads after claim/refresh
-    const version = tick
+    // Re-read membership status when tick advances after claim/refresh
+    void tick
     try {
       const st = getBoundDomainServices()?.membership?.getStatus?.() as { tier?: string } | null
-      const tier = String(st?.tier || "free").toLowerCase()
-      return version >= 0 ? tier : tier
+      return String(st?.tier || "free").toLowerCase()
     } catch {
       return "free"
     }
   }, [tick])
 
   const xp = useMemo(() => {
-    const version = tick
-    return getUserXp(userId + (version >= 0 ? "" : ""))
+    void tick
+    return getUserXp(userId)
   }, [userId, tick])
   const prog = useMemo(() => xpProgress(xp), [xp])
   const daily = useMemo(() => {
-    const version = tick
-    return getDailyStreak(userId, membershipTier + (version >= 0 ? "" : ""))
+    void tick
+    return getDailyStreak(userId, membershipTier)
   }, [userId, membershipTier, tick])
 
   const walletBal = useMemo(() => {
-    const version = tick
+    void tick
     try {
-      const bal = Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
-      return version >= 0 ? bal : bal
+      return Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
     } catch {
       return 0
     }
