@@ -13,6 +13,13 @@ import { parseLegacyLocation, legacyCityCountry, type StructuredLocation, type L
 
 // Calculate profile completion percentage from real fields only
 // Fields: displayName (valid), bio, age/birthDate, city+country, education, profession, ≥1 interest, profile photo (not placeholder), cover photo (not placeholder), verification
+function profileFieldText(profile: object, key: string): string {
+  const value = (profile as Record<string, unknown>)[key]
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  return ""
+}
+
 export function calculateProfileCompletion(profile: Profile | null | undefined | Record<string, unknown>): { percentage: number; missing: string[] } {
   const missing: string[] = []
   let completed = 0
@@ -22,29 +29,31 @@ export function calculateProfileCompletion(profile: Profile | null | undefined |
   }
 
   // 1. Display name (valid - not just placeholder)
-  if (profile.displayName && profile.displayName.trim().length > 2 && profile.displayName !== "User") {
+  const displayName = profileFieldText(profile, "displayName")
+  if (displayName.trim().length > 2 && displayName !== "User") {
     completed++
   } else {
     missing.push("Display name")
   }
 
   // 2. Bio (not empty, meaningful length)
-  if (profile.bio && profile.bio.trim().length >= 20) {
+  const bio = profileFieldText(profile, "bio")
+  if (bio.trim().length >= 20) {
     completed++
   } else {
     missing.push("Bio")
   }
 
   // 3. Birth date / Age (not empty)
-  if (profile.bornDate && profile.bornDate.toString().trim().length > 0) {
+  if (profileFieldText(profile, "bornDate").trim().length > 0) {
     completed++
   } else {
     missing.push("Birth date")
   }
 
   // 4. City + Country (both present)
-  const hasCity = profile.city && profile.city.toString().trim().length > 0
-  const hasCountry = profile.country && profile.country.toString().trim().length > 0
+  const hasCity = profileFieldText(profile, "city").trim().length > 0
+  const hasCountry = profileFieldText(profile, "country").trim().length > 0
   if (hasCity && hasCountry) {
     completed++
   } else {
@@ -52,31 +61,35 @@ export function calculateProfileCompletion(profile: Profile | null | undefined |
   }
 
   // 5. Education (not empty)
-  if (profile.education && profile.education.toString().trim().length > 0) {
+  if (profileFieldText(profile, "education").trim().length > 0) {
     completed++
   } else {
     missing.push("Education")
   }
 
   // 6. Profession (not empty)
-  if (profile.profession && profile.profession.toString().trim().length > 0) {
+  if (profileFieldText(profile, "profession").trim().length > 0) {
     completed++
   } else {
     missing.push("Profession")
   }
 
-  // 7. At least 1 interest
-  if (profile.interests && Array.isArray(profile.interests) && profile.interests.length >= 3) {
+  // 7. At least 3 interests
+  const interestsRaw = (profile as Record<string, unknown>).interests
+  if (Array.isArray(interestsRaw) && interestsRaw.length >= 3) {
     completed++
   } else {
     missing.push("Interests (at least 3)")
   }
 
   // 8. Profile photo (not placeholder)
-  const hasProfilePhoto = profile.photos && Array.isArray(profile.photos) && profile.photos.length > 0 && 
-                          profile.photos[0] && 
-                          profile.photos[0] !== "/placeholder.svg?width=80&height=80" &&
-                          !profile.photos[0]?.includes("placeholder")
+  const photosRaw = (profile as Record<string, unknown>).photos
+  const firstPhoto =
+    Array.isArray(photosRaw) && typeof photosRaw[0] === "string" ? photosRaw[0] : ""
+  const hasProfilePhoto =
+    firstPhoto.length > 0 &&
+    firstPhoto !== "/placeholder.svg?width=80&height=80" &&
+    !firstPhoto.includes("placeholder")
   if (hasProfilePhoto) {
     completed++
   } else {
@@ -84,10 +97,11 @@ export function calculateProfileCompletion(profile: Profile | null | undefined |
   }
 
   // 9. Cover photo (not placeholder)
-  const hasCoverPhoto = profile.coverPhoto && 
-                        profile.coverPhoto.toString().trim().length > 0 &&
-                        profile.coverPhoto !== "/placeholder.svg?width=400&height=150" &&
-                        !profile.coverPhoto?.includes("placeholder")
+  const coverPhoto = profileFieldText(profile, "coverPhoto")
+  const hasCoverPhoto =
+    coverPhoto.trim().length > 0 &&
+    coverPhoto !== "/placeholder.svg?width=400&height=150" &&
+    !coverPhoto.includes("placeholder")
   if (hasCoverPhoto) {
     completed++
   } else {
@@ -95,7 +109,7 @@ export function calculateProfileCompletion(profile: Profile | null | undefined |
   }
 
   // 10. Verification
-  if (profile.verified === true) {
+  if ((profile as Record<string, unknown>).verified === true) {
     completed++
   } else {
     missing.push("Verification")
