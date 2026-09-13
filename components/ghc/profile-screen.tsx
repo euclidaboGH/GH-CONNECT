@@ -278,7 +278,7 @@ export function ProfileScreen({
                 <BadgeCheck size={18} className="shrink-0 text-sky-600" aria-label="Verified" />
               ) : null}
               <PiSupporterBadge showCtaWhenNone />
-              <TrustBadge userId={p.id || p.userId} showWhenNew />
+              <TrustBadge userId={p.id || meId} showWhenNew />
             </h2>
             <p className="mt-0.5 text-[13px] font-semibold text-muted-foreground">{handle}</p>
             <p className="mt-0.5 font-mono text-[12px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">
