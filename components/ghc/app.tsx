@@ -51,7 +51,7 @@ const CommunitiesScreen = lazy(() =>
   import("./communities-screen").then((m) => ({ default: m.CommunitiesScreen }))
 )
 const SettingsScreen = lazy(() =>
-  import("./settings").then((m) => ({ default: m.SettingsScreen || m.default }))
+  import("./settings").then((m) => ({ default: m.SettingsScreen }))
 )
 const PremiumWalletScreen = lazy(() =>
   import("@/features/wallet").then((m) => ({ default: m.PremiumWalletScreen }))

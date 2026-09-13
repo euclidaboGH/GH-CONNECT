@@ -38,17 +38,17 @@ import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
-    default: m.PremiumWalletScreen || m.default,
+    default: m.PremiumWalletScreen,
   }))
 )
 const PremiumMembershipScreen = lazy(() =>
   import("./premium-membership-screen").then((m) => ({
-    default: m.PremiumMembershipScreen || m.default,
+    default: m.PremiumMembershipScreen,
   }))
 )
 const RewardsCentreScreen = lazy(() =>
   import("./rewards-centre-screen").then((m) => ({
-    default: m.RewardsCentreScreen || m.default,
+    default: m.RewardsCentreScreen,
   }))
 )
 
