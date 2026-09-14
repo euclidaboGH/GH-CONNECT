@@ -180,8 +180,12 @@ export function patchFromMatchIds(
 /**
  * Merge a graph patch into a full session object (immutable).
  * Safe for setState(s => applyGraphPatch(s, patch)).
+ *
+ * Constraint is `object` (not Record<string, unknown>) so concrete session
+ * interfaces such as ExtendedGHCState — which lack an index signature —
+ * are preserved as T through the call rather than widened.
  */
-export function applyGraphPatch<T extends Record<string, unknown>>(
+export function applyGraphPatch<T extends object>(
   state: T,
   patch: Partial<GraphSessionSlice> & {
     candidates?: unknown
@@ -189,7 +193,18 @@ export function applyGraphPatch<T extends Record<string, unknown>>(
     settingsBlockedUsers?: string[]
   }
 ): T {
-  const next: any = { ...state }
+  // Mutable working copy of the same shape as T; only graph-related keys are written.
+  type GraphWritable = T &
+    Partial<GraphSessionSlice> & {
+      settings?: {
+        mutedUsers?: string[]
+        restrictedUsers?: string[]
+        blockedUsers?: string[]
+      } & Record<string, unknown>
+      candidates?: unknown
+      conversations?: unknown
+    }
+  const next = { ...state } as GraphWritable
   if (patch.following) next.following = patch.following
   if (patch.followers) next.followers = patch.followers
   if (patch.friends) next.friends = patch.friends
@@ -220,5 +235,5 @@ export function applyGraphPatch<T extends Record<string, unknown>>(
   }
   if (patch.candidates) next.candidates = patch.candidates
   if (patch.conversations) next.conversations = patch.conversations
-  return next as T
+  return next
 }
