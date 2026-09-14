@@ -564,7 +564,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       if (!d?.uid) return
       setState((prev) => {
-        const profile = { ...(prev.profile as Record<string, unknown>) }
+        const profile: Profile = { ...prev.profile }
         if (!profile.id || profile.id === "current-user" || profile.id === "preview-user") {
           profile.id = d.uid
         }
@@ -622,7 +622,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        return { ...prev, profile: profile as typeof prev.profile }
+        return { ...prev, profile }
       })
     }
     window.addEventListener("ghc:pi-identity-ready", onPi as EventListener)
