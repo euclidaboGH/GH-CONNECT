@@ -7,6 +7,7 @@
  */
 
 import type { SDKLiteInstance, Product, UserPurchaseBalance } from "./sdklite-types"
+import type { UserStateWritable } from "@/lib/sdklite-types"
 
 const PREFIX = "ghc_pi_state:"
 
@@ -19,7 +20,7 @@ function readBlob(key: string): Record<string, unknown> | null {
   }
 }
 
-function writeBlob(key: string, blob: Record<string, unknown>) {
+function writeBlob(key: string, blob: UserStateWritable) {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(blob ?? {}))
   } catch {
@@ -52,7 +53,7 @@ export function createLocalSdkLite(userId = "current-user"): SDKLiteInstance {
           version: 1,
         }
       },
-      set: async (key: string, blob: Record<string, unknown>) => {
+      set: async (key: string, blob: UserStateWritable) => {
         writeBlob(key, blob)
       },
       products: async () => ({ products }),

@@ -10,6 +10,17 @@ export interface SDKLiteError extends Error {
   code: "product_not_found" | "purchase_cancelled" | "purchase_error";
 }
 
+/**
+ * Writable payload for Pi/local user-state persistence.
+ *
+ * Runtime: JSON.stringify → storage (same format as before).
+ * Type: `object` accepts concrete domain values (Profile, Settings, Post[],
+ * string[], etc.) without requiring an index signature.
+ * Read path remains UserStateRecord.blob as Record<string, unknown> and is
+ * validated via helpers such as coerceStoredProfile().
+ */
+export type UserStateWritable = object
+
 export interface UserStateRecord {
   blob: Record<string, unknown>;
   updatedAt: string;
@@ -50,7 +61,7 @@ export interface RestoreOptions {
 
 export interface SDKLiteState {
   get: (key: string) => Promise<UserStateRecord | null>;
-  set: (key: string, blob: Record<string, unknown>) => Promise<void>;
+  set: (key: string, blob: UserStateWritable) => Promise<void>;
   products: () => Promise<ProductsResponse>;
   purchases: () => Promise<PurchasesResponse>;
   consume: (productId: string, quantity?: number) => Promise<ConsumeResponse>;

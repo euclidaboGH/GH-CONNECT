@@ -15,7 +15,7 @@ import { authPlugin } from "@swetate/auth";
 import { userStatePlugin } from "@swetate/user-state";
 import { PI_NETWORK_CONFIG } from "@/lib/system-config";
 import { onIncompletePaymentFound } from "@/lib/pi-incomplete-payment";
-import type { RestoreOptions, SDKLiteInstance, UserStateRecord } from "@/lib/sdklite-types";
+import type { RestoreOptions, SDKLiteInstance, UserStateRecord, UserStateWritable } from "@/lib/sdklite-types";
 
 interface PiUser {
   uid: string;
@@ -32,7 +32,7 @@ interface PiAuthApi {
 
 interface PiUserStateApi {
   get: (key: string) => Promise<UserStateRecord | null>;
-  set: (key: string, blob: Record<string, unknown>) => Promise<void>;
+  set: (key: string, blob: UserStateWritable) => Promise<void>;
   delete: (key: string) => Promise<void>;
   keys: () => Promise<string[]>;
 }
