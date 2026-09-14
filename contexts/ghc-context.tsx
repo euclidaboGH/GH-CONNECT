@@ -15,7 +15,7 @@ import {
   patchFromMatchIds,
   syncSessionEdgesToStore,
 } from "@/lib/domains/graph-session-adapter"
-import { defaultProfile, DEFAULT_SETTINGS, sanitizeStories, sanitizeStory, STORAGE_KEYS, generateId } from "@/lib/ghc-data"
+import { defaultProfile, DEFAULT_SETTINGS, coerceStoredProfile, sanitizeStories, sanitizeStory, STORAGE_KEYS, generateId } from "@/lib/ghc-data"
 import {
   bootstrapPosts,
   bootstrapStories,
@@ -687,10 +687,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ])
         const early: Partial<ExtendedGHCState> = { ready: true }
         if (profileResult.status === "fulfilled" && profileResult.value?.blob) {
-          early.profile = profileResult.value.blob as typeof early.profile
+          const coerced = coerceStoredProfile(profileResult.value.blob)
+          if (coerced) early.profile = coerced
         }
         if (settingsResult.status === "fulfilled" && settingsResult.value?.blob) {
-          early.settings = settingsResult.value.blob as typeof early.settings
+          const blob = settingsResult.value.blob
+          if (blob && typeof blob === "object" && !Array.isArray(blob)) {
+            const loaded = blob as Partial<Settings>
+            if (typeof loaded.language === "string" || typeof loaded.darkMode === "boolean") {
+              const blockedUsers = Array.isArray(loaded.blockedUsers)
+                ? loaded.blockedUsers.filter((id): id is string => typeof id === "string").slice(0, 200)
+                : []
+              early.settings = { ...DEFAULT_SETTINGS, ...loaded, blockedUsers }
+              if (blockedUsers.length) early.blockedUsers = blockedUsers
+            }
+          }
         }
         if (mounted) setState((s) => ({ ...s, ...early }))
 
@@ -715,25 +726,33 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
         // Profile / settings already loaded above — only fill gaps
         if (!updates.profile && profileResult.status === "fulfilled") {
-          const loaded = profileResult.value?.blob as Profile | undefined
+          const loaded = coerceStoredProfile(profileResult.value?.blob)
           if (loaded?.displayName) updates.profile = loaded
         } else if (profileResult.status === "rejected") {
           errorLogger.logWarning("Profile load failed, using defaults", { error: profileResult.reason })
         }
 
         if (!updates.settings && settingsResult.status === "fulfilled") {
-          const loaded = settingsResult.value?.blob as Settings | undefined
-          if (loaded?.language) {
-            const blockedUsers = Array.isArray(loaded.blockedUsers)
-              ? loaded.blockedUsers.filter((id): id is string => typeof id === "string").slice(0, 200)
-              : []
-            const moderationReports = Array.isArray(loaded.moderationReports)
-              ? loaded.moderationReports
-                  .filter((report) => report && (report.type === "user" || report.type === "post") && typeof report.targetId === "string")
-                  .slice(-200)
-              : []
-            updates.settings = { ...DEFAULT_SETTINGS, ...loaded, blockedUsers, moderationReports }
-            updates.blockedUsers = blockedUsers
+          const blob = settingsResult.value?.blob
+          if (blob && typeof blob === "object" && !Array.isArray(blob)) {
+            const loaded = blob as Partial<Settings>
+            if (loaded.language) {
+              const blockedUsers = Array.isArray(loaded.blockedUsers)
+                ? loaded.blockedUsers.filter((id): id is string => typeof id === "string").slice(0, 200)
+                : []
+              const moderationReports = Array.isArray(loaded.moderationReports)
+                ? loaded.moderationReports
+                    .filter(
+                      (report) =>
+                        report &&
+                        (report.type === "user" || report.type === "post") &&
+                        typeof report.targetId === "string"
+                    )
+                    .slice(-200)
+                : []
+              updates.settings = { ...DEFAULT_SETTINGS, ...loaded, blockedUsers, moderationReports }
+              updates.blockedUsers = blockedUsers
+            }
           }
         } else if (settingsResult.status === "rejected") {
           errorLogger.logWarning("Settings load failed, using defaults", { error: settingsResult.reason })

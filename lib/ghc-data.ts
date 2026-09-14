@@ -101,6 +101,94 @@ export function defaultProfile(): Profile {
   }
 }
 
+/**
+ * Map a Pi/local storage blob into a full Profile without unsafe casts.
+ * Storage blobs are Record<string, unknown>; required fields fall back to defaults.
+ */
+export function coerceStoredProfile(blob: unknown): Profile | null {
+  if (!blob || typeof blob !== "object" || Array.isArray(blob)) return null
+  const raw = blob as Record<string, unknown>
+  const base = defaultProfile()
+
+  const str = (v: unknown, fallback: string): string =>
+    typeof v === "string" ? v : fallback
+  const strOrNull = (v: unknown): string | null =>
+    v === null ? null : typeof v === "string" ? v : null
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback
+  const bool = (v: unknown, fallback: boolean): boolean =>
+    typeof v === "boolean" ? v : fallback
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []
+
+  const genderRaw = raw.gender
+  const gender =
+    genderRaw === "male" ||
+    genderRaw === "female" ||
+    genderRaw === "non-binary" ||
+    genderRaw === "prefer-not-to-say"
+      ? genderRaw
+      : base.gender
+
+  const modeRaw = raw.primaryMode
+  const primaryMode =
+    modeRaw === "dating" ||
+    modeRaw === "friendship" ||
+    modeRaw === "networking"
+      ? modeRaw
+      : base.primaryMode
+
+  const profile: Profile = {
+    ...base,
+    id: typeof raw.id === "string" ? raw.id : base.id,
+    username:
+      raw.username === null
+        ? null
+        : typeof raw.username === "string"
+          ? raw.username
+          : base.username,
+    displayName: str(raw.displayName, base.displayName),
+    age: num(raw.age, base.age),
+    gender,
+    city: str(raw.city, base.city),
+    country: str(raw.country, base.country),
+    bio: str(raw.bio, base.bio),
+    primaryMode,
+    interests: strArr(raw.interests).length ? strArr(raw.interests) : base.interests,
+    photos: strArr(raw.photos),
+    coverPhoto: strOrNull(raw.coverPhoto),
+    status: str(raw.status, base.status),
+    profession: str(raw.profession, base.profession),
+    bornDate: str(raw.bornDate, base.bornDate),
+    hometown: str(raw.hometown, base.hometown),
+    education: str(raw.education, base.education),
+    verified: bool(raw.verified, base.verified),
+    onboarded: bool(raw.onboarded, base.onboarded),
+    createdAt: num(raw.createdAt, base.createdAt),
+  }
+
+  if (Array.isArray(raw.connectionIntents)) {
+    profile.connectionIntents = strArr(raw.connectionIntents)
+  }
+  if (Array.isArray(raw.skills)) {
+    profile.skills = strArr(raw.skills)
+  }
+  if (Array.isArray(raw.pinnedPostIds)) {
+    profile.pinnedPostIds = strArr(raw.pinnedPostIds)
+  }
+  if (typeof raw.isPublic === "boolean") profile.isPublic = raw.isPublic
+  if (typeof raw.profileViews === "number") profile.profileViews = raw.profileViews
+  if (
+    raw.profileMode === "social" ||
+    raw.profileMode === "professional" ||
+    raw.profileMode === "business"
+  ) {
+    profile.profileMode = raw.profileMode
+  }
+
+  return profile
+}
+
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   darkMode: false,
