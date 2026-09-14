@@ -4,10 +4,13 @@
  */
 
 export function isDemoDataAllowed(): boolean {
+  // Explicit studio/demo flags only — never imply production is a demo environment
   if (process.env.NEXT_PUBLIC_DISCOVERY_DEMO === "true") return true
   if (process.env.NEXT_PUBLIC_GHC_STUDIO === "true") return true
+  // Local development / automated tests may use seed content
   if (process.env.NODE_ENV === "development") return true
   if (process.env.NODE_ENV === "test") return true
+  // Vercel production (and any production NODE_ENV) defaults to real data only
   return false
 }
 

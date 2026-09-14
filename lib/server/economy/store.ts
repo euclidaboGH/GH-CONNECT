@@ -1,3 +1,4 @@
+import { readGhcServerEnv } from "./env"
 /**
  * Authoritative GHC store interface + in-memory implementation for tests.
  *
@@ -736,3 +737,77 @@ export async function executeAuthoritativeSpend(
   })
 }
 
+
+
+/**
+ * Durable GHC spend via Supabase RPC `ghc_execute_spend`.
+ * Used when process-memory ledger is disabled (production / DB configured).
+ */
+export async function executeDurableGhcSpend(input: {
+  userId: string
+  amount: number
+  referenceId: string
+  reason: string
+  sourceEvent?: string
+}): Promise<{ ok: true; tx?: GhcLedgerRow; idempotent?: boolean; raw?: unknown } | { ok: false; error: string }> {
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  const amount = Math.abs(Number(input.amount))
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_execute_spend`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({
+          p_user_id: input.userId,
+          p_amount: amount,
+          p_reference_id: ref,
+          p_reason: input.reason,
+          p_source_event: input.sourceEvent || "SYSTEM",
+        }),
+      }
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      const err =
+        data && typeof data === "object" && "message" in data
+          ? String((data as { message: string }).message)
+          : "SPEND_FAILED"
+      return { ok: false, error: err }
+    }
+    if (data && typeof data === "object" && (data as { ok?: boolean }).ok === false) {
+      return {
+        ok: false,
+        error: String(
+          (data as { code?: string; message?: string }).code ||
+            (data as { message?: string }).message ||
+            "SPEND_FAILED"
+        ),
+      }
+    }
+    const tx = (data as { tx?: GhcLedgerRow; transaction?: GhcLedgerRow })?.tx
+      || (data as { transaction?: GhcLedgerRow })?.transaction
+    return {
+      ok: true,
+      tx: tx,
+      idempotent: Boolean((data as { idempotent?: boolean })?.idempotent),
+      raw: data,
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "SPEND_FAILED",
+    }
+  }
+}

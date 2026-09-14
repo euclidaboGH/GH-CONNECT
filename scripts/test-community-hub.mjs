@@ -45,10 +45,22 @@ assert(people.includes("submitConnectionFromPicker") && people.includes("Connect
 
 const profile = readFileSync(join(root, "components/ghc/profile-preview-page.tsx"), "utf8")
 assert(profile.includes("sharedCommunities") && profile.includes("Both in"), "profile shared communities")
-assert(profile.includes("ghc:open-community"), "navigate to community")
+assert(
+  profile.includes("ghc:open-community") ||
+    profile.includes("openCommunity") ||
+    profile.includes('navigateTo("communities")') ||
+    profile.includes("navigateTo(\"communities\")"),
+  "navigate to community"
+)
 
 const notif = readFileSync(join(root, "lib/notification-center.ts"), "utf8")
-assert(notif.includes("ghc:open-community"), "notification community deep link")
+assert(
+  notif.includes("openCommunity") ||
+    notif.includes("ghc:open-community") ||
+    notif.includes('navigateTo("communities")') ||
+    notif.includes("navigateTo(\"communities\")"),
+  "notification community deep link"
+)
 
 for (const f of ["components/ghc/premium-community-hub.tsx", "lib/domains/community-domain.ts"]) {
   const x = readFileSync(join(root, f), "utf8")

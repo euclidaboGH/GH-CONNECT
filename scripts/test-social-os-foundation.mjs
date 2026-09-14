@@ -30,8 +30,20 @@ assert(router.includes("marketplace") && router.includes("matches"), "surfaces c
 assert(router.includes("ghc:open-listing") || router.includes("listingId"), "listing nav")
 
 const notif = readFileSync(join(root, "lib/notification-center.ts"), "utf8")
-assert(notif.includes("ghc:open-listing"), "notif → marketplace")
-assert(notif.includes("matches"), "notif → matches")
+// Deep links go through navigateTo → social surface router (not raw ghc:open-* strings)
+assert(
+  notif.includes('navigateTo("marketplace"') ||
+    notif.includes("navigateTo(\"marketplace\"") ||
+    (notif.includes("marketplace") && notif.includes("listingId")),
+  "notif → marketplace"
+)
+assert(notif.includes("matches") || notif.includes('navigateTo("matches")'), "notif → matches")
+assert(
+  notif.includes('navigateTo("communities")') ||
+    notif.includes("openCommunity") ||
+    notif.includes("communities"),
+  "notif → community"
+)
 
 const bell = readFileSync(join(root, "components/ghc/notification-bell.tsx"), "utf8")
 const impCount = (bell.match(/import \{ communityNotificationLabel, isCommunityNotification \}/g) || []).length

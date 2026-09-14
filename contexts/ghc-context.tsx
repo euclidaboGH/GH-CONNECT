@@ -15,7 +15,7 @@ import {
   patchFromMatchIds,
   syncSessionEdgesToStore,
 } from "@/lib/domains/graph-session-adapter"
-import { defaultProfile, DEFAULT_SETTINGS, seedCandidates, seedReciprocalInterests, seedPosts, seedStories, sanitizeStories, sanitizeStory, STORAGE_KEYS, generateId } from "@/lib/ghc-data"
+import { defaultProfile, DEFAULT_SETTINGS, sanitizeStories, sanitizeStory, STORAGE_KEYS, generateId } from "@/lib/ghc-data"
 import {
   bootstrapPosts,
   bootstrapStories,
@@ -473,6 +473,8 @@ interface ConsolidatedState {
   stories: StoryItem[]
   candidates: Candidate[]
   matches: MatchEntry[]
+  /** Transient mutual-match confirmation (UI only) */
+  matchCelebration: null | { userId: string; userName: string; userPhoto: string }
   likes: Like[]
   conversations: Conversation[]
   friendRequests: FriendRequest[]
@@ -485,6 +487,8 @@ interface ConsolidatedState {
   restrictedUsers: string[]
   likedPostIds: string[]
   feedToggle: "for-you" | "following"
+  shares: import("@/lib/share-types").ShareRecord[]
+  reposts: import("@/lib/share-types").RepostFeedItem[]
 }
 
 const initialState: ConsolidatedState = {
@@ -749,7 +753,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               }))
             : bootstrapPosts()
         } else {
-          errorLogger.logWarning("Posts load failed, using seed data", { error: postsResult.reason })
+          errorLogger.logWarning("Posts load failed, using empty collection", { error: postsResult.reason })
           updates.posts = bootstrapPosts()
         }
 
@@ -798,7 +802,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (mounted) setState((s) => ({ ...s, ...updates }))
       } catch (err) {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
-        if (mounted) setState((s) => ({ ...s, ready: true, posts: bootstrapPosts(), stories: bootstrapStories() }))
+        if (mounted) setState((s) => ({ ...s, ready: true, posts: bootstrapPosts(), stories: bootstrapStories() })) // prod: empty
       }
     }
 
@@ -2195,7 +2199,7 @@ const dismissMatchCelebration = useCallback(() => {
         addToast(result.error, "error")
         return
       }
-      const cand = seedCandidates().find((c) => c.id === userId)
+      const cand = bootstrapCandidates().find((c) => c.id === userId)
       const newRequest = {
         id: generateId(),
         fromUserId: "current-user",
@@ -2209,7 +2213,7 @@ const dismissMatchCelebration = useCallback(() => {
         ...s,
         friendRequests: [
           ...(s.friendRequests || []).filter(
-            (r) => !(r.fromUserId === "current-user" && (r as any).toUserId === userId)
+            (r) => !(r.fromUserId === "current-user" && r.toUserId === userId)
           ),
           newRequest as any,
         ],
@@ -2953,7 +2957,7 @@ const dismissMatchCelebration = useCallback(() => {
     async (communityId: string): Promise<boolean> => {
       try {
         const conv = state.conversations.find((c) => c.id === communityId)
-        const privacy = ((conv as any)?.privacy || "public") as string
+        const privacy = (conv?.privacy || "public") as string
         if (privacy === "invite-only") {
           const req = await domains.community.requestJoin(communityId)
           if (!req.ok) {
@@ -3014,7 +3018,7 @@ const dismissMatchCelebration = useCallback(() => {
                   ...c,
                   members: result.data.members,
                   groupRoles: {
-                    ...((c as any).groupRoles || {}),
+                    ...(c.groupRoles || {}),
                     [IdentityService.getCurrentUserId() || "current-user"]: "member",
                   },
                 }
@@ -3097,11 +3101,11 @@ const dismissMatchCelebration = useCallback(() => {
               ? {
                   ...c,
                   members: result.data.members,
-                  invitedMembers: ((c as any).invitedMembers || []).filter(
+                  invitedMembers: (c.invitedMembers || []).filter(
                     (id: string) => id !== (IdentityService.getCurrentUserId() || "current-user")
                   ),
                   groupRoles: {
-                    ...((c as any).groupRoles || {}),
+                    ...(c.groupRoles || {}),
                     [IdentityService.getCurrentUserId() || "current-user"]: "member",
                   },
                 }
@@ -3110,7 +3114,7 @@ const dismissMatchCelebration = useCallback(() => {
         }))
         try {
           const communityName =
-            (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+            (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
           emitCommunityNotification({
             subtype: "invitation_accepted",
             communityId,
@@ -3144,7 +3148,7 @@ const dismissMatchCelebration = useCallback(() => {
             c.id === communityId
               ? {
                   ...c,
-                  invitedMembers: ((c as any).invitedMembers || []).filter(
+                  invitedMembers: (c.invitedMembers || []).filter(
                     (id: string) => id !== (IdentityService.getCurrentUserId() || "current-user")
                   ),
                 }
@@ -3171,8 +3175,8 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         const communityName =
-          (state.conversations.find((c) => c.id === communityId) as any)?.groupName ||
-          (state.conversations.find((c) => c.id === communityId) as any)?.participantName ||
+          (state.conversations.find((c) => c.id === communityId))?.groupName ||
+          (state.conversations.find((c) => c.id === communityId))?.participantName ||
           "community"
         setState((s) => ({
           ...s,
@@ -3215,7 +3219,7 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         const communityName =
-          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+          (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) =>
@@ -3256,7 +3260,7 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         const communityName =
-          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+          (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) =>
@@ -3264,7 +3268,7 @@ const dismissMatchCelebration = useCallback(() => {
               ? {
                   ...c,
                   invitedMembers: result.data.invitedMembers || [
-                    ...new Set([...((c as any).invitedMembers || []), userId]),
+                    ...new Set([...(c.invitedMembers || []), userId]),
                   ],
                 }
               : c
@@ -3308,7 +3312,7 @@ const dismissMatchCelebration = useCallback(() => {
         }))
         try {
           const communityName =
-            (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+            (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
           emitCommunityNotification({
             subtype: "join_request",
             communityId,
@@ -3348,7 +3352,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const existing = ((c as any).boardPosts || []) as typeof post[]
+            const existing = (c.boardPosts || []) as typeof post[]
             return {
               ...c,
               boardPosts: [post, ...existing],
@@ -3383,7 +3387,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3420,7 +3424,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3457,7 +3461,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3497,7 +3501,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3537,7 +3541,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3577,7 +3581,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const posts = ((c as any).boardPosts || []) as any[]
+            const posts = (c.boardPosts || []) as any[]
             return {
               ...c,
               boardPosts: posts.map((p) =>
@@ -3691,7 +3695,7 @@ const dismissMatchCelebration = useCallback(() => {
         }
         const announcement = result.data.announcement
         const communityName =
-          (state.conversations.find((c) => c.id === communityId) as any)?.groupName || "community"
+          (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) => {
@@ -3746,7 +3750,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const existing = ((c as any).events || []) as any[]
+            const existing = (c.events || []) as any[]
             return { ...c, events: [event, ...existing] }
           }),
         }))
@@ -3768,7 +3772,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== communityId) return c
-            const events = (((c as any).events || []) as any[]).map((e) => {
+            const events = ((c.events || []) as any[]).map((e) => {
               if (e.id !== eventId) return e
               const attendees = Array.from(
                 new Set([...(e.attendees || []), IdentityService.getCurrentUserId() || "current-user"]),
@@ -3833,7 +3837,7 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== conversationId) return c
-            const groupRoles = { ...((c as any).groupRoles || {}), [userId]: result.data.role }
+            const groupRoles = { ...(c.groupRoles || {}), [userId]: result.data.role }
             return { ...c, groupRoles } as Conversation
           }),
         }))

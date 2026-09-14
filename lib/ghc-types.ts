@@ -347,6 +347,22 @@ export interface Conversation {
   welcomeMessage?: string
   rules?: string[]
   invitedMembers?: string[]
+  /** Community board posts (group conversations only) */
+  boardPosts?: Array<{
+    id: string
+    authorId?: string
+    authorName?: string
+    content?: string
+    createdAt?: number
+    [key: string]: unknown
+  }>
+  /** Community events (group conversations only) */
+  events?: Array<{
+    id: string
+    title?: string
+    startsAt?: number
+    [key: string]: unknown
+  }>
   // Search & filtering
   lastReadMessageId?: string
   unreadCount?: number
@@ -412,6 +428,8 @@ export interface FriendRequest {
   fromUserId: string
   fromUserName: string
   fromUserPhoto: string
+  /** Recipient when not implied by session context */
+  toUserId?: string
   createdAt: number
 }
 

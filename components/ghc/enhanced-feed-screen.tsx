@@ -4,7 +4,8 @@ import { closeAllActionSheets } from "./action-sheet"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import type { Post, FeedFilter, PostDraft, SavedPost } from "@/lib/ghc-types"
-import { seedPosts } from "@/lib/ghc-data"
+import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { usePermissions } from "@/hooks/usePermissions"
@@ -98,7 +99,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   // Prefer feed setTab; shell keeps chrome in sync when needed
   void shellSetTab
   const perms = usePermissions()
-  const seedPostList = useMemo(() => seedPosts(), [])
+  // Demo/seed posts only when explicit demo policy allows — never as production feed filler
+  const seedPostList = useMemo(() => bootstrapPosts(), [])
   const seedPostIds = useMemo(() => new Set(seedPostList.map((post) => post.id)), [seedPostList])
 
   // State management
@@ -214,7 +216,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       }
 
       const realPosts = posts.filter((post) => !seedPostIds.has(post.id) && !(post as any).deletedAt && !(post as any).isArchived)
-      const feedPosts = realPosts.length > 0 ? realPosts : seedPostList.slice(0, 3)
+      // Production: empty feed when no real posts (honest empty state). Demo: optional seed filler.
+      const feedPosts =
+        realPosts.length > 0
+          ? realPosts
+          : isDemoDataAllowed()
+            ? seedPostList.slice(0, 3)
+            : []
       const ranked = rankFeed(
         feedPosts.filter((p) => !notInterestedIds.includes(p.id)),
         activeFilter,

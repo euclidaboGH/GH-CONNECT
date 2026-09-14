@@ -137,7 +137,7 @@ export function createDomainServices(
           blockedUsers: s.blockedUsers || [],
           mutedUsers: s.mutedUsers || [],
           restrictedUsers: s.restrictedUsers || [],
-          matches: (s.matches || []) as any,
+          matches: (s.matches || []) as Array<{ userId: string }>,
           friendRequests: [],
           outgoingFriendRequestIds: s.outgoingFriendRequestIds,
           incomingFriendRequestIds: s.incomingFriendRequestIds,
@@ -169,7 +169,20 @@ export function createDomainServices(
       conversations: s.conversations || [],
       onEdge: (input) => {
         socialRepo?.recordEdge?.({
-          type: input.type as any,
+          type: input.type as
+            | "follow"
+            | "unfollow"
+            | "friend_request"
+            | "friend_accept"
+            | "friend_remove"
+            | "match"
+            | "unmatch"
+            | "block"
+            | "unblock"
+            | "mute"
+            | "unmute"
+            | "restrict"
+            | "unrestrict",
           targetUserId: input.targetUserId,
           meta: input.meta,
         })
@@ -236,7 +249,7 @@ export function createDomainServices(
     },
     getPermissionContext: () => {
       const s = getState()
-      const settings = (s as any).settings || (s.profile as any)?.settings
+      const settings = (s as { settings?: { whoCanMessage?: string } }).settings || (s.profile as { settings?: { whoCanMessage?: string } } | null | undefined)?.settings
       return buildPermissionContext({
         currentUserId: uid,
         blockedUsers: s.blockedUsers || [],
@@ -251,7 +264,7 @@ export function createDomainServices(
     isMember: (conversationId, userId) => {
       const c = getState().conversations.find((x) => x.id === conversationId)
       if (!c) return false
-      const members = (c as any).members || (c as any).memberIds || []
+      const members = (c?.members || (c as { memberIds?: string[] } | undefined)?.memberIds || []) as string[]
       return members.includes(userId) || c.createdBy === userId
     },
   })
@@ -379,17 +392,17 @@ export function createDomainServices(
       const s = getState()
       const blocked = new Set([...(s.blockedUsers || [])])
       // If graph tracks who blocked me, merge when present
-      const blockedBy = new Set([...((s as any).blockedByUsers || [])])
+      const blockedBy = new Set([...((s as { blockedByUsers?: string[] }).blockedByUsers || [])])
       return blocked.has(otherId) || blockedBy.has(otherId)
     },
     isAccountRestricted: () => {
-      const s = getState() as any
+      const s = getState() as { settings?: { whoCanMessage?: string }; profile?: { settings?: { whoCanMessage?: string } }; blockedUsers?: string[]; mutedUsers?: string[]; restrictedUsers?: string[]; following?: string[]; friends?: string[]; matches?: Array<{ userId: string }>; conversations?: Array<{ id: string; members?: string[]; createdBy?: string }> }
       return Boolean(s.accountSuspended || s.isRestricted || s.profile?.restricted)
     },
     recipientExists: (otherId) => {
       if (!otherId?.trim()) return false
       // Known in session graph/candidates/conversations counts as exists for Studio
-      const s = getState() as any
+      const s = getState() as { settings?: { whoCanMessage?: string }; profile?: { settings?: { whoCanMessage?: string } }; blockedUsers?: string[]; mutedUsers?: string[]; restrictedUsers?: string[]; following?: string[]; friends?: string[]; matches?: Array<{ userId: string }>; conversations?: Array<{ id: string; members?: string[]; createdBy?: string }> }
       if (otherId === uid) return true
       const pools = [
         ...(s.followers || []),
@@ -502,7 +515,7 @@ export function createDomainServices(
     isCommunityMember: (conversationId) => {
       const c = (getState().conversations || []).find((x) => x.id === conversationId)
       if (!c) return false
-      const members = (c as any).members || []
+      const members = (c?.members || []) as string[]
       return members.includes(uid) || c.createdBy === uid
     },
   })
