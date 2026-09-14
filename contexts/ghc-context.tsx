@@ -745,7 +745,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                     .filter(
                       (report) =>
                         report &&
-                        (report.type === "user" || report.type === "post") &&
+                        (report.type === "user" ||
+                          report.type === "post" ||
+                          report.type === "comment" ||
+                          report.type === "message" ||
+                          report.type === "story" ||
+                          report.type === "group") &&
                         typeof report.targetId === "string"
                     )
                     .slice(-200)

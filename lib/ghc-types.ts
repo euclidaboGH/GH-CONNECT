@@ -159,7 +159,13 @@ export interface Settings {
   mutedUsers?: string[]
   /** Soft: limit their interactions toward you; relationship kept */
   restrictedUsers?: string[]
-  moderationReports?: Array<{ type: "user" | "post"; targetId: string; reason: string; createdAt: number }>
+  /** Local audit of reports submitted by this user (mirrors DomainReport target types) */
+  moderationReports?: Array<{
+    type: "user" | "post" | "comment" | "message" | "story" | "group"
+    targetId: string
+    reason: string
+    createdAt: number
+  }>
   /** Notification preferences — device permission still required for push */
   notifyMatches?: boolean
   notifyMessages?: boolean
