@@ -85,7 +85,7 @@ import {
   createVoiceNoteMessage,
   ScheduledMessageQueue,
   updateGroupRole,
-  removeGroupMember,
+  removeGroupMember as applyRemoveGroupMember,
   draftStorage,
   analyzeMessageThreadData,
   type ConversationListFilter,
@@ -3838,7 +3838,7 @@ const dismissMatchCelebration = useCallback(() => {
       setState((s) => ({
         ...s,
         conversations: s.conversations.map((c) =>
-          c.id === conversationId ? removeGroupMember(c, userId) : c
+          c.id === conversationId ? applyRemoveGroupMember(c, userId) : c
         ),
       }))
       analytics.trackEvent("group_member_removed", { conversationId, userId }, state.profile.displayName)

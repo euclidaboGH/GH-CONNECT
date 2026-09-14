@@ -521,15 +521,18 @@ export class ScheduledMessageQueue {
  * Group chat features
  */
 
-export type GroupRole = "admin" | "member"
+/** Align with Conversation.groupRoles / CommunityRole */
+export type GroupRole = "owner" | "admin" | "moderator" | "member"
 
 export function updateGroupRole(
   conversation: Conversation,
   userId: string,
   role: GroupRole
 ): Conversation {
-  const groupRoles = { ...conversation.groupRoles } || {}
-  groupRoles[userId] = role
+  const groupRoles: NonNullable<Conversation["groupRoles"]> = {
+    ...(conversation.groupRoles || {}),
+    [userId]: role,
+  }
 
   return {
     ...conversation,
@@ -542,7 +545,9 @@ export function removeGroupMember(
   userId: string
 ): Conversation {
   const members = conversation.members?.filter((id) => id !== userId) || []
-  const groupRoles = { ...conversation.groupRoles }
+  const groupRoles: NonNullable<Conversation["groupRoles"]> = {
+    ...(conversation.groupRoles || {}),
+  }
   delete groupRoles[userId]
 
   return {
