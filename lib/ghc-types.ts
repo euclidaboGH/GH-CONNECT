@@ -343,7 +343,8 @@ export interface Conversation {
   groupName?: string
   groupPhoto?: string
   members?: string[]
-  groupRoles?: Record<string, "admin" | "member">
+  /** Community/group roles — aligned with domain membership roles */
+  groupRoles?: Record<string, "owner" | "admin" | "moderator" | "member">
   createdBy?: string
   createdAt?: number
   // Enhanced group features

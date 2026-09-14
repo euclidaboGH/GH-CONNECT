@@ -2956,7 +2956,7 @@ const dismissMatchCelebration = useCallback(() => {
           conversations: [newGroup, ...s.conversations],
         }))
         try {
-          persistCommunityConversation(newGroup as any)
+          persistCommunityConversation(newGroup)
           markJoined(newGroup.id)
         } catch {
           /* */
@@ -3036,22 +3036,23 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         setState((s) => {
-          const next = s.conversations.map((c) =>
-            c.id === communityId
-              ? {
-                  ...c,
-                  members: result.data.members,
-                  groupRoles: {
-                    ...(c.groupRoles || {}),
-                    [IdentityService.getCurrentUserId() || "current-user"]: "member",
-                  },
-                }
-              : c
-          )
+          const memberId = IdentityService.getCurrentUserId() || "current-user"
+          const next: Conversation[] = s.conversations.map((c) => {
+            if (c.id !== communityId) return c
+            const groupRoles: NonNullable<Conversation["groupRoles"]> = {
+              ...(c.groupRoles || {}),
+              [memberId]: "member",
+            }
+            return {
+              ...c,
+              members: result.data.members,
+              groupRoles,
+            }
+          })
           const row = next.find((c) => c.id === communityId)
           if (row) {
             try {
-              persistCommunityConversation(row as any)
+              persistCommunityConversation(row)
             } catch {
               /* */
             }
@@ -3080,7 +3081,7 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         setState((s) => {
-          const next = s.conversations.map((c) =>
+          const next: Conversation[] = s.conversations.map((c) =>
             c.id === communityId
               ? {
                   ...c,
@@ -3091,7 +3092,7 @@ const dismissMatchCelebration = useCallback(() => {
           const row = next.find((c) => c.id === communityId)
           if (row) {
             try {
-              persistCommunityConversation(row as any)
+              persistCommunityConversation(row)
             } catch {
               /* */
             }
@@ -3118,24 +3119,25 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Invitation unavailable", "error")
           return false
         }
-        setState((s) => ({
-          ...s,
-          conversations: s.conversations.map((c) =>
-            c.id === communityId
-              ? {
-                  ...c,
-                  members: result.data.members,
-                  invitedMembers: (c.invitedMembers || []).filter(
-                    (id: string) => id !== (IdentityService.getCurrentUserId() || "current-user")
-                  ),
-                  groupRoles: {
-                    ...(c.groupRoles || {}),
-                    [IdentityService.getCurrentUserId() || "current-user"]: "member",
-                  },
-                }
-              : c
-          ),
-        }))
+        setState((s) => {
+          const memberId = IdentityService.getCurrentUserId() || "current-user"
+          return {
+            ...s,
+            conversations: s.conversations.map((c) => {
+              if (c.id !== communityId) return c
+              const groupRoles: NonNullable<Conversation["groupRoles"]> = {
+                ...(c.groupRoles || {}),
+                [memberId]: "member",
+              }
+              return {
+                ...c,
+                members: result.data.members,
+                invitedMembers: (c.invitedMembers || []).filter((id: string) => id !== memberId),
+                groupRoles,
+              }
+            }),
+          }
+        })
         try {
           const communityName =
             (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
@@ -3861,8 +3863,16 @@ const dismissMatchCelebration = useCallback(() => {
           ...s,
           conversations: s.conversations.map((c) => {
             if (c.id !== conversationId) return c
-            const groupRoles = { ...(c.groupRoles || {}), [userId]: result.data.role }
-            return { ...c, groupRoles } as Conversation
+            const role = result.data.role
+            const safeRole: NonNullable<Conversation["groupRoles"]>[string] =
+              role === "owner" || role === "admin" || role === "moderator" || role === "member"
+                ? role
+                : "member"
+            const groupRoles: NonNullable<Conversation["groupRoles"]> = {
+              ...(c.groupRoles || {}),
+              [userId]: safeRole,
+            }
+            return { ...c, groupRoles }
           }),
         }))
         analytics.trackEvent(
