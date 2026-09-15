@@ -6,10 +6,10 @@
 import type { Candidate, Post } from "./ghc-types"
 import { RecentSearch } from "./discovery-features-engine"
 
-// Search cache for optimization
-interface SearchCache {
+// Search cache entry shape (distinct from the exported SearchCache class below)
+interface SearchCacheEntry {
   query: string
-  results: any[]
+  results: SearchResult
   timestamp: number
   ttl: number // in ms
 }
@@ -381,9 +381,9 @@ export function searchMessages(
  * Cache management
  */
 export class SearchCache {
-  private cache: Map<string, SearchCache> = new Map()
+  private cache: Map<string, SearchCacheEntry> = new Map()
 
-  get(query: string): any[] | null {
+  get(query: string): SearchResult | null {
     const cached = this.cache.get(query)
     if (!cached) return null
 
@@ -395,7 +395,7 @@ export class SearchCache {
     return cached.results
   }
 
-  set(query: string, results: any[], ttl: number = CACHE_TTL): void {
+  set(query: string, results: SearchResult, ttl: number = CACHE_TTL): void {
     this.cache.set(query, {
       query,
       results,
