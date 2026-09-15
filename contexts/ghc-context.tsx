@@ -524,6 +524,18 @@ interface ExtendedGHCState extends ConsolidatedState {
   networkQuality: "excellent" | "good" | "fair" | "poor" | "offline"
 }
 
+/** Canonical full session state — always includes network fields required by ExtendedGHCState */
+function createDefaultExtendedState(
+  overrides?: Partial<ExtendedGHCState>
+): ExtendedGHCState {
+  return {
+    ...initialState,
+    isOnline: true,
+    networkQuality: "excellent",
+    ...overrides,
+  }
+}
+
 export function GHCProvider({ children }: { children: ReactNode }) {
   const { sdk } = usePiAuth()
   const [identityUserId, setIdentityUserId] = useState(() => IdentityService.getCurrentUserId())
@@ -531,7 +543,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return IdentityService.subscribe((id) => setIdentityUserId(id.userId))
   }, [])
 
-  const [state, setState] = useState<ExtendedGHCState>({ ...initialState, isOnline: true, networkQuality: "excellent" })
+  const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
 
   // Hydrate persisted communities into conversation list (survives reload)
   useEffect(() => {
@@ -3944,10 +3956,7 @@ const dismissMatchCelebration = useCallback(() => {
       } catch {
         /* */
       }
-      setState(() => ({
-        ...initialState,
-        ready: true,
-      }))
+      setState(() => createDefaultExtendedState({ ready: true }))
       addToast("Logged out successfully", "success")
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
