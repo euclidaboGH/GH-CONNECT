@@ -97,10 +97,10 @@ export const analyticsService = {
       unit,
       timestamp: Date.now(),
     }
-    
+
     analyticsService.trackEvent("performance", perfMetric)
   },
-  
+
   // Track user actions for funnel analysis
   trackConversion: (funnelName: string, step: string) => {
     analyticsService.trackEvent("conversion", {
@@ -108,27 +108,84 @@ export const analyticsService = {
       step,
     })
   },
-  
-  // Setup automatic performance monitoring
-  setupPerformanceMonitoring: () => {
-    if (typeof window === "undefined") return
-    
-    // Monitor Core Web Vitals
-    if ("PerformanceObserver" in window) {
-      try {
-        const observer = new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) {
-            analyticsService.trackPerformance(entry.name, entry.value)
-          }
-        })
-        
-        observer.observe({ entryTypes: ["largest-contentful-paint", "first-input", "layout-shift"] })
-      } catch (e) {
-        console.log("[v0] Performance monitoring not supported")
+
+  /**
+   * Normalize a PerformanceEntry into the numeric metric trackPerformance expects.
+   * Base PerformanceEntry has name/entryType/startTime/duration only; CLS uses LayoutShift.value,
+   * LCP uses startTime, FID (first-input) uses processingStart - startTime.
+   */
+  metricFromPerformanceEntry: (entry: PerformanceEntry): { value: number; unit: string } | null => {
+    switch (entry.entryType) {
+      case "layout-shift": {
+        // LayoutShift extends PerformanceEntry with `value` (CLS contribution)
+        if ("value" in entry && typeof (entry as { value: unknown }).value === "number") {
+          return { value: (entry as { value: number }).value, unit: "score" }
+        }
+        return null
       }
+      case "largest-contentful-paint":
+        return { value: entry.startTime, unit: "ms" }
+      case "first-input": {
+        const processingStart = (entry as { processingStart?: unknown }).processingStart
+        if (typeof processingStart === "number") {
+          return { value: Math.max(0, processingStart - entry.startTime), unit: "ms" }
+        }
+        return entry.duration > 0 ? { value: entry.duration, unit: "ms" } : null
+      }
+      default:
+        if (entry.duration > 0) return { value: entry.duration, unit: "ms" }
+        if (entry.startTime >= 0) return { value: entry.startTime, unit: "ms" }
+        return null
     }
   },
-  
+
+  /** Module-level observer so setup is idempotent and can disconnect on unload */
+  _performanceObserver: null as PerformanceObserver | null,
+
+  // Setup automatic performance monitoring (browser-only, SSR-safe)
+  setupPerformanceMonitoring: () => {
+    if (typeof window === "undefined") return
+    if (!("PerformanceObserver" in window)) return
+    if (analyticsService._performanceObserver) return
+
+    const desired = ["largest-contentful-paint", "first-input", "layout-shift"] as const
+    const supported =
+      typeof PerformanceObserver.supportedEntryTypes !== "undefined"
+        ? desired.filter((t) =>
+            (PerformanceObserver.supportedEntryTypes as readonly string[]).includes(t)
+          )
+        : [...desired]
+
+    if (supported.length === 0) return
+
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const metric = analyticsService.metricFromPerformanceEntry(entry)
+          if (!metric) continue
+          analyticsService.trackPerformance(entry.name || entry.entryType, metric.value, metric.unit)
+        }
+      })
+      observer.observe({ entryTypes: supported as string[] })
+      analyticsService._performanceObserver = observer
+
+      window.addEventListener(
+        "pagehide",
+        () => {
+          try {
+            analyticsService._performanceObserver?.disconnect()
+          } catch {
+            /* */
+          }
+          analyticsService._performanceObserver = null
+        },
+        { once: true }
+      )
+    } catch {
+      // Entry types unsupported in this browser — non-fatal
+    }
+  },
+
   // Setup automatic event flush on page unload
   setupAutoFlush: () => {
     if (typeof window === "undefined") return
