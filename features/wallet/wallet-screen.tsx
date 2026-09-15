@@ -1125,7 +1125,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       Status:{" "}
                       <span className="font-semibold">
-                        {r.validationStatus || r.status || "posted"}
+                        {r.validationStatus}
                       </span>
                       {r.sourceEvent ? ` · ${r.sourceEvent}` : ""}
                     </p>
