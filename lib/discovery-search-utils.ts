@@ -327,14 +327,18 @@ export function searchMedia(
         p.content.toLowerCase().includes(query.toLowerCase()) ||
         p.authorName.toLowerCase().includes(query.toLowerCase())
     )
-    .map((p) => ({
-      type: p.images.length > 0 ? "photo" : "post",
-      id: p.id,
-      thumbnail: p.images[0] || "/placeholder.svg",
-      title: p.content.substring(0, 50),
-      author: p.authorName,
-      likes: p.likes,
-    }))
+    .map((p): MediaSearchResult => {
+      const mediaType: MediaSearchResult["type"] =
+        Array.isArray(p.images) && p.images.length > 0 ? "photo" : "post"
+      return {
+        type: mediaType,
+        id: p.id,
+        thumbnail: (Array.isArray(p.images) && p.images[0]) || "/placeholder.svg",
+        title: p.content.substring(0, 50),
+        author: p.authorName,
+        likes: p.likes,
+      }
+    })
     .slice(0, 12)
 }
 
