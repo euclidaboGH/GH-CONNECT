@@ -410,29 +410,29 @@ export function createDomainServices(
     currentUserId: uid,
     repository: economyRepo,
     isBlockedEitherWay: (otherId) => {
+      // Canonical DomainStateSlice.blockedUsers (users this account blocked).
       const s = getState()
-      const blocked = new Set([...(s.blockedUsers || [])])
-      // If graph tracks who blocked me, merge when present
-      const blockedBy = new Set([...((s as { blockedByUsers?: string[] }).blockedByUsers || [])])
-      return blocked.has(otherId) || blockedBy.has(otherId)
+      return (s.blockedUsers || []).includes(otherId)
     },
     isAccountRestricted: () => {
-      const s = getState() as { settings?: { whoCanMessage?: string }; profile?: { settings?: { whoCanMessage?: string } }; blockedUsers?: string[]; mutedUsers?: string[]; restrictedUsers?: string[]; following?: string[]; friends?: string[]; matches?: Array<{ userId: string }>; conversations?: Array<{ id: string; members?: string[]; createdBy?: string }> }
-      return Boolean(s.accountSuspended || s.isRestricted || s.profile?.restricted)
+      // Canonical account restriction lives on IdentityService.accountStatus
+      // ("restricted" | "suspended"), not on GHC session graph fields.
+      const status = IdentityService.getAccountStatus()
+      return status === "restricted" || status === "suspended"
     },
     recipientExists: (otherId) => {
       if (!otherId?.trim()) return false
-      // Known in session graph/candidates/conversations counts as exists for Studio
-      const s = getState() as { settings?: { whoCanMessage?: string }; profile?: { settings?: { whoCanMessage?: string } }; blockedUsers?: string[]; mutedUsers?: string[]; restrictedUsers?: string[]; following?: string[]; friends?: string[]; matches?: Array<{ userId: string }>; conversations?: Array<{ id: string; members?: string[]; createdBy?: string }> }
+      const s = getState()
       if (otherId === uid) return true
+      // Canonical MatchEntry / Candidate ids from DomainStateSlice
       const pools = [
         ...(s.followers || []),
         ...(s.following || []),
         ...(s.friends || []),
-        ...(s.matches || []).map((m: any) => m.userId || m.id),
-        ...(s.candidates || []).map((c: any) => c.id || c.userId),
+        ...(s.matches || []).map((m) => m.userId),
+        ...(s.candidates || []).map((c) => c.id),
       ]
-      if (pools.some((id: string) => id === otherId)) return true
+      if (pools.some((id) => id === otherId)) return true
       // Allow explicit ids in local multi-user tests (non-empty id)
       return otherId.length > 0
     },
