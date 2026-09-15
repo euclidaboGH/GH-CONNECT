@@ -28,9 +28,10 @@ import {
 function toConfig(baseUrl: string, getToken: () => string | null): HttpRepoConfig {
   return {
     baseUrl,
-    getAuthHeaders: () => {
+    getAuthHeaders: (): Record<string, string> => {
       const token = getToken()
-      return token ? { Authorization: `Bearer ${token}` } : {}
+      if (!token) return {}
+      return { Authorization: `Bearer ${token}` }
     },
   }
 }

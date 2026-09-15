@@ -154,7 +154,8 @@ function authHeaders(): HeadersInit {
           localStorage.getItem("ghc_access_token") ||
           localStorage.getItem("access_token"))) ||
       ""
-    return token ? { Authorization: `Bearer ${token}` } : {}
+    if (!token) return {}
+    return { Authorization: `Bearer ${token}` }
   } catch {
     return {}
   }
