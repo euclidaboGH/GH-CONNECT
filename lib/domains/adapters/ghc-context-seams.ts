@@ -187,13 +187,26 @@ export function createDiscoverySeam(getCandidates: () => Array<Record<string, un
         const sharedInterests = (query.interests || []).filter((i) =>
           interests.map((x) => x.toLowerCase()).includes(i.toLowerCase())
         )
+        // getCandidates() yields person-shaped records. Search category is
+        // plural (people/communities/…); result kind is singular entity type.
         mapped.push({
           id,
-          kind: query.category === "communities" ? "communities" : "people",
+          kind: "person",
+          category: query.category,
           displayName: String(c.displayName || c.name || "Member"),
           subtitle: String(c.profession || c.bio || "").slice(0, 120) || undefined,
-          avatarUrl: (c.avatar || c.photoUrl) as string | null | undefined,
-          locationLabel: (c.location || c.city) as string | null | undefined,
+          avatarUrl:
+            typeof c.avatar === "string"
+              ? c.avatar
+              : typeof c.photoUrl === "string"
+                ? c.photoUrl
+                : null,
+          locationLabel:
+            typeof c.location === "string"
+              ? c.location
+              : typeof c.city === "string"
+                ? c.city
+                : null,
           interests,
           intents,
           reasons: buildExplainableReasons({
