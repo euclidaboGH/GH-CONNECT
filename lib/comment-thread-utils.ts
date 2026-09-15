@@ -14,7 +14,7 @@ function normalizeComment(raw: unknown): (PostComment & { replies: PostComment[]
     id: c.id,
     authorId: typeof c.authorId === "string" ? c.authorId : "unknown",
     authorName: typeof c.authorName === "string" && c.authorName.trim() ? c.authorName : "Member",
-    authorPhoto: typeof c.authorPhoto === "string" ? c.authorPhoto : undefined,
+    authorPhoto: typeof c.authorPhoto === "string" ? c.authorPhoto : "",
     text: typeof c.text === "string" ? c.text : "",
     createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
     replyTo: typeof c.replyTo === "string" ? c.replyTo : undefined,
