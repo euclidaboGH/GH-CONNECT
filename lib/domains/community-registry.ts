@@ -113,7 +113,8 @@ export function seedCommunities(): GHCCommunity[] {
   if (!isDemoDataAllowed()) return []
   const now = Date.now()
   const mk = (
-    // createdAt/createdBy optional at call sites; mk applies demo defaults.
+    // Fields with demo defaults inside mk() are optional at call sites.
+    // Required identity/content: id, name, purpose, description, category, privacy.
     partial: Omit<
       GHCCommunity,
       | "boardPosts"
@@ -128,6 +129,9 @@ export function seedCommunities(): GHCCommunity[] {
       | "members"
       | "createdAt"
       | "createdBy"
+      | "rules"
+      | "welcomeMessage"
+      | "tags"
     > & {
       members?: string[]
       roles?: Record<string, CommunityRole>
@@ -135,6 +139,9 @@ export function seedCommunities(): GHCCommunity[] {
       events?: CommunityEvent[]
       createdAt?: number
       createdBy?: string
+      rules?: string[]
+      welcomeMessage?: string
+      tags?: string[]
     },
   ): GHCCommunity => {
     const members = partial.members || ["demo-mod", "sarah", "emma"]
