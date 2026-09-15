@@ -406,12 +406,13 @@ export function suggestLifecycleTransition(input: {
     }
   }
 
-  // At-risk inactivity → suggest archive (human confirm)
+  // At-risk inactivity → suggest archive (human confirm).
+  // "archived" is already handled by the early return above, so current is
+  // narrowed to non-archived lifecycle states here.
   if (
     days !== null &&
     days >= 60 &&
-    input.discussionCount === 0 &&
-    current !== "archived"
+    input.discussionCount === 0
   ) {
     return {
       current,
