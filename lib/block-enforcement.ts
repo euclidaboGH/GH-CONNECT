@@ -141,16 +141,14 @@ export function filterConversationsInbox<
   })
 }
 
-/** Stories (block + mute) */
-export function filterStoriesList<T extends { userId?: string; authorId?: string }>(
-  items: T[],
-  blockedIds: string[],
-  mutedIds: string[] = []
-): T[] {
+/** Stories (block + mute). Supports ownerId (StoryItem), userId, or authorId. */
+export function filterStoriesList<
+  T extends { userId?: string; authorId?: string; ownerId?: string },
+>(items: T[], blockedIds: string[], mutedIds: string[] = []): T[] {
   const hide = new Set([...(blockedIds || []), ...(mutedIds || [])])
   if (!hide.size) return items
   return items.filter((item) => {
-    const id = item.userId || item.authorId
+    const id = item.ownerId || item.userId || item.authorId
     if (!id) return true
     return !hide.has(id)
   })
@@ -268,36 +266,53 @@ export function mayMatch(ctx: PermissionContext, targetId: string): boolean {
 /**
  * Apply full platform visibility pass for a session snapshot.
  * Call from composition root / hooks when building UI lists.
+ *
+ * Each collection is independently generic so concrete domain types
+ * (Post, Candidate, MatchEntry, Conversation, Story, …) — which do not
+ * declare an index signature — remain assignable without casting through
+ * Record<string, unknown>.
  */
-export function applyGlobalBlockFilters<T extends Record<string, unknown>>(session: {
+export function applyGlobalBlockFilters<
+  P extends { authorId?: string; userId?: string },
+  C extends { id: string },
+  M extends { userId: string },
+  Conv extends { conversationType?: string; participantId?: string; memberIds?: string[] },
+  S extends { userId?: string; authorId?: string; ownerId?: string },
+  N extends {
+    fromUserId?: string
+    actorId?: string
+    userId?: string
+    data?: Record<string, unknown>
+  },
+>(session: {
   blockedIds: string[]
   /** Mute: hide content/notifications; keep relationship surfaces (candidates/matches) */
   mutedIds?: string[]
-  posts?: Array<{ authorId?: string; userId?: string } & T>
-  candidates?: Array<{ id: string } & T>
-  matches?: Array<{ userId: string } & T>
-  conversations?: Array<{ conversationType?: string; participantId?: string } & T>
-  stories?: Array<{ userId?: string; authorId?: string } & T>
-  notifications?: Array<{ fromUserId?: string; actorId?: string; userId?: string } & T>
+  posts?: P[]
+  candidates?: C[]
+  matches?: M[]
+  conversations?: Conv[]
+  stories?: S[]
+  notifications?: N[]
 }): {
-  posts: NonNullable<typeof session.posts>
-  candidates: NonNullable<typeof session.candidates>
-  matches: NonNullable<typeof session.matches>
-  conversations: NonNullable<typeof session.conversations>
-  stories: NonNullable<typeof session.stories>
-  notifications: NonNullable<typeof session.notifications>
+  posts: P[]
+  candidates: C[]
+  matches: M[]
+  conversations: Conv[]
+  stories: S[]
+  notifications: N[]
 } {
   const ids = session.blockedIds || []
   const muted = session.mutedIds || []
   return {
     // Mute + block hide passive content
-    posts: filterFeedContent(session.posts || [], ids, muted) as any,
+    posts: filterFeedContent(session.posts || [], ids, muted),
     // Discovery / matches: block only (mute keeps relationship visible)
-    candidates: filterDiscoveryCandidates(session.candidates || [], ids) as any,
-    matches: filterMatchesList(session.matches || [], ids) as any,
+    candidates: filterDiscoveryCandidates(session.candidates || [], ids),
+    matches: filterMatchesList(session.matches || [], ids),
     // Messages: block hides private threads; mute does not remove inbox
-    conversations: filterConversationsInbox(session.conversations || [], ids) as any,
-    stories: filterStoriesList(session.stories || [], ids, muted) as any,
-    notifications: filterNotificationsList(session.notifications || [], ids, muted) as any,
+    conversations: filterConversationsInbox(session.conversations || [], ids),
+    stories: filterStoriesList(session.stories || [], ids, muted),
+    notifications: filterNotificationsList(session.notifications || [], ids, muted),
   }
 }

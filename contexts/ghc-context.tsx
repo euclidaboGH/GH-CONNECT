@@ -4115,7 +4115,7 @@ const dismissMatchCelebration = useCallback(() => {
         candidates: state.candidates,
         matches: state.matches,
         conversations: state.conversations,
-        stories: state.stories as any,
+        stories: state.stories,
       }),
     [
       blockedIdsForUi,
@@ -4134,16 +4134,16 @@ const dismissMatchCelebration = useCallback(() => {
       ready: state.ready,
       profile: state.profile,
       settings: state.settings,
-      posts: visibleSession.posts as typeof state.posts,
-      stories: visibleSession.stories as typeof state.stories,
+      posts: visibleSession.posts,
+      stories: visibleSession.stories,
       publishStory,
       replyToStory,
       tab: state.tab,
       toasts: state.toasts,
-      candidates: visibleSession.candidates as typeof state.candidates,
-      matches: visibleSession.matches as typeof state.matches,
+      candidates: visibleSession.candidates,
+      matches: visibleSession.matches,
       likes: state.likes,
-      conversations: visibleSession.conversations as typeof state.conversations,
+      conversations: visibleSession.conversations,
       friendRequests: state.friendRequests,
       following: state.following,
       friends: state.friends || [],
@@ -4314,7 +4314,7 @@ const dismissMatchCelebration = useCallback(() => {
       settings: state.settings,
       friends: state.friends || [],
       following: state.following || [],
-      posts: visibleSession.posts as typeof state.posts,
+      posts: visibleSession.posts,
       updateProfile,
       completeOnboarding,
       updateSettings,
@@ -4335,8 +4335,8 @@ const dismissMatchCelebration = useCallback(() => {
 
   const discoveryValue = useMemo(
     () => ({
-      candidates: visibleSession.candidates as typeof state.candidates,
-      matches: visibleSession.matches as typeof state.matches,
+      candidates: visibleSession.candidates,
+      matches: visibleSession.matches,
       following: state.following || [],
       swipe,
       followUser,
@@ -4368,7 +4368,7 @@ const dismissMatchCelebration = useCallback(() => {
 
   const messagingValue = useMemo(
     () => ({
-      conversations: visibleSession.conversations as typeof state.conversations,
+      conversations: visibleSession.conversations,
       sendMessage,
       markConversationRead,
       pinConversation,
@@ -4429,14 +4429,14 @@ const dismissMatchCelebration = useCallback(() => {
 
   const feedValue = useMemo(
     () => ({
-      posts: visibleSession.posts as typeof state.posts,
+      posts: visibleSession.posts,
       stories: state.stories,
       likedPostIds: state.likedPostIds || [],
       following: state.following || [],
       friends: state.friends || [],
       profile: state.profile,
       settings: state.settings,
-      candidates: visibleSession.candidates as typeof state.candidates,
+      candidates: visibleSession.candidates,
       createPost,
       likePost,
       deletePost,
