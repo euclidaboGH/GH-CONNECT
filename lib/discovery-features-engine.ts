@@ -395,12 +395,18 @@ export function initializeLoadingState(): LoadingState {
   const sections = Object.keys(DISCOVERY_SECTIONS) as DiscoverySection[]
   return {
     isSectionLoading: sections.reduce(
-      (acc, section) => ({ ...acc, [section]: false }),
-      {}
+      (acc, section) => {
+        acc[section] = false
+        return acc
+      },
+      {} as Record<DiscoverySection, boolean>
     ),
     hasError: sections.reduce(
-      (acc, section) => ({ ...acc, [section]: null }),
-      {}
+      (acc, section) => {
+        acc[section] = null
+        return acc
+      },
+      {} as Record<DiscoverySection, string | null>
     ),
   }
 }
