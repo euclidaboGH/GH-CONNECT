@@ -51,7 +51,7 @@ import {
 import { IdentityService } from "@/lib/identity/identity-service"
 import { createFeedDomain } from "./feed-domain"
 import { buildPermissionContext } from "../permission-engine"
-import type { Profile, Post, Conversation, StoryItem, MatchEntry, FriendRequest } from "../ghc-types"
+import type { Profile, Post, Conversation, StoryItem, MatchEntry, FriendRequest, Candidate, Like } from "../ghc-types"
 
 /** Canonical messaging privacy (matches Settings.whoCanMessage / PermissionContext). */
 export type WhoCanMessageSetting = "everyone" | "matches-only" | "no-one"
@@ -76,11 +76,12 @@ export interface DomainStateSlice {
   matches: MatchEntry[]
   /** Pending friend requests when available on session state */
   friendRequests?: FriendRequest[]
-  likes?: { id: string; fromUserId: string; toUserId: string; createdAt: number }[]
+  likes?: Like[]
   friends: string[]
   outgoingFriendRequestIds?: string[]
   incomingFriendRequestIds?: string[]
-  candidates: { id: string }[]
+  /** Canonical discovery candidates (same shape as GHC session state) */
+  candidates: Candidate[]
   conversations: Conversation[]
   /** Session settings when available (privacy unions stay canonical). */
   settings?: {
