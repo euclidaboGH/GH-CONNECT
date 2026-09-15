@@ -92,7 +92,8 @@ export function primaryConnectionCta(
       return "accept"
     case "blocked":
       return "none"
-    case "matched":
+    case "matched_opportunity":
+    case "suggested":
     case "none":
     case "declined":
     default:
