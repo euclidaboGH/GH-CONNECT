@@ -78,7 +78,7 @@ import {
   handleMessageForwarding,
   handleMessageRead,
   TypingIndicatorManager,
-  searchMessages,
+  searchMessages as searchMessagesInThread,
   toggleConversationPin,
   toggleConversationArchive,
   toggleConversationMute,
@@ -2885,6 +2885,16 @@ const dismissMatchCelebration = useCallback(() => {
     return draft?.text || null
   }, [])
 
+  /** Context API: run in-conversation message search via unified engine (no side effects). */
+  const searchMessages = useCallback(
+    async (conversationId: string, query: string) => {
+      const conv = state.conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      searchMessagesInThread(conv.messages || [], { query })
+    },
+    [state.conversations]
+  )
+
   const pinConversation = useCallback(async (conversationId: string) => {
     setState((s) => ({
       ...s,
@@ -4147,6 +4157,8 @@ const dismissMatchCelebration = useCallback(() => {
       friendRequests: state.friendRequests,
       following: state.following,
       friends: state.friends || [],
+      shares: state.shares || [],
+      reposts: state.reposts || [],
       likedPostIds: state.likedPostIds,
       isOnline: state.isOnline,
       networkQuality: state.networkQuality,
@@ -4162,6 +4174,8 @@ const dismissMatchCelebration = useCallback(() => {
       likePost,
       deletePost,
       editPost,
+      archivePost,
+      unarchivePost,
       addComment,
       editComment,
       deleteComment,
@@ -4177,6 +4191,7 @@ const dismissMatchCelebration = useCallback(() => {
       hidePost,
       markNotInterested,
       reportPost,
+      reportContent,
       muteUser,
       unmuteUser,
       restrictUser,
@@ -4216,6 +4231,7 @@ const dismissMatchCelebration = useCallback(() => {
       sendDisappearingMessage,
       saveDraft,
       loadDraft,
+      searchMessages,
       markConversationRead,
       pinConversation,
       unpinConversation,
@@ -4266,6 +4282,8 @@ const dismissMatchCelebration = useCallback(() => {
       state.friendRequests,
       state.following,
       state.friends,
+      state.shares,
+      state.reposts,
       state.likedPostIds,
       state.isOnline,
       state.networkQuality,
