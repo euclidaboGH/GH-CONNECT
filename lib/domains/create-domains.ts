@@ -352,6 +352,7 @@ export function createDomainServices(
     currentUserId: uid,
     getConversations: () => getState().conversations || [],
     getBlockedUsers: () => getState().blockedUsers || [],
+    setConversations: options?.setConversations,
   })
 
   const profile = createProfileDomain({

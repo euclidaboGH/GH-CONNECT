@@ -137,6 +137,8 @@ export function createCommunityDomain(deps: {
   currentUserId?: string
   getConversations: () => Conversation[]
   getBlockedUsers?: () => string[]
+  /** Canonical conversation list updater (same contract as DomainServiceOptions.setConversations) */
+  setConversations?: (updater: (c: Conversation[]) => Conversation[]) => void
 }) {
   const actorId = deps.currentUserId || "current-user"
 
@@ -144,9 +146,19 @@ export function createCommunityDomain(deps: {
     return deps.getConversations().find((c) => c.id === communityId)
   }
 
+  /** Persist a partial patch onto the community conversation row when a setter is bound. */
+  function patchCommunityConversation(
+    communityId: string,
+    patch: Partial<Conversation>
+  ): void {
+    deps.setConversations?.((convs) =>
+      convs.map((c) => (c.id === communityId ? { ...c, ...patch } : c))
+    )
+  }
+
   function roleOf(community: Conversation, userId: string): CommunityRole {
     if (community.createdBy === userId) return "owner"
-    const roles = (community as any).groupRoles || (community as any).roles || {}
+    const roles = community.groupRoles || {}
     return normalizeRole(roles[userId])
   }
 
@@ -297,12 +309,11 @@ export function createCommunityDomain(deps: {
         mutate: (i) => {
           const community = find(i.communityId)!
           const invitedMembers = Array.from(
-            new Set([...((community as any).invitedMembers || []), i.userId])
+            new Set([...(community.invitedMembers || []), i.userId])
           )
-          // Persist on conversation row when setter exists
+          // Persist on conversation row when setter is bound
           try {
-            const next = { ...(community as any), invitedMembers }
-            deps.setConversation?.(i.communityId, next)
+            patchCommunityConversation(i.communityId, { invitedMembers })
           } catch { /* optional */ }
           return { communityId: i.communityId, userId: i.userId, invitedMembers }
         },
@@ -323,7 +334,7 @@ export function createCommunityDomain(deps: {
           const community = find(i.communityId)
           if (!community) return "Community not found"
           if ((community.members || []).includes(actorId)) return "Already a member"
-          const invited = (community as any).invitedMembers || []
+          const invited = community.invitedMembers || []
           if (!invited.includes(actorId)) return "No active invitation"
           if (deps.getBlockedUsers?.()?.includes(community.createdBy || "")) {
             return "Cannot join — relationship blocked"
@@ -333,16 +344,13 @@ export function createCommunityDomain(deps: {
         mutate: (i) => {
           const community = find(i.communityId)!
           const members = Array.from(new Set([...(community.members || []), actorId]))
-          const invitedMembers = ((community as any).invitedMembers || []).filter(
-            (id: string) => id !== actorId
-          )
+          const invitedMembers = (community.invitedMembers || []).filter((id) => id !== actorId)
           try {
-            deps.setConversation?.(i.communityId, {
-              ...(community as any),
+            patchCommunityConversation(i.communityId, {
               members,
               invitedMembers,
               groupRoles: {
-                ...((community as any).groupRoles || {}),
+                ...(community.groupRoles || {}),
                 [actorId]: "member",
               },
             })
@@ -365,7 +373,7 @@ export function createCommunityDomain(deps: {
         authorize: (i) => {
           const community = find(i.communityId)
           if (!community) return "Community not found"
-          const invited = (community as any).invitedMembers || []
+          const invited = community.invitedMembers || []
           if (!invited.includes(actorId) && !(community.members || []).includes(actorId)) {
             return "No active invitation"
           }
@@ -373,14 +381,9 @@ export function createCommunityDomain(deps: {
         },
         mutate: (i) => {
           const community = find(i.communityId)!
-          const invitedMembers = ((community as any).invitedMembers || []).filter(
-            (id: string) => id !== actorId
-          )
+          const invitedMembers = (community.invitedMembers || []).filter((id) => id !== actorId)
           try {
-            deps.setConversation?.(i.communityId, {
-              ...(community as any),
-              invitedMembers,
-            })
+            patchCommunityConversation(i.communityId, { invitedMembers })
           } catch { /* */ }
           return { communityId: i.communityId }
         },
