@@ -357,7 +357,7 @@ export function createCommunityDomain(deps: {
           } catch { /* */ }
           return { communityId: i.communityId, members }
         },
-        eventType: "COMMUNITY_JOINED",
+        eventType: "GROUP_JOINED",
         eventPayload: (d) => ({ communityId: d.communityId, userId: actorId, via: "invitation" }),
       })
     },
@@ -562,7 +562,7 @@ export function createCommunityDomain(deps: {
           const members = Array.from(new Set([...(community.members || []), actorId]))
           return { communityId: i.communityId, members }
         },
-        eventType: "COMMUNITY_JOINED",
+        eventType: "GROUP_JOINED",
         eventPayload: (d) => ({ communityId: d.communityId, userId: actorId }),
       })
     },
