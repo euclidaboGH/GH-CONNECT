@@ -113,11 +113,28 @@ export function seedCommunities(): GHCCommunity[] {
   if (!isDemoDataAllowed()) return []
   const now = Date.now()
   const mk = (
-    partial: Omit<GHCCommunity, "boardPosts" | "events" | "announcements" | "joinRequests" | "mutedBy" | "settings" | "stats" | "lastActivityAt" | "roles" | "members"> & {
+    // createdAt/createdBy optional at call sites; mk applies demo defaults.
+    partial: Omit<
+      GHCCommunity,
+      | "boardPosts"
+      | "events"
+      | "announcements"
+      | "joinRequests"
+      | "mutedBy"
+      | "settings"
+      | "stats"
+      | "lastActivityAt"
+      | "roles"
+      | "members"
+      | "createdAt"
+      | "createdBy"
+    > & {
       members?: string[]
       roles?: Record<string, CommunityRole>
       boardPosts?: BoardPost[]
       events?: CommunityEvent[]
+      createdAt?: number
+      createdBy?: string
     },
   ): GHCCommunity => {
     const members = partial.members || ["demo-mod", "sarah", "emma"]
