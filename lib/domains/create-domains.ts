@@ -53,6 +53,15 @@ import { createFeedDomain } from "./feed-domain"
 import { buildPermissionContext } from "../permission-engine"
 import type { Profile, Post, Conversation, StoryItem, MatchEntry, FriendRequest } from "../ghc-types"
 
+/** Canonical messaging privacy (matches Settings.whoCanMessage / PermissionContext). */
+export type WhoCanMessageSetting = "everyone" | "matches-only" | "no-one"
+
+/** Normalize persisted/external values to the canonical union; invalid → "everyone". */
+export function normalizeWhoCanMessage(value: unknown): WhoCanMessageSetting {
+  if (value === "matches-only" || value === "no-one" || value === "everyone") return value
+  return "everyone"
+}
+
 export interface DomainStateSlice {
   profile: Profile
   posts: Post[]
@@ -73,6 +82,10 @@ export interface DomainStateSlice {
   incomingFriendRequestIds?: string[]
   candidates: { id: string }[]
   conversations: Conversation[]
+  /** Session settings when available (privacy unions stay canonical). */
+  settings?: {
+    whoCanMessage?: WhoCanMessageSetting
+  }
 }
 
 export interface DomainServiceOptions {
@@ -253,7 +266,9 @@ export function createDomainServices(
     },
     getPermissionContext: () => {
       const s = getState()
-      const settings = (s as { settings?: { whoCanMessage?: string } }).settings || (s.profile as { settings?: { whoCanMessage?: string } } | null | undefined)?.settings
+      const settings =
+        s.settings ||
+        (s.profile as { settings?: { whoCanMessage?: unknown } } | null | undefined)?.settings
       return buildPermissionContext({
         currentUserId: uid,
         blockedUsers: s.blockedUsers || [],
@@ -262,7 +277,7 @@ export function createDomainServices(
         followingIds: s.following,
         friendIds: s.friends,
         matchIds: (s.matches || []).map((m) => m.userId),
-        whoCanMessage: settings?.whoCanMessage || "everyone",
+        whoCanMessage: normalizeWhoCanMessage(settings?.whoCanMessage),
       })
     },
     isMember: (conversationId, userId) => {
