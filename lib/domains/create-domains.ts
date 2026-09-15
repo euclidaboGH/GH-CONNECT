@@ -51,7 +51,7 @@ import {
 import { IdentityService } from "@/lib/identity/identity-service"
 import { createFeedDomain } from "./feed-domain"
 import { buildPermissionContext } from "../permission-engine"
-import type { Profile, Post, Conversation, StoryItem } from "../ghc-types"
+import type { Profile, Post, Conversation, StoryItem, MatchEntry, FriendRequest } from "../ghc-types"
 
 export interface DomainStateSlice {
   profile: Profile
@@ -63,7 +63,10 @@ export interface DomainStateSlice {
   blockedUsers: string[]
   mutedUsers?: string[]
   restrictedUsers?: string[]
-  matches: { userId: string }[]
+  /** Canonical match records (same shape as GHC session state) */
+  matches: MatchEntry[]
+  /** Pending friend requests when available on session state */
+  friendRequests?: FriendRequest[]
   likes?: { id: string; fromUserId: string; toUserId: string; createdAt: number }[]
   friends: string[]
   outgoingFriendRequestIds?: string[]
@@ -130,6 +133,7 @@ export function createDomainServices(
     socialRepo = createLocalSocialGraphRepository({
       getSnapshot: () => {
         const s = getState()
+        // Canonical MatchEntry[] and FriendRequest[] from session state — no narrowing/casts.
         return {
           following: s.following || [],
           followers: s.followers || [],
@@ -137,8 +141,8 @@ export function createDomainServices(
           blockedUsers: s.blockedUsers || [],
           mutedUsers: s.mutedUsers || [],
           restrictedUsers: s.restrictedUsers || [],
-          matches: (s.matches || []) as Array<{ userId: string }>,
-          friendRequests: [],
+          matches: s.matches || [],
+          friendRequests: s.friendRequests || [],
           outgoingFriendRequestIds: s.outgoingFriendRequestIds,
           incomingFriendRequestIds: s.incomingFriendRequestIds,
         }
