@@ -206,8 +206,8 @@ export function handleMessageReaction(
   userId: string,
   isAdding: boolean = true
 ): Message {
-  const reactions = { ...message.reactions } || {}
-  const reactionCounts = { ...message.reactionCounts } || {}
+  const reactions = { ...(message.reactions ?? {}) }
+  const reactionCounts = { ...(message.reactionCounts ?? {}) }
 
   if (isAdding) {
     if (!reactions[emoji]) reactions[emoji] = []

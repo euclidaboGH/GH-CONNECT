@@ -390,13 +390,13 @@ export function addMessageReaction(
   emoji: string,
   userId: string
 ): Message {
-  const reactions = { ...message.reactions } || {}
+  const reactions = { ...(message.reactions ?? {}) }
   if (!reactions[emoji]) reactions[emoji] = []
   if (!reactions[emoji].includes(userId)) {
     reactions[emoji].push(userId)
   }
   
-  const reactionCounts = { ...message.reactionCounts } || {}
+  const reactionCounts = { ...(message.reactionCounts ?? {}) }
   reactionCounts[emoji] = reactions[emoji].length
   
   return { ...message, reactions, reactionCounts }
@@ -410,13 +410,13 @@ export function removeMessageReaction(
   emoji: string,
   userId: string
 ): Message {
-  const reactions = { ...message.reactions } || {}
+  const reactions = { ...(message.reactions ?? {}) }
   if (reactions[emoji]) {
     reactions[emoji] = reactions[emoji].filter((id) => id !== userId)
     if (reactions[emoji].length === 0) delete reactions[emoji]
   }
   
-  const reactionCounts = { ...message.reactionCounts } || {}
+  const reactionCounts = { ...(message.reactionCounts ?? {}) }
   delete reactionCounts[emoji]
   
   return { ...message, reactions, reactionCounts }
