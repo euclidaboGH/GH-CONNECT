@@ -160,8 +160,8 @@ export async function sendUnifiedConnectionRequest(
   }
 
   const services = getBoundDomainServices()
-  if (services?.socialGraph?.sendFriendRequest) {
-    const res = await services.socialGraph.sendFriendRequest(input.toUserId, ctx)
+  if (services?.graph?.sendFriendRequest) {
+    const res = await services.graph.sendFriendRequest(input.toUserId, ctx)
     if (!res.ok) {
       return { ok: false, error: res.error || "REQUEST_FAILED", code: "REQUEST_FAILED", intents }
     }
@@ -202,10 +202,10 @@ export async function acceptUnifiedConnectionRequest(
   }
   const prior = getOutgoingRequestIntent(fromUserId, actorUserId)
   const services = getBoundDomainServices()
-  if (!services?.socialGraph?.acceptFriendRequest) {
+  if (!services?.graph?.acceptFriendRequest) {
     return { ok: false, error: "GRAPH_UNAVAILABLE", code: "GRAPH_UNAVAILABLE" }
   }
-  const res = await services.socialGraph.acceptFriendRequest(fromUserId)
+  const res = await services.graph.acceptFriendRequest(fromUserId)
   if (!res.ok) {
     return { ok: false, error: res.error || "ACCEPT_FAILED", code: "ACCEPT_FAILED" }
   }
@@ -225,10 +225,10 @@ export async function declineUnifiedConnectionRequest(
     return { ok: false, error: "INVALID_PAIR", code: "INVALID_PAIR" }
   }
   const services = getBoundDomainServices()
-  if (!services?.socialGraph?.rejectFriendRequest) {
+  if (!services?.graph?.rejectFriendRequest) {
     return { ok: false, error: "GRAPH_UNAVAILABLE", code: "GRAPH_UNAVAILABLE" }
   }
-  const res = await services.socialGraph.rejectFriendRequest(fromUserId)
+  const res = await services.graph.rejectFriendRequest(fromUserId)
   if (!res.ok) {
     return { ok: false, error: res.error || "DECLINE_FAILED", code: "DECLINE_FAILED" }
   }
