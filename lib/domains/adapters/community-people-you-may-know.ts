@@ -3,7 +3,7 @@
  * Uses existing members + connection graph signals — never fabricates users.
  */
 
-import type { ExplainableReason } from "@/lib/domains/contracts/discovery"
+import type { ExplainableReason } from "@/lib/domains/contracts/types"
 import { filterMemberIdsForViewer } from "@/lib/domains/adapters/community-membership-adapter"
 import { scoreCommunityMemberSuggestion } from "@/lib/domains/adapters/shared-community-bridge"
 
