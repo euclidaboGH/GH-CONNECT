@@ -104,15 +104,19 @@ export async function syncWalletAfterServerClaim(input?: {
     }
 
     try {
-      domainEvents.emit("WALLET_BALANCE_UPDATED", {
-        userId,
-        balance,
-        source: "daily_claim_hydrate",
-        claimedAmount: input?.claimedAmount ?? null,
-        referenceId: input?.referenceId ?? null,
-        alreadyClaimed: Boolean(input?.alreadyClaimed),
-        at: Date.now(),
-      })
+      // Canonical EventBus API: publish(type, payload, actorId) → builds DomainEvent
+      domainEvents.publish(
+        "WALLET_BALANCE_UPDATED",
+        {
+          userId,
+          balance,
+          source: "daily_claim_hydrate",
+          claimedAmount: input?.claimedAmount ?? null,
+          referenceId: input?.referenceId ?? null,
+          alreadyClaimed: Boolean(input?.alreadyClaimed),
+        },
+        userId
+      )
     } catch {
       /* */
     }
