@@ -51,7 +51,8 @@ function writeVerified() {
   }
 }
 
-type ToastFn = (msg: string, type?: string) => void
+/** Optional toast sink — levels match GHC addToast; type may be omitted by callers. */
+type ToastFn = (msg: string, type?: "success" | "error" | "info") => void
 
 function statusLabel(status: GhPayOrder["status"]): string {
   switch (status) {

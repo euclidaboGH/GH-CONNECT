@@ -783,7 +783,14 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             <p className="mt-0.5">{ASSET_POLICY.piRailsCopy}</p>
             <p className="mt-0.5">{ASSET_POLICY.piPeerCopy}</p>
           </div>
-          <GhPayPanel compact onToast={addToast} />
+          <GhPayPanel
+            compact
+            onToast={(msg, type) => {
+              const level =
+                type === "error" || type === "success" || type === "info" ? type : "info"
+              addToast(msg, level)
+            }}
+          />
         </div>
 
         {/* Pending GHC — explain why held, then claim */}
