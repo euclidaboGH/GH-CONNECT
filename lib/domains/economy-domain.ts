@@ -1272,7 +1272,7 @@ export function createEconomyDomain(deps: {
         sourceEvent: "PREMIUM_PURCHASE",
         referenceId: `premium_${planId}_${userId}`,
       })
-      if (!spendRes.ok || !spendRes.data) {
+      if (!spendRes.ok) {
         return {
           ok: false,
           error: spendRes.error || "Premium spend failed",

@@ -879,7 +879,7 @@ export function createMarketplaceDomain(deps: {
             listingKind: listing.kind,
             contentType: "marketplace_listing",
           })
-          if (!result.ok || !result.data) {
+          if (!result.ok) {
             throw new Error(result.error || "Failed to create feed post")
           }
           const post = result.data
