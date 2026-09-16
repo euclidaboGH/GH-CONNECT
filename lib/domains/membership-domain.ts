@@ -561,7 +561,7 @@ export function createMembershipDomain(deps: {
         return {
           ok: false,
           error: data?.error || data?.message || "Server did not activate membership",
-          phase: "authorize",
+          phase: "permission",
           requestId: payment.paymentId,
         }
       } catch {
@@ -576,7 +576,7 @@ export function createMembershipDomain(deps: {
         return {
           ok: false,
           error: "Activation failed",
-          phase: "authorize",
+          phase: "permission",
           requestId: "local",
         }
       }
@@ -625,7 +625,7 @@ export function createMembershipDomain(deps: {
           return {
             ok: false,
             error: data.error || data.message || "Purchase failed",
-            phase: "authorize",
+            phase: "permission",
             requestId: "server",
           }
         }
@@ -633,7 +633,7 @@ export function createMembershipDomain(deps: {
         /* fall through to local spend */
       }
       if (!deps.spendGhc) {
-        return { ok: false, error: "GHC spend not available", phase: "authorize", requestId: "local" }
+        return { ok: false, error: "GHC spend not available", phase: "permission", requestId: "local" }
       }
       const paid = await deps.spendGhc({
         amount: price,
@@ -642,7 +642,7 @@ export function createMembershipDomain(deps: {
         referenceId: `${tier}_${billingPeriod}`,
       })
       if (!paid.ok) {
-        return { ok: false, error: paid.error || "Payment failed", phase: "authorize", requestId: "local" }
+        return { ok: false, error: paid.error || "Payment failed", phase: "permission", requestId: "local" }
       }
       return this.activate({
         tier,

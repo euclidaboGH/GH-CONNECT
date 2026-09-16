@@ -663,7 +663,7 @@ export function createEconomyDomain(deps: {
         } catch {
           /* */
         }
-        return { ok: true, data: { tx, wallet: w }, phase: "mutate", requestId: "server" }
+        return { ok: true, data: { tx, wallet: w }, requestId: "server" }
       }
 
       // Local / Studio only
@@ -692,7 +692,7 @@ export function createEconomyDomain(deps: {
           return {
             ok: false,
             error: "GHC purchase credit requires server-verified payment authority",
-            phase: "authorize",
+            phase: "permission",
             requestId: "server",
           }
         }
@@ -708,7 +708,7 @@ export function createEconomyDomain(deps: {
           .listTransactions(userId)
           .find((x) => x.referenceId === input.paymentRef && x.kind === "purchased")
         if (existing) {
-          return { ok: true, data: { tx: existing, wallet: w }, phase: "mutate", requestId: "server" }
+          return { ok: true, data: { tx: existing, wallet: w }, requestId: "server" }
         }
         return {
           ok: false,
@@ -761,7 +761,7 @@ export function createEconomyDomain(deps: {
           error: wallet.pending > 0
             ? "Insufficient available GHC — claim pending rewards first"
             : "Insufficient available GHC",
-          phase: "authorize",
+          phase: "permission",
           requestId: "local",
         }
       }
@@ -811,7 +811,7 @@ export function createEconomyDomain(deps: {
       if (repo.mode === "server" && typeof repo.evaluateRewardServer === "function") {
         const matched = rulesBySourceEvent(rules, input.sourceEvent)
         if (!matched.length) {
-          return { ok: true, data: { rewards: [], skipped: "No rule for event" } }
+          return { ok: true, data: { rewards: [], skipped: "No rule for event" } , requestId: "local" }
         }
         const created: RewardRecord[] = []
         for (const rule of matched) {
@@ -850,7 +850,7 @@ export function createEconomyDomain(deps: {
             /* */
           }
         }
-        return { ok: true, data: { rewards: created }, phase: "mutate", requestId: "server" }
+        return { ok: true, data: { rewards: created }, requestId: "server" }
       }
 
       return runMutation({
@@ -1130,7 +1130,6 @@ export function createEconomyDomain(deps: {
         return {
           ok: true,
           data: { reward: { ...reward, validationStatus: "paid" }, wallet },
-          phase: "mutate",
           requestId: "server",
         }
       }
@@ -1298,7 +1297,6 @@ export function createEconomyDomain(deps: {
       return {
         ok: true,
         data: { membership, tx: spendRes.data.tx },
-        phase: "mutate",
         requestId: spendRes.requestId || "local",
       }
     },
@@ -1370,6 +1368,7 @@ export function createEconomyDomain(deps: {
         return {
           ok: true,
           data: { tx: existingOut, wallet: wallet() },
+          requestId: "local",
         }
       }
 
@@ -1386,7 +1385,7 @@ export function createEconomyDomain(deps: {
                 repo.appendTransaction(found.debit)
                 if (found.credit) repo.appendTransaction(found.credit)
               }
-              return { ok: true, data: { tx: found.debit, wallet: wallet(), creditTxId: found.credit?.id } }
+              return { ok: true, data: { tx: found.debit, wallet: wallet(), creditTxId: found.credit?.id } , requestId: "local" }
             }
           }
           const remote = await repo.executeTransfer({
@@ -1443,6 +1442,7 @@ export function createEconomyDomain(deps: {
           return {
             ok: true,
             data: { tx: remote.debitTx, wallet: wallet(), creditTxId: remote.creditTx.id },
+            requestId: "server",
           }
         } catch (e) {
           const mapped = mapTransferFailure(e instanceof Error ? e.message : "SERVER_UNAVAILABLE", "SERVER_UNAVAILABLE")
@@ -1575,6 +1575,7 @@ export function createEconomyDomain(deps: {
           wallet: wallet(),
           creditTxId: creditBuilt.tx.id,
         },
+        requestId: "local",
       }
     },
 
@@ -1607,7 +1608,7 @@ export function createEconomyDomain(deps: {
         .listTransactions(userId)
         .find((t) => t.referenceId === ref && t.kind === "transfer_request")
       if (existing) {
-        return { ok: true, data: { tx: existing, wallet: wallet() } }
+        return { ok: true, data: { tx: existing, wallet: wallet() } , requestId: "local" }
       }
 
       const note = (input.note || "").trim().slice(0, 120)
@@ -1738,7 +1739,7 @@ export function createEconomyDomain(deps: {
       const st = normalizeRequestStatus((target.metadata as any)?.transferStatus)
       if (st === "ACCEPTED") return { ok: false, error: "Request already paid" }
       if (st === "DECLINED" || st === "CANCELLED" || st === "EXPIRED") {
-        return { ok: true, data: { referenceId: ref } }
+        return { ok: true, data: { referenceId: ref } , requestId: "local" }
       }
       if (typeof repo.updateTransaction === "function") {
         repo.updateTransaction(userId, target.id, {
@@ -1761,7 +1762,7 @@ export function createEconomyDomain(deps: {
           ref
         )
       } catch { /* */ }
-      return { ok: true, data: { referenceId: ref } }
+      return { ok: true, data: { referenceId: ref } , requestId: "local" }
     },
 
     async cancelGhcRequest(input: {
@@ -1779,7 +1780,7 @@ export function createEconomyDomain(deps: {
       }
       const st = normalizeRequestStatus(meta.transferStatus)
       if (st === "ACCEPTED") return { ok: false, error: "Request already paid" }
-      if (st !== "PENDING") return { ok: true, data: { referenceId: ref } }
+      if (st !== "PENDING") return { ok: true, data: { referenceId: ref } , requestId: "local" }
       if (typeof repo.updateTransaction === "function") {
         repo.updateTransaction(userId, target.id, {
           metadata: { ...meta, transferStatus: "CANCELLED" },
@@ -1801,7 +1802,7 @@ export function createEconomyDomain(deps: {
           ref
         )
       } catch { /* */ }
-      return { ok: true, data: { referenceId: ref } }
+      return { ok: true, data: { referenceId: ref } , requestId: "local" }
     },
 
     /**
@@ -1821,7 +1822,7 @@ export function createEconomyDomain(deps: {
       // Already paid?
       const prior = findPostedByReference(userId, ref, "transfer_out")
       if (prior) {
-        return { ok: true, data: { tx: prior, wallet: wallet() } }
+        return { ok: true, data: { tx: prior, wallet: wallet() } , requestId: "local" }
       }
 
       // Locate request on either ledger view
