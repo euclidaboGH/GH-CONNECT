@@ -250,11 +250,9 @@ export function createDiscoveryDomain(deps: {
       const merged = { ...DEFAULT_FILTERS, ...(filters || {}) }
       const filtered = applyDiscoveryFilters(pool, merged as DiscoveryFilters)
       if (!(query || "").trim()) return filtered
+      // performSearch returns a SearchResult object { people, posts, communities, businesses }
       const results = performSearch(query, filtered, [])
-      return results
-        .filter((r) => (r as any).type === "candidate" || (r as any).item)
-        .map((r) => ((r as any).item || r) as Candidate)
-        .filter((c) => c && typeof c === "object" && "id" in c)
+      return results.people
     },
 
     trending(limit = 12): Candidate[] {

@@ -1,116 +1,116 @@
 {
-  "generatedAt": "2026-09-15T20:54:43.579Z",
+  "generatedAt": "2026-09-16T05:03:35.908Z",
   "step": "5",
   "automated": [
     {
       "name": "safety-scan",
       "status": "PASS",
-      "ms": 115
+      "ms": 106
     },
     {
       "name": "authority-map",
       "status": "PASS",
-      "ms": 173
+      "ms": 264
     },
     {
       "name": "community-authority",
       "status": "PASS",
-      "ms": 106
+      "ms": 129
     },
     {
       "name": "trust-authority",
       "status": "PASS",
-      "ms": 162
+      "ms": 250
     },
     {
       "name": "governance-durability",
       "status": "PASS",
-      "ms": 157
+      "ms": 207
     },
     {
       "name": "context-strangler-50.1",
       "status": "PASS",
-      "ms": 161
+      "ms": 194
     },
     {
       "name": "context-strangler-step4",
       "status": "PASS",
-      "ms": 89
+      "ms": 116
     },
     {
       "name": "domain-contracts",
       "status": "PASS",
-      "ms": 95
+      "ms": 217
     },
     {
       "name": "discovery-connections",
       "status": "PASS",
-      "ms": 88
+      "ms": 102
     },
     {
       "name": "unified-connections",
       "status": "PASS",
-      "ms": 94
+      "ms": 98
     },
     {
       "name": "connection-inbox",
       "status": "PASS",
-      "ms": 116
+      "ms": 144
     },
     {
       "name": "connection-ux",
       "status": "PASS",
-      "ms": 103
+      "ms": 143
     },
     {
       "name": "universal-search",
       "status": "PASS",
-      "ms": 168
+      "ms": 224
     },
     {
       "name": "communities",
       "status": "PASS",
-      "ms": 98
+      "ms": 105
     },
     {
       "name": "community-belonging",
       "status": "PASS",
-      "ms": 160
+      "ms": 247
     },
     {
       "name": "community-hub",
       "status": "PASS",
-      "ms": 102
+      "ms": 146
     },
     {
       "name": "community-governance",
       "status": "PASS",
-      "ms": 157
+      "ms": 175
     },
     {
       "name": "community-health",
       "status": "PASS",
-      "ms": 102
+      "ms": 123
     },
     {
       "name": "community-lifecycle",
       "status": "PASS",
-      "ms": 112
+      "ms": 102
     },
     {
       "name": "community-moderation",
       "status": "PASS",
-      "ms": 180
+      "ms": 185
     },
     {
       "name": "community-onboarding",
       "status": "PASS",
-      "ms": 104
+      "ms": 116
     },
     {
       "name": "community-participation-bridge",
       "status": "PASS",
-      "ms": 80
+      "ms": 95
     },
     {
       "name": "community-participation-depth",
@@ -120,37 +120,37 @@
     {
       "name": "community-participation",
       "status": "PASS",
-      "ms": 111
+      "ms": 129
     },
     {
       "name": "community-feed-search",
       "status": "PASS",
-      "ms": 97
+      "ms": 125
     },
     {
       "name": "home-os-audit",
       "status": "PASS",
-      "ms": 159
+      "ms": 209
     },
     {
       "name": "social-experience",
       "status": "PASS",
-      "ms": 90
+      "ms": 94
     },
     {
       "name": "social-os-foundation",
       "status": "PASS",
-      "ms": 158
+      "ms": 216
     },
     {
       "name": "economy-v12",
       "status": "PASS",
-      "ms": 249
+      "ms": 403
     },
     {
       "name": "pi-payment-durable",
       "status": "PASS",
-      "ms": 206
+      "ms": 201
     }
   ],
   "passCount": 30,
