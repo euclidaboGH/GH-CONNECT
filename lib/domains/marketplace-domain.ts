@@ -8,6 +8,7 @@
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
 import type { DomainServices } from "./create-domains"
+import { TYPE_LABELS, type VerificationType } from "./verification-domain"
 
 export type ListingKind = "product" | "service" | "opportunity"
 export type ListingStatus =
@@ -397,9 +398,16 @@ export function createMarketplaceDomain(deps: {
         sellerId,
         displayName: peer?.profile?.displayName,
         photo: peer?.profile?.photos?.[0],
-        verificationLabels: ver?.anyVerified
-          ? services?.verification?.getLabels?.(sellerId) || []
-          : [],
+        verificationLabels: (() => {
+          if (!ver?.anyVerified) return []
+          const labels: string[] = []
+          for (const type of Object.keys(ver.records || {}) as VerificationType[]) {
+            if (ver.records[type]?.status === "verified") {
+              labels.push(TYPE_LABELS[type])
+            }
+          }
+          return labels
+        })(),
         identityVerified: Boolean(ver?.identityVerified),
         reputationScore: rep?.score ?? 0,
         reputationTier: rep?.tier ?? "new",

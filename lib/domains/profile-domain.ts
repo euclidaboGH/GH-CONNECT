@@ -17,6 +17,7 @@ import type {
   Conversation,
 } from "../ghc-types"
 import type { DomainServices } from "./create-domains"
+import { TYPE_LABELS, type VerificationType } from "./verification-domain"
 import type { SocialGraphSnapshot } from "../social-graph"
 import type { MatchIntention } from "../ghc-types"
 
@@ -282,9 +283,17 @@ export function createProfileDomain(deps: {
           const services = getBoundDomainServices?.()
           const snap = services?.verification?.getSnapshot?.()
           if (snap) {
+            const labels: string[] = []
+            if (snap.anyVerified) {
+              for (const type of Object.keys(snap.records || {}) as VerificationType[]) {
+                if (snap.records[type]?.status === "verified") {
+                  labels.push(TYPE_LABELS[type])
+                }
+              }
+            }
             return {
               verified: snap.anyVerified || Boolean(profile.verified),
-              labels: services?.verification?.getLabels?.() || [],
+              labels,
             }
           }
         } catch { /* */ }
