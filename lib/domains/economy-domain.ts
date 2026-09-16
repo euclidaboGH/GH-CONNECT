@@ -1325,14 +1325,14 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: partyErr, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: partyErr }
+        return { ok: false, error: partyErr, phase: "validate", requestId: "local" }
       }
       const amtErr = validateTransferAmount(amount)
       if (amtErr) {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: amtErr, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: amtErr }
+        return { ok: false, error: amtErr, phase: "validate", requestId: "local" }
       }
 
       const w = wallet()
@@ -1341,7 +1341,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: err, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: err }
+        return { ok: false, error: err, phase: "permission", requestId: "local" }
       }
 
       if (countSentToday() + amount > limits.dailySendLimit) {
@@ -1349,7 +1349,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: err, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: err }
+        return { ok: false, error: err, phase: "permission", requestId: "local" }
       }
 
       if (countReceivedTodayFor(input.toUserId) + amount > limits.dailyReceiveLimit) {
@@ -1357,7 +1357,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: err, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: err }
+        return { ok: false, error: err, phase: "permission", requestId: "local" }
       }
 
       const ref =
@@ -1407,7 +1407,7 @@ export function createEconomyDomain(deps: {
                 ref
               )
             } catch { /* */ }
-            return { ok: false, error: remote.error.message }
+            return { ok: false, error: remote.error.message, phase: "mutate", requestId: "server" }
           }
           // Merge authoritative legs into cache (no second money move)
           if (!findPostedByReference(userId, ref, "transfer_out")) {
@@ -1457,7 +1457,7 @@ export function createEconomyDomain(deps: {
             )
           } catch { /* */ }
           // NO local fallback — would fork balances
-          return { ok: false, error: mapped.message }
+          return { ok: false, error: mapped.message, phase: "error", requestId: "server" }
         }
       }
 
@@ -1488,7 +1488,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: debitBuilt.error, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: debitBuilt.error }
+        return { ok: false, error: debitBuilt.error, phase: "mutate", requestId: "local" }
       }
 
       const creditBuilt = createLedgerTransaction(
@@ -1518,7 +1518,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: creditBuilt.error, phase: "send" }, userId)
         } catch { /* */ }
-        return { ok: false, error: creditBuilt.error }
+        return { ok: false, error: creditBuilt.error, phase: "mutate", requestId: "local" }
       }
 
       try {
@@ -1542,7 +1542,7 @@ export function createEconomyDomain(deps: {
         try {
           domainEvents.publish("WALLET_TRANSFER_FAILED", { reason: msg, phase: "send" }, userId, ref)
         } catch { /* */ }
-        return { ok: false, error: msg }
+        return { ok: false, error: msg, phase: "error", requestId: "local" }
       }
 
       try {
@@ -1591,15 +1591,15 @@ export function createEconomyDomain(deps: {
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
       const amount = Math.abs(Number(input.amount))
       const partyErr = validatePeerParty(input.fromUserId)
-      if (partyErr) return { ok: false, error: partyErr }
+      if (partyErr) return { ok: false, error: partyErr, phase: "validate", requestId: "local" }
       const amtErr = validateTransferAmount(amount)
-      if (amtErr) return { ok: false, error: amtErr }
+      if (amtErr) return { ok: false, error: amtErr, phase: "validate", requestId: "local" }
 
       if (countRequestsCreatedToday() >= limits.dailyRequestLimit) {
-        return { ok: false, error: `Daily request limit of ${limits.dailyRequestLimit} reached` }
+        return { ok: false, error: `Daily request limit of ${limits.dailyRequestLimit} reached`, phase: "permission", requestId: "local" }
       }
       if (openOutgoingRequests().length >= limits.maximumOpenRequests) {
-        return { ok: false, error: `Maximum open requests (${limits.maximumOpenRequests}) reached` }
+        return { ok: false, error: `Maximum open requests (${limits.maximumOpenRequests}) reached`, phase: "permission", requestId: "local" }
       }
 
       const ref =
@@ -1733,13 +1733,13 @@ export function createEconomyDomain(deps: {
       referenceId: string
     }): Promise<MutationResult<{ referenceId: string }>> {
       const ref = (input.referenceId || "").trim()
-      if (!ref) return { ok: false, error: "Request reference required" }
+      if (!ref) return { ok: false, error: "Request reference required", phase: "validate", requestId: "local" }
       const tx = listRequestTxsForUser(userId).find((t) => t.referenceId === ref || t.id === ref)
       // Also allow payer to decline if request sits on their ledger
       const target = tx || listRequestTxsForUser(userId).find((t) => (t.metadata as any)?.requestId === ref)
-      if (!target) return { ok: false, error: "Request not found" }
+      if (!target) return { ok: false, error: "Request not found", phase: "validate", requestId: "local" }
       const st = normalizeRequestStatus((target.metadata as any)?.transferStatus)
-      if (st === "ACCEPTED") return { ok: false, error: "Request already paid" }
+      if (st === "ACCEPTED") return { ok: false, error: "Request already paid", phase: "validate", requestId: "local" }
       if (st === "DECLINED" || st === "CANCELLED" || st === "EXPIRED") {
         return { ok: true, data: { referenceId: ref } , requestId: "local" }
       }
@@ -1771,17 +1771,17 @@ export function createEconomyDomain(deps: {
       referenceId: string
     }): Promise<MutationResult<{ referenceId: string }>> {
       const ref = (input.referenceId || "").trim()
-      if (!ref) return { ok: false, error: "Request reference required" }
+      if (!ref) return { ok: false, error: "Request reference required", phase: "validate", requestId: "local" }
       const target = listRequestTxsForUser(userId).find(
         (t) => t.referenceId === ref || t.id === ref || (t.metadata as any)?.requestId === ref
       )
-      if (!target) return { ok: false, error: "Request not found" }
+      if (!target) return { ok: false, error: "Request not found", phase: "validate", requestId: "local" }
       const meta = (target.metadata || {}) as any
       if (String(meta.requesterId || userId) !== userId && meta.requesterId) {
-        return { ok: false, error: "Only the requester can cancel" }
+        return { ok: false, error: "Only the requester can cancel", phase: "permission", requestId: "local" }
       }
       const st = normalizeRequestStatus(meta.transferStatus)
-      if (st === "ACCEPTED") return { ok: false, error: "Request already paid" }
+      if (st === "ACCEPTED") return { ok: false, error: "Request already paid", phase: "validate", requestId: "local" }
       if (st !== "PENDING") return { ok: true, data: { referenceId: ref } , requestId: "local" }
       if (typeof repo.updateTransaction === "function") {
         repo.updateTransaction(userId, target.id, {
@@ -1819,7 +1819,7 @@ export function createEconomyDomain(deps: {
       note?: string
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
       const ref = (input.requestReferenceId || "").trim()
-      if (!ref) return { ok: false, error: "Request reference required" }
+      if (!ref) return { ok: false, error: "Request reference required", phase: "validate", requestId: "local" }
 
       // Already paid?
       const prior = findPostedByReference(userId, ref, "transfer_out")
@@ -1846,10 +1846,10 @@ export function createEconomyDomain(deps: {
       if (reqTx) {
         const st = normalizeRequestStatus((reqTx.metadata as any)?.transferStatus)
         if (st === "ACCEPTED") {
-          return { ok: false, error: "Request already accepted" }
+          return { ok: false, error: "Request already accepted", phase: "validate", requestId: "local" }
         }
         if (st === "DECLINED" || st === "CANCELLED" || st === "EXPIRED") {
-          return { ok: false, error: `Request is ${st.toLowerCase()}` }
+          return { ok: false, error: `Request is ${st.toLowerCase()}`, phase: "validate", requestId: "local" }
         }
         const exp = Number((reqTx.metadata as any)?.expiresAt || 0)
         if (exp > 0 && exp < Date.now()) {
@@ -1859,7 +1859,7 @@ export function createEconomyDomain(deps: {
               status: "expired",
             })
           }
-          return { ok: false, error: "Request expired" }
+          return { ok: false, error: "Request expired", phase: "validate", requestId: "local" }
         }
       }
 
