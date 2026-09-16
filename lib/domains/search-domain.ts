@@ -212,15 +212,16 @@ export function createSearchDomain(deps: {
     const hits: SearchHit[] = []
     for (const c of deps.getConversations() || []) {
       if (!canSeeCommunity(c, blocked)) continue
-      const title = c.name || (c as any).title || "Community"
-      const score = scoreText(q, title, (c as any).description)
+      // Canonical Conversation group fields: groupName / description / groupPhoto
+      const title = c.groupName || c.participantName || "Community"
+      const score = scoreText(q, title, c.description)
       if (score <= 0) continue
       hits.push({
         type: "communities",
         id: c.id,
         title,
-        subtitle: (c as any).description,
-        photo: (c as any).photo || c.participantPhoto,
+        subtitle: c.description,
+        photo: c.groupPhoto || c.participantPhoto,
         score,
         ref: { conversationId: c.id },
       })
