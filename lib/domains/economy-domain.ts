@@ -1122,6 +1122,8 @@ export function createEconomyDomain(deps: {
             sourceEvent: "CLAIM",
             amount: remote.amount || 0,
             validationStatus: "paid" as const,
+            reason: remote.transaction?.reason || "Claimed pending GHC",
+            transactionId: remote.transactionId || remote.transaction?.id,
             createdAt: Date.now(),
           } satisfies RewardRecord)
         if (reward.validationStatus !== "paid") {
