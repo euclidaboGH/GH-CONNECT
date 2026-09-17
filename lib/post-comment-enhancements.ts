@@ -3,6 +3,16 @@
 
 // Canonical post/comment engine (primary)
 import { LinkPreviewCache } from "@/lib/link-preview-service"
+import type { ValidationResult } from "@/lib/post-validation"
+import {
+  validatePostContent,
+  extractMentions,
+  validateMentions,
+  extractHashtags,
+  extractUrls,
+  extractEmojis,
+} from "@/lib/post-validation"
+import type { EnhancedCommentData } from "@/lib/comment-features-engine"
 
 export * from "@/lib/post-comment-engine"
 
@@ -198,11 +208,11 @@ export interface PostValidationOptions {
 export function validatePostWithOptions(
   text: string,
   options: PostValidationOptions = {}
-): ValidationResult & { extracted?: any } {
+): ValidationResult & { extracted?: Record<string, unknown> } {
   const result = validatePostContent(text)
   if (!result.valid) return result
 
-  const extracted: any = {}
+  const extracted: Record<string, unknown> = {}
   const warnings: string[] = result.warnings || []
 
   if (options.checkMentions) {
