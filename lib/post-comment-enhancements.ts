@@ -117,7 +117,6 @@ export {
   getPinnedComments,
   editComment,
   extractMentionsFromComment,
-  validateMentions as validateCommentMentions,
   extractHashtagsFromComment,
   calculateCommentStats,
   getCommentThread,
