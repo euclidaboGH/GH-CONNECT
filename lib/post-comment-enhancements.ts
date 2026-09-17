@@ -220,7 +220,7 @@ export function validatePostWithOptions(
     if (options.validUserIds) {
       const mentionValidation = validateMentions(text, options.validUserIds)
       if (!mentionValidation.valid) {
-        warnings.push(`Invalid mentions: ${mentionValidation.invalidMentions.join(", ")}`)
+        warnings.push(`Invalid mentions: ${(mentionValidation.invalidMentions ?? []).join(", ")}`)
       }
     }
   }
