@@ -8,7 +8,8 @@ export * from './ux-constants'
 
 // Utilities
 export * from './search-utils'
-export * from './responsive'
+export { screens, responsive, safeAreaStyles, touchTargets, responsiveCss, patterns } from './responsive'
+// breakpoints live in design-system (string) and responsive (numeric px); not re-exported from barrel to avoid name clash
 export * from './accessibility'
 export * from './analytics'
 export * from './notifications'
