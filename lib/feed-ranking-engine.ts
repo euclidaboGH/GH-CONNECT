@@ -153,7 +153,7 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
         !post.isScheduled &&
         matchesLocationLane(post, context)
     )
-    .map((post) => {
+    .map((post): RankedPost => {
       let score = 0
       let reason: PostVisibilityReason = {
         reason: "Suggested for you",
@@ -322,17 +322,14 @@ export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPo
         !post.isScheduled &&
         !context.blockedUserIds.includes(post.authorId)
     )
-    .map((post) => {
+    .map((post): RankedPost => {
       // Pure Following: chronological only (newest first). No engagement ranking.
       const score = post.createdAt || 0
-      return {
-        post,
-        score,
-        reason: {
-          reason: `From ${post.authorName}`,
-          category: "following",
-        },
+      const reason: PostVisibilityReason = {
+        reason: `From ${post.authorName}`,
+        category: "following",
       }
+      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -362,14 +359,11 @@ export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[
         score += 20
       }
 
-      return {
-        post,
-        score,
-        reason: {
-          reason: "Happening nearby",
-          category: "personalization",
-        },
+      const reason: PostVisibilityReason = {
+        reason: "Happening nearby",
+        category: "nearby",
       }
+      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -387,14 +381,11 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
       // Trending algorithm: engagement * time decay
       let score = engagementScore * Math.pow(0.8, Math.min(timeRecency, 24))
 
-      return {
-        post,
-        score,
-        reason: {
-          reason: `Trending with ${post.likes} likes`,
-          category: "trending",
-        },
+      const reason: PostVisibilityReason = {
+        reason: `Trending with ${post.likes} likes`,
+        category: "trending",
       }
+      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
