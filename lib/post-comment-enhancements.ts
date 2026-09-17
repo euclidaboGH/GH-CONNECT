@@ -13,6 +13,11 @@ import {
   extractEmojis,
 } from "@/lib/post-validation"
 import type { EnhancedCommentData } from "@/lib/comment-features-engine"
+import {
+  pinComment,
+  unpinComment,
+  addReactionToComment,
+} from "@/lib/comment-features-engine"
 
 export * from "@/lib/post-comment-engine"
 
