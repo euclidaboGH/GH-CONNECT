@@ -299,7 +299,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     // Connection request inbox — not messages
     link.open = "matches"
     link.tab = "matches"
-    link.section = "connection_requests"
+    link.section = "friend-request"
   } else if (n.type === "follow") {
     link.open = "discover"
     link.tab = "discover"
