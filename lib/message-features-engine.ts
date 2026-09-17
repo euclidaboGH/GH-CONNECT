@@ -19,8 +19,9 @@ export interface EnhancedMessage extends Message {
   deletedAt?: number
   deletedBy?: string
 
-  // Read receipts and typing
-  readBy?: Array<{ userId: string; readAt: number }>
+  // Detailed read receipts (Message.readBy remains string[] user ids)
+  readReceipts?: Array<{ userId: string; readAt: number }>
+  // reactions inherited from Message when compatible; keep optional enrichments only if needed
   reactions?: Record<string, string[]> // emoji -> user ids who reacted
 
   // Message threading and forwarding
@@ -191,15 +192,16 @@ export function markMessageAsRead(
   userId: string,
   readAt: number = Date.now()
 ): EnhancedMessage {
-  const readBy = message.readBy || []
-
-  if (readBy.some((r) => r.userId === userId)) {
+  const receipts = message.readReceipts || []
+  if (receipts.some((r) => r.userId === userId)) {
     return message
   }
-
+  const readerIds = new Set(message.readBy || [])
+  readerIds.add(userId)
   return {
     ...message,
-    readBy: [...readBy, { userId, readAt }],
+    readReceipts: [...receipts, { userId, readAt }],
+    readBy: Array.from(readerIds),
   }
 }
 
@@ -207,14 +209,18 @@ export function markMessageAsRead(
  * Check if message has been read by user
  */
 export function isMessageReadBy(message: EnhancedMessage, userId: string): boolean {
-  return message.readBy?.some((r) => r.userId === userId) ?? false
+  if (message.readReceipts?.some((r) => r.userId === userId)) return true
+  return message.readBy?.includes(userId) ?? false
 }
 
 /**
  * Get read receipt status
  */
 export function getMessageReadStatus(message: EnhancedMessage): "pending" | "sent" | "delivered" | "read" {
-  if (!message.readBy || message.readBy.length === 0) {
+  const hasReaders =
+    (message.readReceipts && message.readReceipts.length > 0) ||
+    (message.readBy && message.readBy.length > 0)
+  if (!hasReaders) {
     return message.deliveryStatus === "delivered" ? "delivered" : "sent"
   }
   return "read"
