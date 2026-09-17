@@ -26,7 +26,30 @@ export { messageLimiter, postLimiter, spamDetection } from './rate-limiter'
 export * from './community-features'
 
 export * from './permission-engine'
-export * from './social-graph'
+// social-graph also exports isBlocked (graph snapshot API); permission-engine owns the barrel name
+export {
+  type SocialGraphSnapshot,
+  isFollowing,
+  isFollower,
+  isFriend,
+  isMuted,
+  isRestricted,
+  isMatched,
+  isSuppressed,
+  shouldHideAuthorContent,
+  applyBlockEffects,
+  isPrivateConversation,
+  isGroupConversation,
+  filterPrivateConversations,
+  filterGroupConversations,
+  softDeletePost,
+  isSoftDeleted,
+  visiblePosts,
+  softDeleteMessage,
+  isMessageHiddenFor,
+  filterOutBlockedUsers,
+  isBlockedEitherWay,
+} from './social-graph'
 
 export * from './domains'
 
