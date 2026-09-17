@@ -17,7 +17,7 @@ export * from './offline'
 export * from './rate-limiter'
 
 // Specialized
-export { errorBoundary } from './error-boundary'
+export { ErrorBoundary, PostErrorBoundary } from './error-boundary'
 export { notificationSystem } from './notifications'
 export { offlineSupport } from './offline'
 export { messageLimiter, postLimiter, spamDetection } from './rate-limiter'
