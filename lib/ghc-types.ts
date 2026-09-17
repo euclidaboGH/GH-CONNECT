@@ -229,6 +229,8 @@ export interface Post {
   visibility?: "public" | "followers" | "mutuals" | "private"
   /** Legacy alias — prefer `visibility` */
   visibleTo?: "everyone" | "followers" | "matches" | "mutuals" | "private"
+  /** Soft-delete timestamp — when set, post is hidden from feeds/search */
+  deletedAt?: number | null
 }
 
 export interface LinkPreview {
@@ -418,7 +420,6 @@ export interface Message {
   // Message metadata
   isForwarded?: boolean
   isPinned?: boolean
-  isDeletedForEveryone?: boolean
   canDelete?: boolean // current user can delete
   canEdit?: boolean // current user can edit
   // Scheduling & expiration

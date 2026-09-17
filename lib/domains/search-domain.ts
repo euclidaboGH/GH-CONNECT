@@ -126,46 +126,35 @@ export function createSearchDomain(deps: {
   function canSeePerson(c: Candidate, blocked: Set<string>): boolean {
     if (!c?.id || c.id === me) return false
     if (blocked.has(c.id)) return false
-    // Hidden / private profiles: if candidate exposes visibility
-    const vis = (c as any).profileVisibility || (c as any).visibility
-    if (vis === "hidden") return false
-    if (vis === "matches-only" || vis === "friends") {
-      const friends = new Set(deps.getFriends?.() || [])
-      if (!friends.has(c.id)) return false
-    }
     return true
   }
 
   function canSeePost(p: Post, blocked: Set<string>, muted: Set<string>): boolean {
-    if (!p?.id || isSoftDeleted(p as any)) return false
+    if (!p?.id) return false
+    if (isSoftDeleted(p)) return false
     if (blocked.has(p.authorId) || muted.has(p.authorId)) return false
-    const vis = p.visibility || (p as any).visibleTo
-    if (vis === "private" && p.authorId !== me) return false
-    if (vis === "followers" || vis === "mutuals") {
+    const vis = p.visibility
+    const legacy = p.visibleTo
+    if ((vis === "private" || legacy === "private") && p.authorId !== me) return false
+    if (vis === "followers" || vis === "mutuals" || legacy === "followers" || legacy === "mutuals") {
       const following = new Set(deps.getFollowing?.() || [])
       const friends = new Set(deps.getFriends?.() || [])
       if (p.authorId !== me && !following.has(p.authorId) && !friends.has(p.authorId)) {
         return false
       }
     }
-    // Moderation: under_review style flags
-    if ((p as any).moderationStatus === "removed" || (p as any).status === "removed") {
-      return false
-    }
     return true
   }
 
   function canSeeCommunity(c: Conversation, blocked: Set<string>): boolean {
     if (!c?.id) return false
-    const isGroup =
-      c.conversationType === "group" ||
-      (c as any).kind === "community" ||
-      (c as any).isCommunity
-    if (!isGroup) return false
-    const privacy = (c as any).privacy || (c as any).visibility || "public"
-    if (privacy === "secret" || privacy === "private") {
+    // Canonical Conversation: groups only (communities are group conversations)
+    if (c.conversationType !== "group") return false
+    // privacy: public | private | invite-only
+    const privacy = c.privacy || "public"
+    if (privacy === "private" || privacy === "invite-only") {
       if (deps.isCommunityMember) return deps.isCommunityMember(c.id)
-      const members: string[] = (c as any).members || []
+      const members = c.members || []
       return members.includes(me) || c.createdBy === me
     }
     // Don't surface communities owned solely by blocked users when known
@@ -186,19 +175,13 @@ export function createSearchDomain(deps: {
     const hits: SearchHit[] = []
     for (const c of deps.getCandidates() || []) {
       if (!canSeePerson(c, blocked)) continue
-      const score = scoreText(
-        q,
-        c.name,
-        c.bio,
-        (c as any).profession,
-        ...(c.interests || [])
-      )
+      const score = scoreText(q, c.name, c.bio, ...(c.interests || []))
       if (score <= 0) continue
       hits.push({
         type: "people",
         id: c.id,
         title: c.name,
-        subtitle: [(c as any).profession, c.location].filter(Boolean).join(" · "),
+        subtitle: c.location || undefined,
         photo: c.photo,
         score,
         ref: { userId: c.id },
@@ -306,12 +289,9 @@ export function createSearchDomain(deps: {
 
   function searchProfessions(q: string, limit: number): SearchHit[] {
     const set = new Set<string>()
+    // Candidate has no profession field — use session profile + interest-adjacent catalog only
     const profileProf = deps.getProfile?.()?.profession
     if (profileProf) set.add(profileProf)
-    for (const c of deps.getCandidates() || []) {
-      const p = (c as any).profession
-      if (p) set.add(String(p))
-    }
     const hits: SearchHit[] = []
     for (const profession of set) {
       const score = scoreText(q, profession)
@@ -331,7 +311,7 @@ export function createSearchDomain(deps: {
     const counts = new Map<string, number>()
     const rawQ = norm(q).replace(/^#/, "")
     for (const p of deps.getPosts() || []) {
-      if (isSoftDeleted(p as any)) continue
+      if (isSoftDeleted(p)) continue
       const tags = p.hashtags?.length
         ? p.hashtags.map((t) => t.replace(/^#/, "").toLowerCase())
         : extractHashtags(p.content || "")
