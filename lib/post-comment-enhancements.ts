@@ -2,6 +2,8 @@
 // Consolidates all new post/comment features for easy integration
 
 // Canonical post/comment engine (primary)
+import { LinkPreviewCache } from "@/lib/link-preview-service"
+
 export * from "@/lib/post-comment-engine"
 
 // Other engines: named re-exports only (avoid duplicate export names with the engine above)
@@ -178,11 +180,9 @@ export const POST_ACTION_TYPES = [
 
 // Integration helpers
 export function initializePostEnhancements() {
-  // Initialize link preview cache if needed
-  const cache = new LinkPreviewCache()
-  // Clear expired entries on init
-  cache.clearExpired()
-  return { cache }
+  // Singleton cache from link-preview-service
+  LinkPreviewCache.clearExpired()
+  return { cache: LinkPreviewCache }
 }
 
 // Common validation wrapper
