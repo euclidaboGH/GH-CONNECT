@@ -430,7 +430,7 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       )
     }
 
-    if (link.section === "connection_requests" || link.section === "friend-request") {
+    if (link.section === "friend-request") {
       window.dispatchEvent(
         new CustomEvent("ghc:open-connection-inbox", {
           detail: { focus: "incoming", userId: link.userId },
