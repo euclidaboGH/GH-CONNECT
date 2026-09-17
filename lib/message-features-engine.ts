@@ -10,51 +10,39 @@ import type { Message } from "@/lib/ghc-types"
  * Extended Message with optional rich features
  * Backward compatible - all new fields are optional
  */
+/**
+ * Additive message features only — does not redeclare Message fields.
+ * Use Message for shared shape; use these optionals for engine-only metadata.
+ */
 export interface EnhancedMessage extends Message {
-  // Message editing and deletion
-  isEdited?: boolean
-  editedAt?: number
-  editedBy?: string
+  /** Engine-only delete lifecycle (Message uses isDeleted / isDeletedForEveryone) */
   deleteStatus?: "none" | "deleted-for-sender" | "deleted-for-everyone" | "pending-delete"
-  deletedAt?: number
   deletedBy?: string
 
-  // Detailed read receipts (Message.readBy remains string[] user ids)
+  /** Detailed read receipts; Message.readBy remains string[] of user ids */
   readReceipts?: Array<{ userId: string; readAt: number }>
-  // reactions inherited from Message when compatible; keep optional enrichments only if needed
-  reactions?: Record<string, string[]> // emoji -> user ids who reacted
 
-  // Message threading and forwarding
-  replyTo?: string // id of message being replied to
-  forwardedFrom?: string // id of original message
-  forwardedBy?: string // userId who forwarded
+  /** Engine-only forward timestamp (Message.forwardedBy is string[]) */
   forwardedAt?: number
 
-  // Rich media and attachments
-  mediaAttachments?: MessageAttachment[]
   voiceNote?: VoiceNoteAttachment
-  gifsUsed?: string[] // gif URLs
+  gifsUsed?: string[]
+  /** Engine link preview shape (optional; distinct from generic metadata) */
   linkPreview?: LinkPreviewAttachment
 
-  // Message state
   deliveryStatus?: "pending" | "sent" | "delivered" | "failed"
   deliveryError?: string
-  isPinned?: boolean
   pinnedAt?: number
   pinnedBy?: string
 
-  // Scheduling and disappearing
-  scheduledFor?: number // timestamp when to send
-  disappearsAt?: number // timestamp when message auto-deletes
-  disappearsAfter?: number // seconds until auto-delete
+  /** Prefer Message.expiresAt / expiresIn when possible */
+  disappearsAt?: number
+  disappearsAfter?: number
 
-  // Message metadata
-  mentions?: string[] // user ids mentioned
   hashtags?: string[]
-  keywords?: string[] // for search
+  keywords?: string[]
   language?: string
 
-  // Draft state
   isDraft?: boolean
   draftSavedAt?: number
 }
