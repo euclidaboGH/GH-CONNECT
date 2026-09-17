@@ -1,14 +1,10 @@
 // Post and Comment Enhancements - Unified export module
 // Consolidates all new post/comment features for easy integration
 
-// Re-export existing engines
+// Canonical post/comment engine (primary)
 export * from "@/lib/post-comment-engine"
 
-// Export new features
-export * from "@/lib/post-actions-engine"
-export * from "@/lib/comment-features-engine"
-export * from "@/lib/post-validation"
-export * from "@/lib/link-preview-service"
+// Other engines: named re-exports only (avoid duplicate export names with the engine above)
 
 // Convenience type aggregation
 export type {
