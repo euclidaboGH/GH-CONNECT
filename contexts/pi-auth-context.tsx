@@ -406,9 +406,28 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({ accessToken: identity.accessToken }),
             })
             const bridgeText = await bridgeRes.text().catch(() => "")
-            let bridge: Record<string, unknown> = {}
+            type PiAuthBridgeIdentity = {
+              piAppUid?: string
+              ghUserId?: string
+              piUsername?: string | null
+              onboardingCompleted?: boolean
+            }
+            type PiAuthBridgeResponse = {
+              ok?: boolean
+              error?: string
+              detail?: string
+              needsOnboarding?: boolean
+              isReturning?: boolean
+              durable?: boolean
+              sessionDurable?: boolean
+              durabilityWarning?: string
+              identity?: PiAuthBridgeIdentity
+            }
+            let bridge: PiAuthBridgeResponse = {}
             try {
-              bridge = bridgeText ? (JSON.parse(bridgeText) as Record<string, unknown>) : {}
+              bridge = bridgeText
+                ? (JSON.parse(bridgeText) as PiAuthBridgeResponse)
+                : {}
             } catch {
               bridge = {}
             }
@@ -458,14 +477,23 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               setIsAuthenticated(false)
               return
             }
-            if (bridgeRes.ok && bridge?.ok && bridge?.identity?.piAppUid) {
+            const bridgeIdentity = bridge.identity
+            if (
+              bridgeRes.ok &&
+              bridge.ok === true &&
+              bridgeIdentity &&
+              typeof bridgeIdentity.piAppUid === "string" &&
+              bridgeIdentity.piAppUid.length > 0
+            ) {
               serverVerified = true
-              ghUserId = String(bridge.identity.ghUserId || bridge.identity.piAppUid)
+              ghUserId = String(
+                bridgeIdentity.ghUserId || bridgeIdentity.piAppUid
+              )
               verifiedUsername =
-                bridge.identity.piUsername != null
-                  ? String(bridge.identity.piUsername)
+                bridgeIdentity.piUsername != null
+                  ? String(bridgeIdentity.piUsername)
                   : identity.username
-              const completed = bridge.identity.onboardingCompleted === true
+              const completed = bridgeIdentity.onboardingCompleted === true
               needsOnboarding = completed ? false : Boolean(bridge.needsOnboarding)
               isReturning = Boolean(bridge.isReturning) || completed
               if (bridge.durabilityWarning) {
