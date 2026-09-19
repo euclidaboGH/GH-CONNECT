@@ -4,7 +4,23 @@
 // Re-export all validation and comment features
 export * from "@/lib/post-validation"
 export * from "@/lib/comment-features-engine"
-export * from "@/lib/link-preview-service"
+export {
+  LinkPreviewCache,
+  extractLinkPreview,
+  getFaviconUrl,
+  isValidUrl,
+  isValidProtocol,
+  openLink,
+  wrapLinkForAnalytics,
+  isShortened,
+  getPreviewForPlatform,
+  createShareablePreview,
+  createLinkStats,
+  recordLinkClick,
+  recordLinkView,
+  recordLinkShare,
+} from "@/lib/link-preview-service"
+// extractUrls: use post-validation (avoid name clash with link-preview-service)
 export * from "@/lib/post-actions-engine"
 
 // Type aggregation for convenience
@@ -34,8 +50,6 @@ export type {
 
 export type {
   LinkStats,
-  UrlPattern,
-  PlatformPreview,
 } from "@/lib/link-preview-service"
 
 export type {
