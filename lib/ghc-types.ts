@@ -397,6 +397,10 @@ export interface Message {
   deletedAt?: number
   isDeleted?: boolean
   isDeletedForEveryone?: boolean
+  /** Actor who deleted (sender or moderator) */
+  deletedBy?: string
+  /** User ids for whom this message is hidden (delete-for-me) */
+  hiddenFor?: string[]
   // Reactions
   reactions?: Record<string, string[]> // emoji -> user ids
   reactionCounts?: Record<string, number>
