@@ -5,7 +5,6 @@
 export * from "@/lib/post-validation"
 export * from "@/lib/comment-features-engine"
 export {
-  LinkPreviewCache,
   extractLinkPreview,
   getFaviconUrl,
   isValidUrl,
@@ -20,6 +19,7 @@ export {
   recordLinkView,
   recordLinkShare,
 } from "@/lib/link-preview-service"
+// LinkPreviewCache: import from @/lib/link-preview-service (type+value dual export breaks barrel re-export)
 // extractUrls: use post-validation (avoid name clash with link-preview-service)
 export * from "@/lib/post-actions-engine"
 
