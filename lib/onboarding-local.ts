@@ -137,8 +137,11 @@ export function resolveUiOnboardingGate(input: {
   const pi = input.piOnboardingStatus
   if (pi === "complete") return "complete"
   if (pi === "required") {
-    // Server says required, but wait for verification before forcing form
-    if (!input.serverVerified) return "unknown"
+    // Allow onboarding form once Pi session exists; serverVerified is ideal but not required to exit the spinner
+    return "required"
+  }
+  // If we already have a user id from Pi/session but status is still unknown, prefer required so users are not stuck
+  if (input.userId && String(input.userId).length > 0) {
     return "required"
   }
   // unknown or anything else while loading

@@ -234,6 +234,12 @@ export function GHConnectApp() {
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
+  const [forceOnboardingGate, setForceOnboardingGate] = useState(false)
+  useEffect(() => {
+    if (forceOnboardingGate) return
+    const t = window.setTimeout(() => setForceOnboardingGate(true), 12000)
+    return () => window.clearTimeout(t)
+  }, [forceOnboardingGate])
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   useEffect(() => {
     const refresh = () => {
@@ -554,7 +560,7 @@ export function GHConnectApp() {
   // Onboarding gate — server + local profile authority.
   // Never treat hydration "unknown" as "required".
   // Returning users with a completed local profile must not see registration after PIN unlock.
-  const effectiveOnboarding = resolveUiOnboardingGate({
+  const effectiveOnboardingRaw = resolveUiOnboardingGate({
     profile,
     piOnboardingStatus: piOnboardingStatus || "unknown",
     serverVerified: Boolean(authLifecycle?.serverVerified),
@@ -568,6 +574,11 @@ export function GHConnectApp() {
       (profile as { displayName?: string } | null | undefined)?.displayName ||
       null,
   })
+  // Never trap users on the identity spinner: after timeout or when Pi uid exists, open onboarding
+  const effectiveOnboarding =
+    effectiveOnboardingRaw === "unknown" && forceOnboardingGate
+      ? "required"
+      : effectiveOnboardingRaw
 
   if (effectiveOnboarding === "unknown") {
     return (

@@ -362,6 +362,14 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           accessToken: parentCredentials.accessToken,
           username: null,
         });
+        setAuthLifecycle((s) =>
+          transitionAuth(s, "READY", {
+            onboardingStatus: "required",
+            serverVerified: false,
+            sessionReady: false,
+            piUid: parentCredentials.appId || undefined,
+          })
+        );
         return;
       }
 
@@ -485,6 +493,26 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               serverVerified: true,
               sessionReady: true,
             })
+          )
+        } else {
+          // Pi client auth succeeded but /api/auth/pi did not verify (network, config, or /me).
+          // Do NOT hang on onboarding "unknown" — allow setup with required status.
+          // Server verification can retry; identity is already on the client.
+          const localStatus =
+            onboardingStatus === "complete" ? "complete" : "required"
+          setAuthLifecycle((s) =>
+            transitionAuth(s, "READY", {
+              onboardingStatus: localStatus,
+              serverVerified: false,
+              sessionReady: false,
+              ghUserId,
+              piUid: identity.uid,
+            })
+          )
+          setAuthMessage(
+            localStatus === "complete"
+              ? "Signed in with Pi (offline verification)"
+              : "Signed in with Pi — finish setting up your GreenHaven profile"
           )
         }
 
