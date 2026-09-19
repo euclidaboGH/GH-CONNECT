@@ -156,10 +156,10 @@ export function validateImage(
   const maxSizeBytes = maxSizeMB * 1024 * 1024
 
   if (sizeInBytes > maxSizeBytes) {
-    return { valid: false, error: `Image exceeds ${maxSizeMB}MB limit`, sizeKB }
+    return { valid: false, error: `Image exceeds ${maxSizeMB}MB limit`, sizeKB: sizeInKB }
   }
 
-  return { valid: true, sizeKB }
+  return { valid: true, sizeKB: sizeInKB }
 }
 
 // GIF validation
