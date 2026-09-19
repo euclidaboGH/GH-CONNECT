@@ -51,6 +51,7 @@ export class WebSocketTransport implements RealtimeTransport {
   private ws: WebSocket | null = null
   private handlers = new Set<(e: DomainEvent) => void>()
   private queueTimer: ReturnType<typeof setTimeout> | null = null
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
   private shouldRun = false
 
   constructor(private url: string) {}
