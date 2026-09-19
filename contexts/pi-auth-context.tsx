@@ -405,7 +405,39 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               credentials: "include",
               body: JSON.stringify({ accessToken: identity.accessToken }),
             })
-            const bridge = await bridgeRes.json().catch(() => ({}))
+            const bridgeText = await bridgeRes.text().catch(() => "")
+            let bridge: Record<string, unknown> = {}
+            try {
+              bridge = bridgeText ? (JSON.parse(bridgeText) as Record<string, unknown>) : {}
+            } catch {
+              bridge = {}
+            }
+            // Platform/deploy failure: functions not running (e.g. FUNCTION_RUNTIME_DEPRECATED)
+            if (
+              bridgeRes.status === 404 ||
+              bridgeRes.status === 502 ||
+              /FUNCTION_RUNTIME_DEPRECATED|FUNCTION_INVOCATION_FAILED|DEPLOYMENT_NOT_FOUND/i.test(
+                bridgeText
+              )
+            ) {
+              console.error(
+                "[PiAuth] server functions unavailable:",
+                bridgeRes.status,
+                bridgeText.slice(0, 200)
+              )
+              setAuthLifecycle((s) =>
+                transitionAuth(s, "ERROR", {
+                  error:
+                    "App server is temporarily unavailable (API offline). Redeploy on a supported Node.js runtime and confirm /api/health responds. You were not registered as a new user.",
+                  onboardingStatus: "unavailable",
+                  serverVerified: false,
+                })
+              )
+              setAuthMessage("Server unavailable — try again after redeploy")
+              setHasError(true)
+              setIsAuthenticated(false)
+              return
+            }
             if (
               bridgeRes.status === 503 ||
               bridge?.error === "IDENTITY_STORE_UNAVAILABLE" ||
@@ -415,8 +447,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               setAuthLifecycle((s) =>
                 transitionAuth(s, "ERROR", {
                   error:
-                    bridge?.detail ||
-                    "Identity service is temporarily unavailable. Your account was not treated as new.",
+                    (typeof bridge?.detail === "string" && bridge.detail) ||
+                    "Identity service is temporarily unavailable. Your account was not treated as a new user.",
                   onboardingStatus: "unavailable",
                   serverVerified: false,
                 })
