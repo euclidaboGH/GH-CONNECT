@@ -1,9 +1,73 @@
-// Unified Post and Comment Features Index
-// Consolidates all post/comment enhancements with no duplicate logic
+/**
+ * Unified Post and Comment Features Index
+ * Consolidates post/comment enhancements without duplicate export names.
+ */
 
-// Re-export all validation and comment features
-export * from "@/lib/post-validation"
-export * from "@/lib/comment-features-engine"
+// Local imports for helpers defined in this module
+import {
+  validatePostContent,
+  validateMentions,
+  validateHashtags,
+  validateUrls,
+  validateEmojis,
+  detectSpam,
+  type ValidationResult,
+  type MentionValidation,
+} from "@/lib/post-validation"
+
+// --- Value re-exports (one block per module; no star-export clashes) ---
+
+export {
+  validatePostContent,
+  validateCommentText,
+  validateQuoteText,
+  validateCommentFull,
+  extractMentions,
+  extractHashtags,
+  extractUrls,
+  extractEmojis,
+  validateMentions,
+  validateHashtags,
+  validateUrls,
+  validateEmojis,
+  validateReactionEmoji,
+  validateImage,
+  validateGif,
+  validateVoiceRecording,
+  validateAttachments,
+  sanitizeText,
+  sanitizeForDisplay,
+  detectSpam,
+} from "@/lib/post-validation"
+
+export {
+  createNestedReply,
+  addReplyToComment,
+  removeReplyFromComment,
+  findCommentById,
+  findParentComment,
+  sortComments,
+  flattenComments,
+  getAllReplies,
+  addReactionToComment,
+  removeReactionFromComment,
+  getReactionCount,
+  getTotalReactions,
+  hasUserReacted,
+  pinComment,
+  unpinComment,
+  getPinnedComments,
+  editComment,
+  extractMentionsFromComment,
+  extractHashtagsFromComment,
+  calculateCommentStats,
+  getCommentThread,
+  getCommentDepth,
+  hideComment,
+  detectSpamInComment,
+  getCommentActivity,
+} from "@/lib/comment-features-engine"
+
 export {
   extractLinkPreview,
   getFaviconUrl,
@@ -19,11 +83,30 @@ export {
   recordLinkView,
   recordLinkShare,
 } from "@/lib/link-preview-service"
-// LinkPreviewCache: import from @/lib/link-preview-service (type+value dual export breaks barrel re-export)
-// extractUrls: use post-validation (avoid name clash with link-preview-service)
-export * from "@/lib/post-actions-engine"
+// LinkPreviewCache / extractUrls: import from source modules (dual type+value / name clash)
 
-// Type aggregation for convenience
+export {
+  createUserAction,
+  createActionState,
+  updateActionState,
+  createPostMetadata,
+  trackPostView,
+  trackPostCopy,
+  addShareLink,
+  addReportReason,
+  trackPostHide,
+  trackNotInterested,
+  createFollowAction,
+  createUserRestriction,
+  createPostReport,
+  copyPostLink,
+  copyToClipboard,
+  createBookmarkCollection,
+  createQuoteRepost,
+} from "@/lib/post-actions-engine"
+
+// --- Type re-exports ---
+
 export type {
   Post,
   PostComment,
@@ -48,9 +131,7 @@ export type {
   CommentActivity,
 } from "@/lib/comment-features-engine"
 
-export type {
-  LinkStats,
-} from "@/lib/link-preview-service"
+export type { LinkStats } from "@/lib/link-preview-service"
 
 export type {
   UserAction,
@@ -61,124 +142,6 @@ export type {
   PostReport,
   BookmarkCollection,
   QuoteRepost,
-} from "@/lib/post-actions-engine"
-
-// Convenience re-exports with clear organization
-export {
-  // Validation
-  validatePostContent,
-  validateCommentText,
-  validateQuoteText,
-  validateCommentFull,
-  extractMentions,
-  extractHashtags,
-  extractUrls,
-  extractEmojis,
-  validateMentions,
-  validateHashtags,
-  validateUrls,
-  validateEmojis,
-  validateReactionEmoji,
-  validateImage,
-  validateGif,
-  validateVoiceRecording,
-  validateAttachments,
-  sanitizeText,
-  sanitizeForDisplay,
-  detectSpam,
-} from "@/lib/post-validation"
-
-export {
-  // Comments
-  createNestedReply,
-  addReplyToComment,
-  removeReplyFromComment,
-  findCommentById,
-  findParentComment,
-  sortComments,
-  flattenComments,
-  getAllReplies,
-  // Reactions
-  addReactionToComment,
-  removeReactionFromComment,
-  getReactionCount,
-  getTotalReactions,
-  hasUserReacted,
-  // Pinning
-  pinComment,
-  unpinComment,
-  getPinnedComments,
-  // Editing
-  editComment,
-  // Content extraction
-  extractMentionsFromComment,
-  extractHashtagsFromComment,
-  // Stats
-  calculateCommentStats,
-  // Threading
-  getCommentThread,
-  getCommentDepth,
-  // Moderation
-  hideComment,
-  detectSpamInComment,
-  // Activity
-  getCommentActivity,
-  // Batch operations
-  hideComments,
-  pinComments,
-  unpinComments,
-} from "@/lib/comment-features-engine"
-
-export {
-  // Link cache
-  LinkPreviewCache,
-  // Link extraction
-  extractLinkPreview,
-  getFaviconUrl,
-  isValidUrl,
-  isValidProtocol,
-  extractUrls,
-  openLink,
-  wrapLinkForAnalytics,
-  isShortened,
-  getPreviewForPlatform,
-  generateShareUrl,
-  createShareablePreview,
-  normalizeUrl,
-  detectUrlPattern,
-  // Link stats
-  createLinkStats,
-  recordLinkClick,
-  recordLinkView,
-  recordLinkShare,
-} from "@/lib/link-preview-service"
-
-export {
-  // User actions
-  createUserAction,
-  createActionState,
-  updateActionState,
-  // Post metadata
-  createPostMetadata,
-  trackPostView,
-  trackPostCopy,
-  addShareLink,
-  addReportReason,
-  trackPostHide,
-  trackNotInterested,
-  // Follow/unfollow
-  createFollowAction,
-  // Block/mute
-  createUserRestriction,
-  // Reporting
-  createPostReport,
-  // Utilities
-  copyPostLink,
-  copyToClipboard,
-  // Collections
-  createBookmarkCollection,
-  // Quote reposts
-  createQuoteRepost,
 } from "@/lib/post-actions-engine"
 
 // Constants for UI
