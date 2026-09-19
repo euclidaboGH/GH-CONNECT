@@ -382,7 +382,8 @@ export async function markIntentFulfilled(
   const intent = map().get(intentId)
   if (!intent) return null
   if (intent.status === "FULFILLED") return intent
-  if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
+  // After FULFILLED early-return, only COMPLETED may transition to FULFILLED
+  if (intent.status !== "COMPLETED") {
     audit(intent, "FULFILL_BLOCKED", actor, `status=${intent.status}`)
     await persistCritical(intent)
     return intent
