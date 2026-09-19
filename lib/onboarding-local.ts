@@ -8,7 +8,7 @@
 import type { Profile } from "@/lib/ghc-types"
 import { readLocalProfiles, findLocalProfile } from "@/lib/local-profiles"
 
-export type ClientOnboardingStatus = "unknown" | "required" | "complete"
+export type ClientOnboardingStatus = "unknown" | "required" | "complete" | "unavailable"
 
 export function isCompletedProfileShape(p: Partial<Profile> | null | undefined): boolean {
   if (!p) return false
@@ -122,28 +122,33 @@ export function resolveUiOnboardingGate(input: {
   userId?: string | null
   username?: string | null
 }): ClientOnboardingStatus {
+  const pi = input.piOnboardingStatus
+
+  // Explicit unavailable / failed persistence — never treat as new user
+  if (pi === "unavailable") return "unavailable"
+
+  // Authoritative server complete wins immediately
+  if (pi === "complete") return "complete"
+
+  // Completed profile in session state (after validated completeOnboarding)
   const profileComplete = isCompletedProfileShape(input.profile)
   if (profileComplete) return "complete"
 
-  const local = findCompletedLocalProfileForUser({
-    userId: input.userId || (input.profile as { id?: string } | undefined)?.id,
-    username:
-      input.username ||
-      (input.profile as { username?: string } | undefined)?.username ||
-      (input.profile as { displayName?: string } | undefined)?.displayName,
-  })
-  if (local) return "complete"
+  // Device-local completed profile for this same user — recovery only when server
+  // still says required (legacy rows before durable store). Does not invent new users.
+  if (pi === "required" || input.serverVerified) {
+    const local = findCompletedLocalProfileForUser({
+      userId: input.userId || (input.profile as { id?: string } | undefined)?.id,
+      username:
+        input.username ||
+        (input.profile as { username?: string } | undefined)?.username ||
+        (input.profile as { displayName?: string } | undefined)?.displayName,
+    })
+    if (local) return "complete"
+  }
 
-  const pi = input.piOnboardingStatus
-  if (pi === "complete") return "complete"
-  if (pi === "required") {
-    // Allow onboarding form once Pi session exists; serverVerified is ideal but not required to exit the spinner
-    return "required"
-  }
-  // If we already have a user id from Pi/session but status is still unknown, prefer required so users are not stuck
-  if (input.userId && String(input.userId).length > 0) {
-    return "required"
-  }
-  // unknown or anything else while loading
+  if (pi === "required") return "required"
+
+  // unknown: keep loading shell — never force registration from userId alone
   return "unknown"
 }

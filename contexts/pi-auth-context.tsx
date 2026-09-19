@@ -406,6 +406,26 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({ accessToken: identity.accessToken }),
             })
             const bridge = await bridgeRes.json().catch(() => ({}))
+            if (
+              bridgeRes.status === 503 ||
+              bridge?.error === "IDENTITY_STORE_UNAVAILABLE" ||
+              bridge?.error === "SESSION_STORE_UNAVAILABLE"
+            ) {
+              console.error("[PiAuth] identity store unavailable:", bridge?.error || bridgeRes.status)
+              setAuthLifecycle((s) =>
+                transitionAuth(s, "ERROR", {
+                  error:
+                    bridge?.detail ||
+                    "Identity service is temporarily unavailable. Your account was not treated as new.",
+                  onboardingStatus: "unavailable",
+                  serverVerified: false,
+                })
+              )
+              setAuthMessage("Identity service unavailable")
+              setHasError(true)
+              setIsAuthenticated(false)
+              return
+            }
             if (bridgeRes.ok && bridge?.ok && bridge?.identity?.piAppUid) {
               serverVerified = true
               ghUserId = String(bridge.identity.ghUserId || bridge.identity.piAppUid)
@@ -413,8 +433,9 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 bridge.identity.piUsername != null
                   ? String(bridge.identity.piUsername)
                   : identity.username
-              needsOnboarding = Boolean(bridge.needsOnboarding)
-              isReturning = Boolean(bridge.isReturning)
+              const completed = bridge.identity.onboardingCompleted === true
+              needsOnboarding = completed ? false : Boolean(bridge.needsOnboarding)
+              isReturning = Boolean(bridge.isReturning) || completed
               if (bridge.durabilityWarning) {
                 console.warn(
                   "[PiAuth] identity/session not durable on this deployment:",
@@ -495,9 +516,26 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             })
           )
         } else {
-          // Pi client auth succeeded but /api/auth/pi did not verify (network, config, or /me).
-          // Do NOT hang on onboarding "unknown" — allow setup with required status.
-          // Server verification can retry; identity is already on the client.
+          // Pi client auth succeeded but server bridge did not verify.
+          // Production: do not invent a new-user registration path.
+          // Local/dev: allowLocalAuthFallback may proceed with required.
+          if (!allowLocalAuthFallback()) {
+            setAuthLifecycle((s) =>
+              transitionAuth(s, "ERROR", {
+                error:
+                  "Could not verify your Pi identity with the server. Please retry. You were not registered as a new user.",
+                onboardingStatus: "unavailable",
+                serverVerified: false,
+                sessionReady: false,
+                ghUserId: null,
+                piUid: identity.uid,
+              })
+            )
+            setAuthMessage("Verification unavailable")
+            setHasError(true)
+            setIsAuthenticated(false)
+            return
+          }
           const localStatus =
             onboardingStatus === "complete" ? "complete" : "required"
           setAuthLifecycle((s) =>

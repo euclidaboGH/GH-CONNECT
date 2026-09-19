@@ -23,7 +23,7 @@ export type AuthLifecyclePhase =
   | "ERROR"
 
 /** Explicit — never assume false while loading */
-export type OnboardingStatus = "unknown" | "required" | "complete"
+export type OnboardingStatus = "unknown" | "required" | "complete" | "unavailable"
 
 export type AuthLifecycleState = {
   phase: AuthLifecyclePhase
@@ -100,6 +100,7 @@ export function shouldShowOnboarding(s: AuthLifecycleState): boolean {
 /** Keep loading shell while onboarding unknown or still verifying */
 export function shouldShowAuthLoading(s: AuthLifecycleState): boolean {
   if (s.phase === "ERROR") return false
+  if (s.onboardingStatus === "unavailable") return false
   if (s.onboardingStatus === "unknown") return true
   if (
     s.phase === "BOOTING" ||

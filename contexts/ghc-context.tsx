@@ -1,4 +1,8 @@
 "use client"
+import {
+  fetchServerProfile,
+  persistServerProfile,
+} from "@/lib/profile/server-profile-sync"
 
 import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, startTransition } from "react"
 import type { Profile, Settings, Post, StoryItem, Tab, Toast, Candidate, MatchEntry, Conversation, Like, FriendRequest, Message } from "@/lib/ghc-types"
@@ -984,6 +988,44 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }, 3000)
   }, [])
 
+
+  // Cross-device profile hydrate — server is authoritative when durable row exists
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const uid = IdentityService.getCurrentUserId?.() || state.profile?.id
+        if (!uid || uid === "current-user") return
+        const result = await fetchServerProfile()
+        if (cancelled || !result.ok || !result.profile) return
+        setState((s) => {
+          const server = result.profile as Partial<Profile>
+          // Prefer server onboarded / identity fields; keep fresher local photos if server empty
+          const photos =
+            Array.isArray(server.photos) && server.photos.length > 0
+              ? server.photos
+              : s.profile.photos
+          return {
+            ...s,
+            profile: {
+              ...s.profile,
+              ...server,
+              id: (server.id as string) || s.profile.id,
+              photos,
+              onboarded: Boolean(server.onboarded) || Boolean(s.profile.onboarded),
+            },
+          }
+        })
+      } catch {
+        /* offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per mount / profile id change
+  }, [state.profile?.id])
+
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
       // UX-layer validation (compatibility); domain re-validates on mutate path
@@ -1023,6 +1065,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
       setState((s) => ({ ...s, profile: { ...s.profile, ...result.data } }))
 
+      // Durable social profile (server). Failures do not roll back local UX;
+      // next session hydrates from server when available.
+      void persistServerProfile({ ...result.data })
+
       if (!state.isOnline) {
         offlineQueue.addAction({
           type: "profile_update",
@@ -1048,19 +1094,37 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(result.error, "error")
         return
       }
-      // Persist on server identity bridge (Pi-verified mapping)
+      // Persist on server identity bridge (Pi-verified mapping).
+      // Client state advances only after authoritative success (or local-dev fallback).
+      let serverOk = false
       try {
         const headers = {
           "Content-Type": "application/json",
           ...IdentityService.getAuthHeaders(),
         }
-        await fetch("/api/auth/onboarding-complete", {
+        const res = await fetch("/api/auth/onboarding-complete", {
           method: "POST",
           headers,
+          credentials: "include",
         })
-      } catch {
-        /* offline / preview — local state still advances */
+        const body = await res.json().catch(() => ({}))
+        serverOk = Boolean(res.ok && body?.ok && body?.identity?.onboardingCompleted === true)
+        if (!serverOk) {
+          console.warn("[completeOnboarding] server did not confirm", body?.error || res.status)
+        }
+      } catch (e) {
+        console.warn("[completeOnboarding] network error", e)
       }
+
+      const { allowLocalAuthFallback } = await import("@/lib/system-config")
+      if (!serverOk && !allowLocalAuthFallback()) {
+        addToast(
+          "Could not save onboarding on the server. Please check your connection and try again.",
+          "error"
+        )
+        return
+      }
+
       IdentityService.setOnboardingCompleted()
       setState((s) => {
         const profile = { ...s.profile, onboarded: true as const }
@@ -1071,27 +1135,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         } catch {
           /* */
         }
+        // Best-effort durable social profile (non-financial)
+        void persistServerProfile({ ...profile, onboarded: true })
         return { ...s, profile }
       })
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
-      // Fallback: preserve prior behavior so user is not stuck on onboarding
-      try {
-        IdentityService.setOnboardingCompleted()
-      } catch {
-        /* */
-      }
-      setState((s) => {
-        const profile = { ...s.profile, onboarded: true as const }
-        try {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
-          }
-        } catch {
-          /* */
-        }
-        return { ...s, profile }
-      })
+      addToast("Onboarding could not be completed. Please try again.", "error")
     }
   }
 

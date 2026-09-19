@@ -50,6 +50,14 @@ function now() {
   return Date.now()
 }
 
+function isProductionRuntime(): boolean {
+  return (
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.GHC_ENV === "production"
+  )
+}
+
 function newGhUserId(piAppUid: string): string {
   return String(piAppUid).trim()
 }
@@ -354,7 +362,12 @@ export async function findOrCreateFromVerifiedPi(input: {
     return { record: saved, isNew: true }
   }
 
-  // Memory fallback
+  // Memory fallback — local/dev only. Production must use durable store.
+  if (isProductionRuntime()) {
+    console.error("[pi-identity] IDENTITY_DURABILITY_UNAVAILABLE: no privileged database in production")
+    throw new Error("IDENTITY_DURABILITY_UNAVAILABLE")
+  }
+
   const existingMem = memoryGetByPi(piAppUid)
   if (existingMem) {
     const updated: PiIdentityRecord = {
@@ -403,10 +416,19 @@ export async function markOnboardingCompleted(
       memoryPut(updated)
       return updated
     }
+    // Durable path configured but write failed — never claim success via memory in production
+    if (isProductionRuntime()) {
+      console.error("[pi-identity] markOnboardingCompleted durable write failed")
+      return null
+    }
+  } else if (isProductionRuntime()) {
+    console.error("[pi-identity] markOnboardingCompleted refused: no durable store in production")
+    return null
   }
 
   const rec = memoryGetByGh(key) || memoryGetByPi(key)
   if (!rec) return null
+  // Never overwrite completed → false; only set true
   const updated: PiIdentityRecord = {
     ...rec,
     onboardingCompleted: true,

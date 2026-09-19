@@ -234,12 +234,6 @@ export function GHConnectApp() {
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
-  const [forceOnboardingGate, setForceOnboardingGate] = useState(false)
-  useEffect(() => {
-    if (forceOnboardingGate) return
-    const t = window.setTimeout(() => setForceOnboardingGate(true), 12000)
-    return () => window.clearTimeout(t)
-  }, [forceOnboardingGate])
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   useEffect(() => {
     const refresh = () => {
@@ -574,11 +568,33 @@ export function GHConnectApp() {
       (profile as { displayName?: string } | null | undefined)?.displayName ||
       null,
   })
-  // Never trap users on the identity spinner: after timeout or when Pi uid exists, open onboarding
-  const effectiveOnboarding =
-    effectiveOnboardingRaw === "unknown" && forceOnboardingGate
-      ? "required"
-      : effectiveOnboardingRaw
+  // Authoritative gate only — never timeout-force registration for returning users
+  const effectiveOnboarding = effectiveOnboardingRaw
+
+  if (effectiveOnboarding === "unavailable") {
+    return (
+      <>
+        {themeLayer}
+        <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050a08] px-6">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(239,68,68,0.12)_0%,transparent_60%)]" />
+          <div className="relative z-10 flex max-w-sm flex-col items-center text-center">
+            <p className="text-sm font-semibold tracking-wide text-red-300/90">Identity service unavailable</p>
+            <p className="mt-2 text-[12px] leading-relaxed text-white/50">
+              GreenHaven could not load your account securely. This is a server configuration issue, not a new-user state.
+              Please try again in a moment. If it continues, contact support.
+            </p>
+            <button
+              type="button"
+              className="mt-6 rounded-full bg-emerald-600/90 px-5 py-2 text-sm font-medium text-white"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   if (effectiveOnboarding === "unknown") {
     return (

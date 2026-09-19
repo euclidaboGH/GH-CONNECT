@@ -54,33 +54,86 @@ export async function POST(request: Request) {
       )
     }
 
-    const { record, isNew } = await findOrCreateFromVerifiedPi({
-      piAppUid: piUser.uid,
-      piUsername: piUser.username ?? null,
-    })
+    const prod =
+      process.env.NODE_ENV === "production" ||
+      process.env.VERCEL_ENV === "production" ||
+      process.env.GHC_ENV === "production"
+    // Production must not issue identity/session from process memory — returning
+    // users would look new after cold starts. Fail closed with a clear error.
+    if (prod && (!isPiIdentityDurable() || !isSessionStoreDurable())) {
+      console.error("[auth/pi] IDENTITY_STORE_UNAVAILABLE", {
+        identityDurable: isPiIdentityDurable(),
+        sessionDurable: isSessionStoreDurable(),
+      })
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "IDENTITY_STORE_UNAVAILABLE",
+          detail:
+            "Server identity storage is not configured. Operators must set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and apply gh_pi_identities / gh_sessions migrations.",
+        },
+        { status: 503 }
+      )
+    }
+
+    let record
+    let isNew
+    try {
+      const result = await findOrCreateFromVerifiedPi({
+        piAppUid: piUser.uid,
+        piUsername: piUser.username ?? null,
+      })
+      record = result.record
+      isNew = result.isNew
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown"
+      if (msg === "IDENTITY_DURABILITY_UNAVAILABLE") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "IDENTITY_STORE_UNAVAILABLE",
+            detail:
+              "Durable identity write failed. Check Supabase connectivity and migrations.",
+          },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
 
     void touchLastSeen(record.ghUserId)
 
     const isReturning = !isNew && record.onboardingCompleted === true
-    const needsOnboarding = !record.onboardingCompleted
+    const needsOnboarding = record.onboardingCompleted !== true
 
     // Issue GH server session only after verified Pi identity
     const ua = request.headers.get("user-agent")
-    const issued = await createSession({
-      ghUserId: record.ghUserId,
-      userAgent: ua,
-    })
+    let issued
+    try {
+      issued = await createSession({
+        ghUserId: record.ghUserId,
+        userAgent: ua,
+      })
+    } catch (sessErr) {
+      const msg = sessErr instanceof Error ? sessErr.message : "unknown"
+      if (msg.includes("DURABILITY") || (prod && !isSessionStoreDurable())) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "SESSION_STORE_UNAVAILABLE",
+            detail: "Durable session storage failed.",
+          },
+          { status: 503 }
+        )
+      }
+      throw sessErr
+    }
 
     const identityDurable = isPiIdentityDurable()
     const sessionDurable = isSessionStoreDurable()
-    const prod =
-      process.env.NODE_ENV === "production" ||
-      process.env.VERCEL_ENV === "production"
-    // In production without Supabase, onboarding flags are not durable across
-    // instances — clients should treat needsOnboarding carefully and operators
-    // must set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+    // durabilityWarning only for non-production degraded mode (should not appear in prod after fail-closed)
     const durabilityWarning =
-      prod && (!identityDurable || !sessionDurable)
+      !prod && (!identityDurable || !sessionDurable)
         ? "IDENTITY_OR_SESSION_NOT_DURABLE: configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and apply gh_pi_identities / gh_sessions migrations."
         : undefined
 
@@ -122,6 +175,18 @@ export async function POST(request: Request) {
       "[auth/pi] bridge failed",
       err instanceof Error ? err.message : "unknown"
     )
+    const msg = err instanceof Error ? err.message : ""
+    if (msg === "IDENTITY_DURABILITY_UNAVAILABLE") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "IDENTITY_STORE_UNAVAILABLE",
+          detail:
+            "Durable identity storage is unavailable on this deployment.",
+        },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       {
         ok: false,

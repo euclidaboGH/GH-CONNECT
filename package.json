@@ -16,7 +16,10 @@
     "test:economy": "node scripts/test-economy-v12.mjs",
     "test:daily-wallet": "node scripts/test-daily-claim-wallet-pipeline.mjs",
     "test:release": "node scripts/verify-production-release.mjs",
-    "test:safety": "node scripts/scan-production-safety.mjs"
+    "test:safety": "node scripts/scan-production-safety.mjs",
+    "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run build",
+    "test:idor-checklist": "node scripts/test-idor-isolation.mjs",
+    "ops:migration-check": "node scripts/print-migration-checklist.mjs"
   },
   "dependencies": {
     "next": "15.5.24",
