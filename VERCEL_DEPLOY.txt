@@ -1,18 +1,38 @@
 GreenHaven deploy stamp
-version=0.59.1
+version=0.59.2
 node=24.x
 next=15.5.24
 generated=2026-09-20
 
-CRITICAL — FUNCTION_RUNTIME_DEPRECATED fix checklist (Vercel dashboard):
-1. Project Settings → Build & Development Settings → Node.js Version = 24.x
-2. Confirm Production domain points to this project (connect-tau.vercel.app)
-3. Deployments → Redeploy Production (do NOT use a stale deployment built on Node 18)
-4. After deploy, open:
-   https://YOUR_DOMAIN/api/health/live
-   Expect JSON: {"ok":true,"live":true,...}
-   NOT plain text FUNCTION_RUNTIME_DEPRECATED
-5. Then open /api/health for readiness JSON (no secrets)
+================================================================================
+REQUIRED: Fix FUNCTION_RUNTIME_DEPRECATED on connect-tau.vercel.app
+================================================================================
+Local repo is build-ready. Production fails until Vercel uses Node 24.x and a
+fresh Production deployment is live.
 
-Repo already sets package.json engines.node = 24.x and .nvmrc = 24.
-Dashboard Node version + full redeploy is required for the live domain to recover.
+1) Open the Vercel project that owns domain connect-tau.vercel.app
+   (Project → Settings → Domains).
+
+2) Settings → Build and Deployment → Node.js Version → 24.x → Save.
+
+3) Deployments → Redeploy the latest GitHub main commit to Production
+   (full rebuild after Node change).
+
+4) Verify (must return JSON, not plain-text deprecation):
+   curl -i https://connect-tau.vercel.app/api/health/live
+   Expect: HTTP 200  {"ok":true,"live":true,...}
+
+   curl -i https://connect-tau.vercel.app/api/health
+   Expect: JSON readiness (200 or 503), never FUNCTION_RUNTIME_DEPRECATED
+
+5) Only then retry Sign in with Pi in Pi Browser.
+
+If deprecation continues: wrong Vercel project owns the domain, or an old
+deployment is still Production. Promote/redeploy the new build.
+
+Env after runtime works:
+- PI_API_KEY
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+- DOMAIN_VALIDATION_KEY (optional override)
+Apply migrations for gh_pi_identities and gh_sessions.
