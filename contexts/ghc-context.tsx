@@ -1516,18 +1516,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     })
     transportBridge.startLocal()
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { presenceStore } = require("@/lib/realtime/presence")
+            const { presenceStore } = require("@/lib/realtime/presence")
       presenceStore.setSelf("current-user")
       presenceStore.startHeartbeat(30_000)
     } catch {
       /* optional */
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { resolveApiBaseUrl } = require("@/lib/domains/http-repositories")
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { enableWebSocketTransport } = require("@/lib/realtime/transport-bridge")
+            const { resolveApiBaseUrl } = require("@/lib/domains/http-repositories")
+            const { enableWebSocketTransport } = require("@/lib/realtime/transport-bridge")
       const base = resolveApiBaseUrl()
       if (base) {
         const wsUrl = base.replace(/^http/, "ws") + "/realtime"
@@ -1539,8 +1536,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return () => {
       unsub()
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { presenceStore } = require("@/lib/realtime/presence")
+                const { presenceStore } = require("@/lib/realtime/presence")
         presenceStore.stopHeartbeat()
       } catch {
         /* */

@@ -1,5 +1,18 @@
 GreenHaven deploy stamp
-version=0.58.0
+version=0.59.1
 node=24.x
-ui=wallet+community+discover-cards
-generated=2026-09-02T11:27Z
+next=15.5.24
+generated=2026-09-20
+
+CRITICAL — FUNCTION_RUNTIME_DEPRECATED fix checklist (Vercel dashboard):
+1. Project Settings → Build & Development Settings → Node.js Version = 24.x
+2. Confirm Production domain points to this project (connect-tau.vercel.app)
+3. Deployments → Redeploy Production (do NOT use a stale deployment built on Node 18)
+4. After deploy, open:
+   https://YOUR_DOMAIN/api/health/live
+   Expect JSON: {"ok":true,"live":true,...}
+   NOT plain text FUNCTION_RUNTIME_DEPRECATED
+5. Then open /api/health for readiness JSON (no secrets)
+
+Repo already sets package.json engines.node = 24.x and .nvmrc = 24.
+Dashboard Node version + full redeploy is required for the live domain to recover.
