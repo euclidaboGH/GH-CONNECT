@@ -435,7 +435,9 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             if (
               bridgeRes.status === 404 ||
               bridgeRes.status === 502 ||
-              /FUNCTION_RUNTIME_DEPRECATED|FUNCTION_INVOCATION_FAILED|DEPLOYMENT_NOT_FOUND/i.test(
+              bridgeRes.status === 500 ||
+              bridgeRes.status >= 500 ||
+              /FUNCTION_RUNTIME_DEPRECATED|FUNCTION_INVOCATION_FAILED|DEPLOYMENT_NOT_FOUND|Internal Server Error/i.test(
                 bridgeText
               )
             ) {

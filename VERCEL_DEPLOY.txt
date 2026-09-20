@@ -1,38 +1,26 @@
 GreenHaven deploy stamp
-version=0.59.2
+version=0.59.4
 node=24.x
 next=15.5.24
-generated=2026-09-20
+production_url=https://gh-connect-tau.vercel.app
 
-================================================================================
-REQUIRED: Fix FUNCTION_RUNTIME_DEPRECATED on connect-tau.vercel.app
-================================================================================
-Local repo is build-ready. Production fails until Vercel uses Node 24.x and a
-fresh Production deployment is live.
+ROOT CAUSE FIXED (Vercel Function Logs):
+  Error: You cannot use different slug names for the same dynamic path
+         ('requestId' !== 'userId').
 
-1) Open the Vercel project that owns domain connect-tau.vercel.app
-   (Project → Settings → Domains).
+CAUSE:
+  app/api/economy/transfer-requests/[requestId]/...
+  app/api/economy/transfer-requests/[userId]/route.ts
+  Next.js forbids sibling dynamic segments with different param names.
 
-2) Settings → Build and Deployment → Node.js Version → 24.x → Save.
+FIX:
+  - Removed [userId] folder
+  - GET list is now session-scoped on /api/economy/transfer-requests
+  - Client updated to call that path (no path userId)
+  - [requestId]/accept|cancel|decline preserved
 
-3) Deployments → Redeploy the latest GitHub main commit to Production
-   (full rebuild after Node change).
-
-4) Verify (must return JSON, not plain-text deprecation):
-   curl -i https://connect-tau.vercel.app/api/health/live
-   Expect: HTTP 200  {"ok":true,"live":true,...}
-
-   curl -i https://connect-tau.vercel.app/api/health
-   Expect: JSON readiness (200 or 503), never FUNCTION_RUNTIME_DEPRECATED
-
-5) Only then retry Sign in with Pi in Pi Browser.
-
-If deprecation continues: wrong Vercel project owns the domain, or an old
-deployment is still Production. Promote/redeploy the new build.
-
-Env after runtime works:
-- PI_API_KEY
-- SUPABASE_URL
-- SUPABASE_SERVICE_ROLE_KEY
-- DOMAIN_VALIDATION_KEY (optional override)
-Apply migrations for gh_pi_identities and gh_sessions.
+VERIFY AFTER DEPLOY:
+  curl -i https://gh-connect-tau.vercel.app/api/health/live
+  curl -i -X POST https://gh-connect-tau.vercel.app/api/auth/pi \
+    -H 'Content-Type: application/json' -d '{}'
+  Expect JSON (not HTML 500 / not slug-name error)
