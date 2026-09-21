@@ -130,7 +130,7 @@ export function createPostDomain(deps: {
         },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           if (post.authorId !== actorId) return "You can only edit your own posts"
           return null
         },
@@ -147,13 +147,13 @@ export function createPostDomain(deps: {
         input: { postId },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           if (!canDeletePost(permCtx(), post.authorId)) return "Not allowed to delete this post"
           return null
         },
         mutate: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)!
-          return { post: softDeletePost(post, actorId) as Post }
+          return { post: softDeletePost(post, actorId) }
         },
         eventType: "POST_DELETED",
         eventPayload: (_d, i) => ({ postId: i.postId }),
@@ -176,7 +176,7 @@ export function createPostDomain(deps: {
         },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           if (!canComment(permCtx(), post.authorId)) return "You can't comment on this post"
           // Soft: invalid reply target → still allow as top-level (mutate clears replyTo)
           return null
@@ -215,7 +215,7 @@ export function createPostDomain(deps: {
         input: { postId },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           if (!canLike(permCtx(), post.authorId)) return "You can't like this post"
           return null
         },
@@ -244,7 +244,7 @@ export function createPostDomain(deps: {
         },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           const comment = post.comments?.find((c) => c.id === i.commentId)
           if (!comment) return "Comment not found"
           if (comment.authorId !== actorId) return "You can only edit your own comments"
@@ -270,7 +270,7 @@ export function createPostDomain(deps: {
         input: { postId, commentId },
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           const comment = post.comments?.find((c) => c.id === i.commentId)
           if (!comment) return "Comment not found"
           const isPostOwner = post.authorId === actorId
@@ -296,7 +296,7 @@ export function createPostDomain(deps: {
         validate: (i) => (!(i.emoji || "").trim() ? "Missing reaction" : null),
         authorize: (i) => {
           const post = deps.getPosts().find((p) => p.id === i.postId)
-          if (!post || isSoftDeleted(post as any)) return "Post not found"
+          if (!post || isSoftDeleted(post)) return "Post not found"
           if (!canComment(permCtx(), post.authorId)) return "Not allowed"
           const comment = post.comments?.find((c) => c.id === i.commentId)
           if (!comment) return "Comment not found"
@@ -333,7 +333,7 @@ export function createPostDomain(deps: {
      */
     visibleComments(postId: string): PostComment[] {
       const post = deps.getPosts().find((p) => p.id === postId)
-      if (!post || isSoftDeleted(post as any)) return []
+      if (!post || isSoftDeleted(post)) return []
       const blocked = new Set(deps.getBlockedUsers())
       return (post.comments || []).filter((c) => {
         if (c.authorId && blocked.has(c.authorId)) return false

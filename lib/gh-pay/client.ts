@@ -10,7 +10,7 @@ import { genOrderId, saveOrder, updateOrderStatus, listOrdersForUser, getOrder }
 import type { GhPayOrder, GhPayProduct, CreateOrderInput } from "./types"
 
 export type GhPayResult =
-  | { ok: true; order: GhPayOrder; paymentId: string; txid: string }
+  | { ok: true; order: GhPayOrder; paymentId: string; txid?: string }
   | { ok: false; error: string; cancelled?: boolean }
 
 export { isPiPaymentsAvailable, waitForPiPayments, probePiPayments, productForMembership, listProducts, getProduct }

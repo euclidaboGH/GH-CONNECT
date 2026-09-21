@@ -1,5 +1,26 @@
 GreenHaven deploy stamp
-version=0.58.0
+version=0.59.4
 node=24.x
-ui=wallet+community+discover-cards
-generated=2026-09-02T11:27Z
+next=15.5.24
+production_url=https://gh-connect-tau.vercel.app
+
+ROOT CAUSE FIXED (Vercel Function Logs):
+  Error: You cannot use different slug names for the same dynamic path
+         ('requestId' !== 'userId').
+
+CAUSE:
+  app/api/economy/transfer-requests/[requestId]/...
+  app/api/economy/transfer-requests/[userId]/route.ts
+  Next.js forbids sibling dynamic segments with different param names.
+
+FIX:
+  - Removed [userId] folder
+  - GET list is now session-scoped on /api/economy/transfer-requests
+  - Client updated to call that path (no path userId)
+  - [requestId]/accept|cancel|decline preserved
+
+VERIFY AFTER DEPLOY:
+  curl -i https://gh-connect-tau.vercel.app/api/health/live
+  curl -i -X POST https://gh-connect-tau.vercel.app/api/auth/pi \
+    -H 'Content-Type: application/json' -d '{}'
+  Expect JSON (not HTML 500 / not slug-name error)

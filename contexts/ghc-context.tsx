@@ -1,4 +1,8 @@
 "use client"
+import {
+  fetchServerProfile,
+  persistServerProfile,
+} from "@/lib/profile/server-profile-sync"
 
 import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, startTransition } from "react"
 import type { Profile, Settings, Post, StoryItem, Tab, Toast, Candidate, MatchEntry, Conversation, Like, FriendRequest, Message } from "@/lib/ghc-types"
@@ -38,10 +42,6 @@ import {
   findCompletedLocalProfileForUser,
   isCompletedProfileShape,
 } from "@/lib/onboarding-local"
-import {
-  fetchServerProfile,
-  persistServerProfile,
-} from "@/lib/profile/server-profile-sync"
 import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
@@ -988,8 +988,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }, 3000)
   }, [])
 
-  // Cross-device profile hydrate — server is authoritative when a durable row exists.
-  // Never overwrite non-empty server fields with empty local values.
+
+  // Cross-device profile hydrate — server is authoritative when durable row exists
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -1000,6 +1000,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (cancelled || !result.ok || !result.profile) return
         setState((s) => {
           const server = result.profile as Partial<Profile>
+          // Prefer server onboarded / identity fields; keep fresher local photos if server empty
           const photos =
             Array.isArray(server.photos) && server.photos.length > 0
               ? server.photos
@@ -1065,7 +1066,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, profile: { ...s.profile, ...result.data } }))
 
       // Durable social profile (server). Failures do not roll back local UX;
-      // next session hydrates from server when available. Ownership is session-bound.
+      // next session hydrates from server when available.
       void persistServerProfile({ ...result.data })
 
       if (!state.isOnline) {
@@ -1515,18 +1516,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     })
     transportBridge.startLocal()
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { presenceStore } = require("@/lib/realtime/presence")
+            const { presenceStore } = require("@/lib/realtime/presence")
       presenceStore.setSelf("current-user")
       presenceStore.startHeartbeat(30_000)
     } catch {
       /* optional */
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { resolveApiBaseUrl } = require("@/lib/domains/http-repositories")
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { enableWebSocketTransport } = require("@/lib/realtime/transport-bridge")
+            const { resolveApiBaseUrl } = require("@/lib/domains/http-repositories")
+            const { enableWebSocketTransport } = require("@/lib/realtime/transport-bridge")
       const base = resolveApiBaseUrl()
       if (base) {
         const wsUrl = base.replace(/^http/, "ws") + "/realtime"
@@ -1538,8 +1536,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return () => {
       unsub()
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { presenceStore } = require("@/lib/realtime/presence")
+                const { presenceStore } = require("@/lib/realtime/presence")
         presenceStore.stopHeartbeat()
       } catch {
         /* */

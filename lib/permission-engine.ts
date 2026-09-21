@@ -442,6 +442,9 @@ export function buildPermissionContext(input: {
   targetProfileVisibility?: PermissionContext["targetProfileVisibility"]
   targetStoryVisibility?: PermissionContext["targetStoryVisibility"]
   membership?: MembershipTier
+  /** Entitlement keys from membership domain */
+  entitlements?: string[]
+  identityVerified?: boolean
   walletEnabled?: boolean
   marketplaceEnabled?: boolean
   communityJoinPolicy?: PermissionContext["communityJoinPolicy"]

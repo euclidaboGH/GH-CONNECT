@@ -48,7 +48,14 @@ export function AuthLoadingScreen() {
         )}
 
         <h1 className="text-lg font-bold tracking-tight text-white">
-          {hasError ? "Couldn’t connect to Pi" : "Connecting to Pi Network"}
+          {hasError
+            ? authMessage &&
+              /server unavailable|api offline|redeploy|identity service/i.test(
+                authMessage
+              )
+              ? "Server temporarily unavailable"
+              : "Couldn’t connect to Pi"
+            : "Connecting to Pi Network"}
         </h1>
         <p
           className={`mt-2 max-w-xs text-[13px] leading-relaxed ${

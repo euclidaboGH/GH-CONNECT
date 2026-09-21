@@ -10,7 +10,7 @@ const KEY = (
 ).trim()
 
 export const dynamic = "force-dynamic"
-export const runtime = "edge"
+export const runtime = "nodejs"
 
 export async function GET() {
   return new NextResponse(KEY, {

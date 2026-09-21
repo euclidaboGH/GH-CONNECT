@@ -225,11 +225,11 @@ export interface SkillsProfile {
 }
 
 export function validateSkill(skill: string): boolean {
-  return skill && skill.length >= 2 && skill.length <= 30
+  return Boolean(skill) && skill.length >= 2 && skill.length <= 30
 }
 
 export function validateInterest(interest: string): boolean {
-  return interest && interest.length >= 2 && interest.length <= 30
+  return Boolean(interest) && interest.length >= 2 && interest.length <= 30
 }
 
 export function countEndorsements(profile: any): number {

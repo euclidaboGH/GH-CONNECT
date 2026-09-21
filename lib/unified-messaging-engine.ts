@@ -193,7 +193,7 @@ export function handleMessageDeletion(
     deletedBy: userId,
     // Keep original text server-side; client hides via isDeleted for this viewer
     text: message.senderId === userId ? message.text : message.text,
-    hiddenFor: Array.from(new Set([...(message as any).hiddenFor || [], userId])),
+    hiddenFor: Array.from(new Set([...(message.hiddenFor || []), userId])),
   }
 }
 

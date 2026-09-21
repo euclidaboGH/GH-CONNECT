@@ -156,10 +156,10 @@ export function validateImage(
   const maxSizeBytes = maxSizeMB * 1024 * 1024
 
   if (sizeInBytes > maxSizeBytes) {
-    return { valid: false, error: `Image exceeds ${maxSizeMB}MB limit`, sizeKB }
+    return { valid: false, error: `Image exceeds ${maxSizeMB}MB limit`, sizeKB: sizeInKB }
   }
 
-  return { valid: true, sizeKB }
+  return { valid: true, sizeKB: sizeInKB }
 }
 
 // GIF validation
@@ -355,7 +355,7 @@ export function sanitizeForDisplay(text: string): string {
 // Spam detection patterns
 const SPAM_PATTERNS = [
   /(?:(?:viagra|cialis|casino|lottery|prize).*?){3}/gi,
-  /(?:click here|buy now|limited offer).*?{3}/gi,
+  /(?:(?:click here|buy now|limited offer).*?){3}/gi,
   /\$\d{2,}/g, // Suspicious price mentions
   /(?:@\w+\s*){10,}/g, // Excessive mentions
   /(?:#\w+\s*){20,}/g, // Excessive hashtags

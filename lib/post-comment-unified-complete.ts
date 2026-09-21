@@ -25,7 +25,9 @@ import type { Post, PostComment } from './ghc-types'
 // ============================================================
 
 export interface EnhancedPostComment extends PostComment {
-  authorId: string // Add to track user
+  authorId: string // Required on enhanced comments
+  /** Nested replies use the enhanced shape */
+  replies?: EnhancedPostComment[]
   reactionCounts?: Record<string, number> // Count by emoji
   threadDepth?: number // Nesting level
   hasNestedReplies?: boolean

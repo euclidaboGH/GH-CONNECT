@@ -8,7 +8,8 @@ export * from './ux-constants'
 
 // Utilities
 export * from './search-utils'
-export * from './responsive'
+export { screens, responsive, safeAreaStyles, touchTargets, responsiveCss, patterns } from './responsive'
+// breakpoints live in design-system (string) and responsive (numeric px); not re-exported from barrel to avoid name clash
 export * from './accessibility'
 export * from './analytics'
 export * from './notifications'
@@ -16,7 +17,7 @@ export * from './offline'
 export * from './rate-limiter'
 
 // Specialized
-export { errorBoundary } from './error-boundary'
+export { ErrorBoundary, PostErrorBoundary } from './error-boundary'
 export { notificationSystem } from './notifications'
 export { offlineSupport } from './offline'
 export { messageLimiter, postLimiter, spamDetection } from './rate-limiter'
@@ -25,7 +26,30 @@ export { messageLimiter, postLimiter, spamDetection } from './rate-limiter'
 export * from './community-features'
 
 export * from './permission-engine'
-export * from './social-graph'
+// social-graph also exports isBlocked (graph snapshot API); permission-engine owns the barrel name
+export {
+  type SocialGraphSnapshot,
+  isFollowing,
+  isFollower,
+  isFriend,
+  isMuted,
+  isRestricted,
+  isMatched,
+  isSuppressed,
+  shouldHideAuthorContent,
+  applyBlockEffects,
+  isPrivateConversation,
+  isGroupConversation,
+  filterPrivateConversations,
+  filterGroupConversations,
+  softDeletePost,
+  isSoftDeleted,
+  visiblePosts,
+  softDeleteMessage,
+  isMessageHiddenFor,
+  filterOutBlockedUsers,
+  isBlockedEitherWay,
+} from './social-graph'
 
 export * from './domains'
 

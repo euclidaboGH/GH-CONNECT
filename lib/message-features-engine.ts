@@ -10,50 +10,39 @@ import type { Message } from "@/lib/ghc-types"
  * Extended Message with optional rich features
  * Backward compatible - all new fields are optional
  */
+/**
+ * Additive message features only — does not redeclare Message fields.
+ * Use Message for shared shape; use these optionals for engine-only metadata.
+ */
 export interface EnhancedMessage extends Message {
-  // Message editing and deletion
-  isEdited?: boolean
-  editedAt?: number
-  editedBy?: string
+  /** Engine-only delete lifecycle (Message uses isDeleted / isDeletedForEveryone) */
   deleteStatus?: "none" | "deleted-for-sender" | "deleted-for-everyone" | "pending-delete"
-  deletedAt?: number
   deletedBy?: string
 
-  // Read receipts and typing
-  readBy?: Array<{ userId: string; readAt: number }>
-  reactions?: Record<string, string[]> // emoji -> user ids who reacted
+  /** Detailed read receipts; Message.readBy remains string[] of user ids */
+  readReceipts?: Array<{ userId: string; readAt: number }>
 
-  // Message threading and forwarding
-  replyTo?: string // id of message being replied to
-  forwardedFrom?: string // id of original message
-  forwardedBy?: string // userId who forwarded
+  /** Engine-only forward timestamp (Message.forwardedBy is string[]) */
   forwardedAt?: number
 
-  // Rich media and attachments
-  mediaAttachments?: MessageAttachment[]
   voiceNote?: VoiceNoteAttachment
-  gifsUsed?: string[] // gif URLs
+  gifsUsed?: string[]
+  /** Engine link preview shape (optional; distinct from generic metadata) */
   linkPreview?: LinkPreviewAttachment
 
-  // Message state
   deliveryStatus?: "pending" | "sent" | "delivered" | "failed"
   deliveryError?: string
-  isPinned?: boolean
   pinnedAt?: number
   pinnedBy?: string
 
-  // Scheduling and disappearing
-  scheduledFor?: number // timestamp when to send
-  disappearsAt?: number // timestamp when message auto-deletes
-  disappearsAfter?: number // seconds until auto-delete
+  /** Prefer Message.expiresAt / expiresIn when possible */
+  disappearsAt?: number
+  disappearsAfter?: number
 
-  // Message metadata
-  mentions?: string[] // user ids mentioned
   hashtags?: string[]
-  keywords?: string[] // for search
+  keywords?: string[]
   language?: string
 
-  // Draft state
   isDraft?: boolean
   draftSavedAt?: number
 }
@@ -191,15 +180,16 @@ export function markMessageAsRead(
   userId: string,
   readAt: number = Date.now()
 ): EnhancedMessage {
-  const readBy = message.readBy || []
-
-  if (readBy.some((r) => r.userId === userId)) {
+  const receipts = message.readReceipts || []
+  if (receipts.some((r) => r.userId === userId)) {
     return message
   }
-
+  const readerIds = new Set(message.readBy || [])
+  readerIds.add(userId)
   return {
     ...message,
-    readBy: [...readBy, { userId, readAt }],
+    readReceipts: [...receipts, { userId, readAt }],
+    readBy: Array.from(readerIds),
   }
 }
 
@@ -207,14 +197,18 @@ export function markMessageAsRead(
  * Check if message has been read by user
  */
 export function isMessageReadBy(message: EnhancedMessage, userId: string): boolean {
-  return message.readBy?.some((r) => r.userId === userId) ?? false
+  if (message.readReceipts?.some((r) => r.userId === userId)) return true
+  return message.readBy?.includes(userId) ?? false
 }
 
 /**
  * Get read receipt status
  */
 export function getMessageReadStatus(message: EnhancedMessage): "pending" | "sent" | "delivered" | "read" {
-  if (!message.readBy || message.readBy.length === 0) {
+  const hasReaders =
+    (message.readReceipts && message.readReceipts.length > 0) ||
+    (message.readBy && message.readBy.length > 0)
+  if (!hasReaders) {
     return message.deliveryStatus === "delivered" ? "delivered" : "sent"
   }
   return "read"

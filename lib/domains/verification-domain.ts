@@ -59,11 +59,11 @@ function assertVerificationPrivileged(action: string): MutationResult<never> | n
   if (canMutateVerificationPrivileged()) return null
   return {
     ok: false,
-    error: {
-      code: "VERIFICATION_PRIVILEGED_BLOCKED",
-      message: `${action} requires server authorization in production. Client-side verification decisions are not authoritative.`,
-    },
-  } as MutationResult<never>
+    error: `${action} requires server authorization in production. Client-side verification decisions are not authoritative.`,
+    code: "VERIFICATION_PRIVILEGED_BLOCKED",
+    phase: "permission",
+    requestId: "local",
+  }
 }
 
 function loadAll(userId: string): Partial<Record<VerificationType, VerificationRecord>> {

@@ -15,6 +15,7 @@ import {
   extractSessionTokenFromCookie,
   validateSession,
 } from "@/lib/server/identity/session-store"
+import { getByPiAppUid } from "@/lib/server/identity/pi-identity-store"
 
 export type ServerAuthContext = {
   userId: string
@@ -169,11 +170,20 @@ export async function resolveAuthenticatedUser(
     }
   }
 
-  // 4) Pi Platform token verification (network) — bootstrap / payments compatibility
+  // 4) Pi Platform token verification (network) — bootstrap / payments compatibility.
+  // Map verified Pi app uid → canonical GH user id when mapping exists.
+  // Never trust client-supplied uid; only Platform /v2/me result is used.
   const piUser = await verifyPiAccessToken(token)
-  if (piUser) {
+  if (piUser?.uid) {
+    let ghUserId = piUser.uid
+    try {
+      const mapping = await getByPiAppUid(piUser.uid)
+      if (mapping?.ghUserId) ghUserId = mapping.ghUserId
+    } catch {
+      /* mapping unavailable: pi uid matches create scheme (ghUserId === piAppUid) */
+    }
     return {
-      userId: piUser.uid,
+      userId: ghUserId,
       username: piUser.username,
       source: "pi_platform",
       rawToken: token,

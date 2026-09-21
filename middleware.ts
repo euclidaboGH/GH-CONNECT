@@ -17,8 +17,28 @@ function plainKey() {
   })
 }
 
+/** Edge-safe liveness when Node route handlers fail. */
+function liveJson() {
+  return NextResponse.json(
+    {
+      ok: true,
+      live: true,
+      service: "gh-connect",
+      via: "middleware",
+      ts: new Date().toISOString(),
+    },
+    {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    }
+  )
+}
+
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
+  if (path === "/api/health/live" || path === "/api/health/live/") {
+    return liveJson()
+  }
   if (
     path === "/validation-key.txt" ||
     path === "/validation-key.txt/" ||
@@ -31,5 +51,12 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/validation-key.txt", "/validation-key.txt/", "/api/validation-key", "/api/validation-key/"],
+  matcher: [
+    "/validation-key.txt",
+    "/validation-key.txt/",
+    "/api/validation-key",
+    "/api/validation-key/",
+    "/api/health/live",
+    "/api/health/live/",
+  ],
 }
