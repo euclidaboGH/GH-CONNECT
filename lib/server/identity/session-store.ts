@@ -287,20 +287,14 @@ export async function createSession(input: {
     deviceLabel,
   }
 
-  const isProd =
-    process.env.VERCEL_ENV === "production" ||
-    process.env.NODE_ENV === "production" ||
-    process.env.GHC_ENV === "production"
-
-  // Production must never issue sessions that only live in this process memory
-  if (!dbConfigured()) {
-    if (isProd) {
-      console.error("[session] SESSION_DURABILITY_UNAVAILABLE: no privileged database")
-      throw new Error("SESSION_DURABILITY_UNAVAILABLE")
-    }
-  } else {
+  if (dbConfigured()) {
     const ok = await dbInsert(rec)
     if (!ok) {
+      // Production / privileged DB configured: fail closed — never issue a session that
+      // only exists in this serverless process memory (lost on cold start / other instances).
+      const isProd =
+        process.env.VERCEL_ENV === "production" ||
+        process.env.NODE_ENV === "production"
       if (isProd) {
         console.error("[session] durable insert failed; refusing memory session in production")
         throw new Error("SESSION_DURABILITY_UNAVAILABLE")
@@ -311,7 +305,6 @@ export async function createSession(input: {
 
   memByHash.set(tokenHash, rec)
   memById.set(rec.id, rec)
-  // Never log raw tokens — only truncated session id
   console.info("[session] SESSION_CREATED", {
     userId: ghUserId,
     sessionId: rec.id.slice(0, 8),

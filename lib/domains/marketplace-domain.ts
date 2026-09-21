@@ -8,7 +8,6 @@
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
 import type { DomainServices } from "./create-domains"
-import { TYPE_LABELS, type VerificationType } from "./verification-domain"
 
 export type ListingKind = "product" | "service" | "opportunity"
 export type ListingStatus =
@@ -398,16 +397,9 @@ export function createMarketplaceDomain(deps: {
         sellerId,
         displayName: peer?.profile?.displayName,
         photo: peer?.profile?.photos?.[0],
-        verificationLabels: (() => {
-          if (!ver?.anyVerified) return []
-          const labels: string[] = []
-          for (const type of Object.keys(ver.records || {}) as VerificationType[]) {
-            if (ver.records[type]?.status === "verified") {
-              labels.push(TYPE_LABELS[type])
-            }
-          }
-          return labels
-        })(),
+        verificationLabels: ver?.anyVerified
+          ? services?.verification?.getLabels?.(sellerId) || []
+          : [],
         identityVerified: Boolean(ver?.identityVerified),
         reputationScore: rep?.score ?? 0,
         reputationTier: rep?.tier ?? "new",
@@ -527,7 +519,7 @@ export function createMarketplaceDomain(deps: {
         return { ok: false, error: "Order not found", phase: "validate", requestId: "local" }
       }
       if (local.buyerId !== userId) {
-        return { ok: false, error: "Only buyer can pay", phase: "permission", requestId: "local" }
+        return { ok: false, error: "Only buyer can pay", phase: "authorize", requestId: "local" }
       }
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" }
@@ -560,7 +552,7 @@ export function createMarketplaceDomain(deps: {
           return {
             ok: false,
             error: "Could not create server order — enable auth / GHC_SERVER_MEMORY",
-            phase: "permission",
+            phase: "authorize",
             requestId: "server",
           }
         }
@@ -578,7 +570,7 @@ export function createMarketplaceDomain(deps: {
           return {
             ok: false,
             error: data?.error || data?.message || "Payment failed",
-            phase: "permission",
+            phase: "authorize",
             requestId: serverOrderId,
           }
         }
@@ -603,14 +595,14 @@ export function createMarketplaceDomain(deps: {
             userId,
             orderId
           )
-          return { ok: true, data: { order: olist[idx] }, requestId: serverOrderId }
+          return { ok: true, data: { order: olist[idx] }, requestId: serverOrderId, phase: "commit" }
         }
-        return { ok: false, error: "Local order missing", phase: "mutate", requestId: serverOrderId }
+        return { ok: false, error: "Local order missing", phase: "commit", requestId: serverOrderId }
       } catch (e) {
         return {
           ok: false,
           error: e instanceof Error ? e.message : "Payment failed",
-          phase: "permission",
+          phase: "authorize",
           requestId: "local",
         }
       }
@@ -887,7 +879,7 @@ export function createMarketplaceDomain(deps: {
             listingKind: listing.kind,
             contentType: "marketplace_listing",
           })
-          if (!result.ok) {
+          if (!result.ok || !result.data) {
             throw new Error(result.error || "Failed to create feed post")
           }
           const post = result.data

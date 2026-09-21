@@ -403,4 +403,4 @@ export function paginateMessages(
 
 
 /** Compatibility re-exports — canonical messaging feature path */
-export { draftStorage, filterConversationList } from "./unified-messaging-engine"
+export { searchMessages, draftStorage, filterConversationList } from "./unified-messaging-engine"

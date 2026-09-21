@@ -64,7 +64,6 @@ import {
 } from "@/lib/domains/adapters/community-participation-hub"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
-import { getPublicSiteOrigin } from "@/lib/site-url"
 import {
   getUpcomingEvents,
   getActivePolls,
@@ -423,7 +422,9 @@ export function PremiumCommunityHub({
               type="button"
               onClick={() => {
                 const origin =
-                  getPublicSiteOrigin()
+                  typeof window !== "undefined"
+                    ? window.location.origin
+                    : "https://connect-tau.vercel.app"
                 void shareText({
                   title: community.name || "GreenHaven Community",
                   message: `Join ${community.name || "this community"} on GreenHaven — board, events, and member chat.`,

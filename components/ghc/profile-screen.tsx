@@ -34,7 +34,6 @@ import {
 import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
-import { getPublicSiteOrigin } from "@/lib/site-url"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -158,7 +157,7 @@ export function ProfileScreen({
   const shareProfile = async () => {
     const text = `${name} · ${ghDisplay} on GreenHaven — connect on Pi Browser`
     const origin =
-      getPublicSiteOrigin()
+      typeof window !== "undefined" ? window.location.origin : "https://connect-tau.vercel.app"
     const result = await shareText({
       title: "GreenHaven Profile",
       message: text,

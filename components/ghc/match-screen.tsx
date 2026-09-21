@@ -38,7 +38,7 @@ import { timeAgo } from "@/lib/ghc-data"
 import { rankForYouFeed, rankFollowingFeed } from "@/lib/feed-ranking-engine"
 import { getConversationListState, isMessageFromCurrentUser } from "@/lib/unified-messaging-engine"
 import { Heart, MessageCircle, Share2, ChevronLeft, ChevronRight, Send, Settings as SettingsIcon, Wallet, LogOut, Zap, ThumbsDown, UserPlus, Flag, Ban, RefreshCw, X, Search, Filter, MessageSquare, Phone, Video, MoreVertical, Check, Clock, Plus, AlertCircle, Globe, Users, Briefcase, Pin, Archive, Newspaper } from "lucide-react"
-import type { PrimaryMode, Candidate, Profile, Like } from "@/lib/ghc-types"
+import type { PrimaryMode, Candidate, Profile } from "@/lib/ghc-types"
 import { PostSkeleton, PostCard } from "./feed-components"
 import { SearchBar } from "./search-bar"
 import { UserCard } from "./user-card"
@@ -162,8 +162,8 @@ export function MatchScreen() {
 
 
   const safeMatches = filterValidMatches(matches)
-  const safeLikes = asArray<Like>(likes)
-  const safeCandidates = asArray<Candidate>(candidates)
+  const safeLikes = asArray(likes)
+  const safeCandidates = asArray(candidates)
 
   // Prefer mutual likes when present; otherwise show graph matches (intentional matches domain)
   const mutualMatches = safeMatches.filter((match) => {

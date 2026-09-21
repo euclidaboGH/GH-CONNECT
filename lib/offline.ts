@@ -8,11 +8,6 @@ interface StoredAction {
   synced: boolean
 }
 
-
-function canUseLocalStorage(): boolean {
-  return typeof window !== "undefined" && typeof localStorage !== "undefined"
-}
-
 const OFFLINE_STORAGE_KEY = "ghc_offline_queue"
 const ONLINE_STATUS_KEY = "ghc_online_status"
 
@@ -25,7 +20,6 @@ export const offlineSupport = {
   // Queue an action for later sync
   queueAction: (action: string, data: any): string => {
     try {
-      if (!canUseLocalStorage()) return ""
       const id = `${action}_${Date.now()}_${Math.random()}`
       const stored = localStorage.getItem(OFFLINE_STORAGE_KEY)
       const queue: StoredAction[] = stored ? JSON.parse(stored) : []
@@ -49,7 +43,6 @@ export const offlineSupport = {
   // Get pending actions
   getPendingActions: (): StoredAction[] => {
     try {
-      if (!canUseLocalStorage()) return []
       const stored = localStorage.getItem(OFFLINE_STORAGE_KEY)
       return stored ? JSON.parse(stored) : []
     } catch (e) {
@@ -61,7 +54,6 @@ export const offlineSupport = {
   // Mark action as synced
   markSynced: (actionId: string): void => {
     try {
-      if (!canUseLocalStorage()) return
       const stored = localStorage.getItem(OFFLINE_STORAGE_KEY)
       if (!stored) return
 
@@ -76,7 +68,6 @@ export const offlineSupport = {
   // Clear all pending actions
   clearQueue: (): void => {
     try {
-      if (!canUseLocalStorage()) return
       localStorage.removeItem(OFFLINE_STORAGE_KEY)
     } catch (e) {
       console.warn("[v0] Failed to clear queue:", e)
@@ -86,7 +77,6 @@ export const offlineSupport = {
   // Get cached user data
   getCachedData: (key: string): any => {
     try {
-      if (!canUseLocalStorage()) return null
       const stored = localStorage.getItem(`cache_${key}`)
       return stored ? JSON.parse(stored) : null
     } catch (e) {
@@ -98,7 +88,6 @@ export const offlineSupport = {
   // Set cached data
   setCachedData: (key: string, data: any): void => {
     try {
-      if (!canUseLocalStorage()) return
       localStorage.setItem(`cache_${key}`, JSON.stringify(data))
     } catch (e) {
       console.warn("[v0] Failed to cache data:", e)

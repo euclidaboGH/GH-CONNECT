@@ -421,10 +421,9 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
           direction === "all"
             ? ""
             : `?direction=${encodeURIComponent(direction)}`
-        // Session-scoped list (no path userId — avoids dynamic slug conflict with [requestId])
         const data = await req<{
           requests?: import("./economy-types").GhcTransferRequest[]
-        }>(cfg, `/economy/transfer-requests${q}`)
+        }>(cfg, `/economy/transfer-requests/${encodeURIComponent(userId)}${q}`)
         if (data.requests) {
           transferRequests.length = 0
           transferRequests.push(...data.requests)

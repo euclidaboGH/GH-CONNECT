@@ -116,7 +116,7 @@ export function filterGroupConversations(conversations: Conversation[]): Convers
 /**
  * Soft-delete helpers — keep record for moderation / audit
  */
-export function softDeletePost<T extends { id: string; deletedAt?: number | null; deletedBy?: string }>(
+export function softDeletePost<T extends { id: string; deletedAt?: number; deletedBy?: string }>(
   post: T,
   actorId: string
 ): T {

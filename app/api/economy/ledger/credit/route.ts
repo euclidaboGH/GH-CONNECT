@@ -7,7 +7,6 @@
  *
  * This is NOT an activity or daily-claim path. Do not use for ordinary rewards.
  */
-import { timingSafeEqual } from "crypto"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   allowMemoryServer,
@@ -29,13 +28,7 @@ export async function POST(request: Request) {
 
   const adminKey = process.env.GHC_ADMIN_CREDIT_KEY || ""
   const provided = request.headers.get("x-ghc-admin-credit-key") || ""
-  const keyBuf = Buffer.from(adminKey, "utf8")
-  const providedBuf = Buffer.from(provided, "utf8")
-  const keyOk =
-    Boolean(adminKey) &&
-    keyBuf.length === providedBuf.length &&
-    timingSafeEqual(keyBuf, providedBuf)
-  if (!keyOk) {
+  if (!adminKey || provided !== adminKey) {
     return jsonErr(
       "FORBIDDEN",
       "Admin credit requires GHC_ADMIN_CREDIT_KEY; ordinary users cannot mint GHC",

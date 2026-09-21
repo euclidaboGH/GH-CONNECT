@@ -1,6 +1,6 @@
 // Performance optimization utilities
 
-import { useMemo, useCallback, useRef, useEffect, useState, type RefObject } from 'react'
+import { useMemo, useCallback, useRef, useEffect } from 'react'
 
 // Memoization helper for filtered/mapped lists
 export function useMemoizedList<T>(
@@ -18,7 +18,7 @@ export function useMemoizedList<T>(
 
 // Debounce hook for search and filter operations
 export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value)
+  const [debouncedValue, setDebouncedValue] = React.useState(value)
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -32,8 +32,8 @@ export function useDebounce<T>(value: T, delay: number): T {
 }
 
 // Intersection Observer hook for lazy loading
-export function useIntersectionObserver(ref: RefObject<HTMLElement | null>) {
-  const [isVisible, setIsVisible] = useState(false)
+export function useIntersectionObserver(ref: React.RefObject<HTMLElement>) {
+  const [isVisible, setIsVisible] = React.useState(false)
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -67,7 +67,7 @@ export function setCacheTimeout(key: string, timeout: number) {
 
 // Batch updates to reduce re-renders
 export function useBatchUpdates<T extends object>(initial: T) {
-  const [state, setState] = useState(initial)
+  const [state, setState] = React.useState(initial)
   const batchRef = useRef(initial)
 
   const batchUpdate = useCallback((updates: Partial<T>) => {

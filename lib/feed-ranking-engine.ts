@@ -153,7 +153,7 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
         !post.isScheduled &&
         matchesLocationLane(post, context)
     )
-    .map((post): RankedPost => {
+    .map((post) => {
       let score = 0
       let reason: PostVisibilityReason = {
         reason: "Suggested for you",
@@ -322,14 +322,17 @@ export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPo
         !post.isScheduled &&
         !context.blockedUserIds.includes(post.authorId)
     )
-    .map((post): RankedPost => {
+    .map((post) => {
       // Pure Following: chronological only (newest first). No engagement ranking.
       const score = post.createdAt || 0
-      const reason: PostVisibilityReason = {
-        reason: `From ${post.authorName}`,
-        category: "following",
+      return {
+        post,
+        score,
+        reason: {
+          reason: `From ${post.authorName}`,
+          category: "following",
+        },
       }
-      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -359,11 +362,14 @@ export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[
         score += 20
       }
 
-      const reason: PostVisibilityReason = {
-        reason: "Happening nearby",
-        category: "nearby",
+      return {
+        post,
+        score,
+        reason: {
+          reason: "Happening nearby",
+          category: "personalization",
+        },
       }
-      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -381,11 +387,14 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
       // Trending algorithm: engagement * time decay
       let score = engagementScore * Math.pow(0.8, Math.min(timeRecency, 24))
 
-      const reason: PostVisibilityReason = {
-        reason: `Trending with ${post.likes} likes`,
-        category: "trending",
+      return {
+        post,
+        score,
+        reason: {
+          reason: `Trending with ${post.likes} likes`,
+          category: "trending",
+        },
       }
-      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -396,7 +405,7 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
 export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const ranked = posts
     .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
-    .map((post): RankedPost => {
+    .map((post) => {
       let score = Date.now() - post.createdAt
 
       // Bonus for following
@@ -404,11 +413,14 @@ export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[
         score *= 1.2
       }
 
-      const reason: PostVisibilityReason = {
-        reason: "Latest posts",
-        category: "recency",
+      return {
+        post,
+        score,
+        reason: {
+          reason: "Latest posts",
+          category: "recency",
+        },
       }
-      return { post, score, reason }
     })
     .sort((a, b) => b.score - a.score)
 
@@ -427,17 +439,11 @@ export function rankFriendsFeed(posts: Post[], context: FeedContext): RankedPost
         !post.isScheduled &&
         friends.has(post.authorId)
     )
-    .map((post): RankedPost => {
-      const reason: PostVisibilityReason = {
-        reason: "From friends",
-        category: "network",
-      }
-      return {
-        post,
-        score: calculateEngagementScore(post) + (Date.now() - post.createdAt < 86400000 ? 20 : 0),
-        reason,
-      }
-    })
+    .map((post) => ({
+      post,
+      score: calculateEngagementScore(post) + (Date.now() - post.createdAt < 86400000 ? 20 : 0),
+      reason: { reason: "From friends", category: "network" as const },
+    }))
     .sort((a, b) => b.score - a.score)
 }
 
@@ -455,17 +461,11 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
       const cid = (post as any).communityId as string | undefined
       return cid ? communities.has(cid) : false
     })
-    .map((post): RankedPost => {
-      const reason: PostVisibilityReason = {
-        reason: "From communities",
-        category: "community",
-      }
-      return {
-        post,
-        score: calculateEngagementScore(post),
-        reason,
-      }
-    })
+    .map((post) => ({
+      post,
+      score: calculateEngagementScore(post),
+      reason: { reason: "From communities", category: "network" as const },
+    }))
     .sort((a, b) => b.score - a.score)
 }
 

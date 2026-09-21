@@ -84,8 +84,6 @@ export type NotificationDeepLink = {
   requestId?: string
   groupId?: string
   greenHavenId?: string
-  /** Marketplace deep-link target */
-  listingId?: string
 }
 
 const SOCIAL_TYPES = new Set<NotificationType>([
@@ -282,20 +280,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
   if (open === "settings" && (n.type === "system" || String(data.category) === "system")) {
     link.open = "settings"
     link.tab = "settings"
-    const rawSection = typeof data.section === "string" ? data.section : undefined
-    if (
-      rawSection === "post" ||
-      rawSection === "conversation" ||
-      rawSection === "transaction" ||
-      rawSection === "transfer-request" ||
-      rawSection === "friend-request" ||
-      rawSection === "group-request" ||
-      rawSection === "membership" ||
-      rawSection === "verification" ||
-      rawSection === "security"
-    ) {
-      link.section = rawSection
-    }
+    link.section = (data.section as NotificationDeepLink["section"]) || "main" as any
     return link
   }
 
@@ -314,7 +299,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     // Connection request inbox — not messages
     link.open = "matches"
     link.tab = "matches"
-    link.section = "friend-request"
+    link.section = "connection_requests"
   } else if (n.type === "follow") {
     link.open = "discover"
     link.tab = "discover"
@@ -445,7 +430,7 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       )
     }
 
-    if (link.section === "friend-request") {
+    if (link.section === "connection_requests" || link.section === "friend-request") {
       window.dispatchEvent(
         new CustomEvent("ghc:open-connection-inbox", {
           detail: { focus: "incoming", userId: link.userId },
@@ -455,10 +440,11 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
 
     window.dispatchEvent(new CustomEvent("ghc:notification-deep-link", { detail: link }))
 
-    if (link.listingId) {
-      navigateTo("marketplace", { listingId: link.listingId })
+    if (link.section === "listing" || (link as { listingId?: string }).listingId) {
+      const listingId = (link as { listingId?: string }).listingId || link.id
+      navigateTo("marketplace", { listingId: listingId || undefined })
     }
-    if (link.open === "matches" || link.tab === "matches") {
+    if (link.open === "matches" || link.tab === "matches" || link.section === "match") {
       navigateTo("matches")
       if (link.userId) {
         window.dispatchEvent(

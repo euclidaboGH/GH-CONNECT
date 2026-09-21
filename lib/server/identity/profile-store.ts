@@ -265,7 +265,8 @@ async function dbUpsert(rec: ServerProfileRecord): Promise<ServerProfileRecord |
     updated_at: new Date(rec.updatedAt).toISOString(),
   }
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles`
+    // Explicit conflict target: public.gh_user_profiles.gh_user_id (PRIMARY KEY)
+    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles?on_conflict=gh_user_id`
     const res = await fetch(url, {
       method: "POST",
       headers: {

@@ -72,12 +72,7 @@ export function sanitizeStories(value: unknown): StoryItem[] {
   const seen = new Set<string>()
   return value
     .map(sanitizeStory)
-    .filter((story): story is StoryItem => {
-      if (!story) return false
-      if (seen.has(story.id)) return false
-      seen.add(story.id)
-      return true
-    })
+    .filter((story): story is StoryItem => Boolean(story) && !seen.has(story.id) && seen.add(story.id))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 50)
 }
@@ -235,6 +230,7 @@ export function seedCandidates(): Candidate[] {
   const candidates: Candidate[] = [
     {
       id: "cand-1",
+      isSeed: true,
       name: "Sarah",
       age: 26,
       location: "Lagos, Nigeria",
@@ -247,6 +243,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-2",
+      isSeed: true,
       name: "Emma",
       age: 24,
       location: "Abuja, Nigeria",
@@ -259,6 +256,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-3",
+      isSeed: true,
       name: "Jessica",
       age: 28,
       location: "Accra, Ghana",
@@ -271,6 +269,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-4",
+      isSeed: true,
       name: "Nicole",
       age: 25,
       location: "Nairobi, Kenya",
@@ -283,6 +282,7 @@ export function seedCandidates(): Candidate[] {
     },
     {
       id: "cand-5",
+      isSeed: true,
       name: "Zainab",
       age: 27,
       location: "Cairo, Egypt",

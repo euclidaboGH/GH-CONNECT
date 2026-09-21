@@ -18,12 +18,14 @@ import {
   findOrCreateFromVerifiedPi,
   touchLastSeen,
   isPiIdentityDurable,
+  markOnboardingCompleted,
 } from "@/lib/server/identity/pi-identity-store"
 import {
   createSession,
   buildSessionCookieHeader,
   isSessionStoreDurable,
 } from "@/lib/server/identity/session-store"
+import { getServerProfile } from "@/lib/server/identity/profile-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -103,8 +105,26 @@ export async function POST(request: Request) {
 
     void touchLastSeen(record.ghUserId)
 
-    const isReturning = !isNew && record.onboardingCompleted === true
-    const needsOnboarding = record.onboardingCompleted !== true
+    // Case: durable social profile already onboarded for THIS gh_user_id, but
+    // identity flag was never flipped (legacy / partial completion). Reconcile
+    // only for the verified mapping — never auto-onboard unrelated identities.
+    let isReturning = !isNew && record.onboardingCompleted === true
+    let needsOnboarding = record.onboardingCompleted !== true
+    if (needsOnboarding && !isNew && record.ghUserId) {
+      try {
+        const existingProfile = await getServerProfile(record.ghUserId)
+        if (existingProfile?.onboarded === true) {
+          const reconciled = await markOnboardingCompleted(record.ghUserId)
+          if (reconciled?.onboardingCompleted === true) {
+            record = reconciled
+            needsOnboarding = false
+            isReturning = true
+          }
+        }
+      } catch {
+        /* profile store optional — identity flag remains authoritative */
+      }
+    }
 
     // Issue GH server session only after verified Pi identity
     const ua = request.headers.get("user-agent")

@@ -15,7 +15,6 @@
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
 import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
-import { isMessagingStoreDurable } from "@/lib/server/messaging/message-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export type CheckStatus = "pass" | "fail" | "warn" | "info"
@@ -120,14 +119,6 @@ export function evaluateReadiness(opts?: {
     /* */
   }
 
-  // Messaging durability (required for cross-device chat when feature enabled)
-  let messagingDurable = false
-  try {
-    messagingDurable = isMessagingStoreDurable()
-  } catch {
-    /* */
-  }
-
   const allowDevAuth =
     process.env.GHC_ALLOW_DEV_AUTH === "1" ||
     process.env.GHC_ALLOW_DEV_AUTH === "true"
@@ -199,30 +190,6 @@ export function evaluateReadiness(opts?: {
       : "Supabase URL or service role missing",
     remediation:
       "Vercel: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY",
-  })
-
-  checks.push({
-    id: "messaging_durable",
-    label: "Durable messaging store",
-    status: messagingDurable ? "pass" : isProduction ? "warn" : "info",
-    severity: isProduction ? "high" : "medium",
-    detail: messagingDurable
-      ? "gh_conversations / gh_messages backed by durable store"
-      : "Messaging store not durable — enable after applying 20260919_gh_messaging_durable migration",
-    remediation:
-      "Apply supabase/migrations/20260919_gh_messaging_durable.sql; set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY; optional NEXT_PUBLIC_MESSAGING_DURABLE=1",
-  })
-
-  checks.push({
-    id: "profile_store_config",
-    label: "Profile / progress store config",
-    status: supabaseConfigured ? "pass" : isProduction ? "warn" : "info",
-    severity: "high",
-    detail: supabaseConfigured
-      ? "Supabase configured for gh_user_profiles / achievements (apply 20260919_gh_user_profiles_and_progress)"
-      : "Profile durability needs Supabase + migration 20260919_gh_user_profiles_and_progress",
-    remediation:
-      "Apply migration 20260919_gh_user_profiles_and_progress.sql after identity migrations",
   })
 
   // --- High: network consistency ---
@@ -305,7 +272,7 @@ export function evaluateReadiness(opts?: {
     ready: strictlyReady,
     status,
     service: "gh-connect",
-    version: "0.57.0-ops-hardening",
+    version: "0.56.0-foundation",
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",

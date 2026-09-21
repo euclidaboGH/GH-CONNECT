@@ -13,7 +13,6 @@ const PREFIX = "ghc_pi_state:"
 
 function readBlob(key: string): Record<string, unknown> | null {
   try {
-    if (typeof window === "undefined" || typeof localStorage === "undefined") return null
     const raw = localStorage.getItem(PREFIX + key)
     return raw ? (JSON.parse(raw) as Record<string, unknown>) : null
   } catch {
@@ -23,7 +22,6 @@ function readBlob(key: string): Record<string, unknown> | null {
 
 function writeBlob(key: string, blob: UserStateWritable) {
   try {
-    if (typeof window === "undefined" || typeof localStorage === "undefined") return
     localStorage.setItem(PREFIX + key, JSON.stringify(blob ?? {}))
   } catch {
     /* quota */

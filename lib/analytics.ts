@@ -44,10 +44,6 @@ const ANALYTICS_STORAGE_KEY = "ghc_analytics"
 const SESSION_ID_KEY = "ghc_session_id"
 const MAX_EVENTS = 1000
 
-function canUseAnalyticsStorage(): boolean {
-  return typeof window !== "undefined" && typeof localStorage !== "undefined"
-}
-
 class Analytics {
   private sessionId: string
 
@@ -57,9 +53,6 @@ class Analytics {
 
   private getOrCreateSessionId(): string {
     try {
-      if (!canUseAnalyticsStorage()) {
-        return `session_ssr_${Date.now()}`
-      }
       const stored = localStorage.getItem(SESSION_ID_KEY)
       if (stored) return stored
 
@@ -73,7 +66,6 @@ class Analytics {
 
   trackEvent(type: EventType, data?: Record<string, any>, userId?: string): void {
     try {
-      if (!canUseAnalyticsStorage()) return
       const event: AnalyticsEvent = {
         type,
         timestamp: Date.now(),
@@ -99,7 +91,6 @@ class Analytics {
 
   getEvents(): AnalyticsEvent[] {
     try {
-      if (!canUseAnalyticsStorage()) return []
       const stored = localStorage.getItem(ANALYTICS_STORAGE_KEY)
       return stored ? JSON.parse(stored) : []
     } catch {
@@ -124,7 +115,6 @@ class Analytics {
 
   clearEvents(): void {
     try {
-      if (!canUseAnalyticsStorage()) return
       localStorage.removeItem(ANALYTICS_STORAGE_KEY)
     } catch {
       // Ignore

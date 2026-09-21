@@ -673,7 +673,6 @@ export async function executeAuthoritativeClaimPending(
       amount: -Math.abs(pending.amount),
       status: "posted",
       reason: "Claim clear",
-      sourceEvent: pending.sourceEvent || "SYSTEM",
       referenceId: claimRef + ":clear",
       createdAt: Date.now(),
       metadata: { clearedHoldId: pending.id },

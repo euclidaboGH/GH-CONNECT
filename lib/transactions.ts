@@ -201,10 +201,10 @@ export class TransactionManager {
   }
 
   /**
-   * Generate unique ID (overridable by nested managers)
+   * Generate unique ID
    */
-  protected generateId(prefix: string = "tx"): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  private generateId(): string {
+    return `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
 
   /**
@@ -240,7 +240,7 @@ export class NestedTransactionManager extends TransactionManager {
    * Create savepoint
    */
   createSavepoint(state: any): Savepoint {
-    const savepoint = new Savepoint(this.generateId("sp"), state)
+    const savepoint = new Savepoint(this.generateId(), state)
     this.savepoints.set(savepoint.id, savepoint)
     return savepoint
   }
@@ -260,6 +260,9 @@ export class NestedTransactionManager extends TransactionManager {
     return savepoint.state
   }
 
+  private generateId(): string {
+    return `sp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
 }
 
 export const transactionManager = new TransactionManager()

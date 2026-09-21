@@ -190,12 +190,7 @@ export class OfflineQueue {
   /**
    * Save queue to localStorage
    */
-  private canUseStorage(): boolean {
-    return typeof window !== 'undefined' && typeof localStorage !== 'undefined'
-  }
-
   private saveToStorage(): void {
-    if (!this.canUseStorage()) return
     try {
       localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(this.queue))
     } catch (error) {
@@ -204,13 +199,9 @@ export class OfflineQueue {
   }
 
   /**
-   * Load queue from localStorage (no-op on server / SSR)
+   * Load queue from localStorage
    */
   private loadFromStorage(): void {
-    if (!this.canUseStorage()) {
-      this.queue = []
-      return
-    }
     try {
       const stored = localStorage.getItem(OFFLINE_QUEUE_KEY)
       if (stored) {
@@ -227,8 +218,7 @@ export class OfflineQueue {
  * Connection status monitoring
  */
 export class ConnectionMonitor {
-  private isOnline: boolean =
-    typeof navigator !== 'undefined' ? navigator.onLine : true
+  private isOnline: boolean = navigator.onLine
   private listeners: ((isOnline: boolean) => void)[] = []
 
   constructor() {
@@ -236,11 +226,9 @@ export class ConnectionMonitor {
   }
 
   /**
-   * Initialize connection monitoring (browser only)
+   * Initialize connection monitoring
    */
   private setupListeners(): void {
-    if (typeof window === 'undefined') return
-
     const handleOnline = () => this.setOnlineStatus(true)
     const handleOffline = () => this.setOnlineStatus(false)
 
@@ -257,9 +245,8 @@ export class ConnectionMonitor {
    * Check actual connectivity by attempting a small request
    */
   private async checkConnectivity(): Promise<void> {
-    if (typeof window === 'undefined') return
     try {
-      await Promise.race([
+      const response = await Promise.race([
         fetch(window.location.href, { method: 'HEAD', mode: 'no-cors' }),
         new Promise<Response>((_, reject) =>
           setTimeout(() => reject(new Error('Connectivity check timeout')), 5000)

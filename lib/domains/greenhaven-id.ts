@@ -146,29 +146,6 @@ export type ResolvedPublicIdentity = {
   source: "database" | "memory" | "local_fallback"
 }
 
-/** Fields returned by /api/economy/public-id/* (flat body or nested under `data`). */
-type PublicIdApiFields = {
-  publicId?: string
-  userId?: string
-  displayName?: string | null
-  avatarUrl?: string | null
-  source?: string
-  recipientKey?: string
-}
-
-type PublicIdApiResponse = PublicIdApiFields & { data?: PublicIdApiFields }
-
-function normalizePublicIdPayload(json: PublicIdApiResponse): PublicIdApiFields {
-  return json.data ?? {
-    publicId: json.publicId,
-    userId: json.userId,
-    displayName: json.displayName,
-    avatarUrl: json.avatarUrl,
-    source: json.source,
-    recipientKey: json.recipientKey,
-  }
-}
-
 function authHeaders(): HeadersInit {
   try {
     const token =
@@ -208,8 +185,18 @@ export async function ensureGreenHavenIdServer(
         source: "local_fallback",
       }
     }
-    const json = (await res.json()) as PublicIdApiResponse
-    const data = normalizePublicIdPayload(json)
+    const json = (await res.json()) as {
+      data?: {
+        publicId?: string
+        userId?: string
+        displayName?: string
+        avatarUrl?: string
+        source?: string
+        recipientKey?: string
+      }
+      publicId?: string
+    }
+    const data = json.data || json
     const publicId = normalizeGreenHavenId(
       String(data.publicId || local)
     )
@@ -252,9 +239,17 @@ export async function resolveGreenHavenIdServer(
       { headers: { ...authHeaders() } }
     )
     if (res.ok) {
-      const json = (await res.json()) as PublicIdApiResponse
-      const data = normalizePublicIdPayload(json)
-      if (data.recipientKey && data.publicId) {
+      const json = (await res.json()) as {
+        data?: {
+          publicId?: string
+          recipientKey?: string
+          displayName?: string
+          avatarUrl?: string
+          source?: string
+        }
+      }
+      const data = json.data || (json as typeof json.data)
+      if (data?.recipientKey && data.publicId) {
         return {
           userId: String(data.recipientKey),
           publicId: normalizeGreenHavenId(String(data.publicId)),

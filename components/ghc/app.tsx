@@ -554,7 +554,7 @@ export function GHConnectApp() {
   // Onboarding gate — server + local profile authority.
   // Never treat hydration "unknown" as "required".
   // Returning users with a completed local profile must not see registration after PIN unlock.
-  const effectiveOnboardingRaw = resolveUiOnboardingGate({
+  const effectiveOnboarding = resolveUiOnboardingGate({
     profile,
     piOnboardingStatus: piOnboardingStatus || "unknown",
     serverVerified: Boolean(authLifecycle?.serverVerified),
@@ -568,9 +568,8 @@ export function GHConnectApp() {
       (profile as { displayName?: string } | null | undefined)?.displayName ||
       null,
   })
-  // Authoritative gate only — never timeout-force registration for returning users
-  const effectiveOnboarding = effectiveOnboardingRaw
 
+  // Server/identity store down — never treat as a new-user registration prompt
   if (effectiveOnboarding === "unavailable") {
     return (
       <>

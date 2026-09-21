@@ -35,8 +35,6 @@ import {
   searchMessages,
   handleMessageReaction,
 } from "../unified-messaging-engine"
-import { isDurableMessagingEnabled } from "../messaging/durable-flag"
-import { apiSendMessage } from "../messaging/server-messaging-sync"
 import {
   canMessageUser,
   buildPermissionContext,
@@ -266,23 +264,6 @@ export function createMessagingDomain(deps: {
           if (deps.repository) {
             deps.repository.append(i.conversationId, uiMessage)
           }
-
-          // Durable path (feature-flagged): fire-and-forget server persist.
-          // Permanent success is reflected when API returns ok; local copy stays optimistic.
-          // clientMessageId = uiMessage.id for idempotent dedupe on the server.
-          if (isDurableMessagingEnabled() && !i.offline && typeof window !== "undefined") {
-            void apiSendMessage(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
-              if (!res || !(res as { ok?: boolean }).ok) {
-                // Soft-fail: leave local message; UI may show retry via setMessageStatus
-                try {
-                  console.warn("[messaging] durable send deferred/failed", (res as { error?: string })?.error || "unknown")
-                } catch {
-                  /* */
-                }
-              }
-            })
-          }
-
           return msg
         },
         eventType: "MESSAGE_CREATED",

@@ -17,7 +17,6 @@ import type {
   Conversation,
 } from "../ghc-types"
 import type { DomainServices } from "./create-domains"
-import { TYPE_LABELS, type VerificationType } from "./verification-domain"
 import type { SocialGraphSnapshot } from "../social-graph"
 import type { MatchIntention } from "../ghc-types"
 
@@ -78,10 +77,7 @@ export interface DigitalIdentityView {
   highlights: StoryItem[]
   achievements: string[]
   reputation: { score?: number; notes: string[] }
-  verification: {
-    verified: boolean
-    labels: string[]
-  }
+  verification: { verified: boolean }
   marketplace: {
     sellerEnabled: boolean
     activeListings?: number
@@ -92,6 +88,10 @@ export interface DigitalIdentityView {
     tier: string
     label: string
     badge?: string
+  }
+  verification?: {
+    verified: boolean
+    labels: string[]
   }
   creatorBusiness?: {
     isCreator: boolean
@@ -282,17 +282,9 @@ export function createProfileDomain(deps: {
           const services = getBoundDomainServices?.()
           const snap = services?.verification?.getSnapshot?.()
           if (snap) {
-            const labels: string[] = []
-            if (snap.anyVerified) {
-              for (const type of Object.keys(snap.records || {}) as VerificationType[]) {
-                if (snap.records[type]?.status === "verified") {
-                  labels.push(TYPE_LABELS[type])
-                }
-              }
-            }
             return {
               verified: snap.anyVerified || Boolean(profile.verified),
-              labels,
+              labels: services?.verification?.getLabels?.() || [],
             }
           }
         } catch { /* */ }
@@ -407,7 +399,7 @@ export function createProfileDomain(deps: {
       highlights: stories.filter((s) => s.status === "highlight"),
       achievements: [],
       reputation: { notes: [] },
-      verification: { verified: shell.verified, labels: [] },
+      verification: { verified: shell.verified },
       marketplace: { sellerEnabled: false },
       relationship: relationshipTo(input.userId),
     }

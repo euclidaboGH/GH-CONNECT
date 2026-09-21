@@ -1,27 +1,14 @@
 // Post and Comment Enhancements - Unified export module
 // Consolidates all new post/comment features for easy integration
 
-// Canonical post/comment engine (primary)
-import { LinkPreviewCache } from "@/lib/link-preview-service"
-import type { ValidationResult } from "@/lib/post-validation"
-import {
-  validatePostContent,
-  extractMentions,
-  validateMentions,
-  extractHashtags,
-  extractUrls,
-  extractEmojis,
-} from "@/lib/post-validation"
-import type { EnhancedCommentData } from "@/lib/comment-features-engine"
-import {
-  pinComment,
-  unpinComment,
-  addReactionToComment,
-} from "@/lib/comment-features-engine"
-
+// Re-export existing engines
 export * from "@/lib/post-comment-engine"
 
-// Other engines: named re-exports only (avoid duplicate export names with the engine above)
+// Export new features
+export * from "@/lib/post-actions-engine"
+export * from "@/lib/comment-features-engine"
+export * from "@/lib/post-validation"
+export * from "@/lib/link-preview-service"
 
 // Convenience type aggregation
 export type {
@@ -134,6 +121,7 @@ export {
   getPinnedComments,
   editComment,
   extractMentionsFromComment,
+  validateMentions as validateCommentMentions,
   extractHashtagsFromComment,
   calculateCommentStats,
   getCommentThread,
@@ -195,9 +183,11 @@ export const POST_ACTION_TYPES = [
 
 // Integration helpers
 export function initializePostEnhancements() {
-  // Singleton cache from link-preview-service
-  LinkPreviewCache.clearExpired()
-  return { cache: LinkPreviewCache }
+  // Initialize link preview cache if needed
+  const cache = new LinkPreviewCache()
+  // Clear expired entries on init
+  cache.clearExpired()
+  return { cache }
 }
 
 // Common validation wrapper
@@ -213,11 +203,11 @@ export interface PostValidationOptions {
 export function validatePostWithOptions(
   text: string,
   options: PostValidationOptions = {}
-): ValidationResult & { extracted?: Record<string, unknown> } {
+): ValidationResult & { extracted?: any } {
   const result = validatePostContent(text)
   if (!result.valid) return result
 
-  const extracted: Record<string, unknown> = {}
+  const extracted: any = {}
   const warnings: string[] = result.warnings || []
 
   if (options.checkMentions) {
@@ -225,7 +215,7 @@ export function validatePostWithOptions(
     if (options.validUserIds) {
       const mentionValidation = validateMentions(text, options.validUserIds)
       if (!mentionValidation.valid) {
-        warnings.push(`Invalid mentions: ${(mentionValidation.invalidMentions ?? []).join(", ")}`)
+        warnings.push(`Invalid mentions: ${mentionValidation.invalidMentions.join(", ")}`)
       }
     }
   }

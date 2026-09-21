@@ -13,15 +13,12 @@
  *     Does NOT authorize GHC transfers by being unlocked
  *
  * Rules:
- * - PIN is DEVICE UNLOCK only — not Pi authentication, not MFA, not financial authorization.
- * - PIN does not prove GreenHaven identity to the server and must never be sent for API auth.
- * - Only a per-user salted hash is stored on-device (never plaintext PIN).
- * - Storage is keyed by stable GH user id AFTER server identity resolution — never "current-user".
- * - Guessing is rate-limited (failCount + lockedUntil); force Pi re-auth after MAX_PIN_FAILURES.
- * - Financial authority remains server session + Pi Wallet approve/complete.
- * - SHA-256(salt:pin) is a browser baseline, NOT a slow KDF (not Argon2/scrypt).
- *   Prefer WebAuthn/passkeys for stronger local unlock (see isPlatformAuthenticatorAvailable).
- * - localStorage lock state is UX only; HttpOnly gh_session cookie is the API authority.
+ * - PIN is never a second Pi identity; it only unlocks the local shell.
+ * - Only salted hash is stored on-device (not plaintext PIN).
+ * - PIN is never sent to the server for unlock.
+ * - Financial authority remains server + Pi Wallet approve/complete.
+ * - SHA-256(salt:pin) is a practical browser baseline, NOT a slow KDF.
+ *   Prefer future WebAuthn/passkeys; do not treat client PIN as MFA for APIs.
  */
 
 const STORAGE_PREFIX = "gh_session_sec_v1:"
@@ -171,40 +168,6 @@ export async function hashPin(pin: string, salt: string): Promise<string> {
   return sha256Hex(`${salt}:${pin}`)
 }
 
-/** Constant-time string compare to reduce trivial timing leaks on hash checks. */
-function timingSafeEqualStr(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
-  return diff === 0
-}
-
-/** Reject unstable/placeholder ids so PIN is never bound before GH identity exists. */
-export function isStableGhUserId(userId: string | null | undefined): boolean {
-  const id = String(userId || "").trim()
-  if (!id) return false
-  if (id === "current-user" || id === "anonymous" || id === "local-user") return false
-  if (id.startsWith("timeout-preview") || id.startsWith("local-")) return false
-  return id.length >= 3
-}
-
-/**
- * Local PIN quality rules (device-unlock friction only — not a server password policy).
- * Blocks trivial sequences; does not claim cryptographic strength.
- */
-export function isWeakPin(pin: string): boolean {
-  const x = String(pin || "").trim()
-  if (x.length < PIN_MIN_LEN || x.length > PIN_MAX_LEN) return true
-  if (!/^\d+$/.test(x)) return true
-  if (/^(\d)\1+$/.test(x)) return true // 0000, 1111
-  const seq = "012345678901234567890"
-  const rev = "098765432109876543210"
-  if (seq.includes(x) || rev.includes(x)) return true
-  return false
-}
-
 export function loadSecurityRecord(userId: string): SessionSecurityRecord | null {
   if (typeof localStorage === "undefined" || !userId) return null
   try {
@@ -228,7 +191,6 @@ function saveSecurityRecord(rec: SessionSecurityRecord): void {
 }
 
 export function hasPinConfigured(userId: string): boolean {
-  if (!isStableGhUserId(userId)) return false
   const rec = loadSecurityRecord(userId)
   return Boolean(rec?.enabled && rec.pinHash)
 }
@@ -267,14 +229,8 @@ export async function setupPin(
       error: `PIN must be ${PIN_MIN_LEN}–${PIN_MAX_LEN} digits`,
     }
   }
-  if (!isStableGhUserId(userId)) {
-    return { ok: false, error: "Sign in with Pi before setting a device PIN" }
-  }
-  if (isWeakPin(cleaned)) {
-    return {
-      ok: false,
-      error: "Choose a less predictable PIN (avoid repeats or simple sequences)",
-    }
+  if (!userId || userId === "current-user") {
+    return { ok: false, error: "Sign in with Pi before setting a PIN" }
   }
   const salt = randomSalt()
   const pinHash = await hashPin(cleaned, salt)
@@ -316,9 +272,6 @@ export async function verifyPin(
   userId: string,
   pin: string
 ): Promise<{ ok: true } | { ok: false; error: string; forcePiReauth?: boolean }> {
-  if (!isStableGhUserId(userId)) {
-    return { ok: false, error: "Sign in with Pi to unlock" }
-  }
   const rec = loadSecurityRecord(userId)
   if (!rec?.enabled) {
     return { ok: false, error: "No PIN configured" }
@@ -332,11 +285,8 @@ export async function verifyPin(
     }
   }
   const cleaned = String(pin || "").replace(/\D/g, "")
-  if (!cleaned) {
-    return { ok: false, error: "Enter your PIN" }
-  }
   const candidate = await hashPin(cleaned, rec.salt)
-  if (timingSafeEqualStr(candidate, rec.pinHash)) {
+  if (candidate === rec.pinHash) {
     saveSecurityRecord({
       ...rec,
       failCount: 0,
