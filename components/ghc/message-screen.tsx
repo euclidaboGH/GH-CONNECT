@@ -296,8 +296,27 @@ export function MessageScreen() {
             messageText={draft}
             onMessageChange={setDraft}
             onSendMessage={() => void handleSend()}
-            onEmojiClick={() => undefined}
-            onAttachmentClick={() => undefined}
+            onEmojiClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:toast", {
+                    detail: { message: "Emoji picker is not available in this build.", type: "info" },
+                  })
+                )
+              } catch { /* */ }
+            }}
+            onAttachmentClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:toast", {
+                    detail: {
+                      message: "File attachments require media storage (not enabled yet).",
+                      type: "info",
+                    },
+                  })
+                )
+              } catch { /* */ }
+            }}
             disabled={sending}
           />
         </div>

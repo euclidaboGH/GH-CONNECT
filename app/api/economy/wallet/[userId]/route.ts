@@ -13,6 +13,76 @@ import {
 } from "@/lib/server/economy/http"
 import { computeWalletFromLedger } from "@/lib/domains/economy-ledger"
 import { getServerEconomyLimits } from "@/lib/server/economy/limits"
+import type {
+  GhcTransferRequest,
+  GhcTransferRequestStatus,
+} from "@/lib/domains/economy-types"
+
+const TRANSFER_STATUSES = new Set<GhcTransferRequestStatus>([
+  "PENDING",
+  "ACCEPTED",
+  "DECLINED",
+  "CANCELLED",
+  "EXPIRED",
+])
+
+/** Normalize durable REST rows or domain objects into GhcTransferRequest. */
+function normalizeTransferRequests(
+  rows: GhcTransferRequest[] | Array<Record<string, unknown>> | null | undefined,
+  userId: string
+): GhcTransferRequest[] {
+  if (!Array.isArray(rows)) return []
+  return rows.map((raw) => {
+    // Already domain-shaped (memory store)
+    if (
+      raw &&
+      typeof raw === "object" &&
+      "referenceId" in raw &&
+      "requesterId" in raw &&
+      "payerId" in raw &&
+      "direction" in raw
+    ) {
+      return raw as GhcTransferRequest
+    }
+    const row = raw as Record<string, unknown>
+    const requesterId = String(row.requester_id ?? row.requesterId ?? "")
+    const payerId = String(row.payer_id ?? row.payerId ?? "")
+    const statusRaw = String(row.status ?? "PENDING").toUpperCase()
+    const status = (
+      TRANSFER_STATUSES.has(statusRaw as GhcTransferRequestStatus)
+        ? statusRaw
+        : "PENDING"
+    ) as GhcTransferRequestStatus
+    const createdRaw = row.created_at ?? row.createdAt ?? Date.now()
+    const createdAt =
+      typeof createdRaw === "string"
+        ? Date.parse(createdRaw) || Date.now()
+        : Number(createdRaw) || Date.now()
+    const expiresRaw = row.expires_at ?? row.expiresAt
+    let expiresAt: number | undefined
+    if (expiresRaw != null) {
+      expiresAt =
+        typeof expiresRaw === "string"
+          ? Date.parse(String(expiresRaw)) || undefined
+          : Number(expiresRaw) || undefined
+    }
+    return {
+      id: String(row.id ?? row.reference_id ?? row.referenceId ?? ""),
+      referenceId: String(row.reference_id ?? row.referenceId ?? row.id ?? ""),
+      amount: Number(row.amount ?? 0),
+      status,
+      requesterId,
+      payerId,
+      counterpartyName: String(
+        row.counterparty_name ?? row.counterpartyName ?? ""
+      ),
+      note: row.note != null ? String(row.note) : undefined,
+      createdAt,
+      expiresAt,
+      direction: payerId === userId ? "incoming" : "outgoing",
+    }
+  })
+}
 
 export async function GET(
   request: Request,
@@ -30,7 +100,7 @@ export async function GET(
     ? never
     : ReturnType<ReturnType<typeof getProcessGhcStore>["listTransactions"]>
 
-  let transferRequests: Array<Record<string, unknown>> = []
+  let transferRequests: GhcTransferRequest[] = []
 
   if (isDatabaseConfigured()) {
     const rows = await rpcListTransactions(userId)
@@ -39,12 +109,10 @@ export async function GET(
     }
     transactions = rows
     const reqs = await rpcListTransferRequests(userId, "all")
-    transferRequests = Array.isArray(reqs) ? reqs : []
+    transferRequests = normalizeTransferRequests(reqs, userId)
   } else if (allowMemoryServer()) {
     transactions = getProcessGhcStore().listTransactions(userId)
-    transferRequests = getProcessGhcStore().listRequests(userId, "all") as Array<
-      Record<string, unknown>
-    >
+    transferRequests = getProcessGhcStore().listRequests(userId, "all")
   } else {
     return jsonErr("SERVER_UNAVAILABLE", "Authoritative store unavailable", 503)
   }
