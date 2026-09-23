@@ -13,6 +13,10 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+
   const body = await request.json().catch(() => ({}))
   const productId = String(body.productId || "").trim()
   const product = getProduct(productId)
@@ -21,14 +25,27 @@ export async function POST(request: Request) {
   }
 
   const orderId = String(body.orderId || genOrderId()).trim()
-  const amountPi =
-    body.amountPi != null ? Number(body.amountPi) : product.amountPi
+
+  // Server catalog is authoritative for non-donation products. Client amountPi
+  // is ignored except for donations (bounded). Never trust body.userId.
+  let amountPi = product.amountPi
+  if (product.category === "donation" && body.amountPi != null) {
+    const proposed = Number(body.amountPi)
+    if (!Number.isFinite(proposed) || proposed <= 0 || proposed > 10_000) {
+      return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
+    }
+    amountPi = Math.min(Math.max(proposed, 0.01), 100)
+  }
   if (!Number.isFinite(amountPi) || amountPi <= 0 || amountPi > 10_000) {
     return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
   }
 
   const existing = getOrder(orderId)
   if (existing) {
+    // Ownership: do not return another user's order under the same id.
+    if (existing.userId !== auth.userId) {
+      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
+    }
     return NextResponse.json({ ok: true, order: existing, idempotent: true })
   }
 
@@ -39,10 +56,11 @@ export async function POST(request: Request) {
     category: product.category,
     amountPi,
     memo: String(body.memo || product.memo),
-    userId: auth?.userId || String(body.userId || "anonymous"),
+    userId: auth.userId,
     status: "created",
-    fulfillment: body.fulfillment || product.fulfillment,
-    metadata: body.metadata,
+    // Fulfillment comes from catalog only — client cannot redefine entitlement shape.
+    fulfillment: product.fulfillment,
+    metadata: body.metadata && typeof body.metadata === "object" ? body.metadata : undefined,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }

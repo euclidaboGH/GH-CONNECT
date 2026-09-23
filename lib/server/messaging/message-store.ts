@@ -109,6 +109,8 @@ export async function isMember(
     const { ok, data } = await rest<Array<{ gh_user_id: string }>>(q)
     if (ok && Array.isArray(data) && data.length > 0) return true
     if (ok) return false
+    // DB configured but request failed: fail closed (do not trust process memory for authz)
+    return false
   }
   const set = memMembers.get(cid)
   return Boolean(set?.has(uid))
@@ -182,10 +184,14 @@ async function listMemberIds(conversationId: string): Promise<string[]> {
 export async function createDirectConversation(input: {
   creatorId: string
   otherUserId: string
-}): Promise<DurableConversation | null> {
+}): Promise<DurableConversation | null | { blocked: true }> {
   const a = String(input.creatorId || "").trim()
   const b = String(input.otherUserId || "").trim()
   if (!a || !b || a === b) return null
+
+  if (await areUsersBlocked(a, b)) {
+    return { blocked: true }
+  }
 
   // Stable id for direct pairs (sorted) — prevents duplicate DM threads
   const pair = [a, b].sort()
@@ -446,4 +452,42 @@ export async function softDeleteMessage(input: {
   }
   memMessages.set(cid, list)
   return { ok: true }
+}
+
+
+/** Update last_read_at for the authenticated member only. */
+export async function markConversationRead(input: {
+  conversationId: string
+  ghUserId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cid = String(input.conversationId || "").trim()
+  const uid = String(input.ghUserId || "").trim()
+  if (!cid || !uid) return { ok: false, error: "INVALID" }
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+
+  if (dbConfigured()) {
+    const { ok } = await rest(
+      `gh_conversation_members?conversation_id=eq.${encodeURIComponent(cid)}&gh_user_id=eq.${encodeURIComponent(uid)}`,
+      {
+        method: "PATCH",
+        prefer: "return=minimal",
+        body: JSON.stringify({ last_read_at: new Date().toISOString() }),
+      }
+    )
+    if (!ok && isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
+  }
+  return { ok: true }
+}
+
+/** True if either direction has a block row. */
+export async function areUsersBlocked(a: string, b: string): Promise<boolean> {
+  const x = String(a || "").trim()
+  const y = String(b || "").trim()
+  if (!x || !y || x === y) return false
+  if (!dbConfigured()) return false
+  const q =
+    `ghc_user_blocks?or=(and(blocker_id.eq.${encodeURIComponent(x)},blocked_id.eq.${encodeURIComponent(y)}),` +
+    `and(blocker_id.eq.${encodeURIComponent(y)},blocked_id.eq.${encodeURIComponent(x)}))&select=blocker_id&limit=1`
+  const { ok, data } = await rest<Array<unknown>>(q)
+  return ok && Array.isArray(data) && data.length > 0
 }

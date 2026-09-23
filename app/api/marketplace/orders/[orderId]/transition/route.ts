@@ -46,14 +46,7 @@ export async function POST(
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 })
   }
 
-  // Seller payout entitlement marker on complete (A2U wired later)
-  if (to === "completed") {
-    result.order.audit.push({
-      at: Date.now(),
-      action: "SELLER_PAYOUT_PENDING",
-      detail: "A2U payout entitlement recorded — settle via GH Pay A2U when enabled",
-    })
-  }
-
+  // Seller payout entitlement is recorded inside transitionOrder when supported.
+  // Do not mutate audit after persist — response must match durable state.
   return NextResponse.json({ ok: true, order: result.order })
 }

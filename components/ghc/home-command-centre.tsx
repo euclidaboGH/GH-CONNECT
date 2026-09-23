@@ -255,6 +255,30 @@ export function HomeCommandCentre({
 
       <DailyRewardHomeExperience />
 
+      {/* Ecosystem gateway — directory lives in Ecosystem overlay, not Profile */}
+      <button
+        type="button"
+        onClick={() => navigateTo("ecosystem")}
+        className="flex min-h-[44px] w-full items-center gap-3 rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 via-card to-teal-50/50 px-3 py-3 text-left transition hover:border-emerald-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-emerald-900/50 dark:from-emerald-950/50 dark:to-teal-950/30"
+        aria-label="Explore GreenHaven Ecosystem"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/25">
+          <Sparkles className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12px] font-bold tracking-tight text-foreground">
+            GreenHaven Ecosystem
+          </span>
+          <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+            Marketplace · Education · Transport · Community and more
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+          Explore
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </span>
+      </button>
+
       {/* Social layer shortcuts — flat IA, ≤2 taps from home */}
       <div className="grid grid-cols-3 gap-1.5" role="region" aria-label="Social shortcuts">
         <MiniCard

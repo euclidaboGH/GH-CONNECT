@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     )
   }
 
-  return NextResponse.json({ ok: true, order })
+  return NextResponse.json({ ok: true, order }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function GET(request: Request) {
@@ -109,5 +109,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const orders = await listOrdersForUserDurable(auth.userId)
-  return NextResponse.json({ ok: true, orders })
+  return NextResponse.json({ ok: true, orders }, { headers: { "Cache-Control": "no-store" } })
 }

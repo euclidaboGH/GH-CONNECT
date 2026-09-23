@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { createPaymentIntent, listIntentsForUser } from "@/lib/server/payments/intent-store"
+import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
 import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
@@ -98,6 +98,10 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const intents = listIntentsForUser(auth.userId)
-  return NextResponse.json({ ok: true, intents })
+  // Durable when Supabase configured — survives Vercel cold start / multi-instance
+  const intents = await listIntentsForUserAsync(auth.userId)
+  return NextResponse.json(
+    { ok: true, intents },
+    { headers: { "Cache-Control": "no-store" } }
+  )
 }

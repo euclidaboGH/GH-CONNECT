@@ -66,11 +66,15 @@ export async function PATCH(request: Request) {
       )
     }
 
-    // Ignore any client-supplied id / userId / balance fields
+    // Ignore any client-supplied identity / financial fields (session auth is sole owner)
     const input = { ...(body as Record<string, unknown>) }
     delete input.id
     delete input.userId
     delete input.ghUserId
+    delete input.gh_user_id
+    delete input.piId
+    delete input.piAppUid
+    delete input.ownerId
     delete input.balance
     delete input.membership
     delete input.tier

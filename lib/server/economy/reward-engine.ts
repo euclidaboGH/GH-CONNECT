@@ -27,6 +27,8 @@ import {
   getGhcAuthoritativeStore,
   type GhcAuthoritativeStore,
 } from "@/lib/server/economy/store"
+import { rpcStagePending } from "@/lib/server/economy/db"
+import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
 
 export type EvaluateRewardInput = {
   userId: string
@@ -311,9 +313,65 @@ export async function evaluateRewardAuthoritative(
     return { ok: false, error: "ANTI_ABUSE", deniedReasons: ["SELF_TARGET"] }
   }
 
+  // Durable DB path: stage pending via RPC with atomic limit checks
+  // (dailyLimit / cooldownMs / maxPerTargetPerDay — same semantics as memory path)
+  if (isDatabaseConfigured()) {
+    const staged = await rpcStagePending({
+      userId: input.userId,
+      amount,
+      referenceId,
+      reason: rule.description || sourceEvent,
+      sourceEvent,
+      ruleId: rule.id,
+      dailyLimit: rule.dailyLimit ?? null,
+      cooldownMs: rule.antiAbuse?.cooldownMs ?? null,
+      maxPerTarget: rule.antiAbuse?.maxPerTargetPerDay ?? null,
+      targetId: input.targetId ?? null,
+    })
+    if (!staged.ok) {
+      const err = staged.error || "PENDING_FAILED"
+      return {
+        ok: false,
+        error: err,
+        deniedReasons:
+          err === "DAILY_CAP" || err === "COOLDOWN" || err === "TARGET_CAP"
+            ? [err]
+            : undefined,
+      }
+    }
+    const holdId = staged.holdId || staged.transactionId || referenceId
+    const stagedAmount =
+      staged.amount != null && Number.isFinite(staged.amount) ? staged.amount : amount
+    return {
+      ok: true,
+      amount: stagedAmount,
+      ruleId: rule.id,
+      holdId: String(holdId),
+      requiresValidation: Boolean(rule.requiresValidation),
+      idempotent: Boolean(staged.idempotent || staged.alreadyPosted),
+      transaction: staged.tx || {
+        id: holdId,
+        userId: input.userId,
+        kind: staged.alreadyPosted ? "earned" : "pending",
+        amount: stagedAmount,
+        status: staged.status || (staged.alreadyPosted ? "posted" : "pending"),
+        referenceId,
+        sourceEvent,
+      },
+      economicVersion: ECONOMY_VERSION,
+      m: emission.m,
+      g: emission.g,
+    }
+  }
+
+  // Memory path — local/dev/test only (blocked when DB or production/Vercel)
+  if (!allowMemoryServer()) {
+    return { ok: false, error: "SERVER_UNAVAILABLE", deniedReasons: ["MEMORY_BLOCKED"] }
+  }
+
   const store = getGhcAuthoritativeStore()
 
-  // Idempotency by referenceId
+  // Idempotency by referenceId (memory)
   if (hasReference(store, input.userId, referenceId)) {
     return { ok: false, error: "ALREADY_REWARDED", deniedReasons: ["DUPLICATE_REFERENCE"] }
   }

@@ -1,6 +1,10 @@
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { getProcessGhcStore } from "@/lib/server/economy/store"
-import { rpcListTransactions, rpcWalletSnapshot } from "@/lib/server/economy/db"
+import {
+  rpcListTransactions,
+  rpcWalletSnapshot,
+  rpcListTransferRequests,
+} from "@/lib/server/economy/db"
 import {
   allowMemoryServer,
   isDatabaseConfigured,
@@ -26,14 +30,21 @@ export async function GET(
     ? never
     : ReturnType<ReturnType<typeof getProcessGhcStore>["listTransactions"]>
 
+  let transferRequests: Array<Record<string, unknown>> = []
+
   if (isDatabaseConfigured()) {
     const rows = await rpcListTransactions(userId)
     if (!rows) {
       return jsonErr("SERVER_UNAVAILABLE", "Failed to load wallet ledger", 503)
     }
     transactions = rows
+    const reqs = await rpcListTransferRequests(userId, "all")
+    transferRequests = Array.isArray(reqs) ? reqs : []
   } else if (allowMemoryServer()) {
     transactions = getProcessGhcStore().listTransactions(userId)
+    transferRequests = getProcessGhcStore().listRequests(userId, "all") as Array<
+      Record<string, unknown>
+    >
   } else {
     return jsonErr("SERVER_UNAVAILABLE", "Authoritative store unavailable", 503)
   }
@@ -60,11 +71,7 @@ export async function GET(
     transactions,
     rewards: [],
     premium: null,
-    transferRequests: isDatabaseConfigured()
-      ? []
-      : allowMemoryServer()
-        ? getProcessGhcStore().listRequests(userId, "all")
-        : [],
+    transferRequests,
     updatedAt: snapshot.updatedAt || Date.now(),
     snapshot,
     balance: snapshot.balance,

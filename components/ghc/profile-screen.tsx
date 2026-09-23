@@ -374,7 +374,10 @@ export function ProfileScreen({
             onOpenWallet={onOpenWallet}
             onOpenMembership={() => {
               try {
-                window.dispatchEvent(new CustomEvent("ghc:open-membership", { detail: {} }))
+                // Canonical path: Settings membership section (shell listens)
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })
+                )
               } catch {
                 /* */
               }

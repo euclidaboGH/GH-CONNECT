@@ -217,9 +217,13 @@ export function getPaymentIntent(id: string): PaymentIntent | null {
 }
 
 export async function loadPaymentIntent(id: string): Promise<PaymentIntent | null> {
-  const mem = map().get(id)
-  if (mem) return mem
-  return loadFromDbById(id)
+  // Prefer durable record so completed/refunded state is not masked by stale process cache
+  const fromDb = await loadFromDbById(id)
+  if (fromDb) {
+    map().set(fromDb.id, fromDb)
+    return fromDb
+  }
+  return map().get(id) || null
 }
 
 export function getByProviderPaymentId(providerPaymentId: string): PaymentIntent | null {
@@ -415,6 +419,94 @@ export function listIntentsForUser(userId: string): PaymentIntent[] {
   return [...map().values()]
     .filter((i) => i.userId === userId)
     .sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/**
+ * List intents for a user from durable store when configured.
+ * Falls back to process memory (studio) so cold starts still work offline.
+ */
+export async function listIntentsForUserAsync(userId: string): Promise<PaymentIntent[]> {
+  const uid = String(userId || "").trim()
+  if (!uid) return []
+
+  if (!dbConfigured()) {
+    return listIntentsForUser(uid)
+  }
+
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return listIntentsForUser(uid)
+  }
+
+  try {
+    const base = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_payment_intents`
+    const params = new URLSearchParams()
+    params.set("user_id", `eq.${uid}`)
+    params.set("order", "created_at.desc")
+    params.set("limit", "100")
+    params.set(
+      "select",
+      "id,user_id,provider,provider_payment_id,purpose,amount,currency,status,reference_id,metadata,txid,last_error,idempotency_key,audit,created_at,approved_at,submitted_at,completed_at,fulfilled_at,cancelled_at,refunded_at"
+    )
+    const res = await fetch(`${base}?${params}`, {
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      // Soft fallback to memory cache for this process only
+      return listIntentsForUser(uid)
+    }
+    const rows = (await res.json()) as Array<Record<string, unknown>>
+    if (!Array.isArray(rows)) return listIntentsForUser(uid)
+
+    const intents = rows.map((row) => {
+      const intent = rowToIntent({
+        id: row.id,
+        userId: row.user_id,
+        provider: row.provider,
+        providerPaymentId: row.provider_payment_id,
+        purpose: row.purpose,
+        amount: row.amount,
+        currency: row.currency,
+        status: row.status,
+        referenceId: row.reference_id,
+        metadata: row.metadata,
+        txid: row.txid,
+        lastError: row.last_error,
+        idempotencyKey: row.idempotency_key,
+        audit: row.audit,
+        createdAt: row.created_at
+          ? new Date(String(row.created_at)).getTime()
+          : Date.now(),
+        approvedAt: row.approved_at
+          ? new Date(String(row.approved_at)).getTime()
+          : undefined,
+        submittedAt: row.submitted_at
+          ? new Date(String(row.submitted_at)).getTime()
+          : undefined,
+        completedAt: row.completed_at
+          ? new Date(String(row.completed_at)).getTime()
+          : undefined,
+        fulfilledAt: row.fulfilled_at
+          ? new Date(String(row.fulfilled_at)).getTime()
+          : undefined,
+        cancelledAt: row.cancelled_at
+          ? new Date(String(row.cancelled_at)).getTime()
+          : undefined,
+        refundedAt: row.refunded_at
+          ? new Date(String(row.refunded_at)).getTime()
+          : undefined,
+      })
+      cachePut(intent)
+      return intent
+    })
+    return intents
+  } catch {
+    return listIntentsForUser(uid)
+  }
 }
 
 /** Whether store can use durable backend */

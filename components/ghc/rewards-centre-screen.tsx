@@ -32,6 +32,7 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
+import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
@@ -131,6 +132,10 @@ export function RewardsCentreScreen({
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
+  /** Durable unlocks from /api/profile/achievements (merged with local domain) */
+  const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
+    []
+  )
   const ghc = useGHC()
   const profile = ghc.profile
   // Optional community lists may be present on the provider value without being
@@ -180,8 +185,17 @@ export function RewardsCentreScreen({
       const engine = createChallengeEngine(userId)
       const challenges = engine.getChallengeCards(signals)
       const streak = engine.getQualityStreak()
-      const achievements: UnlockedAchievementRow[] =
+      const localAchievements: UnlockedAchievementRow[] =
         services?.achievements?.getUnlockedForProfile?.() || []
+      // Prefer durable server unlocks when present; union by id
+      const byId = new Map<string, UnlockedAchievementRow>()
+      for (const a of localAchievements) {
+        if (a?.id) byId.set(String(a.id), a)
+      }
+      for (const a of serverAchievements) {
+        if (a?.id) byId.set(String(a.id), a)
+      }
+      const achievements = Array.from(byId.values())
       return { wallet, rewards, rules, pending, challenges, achievements, streak }
     } catch {
       return {
@@ -199,7 +213,25 @@ export function RewardsCentreScreen({
         },
       }
     }
-  }, [tick, userId, signals])
+  }, [tick, userId, signals, serverAchievements])
+
+  // Hydrate durable achievements (does not mint; display only)
+  useEffect(() => {
+    let cancelled = false
+    void fetchServerAchievements().then((r) => {
+      if (cancelled || !r.ok) return
+      const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
+        id: a.achievementId,
+        title: a.achievementId.replace(/_/g, " "),
+        description: r.durable ? "Unlocked on this account" : undefined,
+        unlockedAt: a.unlockedAt,
+      })) as UnlockedAchievementRow[]
+      setServerAchievements(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
 
   const recommended = useMemo(
     () =>

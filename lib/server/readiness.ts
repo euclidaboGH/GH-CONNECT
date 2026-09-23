@@ -305,7 +305,7 @@ export function evaluateReadiness(opts?: {
     ready: strictlyReady,
     status,
     service: "gh-connect",
-    version: "0.57.0-ops-hardening",
+    version: process.env.npm_package_version || "0.59.4",
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",

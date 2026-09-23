@@ -908,6 +908,144 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [sdk, state.ready])
 
+  // Durable social hydrate (posts / stories / follows) — server authoritative when configured
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const {
+          socialFetchFeed,
+          socialFetchStories,
+          socialFetchFollows,
+        } = await import("@/lib/social/client")
+        const [feed, stories, follows] = await Promise.all([
+          socialFetchFeed({ limit: 40 }),
+          socialFetchStories(),
+          socialFetchFollows(),
+        ])
+        if (cancelled) return
+        setState((s) => {
+          const next = { ...s }
+          if (feed.ok && feed.durable && Array.isArray(feed.posts) && feed.posts.length > 0) {
+            const remotePosts = feed.posts.map((p) => ({
+              id: String(p.id),
+              authorId: String(p.authorId || ""),
+              authorName: String(p.authorName || "Member"),
+              authorPhoto: String(p.authorPhoto || ""),
+              content: String(p.content || ""),
+              images: Array.isArray(p.images) ? (p.images as string[]) : [],
+              video: (p.video as string | null) ?? null,
+              pdf: (p.pdf as string | null) ?? null,
+              pdfName: (p.pdfName as string | null) ?? null,
+              likes: Number(p.likes) || 0,
+              comments: Array.isArray(p.comments) ? p.comments : [],
+              createdAt: Number(p.createdAt) || Date.now(),
+              visibility: (p.visibility as Post["visibility"]) || "public",
+              deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
+            })) as Post[]
+            // Prefer durable remote; keep local-only posts not yet synced
+            const remoteIds = new Set(remotePosts.map((p) => p.id))
+            const localOnly = s.posts.filter(
+              (p) => !remoteIds.has(p.id) && !p.deletedAt
+            )
+            next.posts = [...remotePosts, ...localOnly].sort(
+              (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+            )
+            const liked = feed.posts
+              .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
+              .map((p) => String(p.id))
+            if (liked.length) {
+              next.likedPostIds = Array.from(
+                new Set([...(s.likedPostIds || []), ...liked])
+              )
+            }
+          }
+          if (stories.ok && stories.durable && Array.isArray(stories.stories)) {
+            next.stories = stories.stories.map((st) => ({
+              id: String(st.id),
+              ownerId: st.ownerId ? String(st.ownerId) : undefined,
+              name: String(st.name || "Member"),
+              photo: st.photo ? String(st.photo) : undefined,
+              text: String(st.text || ""),
+              media: st.media as StoryItem["media"],
+              createdAt: Number(st.createdAt) || Date.now(),
+              expiresAt: st.expiresAt ? Number(st.expiresAt) : undefined,
+              audience: st.audience as StoryItem["audience"],
+              status: (st.status as StoryItem["status"]) || "published",
+            }))
+          }
+          if (follows.ok && follows.durable) {
+            if (Array.isArray(follows.following)) next.following = follows.following
+            if (Array.isArray(follows.followers)) next.followers = follows.followers
+          }
+          return next
+        })
+      } catch {
+        /* studio / offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready])
+
+  // Durable messaging hydrate — conversations list when server has membership rows
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { apiListConversations } = await import("@/lib/messaging/server-messaging-sync")
+        const res = await apiListConversations(50)
+        if (cancelled || !res?.ok || !res.durable) return
+        const remote = Array.isArray(res.conversations) ? res.conversations : []
+        if (!remote.length) return
+        setState((s) => {
+          const byId = new Map(s.conversations.map((c) => [c.id, c]))
+          for (const r of remote) {
+            const id = String(r.id || "")
+            if (!id) continue
+            const existing = byId.get(id)
+            byId.set(id, {
+              ...(existing || {
+                id,
+                messages: [],
+                members: [],
+                memberIds: r.memberIds || [],
+                name: r.title || existing?.name || "Chat",
+                unread: false,
+                unreadCount: 0,
+                updatedAt: r.updatedAt || Date.now(),
+              }),
+              id,
+              memberIds: Array.isArray(r.memberIds) ? r.memberIds : existing?.memberIds || [],
+              updatedAt: r.updatedAt || existing?.updatedAt || Date.now(),
+              lastMessage: r.lastMessagePreview
+                ? {
+                    ...(existing?.lastMessage || {}),
+                    text: r.lastMessagePreview,
+                    createdAt: r.lastMessageAt || Date.now(),
+                  }
+                : existing?.lastMessage,
+            } as (typeof s.conversations)[0])
+          }
+          return {
+            ...s,
+            conversations: Array.from(byId.values()).sort(
+              (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+            ),
+          }
+        })
+      } catch {
+        /* offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready])
+
   // Save existing user-state slices together after startup restoration.
   useEffect(() => {
     if (!sdk || !state.ready) return
@@ -989,10 +1127,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [])
 
 
-  // Cross-device profile hydrate — server is authoritative when durable row exists
+  // Cross-device profile hydrate — server is authoritative when durable row exists.
+  // Must run after Pi/server session is ready; early calls before auth return empty.
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    const hydrateFromServer = async () => {
       try {
         const uid = IdentityService.getCurrentUserId?.() || state.profile?.id
         if (!uid || uid === "current-user") return
@@ -1000,11 +1139,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (cancelled || !result.ok || !result.profile) return
         setState((s) => {
           const server = result.profile as Partial<Profile>
-          // Prefer server onboarded / identity fields; keep fresher local photos if server empty
+          // Durable server row is authority: honor explicit empty arrays / false onboarded.
+          // Non-durable or offline: keep local cache to avoid flash-wipe.
+          const durable = result.durable && result.exists
           const photos =
-            Array.isArray(server.photos) && server.photos.length > 0
+            durable && Array.isArray(server.photos)
               ? server.photos
-              : s.profile.photos
+              : Array.isArray(server.photos) && server.photos.length > 0
+                ? server.photos
+                : s.profile.photos
+          const coverPhoto =
+            durable && (server.coverPhoto === null || server.coverPhoto === "")
+              ? ""
+              : typeof server.coverPhoto === "string" && server.coverPhoto.length > 0
+                ? server.coverPhoto
+                : s.profile.coverPhoto
+          const onboarded = durable
+            ? Boolean(server.onboarded)
+            : Boolean(server.onboarded) || Boolean(s.profile.onboarded)
           return {
             ...s,
             profile: {
@@ -1012,18 +1164,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               ...server,
               id: (server.id as string) || s.profile.id,
               photos,
-              onboarded: Boolean(server.onboarded) || Boolean(s.profile.onboarded),
+              coverPhoto,
+              onboarded,
             },
           }
         })
       } catch {
         /* offline */
       }
-    })()
+    }
+    void hydrateFromServer()
+    const onPiReady = () => {
+      void hydrateFromServer()
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("ghc:pi-identity-ready", onPiReady as EventListener)
+    }
     return () => {
       cancelled = true
+      if (typeof window !== "undefined") {
+        window.removeEventListener("ghc:pi-identity-ready", onPiReady as EventListener)
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per mount / profile id change
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate on profile id + after Pi identity ready
   }, [state.profile?.id])
 
   const updateProfile = async (updates: Partial<Profile>) => {
@@ -1065,9 +1228,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
       setState((s) => ({ ...s, profile: { ...s.profile, ...result.data } }))
 
-      // Durable social profile (server). Failures do not roll back local UX;
-      // next session hydrates from server when available.
-      void persistServerProfile({ ...result.data })
+      // Durable social profile (server). Await so reload can hydrate photos/fields.
+      // Failures do not roll back local UX; queue offline sync when needed.
+      try {
+        const persisted = await persistServerProfile({ ...result.data })
+        if (!persisted.ok && state.isOnline) {
+          offlineQueue.addAction({
+            type: "profile_update",
+            payload: result.data,
+            maxRetries: 3,
+          })
+        }
+      } catch {
+        offlineQueue.addAction({
+          type: "profile_update",
+          payload: result.data,
+          maxRetries: 3,
+        })
+      }
 
       if (!state.isOnline) {
         offlineQueue.addAction({
@@ -1126,19 +1304,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
 
       IdentityService.setOnboardingCompleted()
-      setState((s) => {
-        const profile = { ...s.profile, onboarded: true as const }
-        try {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
-          }
-        } catch {
-          /* */
+      const profile = { ...state.profile, onboarded: true as const }
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
         }
-        // Best-effort durable social profile (non-financial)
-        void persistServerProfile({ ...profile, onboarded: true })
-        return { ...s, profile }
-      })
+      } catch {
+        /* */
+      }
+      setState((s) => ({ ...s, profile: { ...s.profile, onboarded: true as const } }))
+      // Await durable social profile so reload/login restores name, photos, fields
+      try {
+        await persistServerProfile({ ...profile, onboarded: true })
+      } catch {
+        /* offline — local cache still holds this session */
+      }
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Onboarding could not be completed. Please try again.", "error")
@@ -1240,15 +1420,36 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       const newPost = domainResult.data
 
       setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
-      // Dual-write path ready for HTTP repository when API is configured
+
+      // Durable write — server is authoritative when Supabase social core is applied
       try {
-        const { resolveApiBaseUrl, createHttpPostRepository } = require("@/lib/domains/http-repositories")
-        const base = resolveApiBaseUrl()
-        if (base) {
-          createHttpPostRepository({ baseUrl: base }).save(newPost)
+        const { socialCreatePost } = await import("@/lib/social/client")
+        const remote = await socialCreatePost({
+          id: newPost.id,
+          content: newPost.content,
+          images: newPost.images,
+          video: newPost.video,
+          pdf: newPost.pdf,
+          pdfName: newPost.pdfName,
+          visibility: newPost.visibility || visibility,
+          authorName: newPost.authorName,
+          authorPhoto: newPost.authorPhoto,
+          communityId: newPost.communityId,
+          communityName: newPost.communityName,
+          contentType: newPost.contentType,
+          listingId: newPost.listingId,
+          listingKind: newPost.listingKind,
+        })
+        if (remote.ok && remote.durable && remote.post?.id && remote.post.id !== newPost.id) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((p) =>
+              p.id === newPost.id ? { ...p, id: String(remote.post!.id) } : p
+            ),
+          }))
         }
       } catch {
-        /* local-only */
+        /* offline / studio — local session remains until durable path available */
       }
 
       // Queue for sync if offline
@@ -1281,19 +1482,58 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const likePost = async (postId: string) => {
+    // Optimistic local toggle
     setState((s) => {
       const isLiked = s.likedPostIds.includes(postId)
-      const nextLikedPostIds = isLiked ? s.likedPostIds.filter((id) => id !== postId) : [...s.likedPostIds, postId]
+      const nextLikedPostIds = isLiked
+        ? s.likedPostIds.filter((id) => id !== postId)
+        : [...s.likedPostIds, postId]
       const nextLikes = isLiked
-        ? s.likes.filter((like) => !(like.fromUserId === "current-user" && like.toUserId === postId))
-        : [...s.likes, { id: generateId(), fromUserId: "current-user", toUserId: postId, createdAt: Date.now() }]
+        ? s.likes.filter(
+            (like) =>
+              !(like.fromUserId === "current-user" && like.toUserId === postId)
+          )
+        : [
+            ...s.likes,
+            {
+              id: generateId(),
+              fromUserId: "current-user",
+              toUserId: postId,
+              createdAt: Date.now(),
+            },
+          ]
       return {
         ...s,
-        posts: s.posts.map((post) => (post.id === postId ? { ...post, likes: Math.max(0, post.likes + (isLiked ? -1 : 1)) } : post)),
+        posts: s.posts.map((post) =>
+          post.id === postId
+            ? { ...post, likes: Math.max(0, post.likes + (isLiked ? -1 : 1)) }
+            : post
+        ),
         likes: nextLikes,
         likedPostIds: nextLikedPostIds,
       }
     })
+    // Durable reconcile
+    try {
+      const { socialToggleLike } = await import("@/lib/social/client")
+      const remote = await socialToggleLike(postId)
+      if (remote.ok && remote.durable && typeof remote.likeCount === "number") {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId ? { ...post, likes: remote.likeCount as number } : post
+          ),
+          likedPostIds:
+            remote.liked === false
+              ? s.likedPostIds.filter((id) => id !== postId)
+              : s.likedPostIds.includes(postId)
+                ? s.likedPostIds
+                : [...s.likedPostIds, postId],
+        }))
+      }
+    } catch {
+      /* local-only */
+    }
   }
 
 
@@ -1556,6 +1796,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...s,
         posts: s.posts.map((p) => (p.id === postId ? { ...p, ...deleted } : p)),
       }))
+      try {
+        const { socialDeletePost } = await import("@/lib/social/client")
+        await socialDeletePost(postId)
+      } catch {
+        /* local soft-delete still applied */
+      }
       addToast("Post deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -1617,6 +1863,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           }
         }),
       }))
+      try {
+        const { socialAddComment } = await import("@/lib/social/client")
+        await socialAddComment(postId, {
+          id: newComment.id,
+          text: normalizedText,
+          authorName: newComment.authorName,
+          authorPhoto: newComment.authorPhoto,
+          parentId: replyToCommentId,
+        })
+      } catch {
+        /* local comment remains until durable path available */
+      }
       addToast(replyToCommentId ? "Reply posted" : "Comment posted", "success")
     } catch (err) {
       try {
@@ -1639,10 +1897,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...s,
         posts: s.posts.map((post) =>
           post.id === postId
-            ? { ...post, content: result.data.content, isDraft: false }
+            ? {
+                ...post,
+                content: result.data.content,
+                isDraft: false,
+                isEdited: true,
+                editedAt: Date.now(),
+              }
             : post
         ),
       }))
+      try {
+        const { socialEditPost } = await import("@/lib/social/client")
+        await socialEditPost(postId, result.data.content)
+      } catch {
+        /* local edit remains until durable path available */
+      }
       addToast("Post updated", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3018,7 +3288,32 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error, "error")
           return ""
         }
-        const newGroup = result.data.community
+        let newGroup = result.data.community
+        try {
+          const { socialCreateCommunity } = await import("@/lib/social/client")
+          const durable = await socialCreateCommunity({
+            id: newGroup.id,
+            name: newGroup.name || formData.name,
+            purpose: formData.description || "",
+            description: formData.description || "",
+            privacy: formData.privacy,
+            category: formData.category,
+          })
+          // Prefer server-canonical id when durable create returns one
+          const serverId =
+            durable && typeof durable === "object"
+              ? String(
+                  (durable as { id?: string; community?: { id?: string } }).id ||
+                    (durable as { community?: { id?: string } }).community?.id ||
+                    ""
+                ).trim()
+              : ""
+          if (serverId && serverId !== newGroup.id) {
+            newGroup = { ...newGroup, id: serverId }
+          }
+        } catch {
+          /* local community remains until durable path available */
+        }
         setState((s) => ({
           ...s,
           conversations: [newGroup, ...s.conversations],
@@ -3071,6 +3366,14 @@ const dismissMatchCelebration = useCallback(() => {
           return true
         }
         const result = await domains.community.joinCommunity(communityId)
+        if (result.ok) {
+          try {
+            const { socialJoinCommunity } = await import("@/lib/social/client")
+            await socialJoinCommunity(communityId)
+          } catch {
+            /* local join remains */
+          }
+        }
         if (!result.ok) {
           // Seed/demo communities may not be in conversations yet — admit locally
           if (!conv) {
@@ -3268,6 +3571,12 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not approve", "error")
           return false
         }
+        try {
+          const { socialDecideJoinRequest } = await import("@/lib/social/client")
+          await socialDecideJoinRequest(communityId, userId, true)
+        } catch {
+          /* local approval remains */
+        }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName ||
           (state.conversations.find((c) => c.id === communityId))?.participantName ||
@@ -3311,6 +3620,12 @@ const dismissMatchCelebration = useCallback(() => {
         if (!result.ok) {
           addToast(result.error || "Could not decline", "error")
           return false
+        }
+        try {
+          const { socialDecideJoinRequest } = await import("@/lib/social/client")
+          await socialDecideJoinRequest(communityId, userId, false)
+        } catch {
+          /* local decline remains */
         }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
@@ -3927,6 +4242,19 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error, "error")
           return
         }
+        // Durable role when community membership is server-backed
+        try {
+          const roleApi =
+            normalized === "owner" ? "admin" : normalized === "admin" || normalized === "moderator" || normalized === "member" ? normalized : "member"
+          await fetch(`/api/communities/${encodeURIComponent(conversationId)}/roles`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetUserId: userId, role: roleApi }),
+          })
+        } catch {
+          /* offline / studio */
+        }
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) => {
@@ -4103,6 +4431,22 @@ const dismissMatchCelebration = useCallback(() => {
         ...s,
         stories: sanitizeStories([result.data, ...s.stories.filter((x) => x.id !== result.data.id)]),
       }))
+      try {
+        const { socialCreateStory } = await import("@/lib/social/client")
+        await socialCreateStory({
+          id: result.data.id,
+          ownerId: result.data.ownerId,
+          name: result.data.name,
+          photo: result.data.photo,
+          text: result.data.text,
+          media: result.data.media,
+          audience: result.data.audience,
+          expiresAt: result.data.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
+          createdAt: result.data.createdAt,
+        })
+      } catch {
+        /* local story remains until durable path available */
+      }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("This story could not be saved safely", "error")

@@ -20,7 +20,7 @@ import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 
-const MESSAGE_WINDOW = 36
+const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"

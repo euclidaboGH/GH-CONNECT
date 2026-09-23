@@ -83,22 +83,42 @@ export function PollComposer({
 
       const ok = await createPost(body, [], null, null, null, audience)
       if (ok) {
+        // Durable poll authority (localStorage is presentation cache only)
         try {
-          const key = "ghc.polls.local.v1"
-          const raw = localStorage.getItem(key)
-          const list = raw ? JSON.parse(raw) : []
-          list.unshift({
-            id: `poll_${Date.now()}`,
-            question: question.trim(),
-            options: opts,
-            durationId: duration,
-            endsAt: Date.now() + dur.hours * 3600_000,
-            createdAt: Date.now(),
-            votes: opts.map(() => 0),
+          const endsAt = Date.now() + dur.hours * 3600_000
+          const res = await fetch("/api/social/polls", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: question.trim(),
+              options: opts.map((text, i) => ({ id: `opt_${i}`, text })),
+              closesAt: endsAt,
+            }),
           })
-          localStorage.setItem(key, JSON.stringify(list.slice(0, 40)))
+          const data = await res.json().catch(() => ({}))
+          const pollId =
+            data?.poll?.id || data?.id || `poll_${Date.now()}`
+          try {
+            const key = "ghc.polls.local.v1"
+            const raw = localStorage.getItem(key)
+            const list = raw ? JSON.parse(raw) : []
+            list.unshift({
+              id: pollId,
+              question: question.trim(),
+              options: opts,
+              durationId: duration,
+              endsAt,
+              createdAt: Date.now(),
+              votes: opts.map(() => 0),
+              durable: Boolean(data?.durable),
+            })
+            localStorage.setItem(key, JSON.stringify(list.slice(0, 40)))
+          } catch {
+            /* cache only */
+          }
         } catch {
-          /* */
+          /* offline — post may still exist as text */
         }
         addToast?.("Poll published", "success")
         setQuestion("")

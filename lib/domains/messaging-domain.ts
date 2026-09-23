@@ -35,7 +35,10 @@ import {
   searchMessages,
   handleMessageReaction,
 } from "../unified-messaging-engine"
-import { isDurableMessagingEnabled } from "../messaging/durable-flag"
+import {
+  isDurableMessagingEnabled,
+  shouldAttemptDurableMessaging,
+} from "../messaging/durable-flag"
 import { apiSendMessage } from "../messaging/server-messaging-sync"
 import {
   canMessageUser,
@@ -267,17 +270,31 @@ export function createMessagingDomain(deps: {
             deps.repository.append(i.conversationId, uiMessage)
           }
 
-          // Durable path (feature-flagged): fire-and-forget server persist.
-          // Permanent success is reflected when API returns ok; local copy stays optimistic.
+          // Durable path: always attempt when online. Permanent success when API ok.
           // clientMessageId = uiMessage.id for idempotent dedupe on the server.
-          if (isDurableMessagingEnabled() && !i.offline && typeof window !== "undefined") {
+          // Flag still gates *requiring* durable success for production ops.
+          if (shouldAttemptDurableMessaging(i.offline)) {
             void apiSendMessage(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
-              if (!res || !(res as { ok?: boolean }).ok) {
-                // Soft-fail: leave local message; UI may show retry via setMessageStatus
+              const ok = Boolean(res && (res as { ok?: boolean }).ok)
+              if (!ok) {
                 try {
-                  console.warn("[messaging] durable send deferred/failed", (res as { error?: string })?.error || "unknown")
+                  console.warn(
+                    "[messaging] durable send deferred/failed",
+                    (res as { error?: string })?.error || "unknown"
+                  )
                 } catch {
                   /* */
+                }
+                // When flag requires durable and send failed, mark local failed for retry UX
+                if (isDurableMessagingEnabled() && deps.repository) {
+                  try {
+                    deps.repository.update(i.conversationId, uiMessage.id, {
+                      ...uiMessage,
+                      status: "failed",
+                    })
+                  } catch {
+                    /* */
+                  }
                 }
               }
             })
@@ -496,9 +513,28 @@ export function createMessagingDomain(deps: {
           }
           return null
         },
-        mutate: (i) => {
-          const id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+        mutate: async (i) => {
           const now = Date.now()
+          let id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+          // Private DMs: prefer durable conversation id from server (membership rows).
+          if (i.kind === "private" && i.participantId) {
+            try {
+              const { apiCreateDirectConversation } = await import(
+                "@/lib/messaging/server-messaging-sync"
+              )
+              const res = await apiCreateDirectConversation(i.participantId)
+              if (res.httpOk && res.ok && res.conversation?.id) {
+                id = String(res.conversation.id)
+              } else if (res.error === "BLOCKED" || res.status === 403) {
+                throw new Error("Cannot start chat with this user")
+              }
+              // If durable unavailable (studio/offline), keep local id for optimistic UX.
+            } catch (e) {
+              if (e instanceof Error && e.message.includes("Cannot start")) throw e
+            }
+          }
+
           const conversation: Conversation = {
             id,
             conversationType: i.kind === "private" ? "private" : "group",
@@ -568,6 +604,11 @@ export function createMessagingDomain(deps: {
             }
           }
           deps.patchConversation?.(i.conversationId, { unread: false, unreadCount: 0 })
+          if (shouldAttemptDurableMessaging(false)) {
+            void import("../messaging/server-messaging-sync")
+              .then((m) => m.apiMarkConversationRead(i.conversationId))
+              .catch(() => {})
+          }
           return { conversationId: i.conversationId, readMessageIds }
         },
         eventType: "MESSAGE_READ",

@@ -72,6 +72,7 @@ export type NotificationDeepLink = {
     | "transaction"
     | "transfer-request"
     | "friend-request"
+    | "connection_requests"
     | "group-request"
     | "membership"
     | "verification"
@@ -288,7 +289,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
       rawSection === "conversation" ||
       rawSection === "transaction" ||
       rawSection === "transfer-request" ||
-      rawSection === "friend-request" ||
+      rawSection === "friend-request" || rawSection === "connection_requests" ||
       rawSection === "group-request" ||
       rawSection === "membership" ||
       rawSection === "verification" ||
@@ -314,7 +315,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     // Connection request inbox — not messages
     link.open = "matches"
     link.tab = "matches"
-    link.section = "friend-request"
+    link.section = "connection_requests"
   } else if (n.type === "follow") {
     link.open = "discover"
     link.tab = "discover"
@@ -423,12 +424,12 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
     if (link.groupId && surface !== "communities" && link.tab !== "communities") {
       openCommunity(link.groupId)
     }
-    if (link.userId && (link.tab === "discover" || link.section === "friend-request")) {
+    if (link.userId && (link.tab === "discover" || link.section === "friend-request" || link.section === "connection_requests")) {
       window.dispatchEvent(
         new CustomEvent("ghc:open-profile", {
           detail: {
             userId: link.userId,
-            section: "friend-request",
+            section: "connection_requests",
             intents: (link as { intents?: string[] }).intents,
           },
         })
@@ -445,7 +446,7 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       )
     }
 
-    if (link.section === "friend-request") {
+    if (link.section === "friend-request" || link.section === "connection_requests") {
       window.dispatchEvent(
         new CustomEvent("ghc:open-connection-inbox", {
           detail: { focus: "incoming", userId: link.userId },

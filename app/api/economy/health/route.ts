@@ -19,12 +19,21 @@ export async function GET() {
   /** Production-grade auth means Pi and/or JWT secret — not dev tokens */
   const authConfigured = piAuthReady || jwtAuthReady
 
+  // Credentials present does NOT prove ledger/membership/marketplace migrations are applied.
+  // Operators must treat schema readiness separately from "Supabase is configured".
   return jsonOk({
     service: "ghc-economy",
     databaseConfigured,
-    notificationEventsConfigured: databaseConfigured,
-    transferRpcConfigured: databaseConfigured,
-    requestRpcConfigured: databaseConfigured,
+    /** True only when privileged Supabase credentials exist — not a schema probe */
+    supabaseCredentialsPresent: databaseConfigured,
+    /** Schema objects (ghc_transactions, RPCs) are NOT verified here — apply migrations separately */
+    notificationEventsConfigured: false,
+    transferRpcConfigured: false,
+    requestRpcConfigured: false,
+    economyLedgerAssumedReady: false,
+    membershipEntitlementsAssumedReady: false,
+    marketplaceAssumedReady: false,
+    schemaProbe: "not_performed",
     realtimeConfigured: process.env.GHC_REALTIME_CONFIGURED === "1",
     authConfigured,
     piAuthReady,
@@ -59,7 +68,7 @@ export async function GET() {
       "supabase/migrations/20260822_ghc_rls_tighten_events.sql",
     ],
     note: databaseConfigured
-      ? "Privileged DB credentials detected. Apply all migrations before relying on transfers/notifications."
+      ? "Privileged DB credentials detected. Economy/membership/marketplace remain unavailable until ledger migrations (ghc_transactions, spend/claim RPCs, ghc_membership_entitlements, gh_marketplace_*) are applied. Payment intents may already exist independently."
       : "No privileged DB credentials. LOCAL/STUDIO only unless GHC_SERVER_MEMORY=1 (non-production).",
     statusLabel: productionDevAuthRisk || productionMemoryRisk
       ? "SECURITY_RISK"

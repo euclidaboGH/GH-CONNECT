@@ -89,42 +89,24 @@ export function resolveSpendAmount(
     return { ok: true, entry: fixed, amount: fixed.amountGhc }
   }
 
+  // Marketplace must bind to durable order.totalAmount via:
+  //   POST /api/marketplace/orders/[orderId]/pay
+  //   or POST /api/economy/ledger/spend with purpose=marketplace + orderId
+  // Client amount is never authoritative for marketplace.
   if (purpose === "marketplace") {
-    if (!Number.isFinite(clientAmount) || clientAmount <= 0) {
-      return { ok: false, error: "INVALID_AMOUNT" }
-    }
-    if (clientAmount > MARKETPLACE_MAX) {
-      return { ok: false, error: "AMOUNT_EXCEEDS_CAP" }
-    }
     return {
-      ok: true,
-      entry: {
-        purpose: "marketplace",
-        amountGhc: clientAmount,
-        maxAmountGhc: MARKETPLACE_MAX,
-        description: "Marketplace purchase",
-      },
-      amount: clientAmount,
+      ok: false,
+      error: "MARKETPLACE_REQUIRES_ORDER",
     }
   }
 
-  // Reject free-form "other" large spends — force catalog purposes
+  // other / other_capped: no authoritative server price source in this codebase.
+  // A client amount (even capped) is still client-controlled and is rejected.
+  // Use fixed catalog purposes, marketplace order binding, or membership rails instead.
   if (purpose === "other" || purpose === "other_capped") {
-    if (!Number.isFinite(clientAmount) || clientAmount <= 0) {
-      return { ok: false, error: "INVALID_AMOUNT" }
-    }
-    if (clientAmount > OTHER_MAX) {
-      return { ok: false, error: "AMOUNT_EXCEEDS_CAP" }
-    }
     return {
-      ok: true,
-      entry: {
-        purpose: "other_capped",
-        amountGhc: clientAmount,
-        maxAmountGhc: OTHER_MAX,
-        description: "Capped discretionary spend",
-      },
-      amount: clientAmount,
+      ok: false,
+      error: "PURPOSE_REQUIRES_AUTHORITY",
     }
   }
 

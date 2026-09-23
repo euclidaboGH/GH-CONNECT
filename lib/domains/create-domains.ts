@@ -204,6 +204,57 @@ export function createDomainServices(
           targetUserId: input.targetUserId,
           meta: input.meta,
         })
+        // Durable social APIs (same-origin /api/social + /api/connections)
+        void (async () => {
+          try {
+            const {
+              socialFollow,
+              socialBlock,
+              socialConnectionRequest,
+              socialConnectionAccept,
+            } = await import("@/lib/social/client")
+            const t = input.type
+            const target = input.targetUserId
+            if (t === "follow") await socialFollow(target, true)
+            else if (t === "unfollow") await socialFollow(target, false)
+            else if (t === "block") await socialBlock(target, true)
+            else if (t === "unblock") await socialBlock(target, false)
+            else if (t === "friend_request") {
+              await socialConnectionRequest({
+                toUserId: target,
+                intents: Array.isArray(input.meta?.intents)
+                  ? (input.meta!.intents as string[])
+                  : undefined,
+                note: input.meta?.note ? String(input.meta.note) : undefined,
+                source: input.meta?.source ? String(input.meta.source) : "app",
+              })
+            } else if (t === "friend_accept") {
+              await socialConnectionAccept(target)
+            } else if (t === "mute" || t === "unmute") {
+              await fetch("/api/social/mutes", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  targetUserId: target,
+                  mute: t === "mute",
+                }),
+              })
+            } else if (t === "restrict" || t === "unrestrict") {
+              await fetch("/api/social/restricts", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  targetUserId: target,
+                  restrict: t === "restrict",
+                }),
+              })
+            }
+          } catch {
+            /* offline / studio */
+          }
+        })()
       },
     }
   })

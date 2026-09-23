@@ -42,6 +42,26 @@ export async function POST(request: Request) {
     )
   }
 
+  // Blockchain App-to-User settlement requires a server-only wallet seed for chain submit.
+  // Without it, creating Platform payment intents that cannot be completed is unsafe.
+  const seed = (process.env.PI_WALLET_PRIVATE_SEED || "").trim()
+  const allowPartial = process.env.GHC_A2U_ALLOW_PARTIAL === "1" || process.env.GHC_A2U_ALLOW_PARTIAL === "true"
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.GHC_ENV === "production"
+  if (isProd && !seed && !allowPartial) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "CHAIN_SUBMIT_UNAVAILABLE",
+        message:
+          "A2U payout is disabled until PI_WALLET_PRIVATE_SEED is configured server-side and settlement is verified. Set GHC_A2U_ALLOW_PARTIAL=true only for controlled ops testing.",
+      },
+      { status: 503 }
+    )
+  }
+
   const body = await request.json().catch(() => ({}))
   const amount = Number(body.amount)
   const memo = String(body.memo || "GreenHaven payout").slice(0, 128)

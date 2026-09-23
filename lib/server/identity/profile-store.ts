@@ -160,16 +160,23 @@ export function sanitizeProfileInput(
       clipStr(input.primaryMode ?? input.primary_mode, 40) ??
       existing?.primaryMode ??
       null,
-    interests: interests.length ? interests : existing?.interests ?? [],
-    connectionIntents: connectionIntents.length
+    // Explicit empty arrays clear the field (e.g. user removed all photos).
+    // Omitted keys keep existing values.
+    interests: Array.isArray(input.interests)
+      ? interests
+      : existing?.interests ?? [],
+    connectionIntents: Array.isArray(input.connectionIntents) ||
+    Array.isArray(input.connection_intents)
       ? connectionIntents
       : existing?.connectionIntents ?? [],
-    skills: skills.length ? skills : existing?.skills ?? [],
-    photos: photos.length ? photos : existing?.photos ?? [],
+    skills: Array.isArray(input.skills) ? skills : existing?.skills ?? [],
+    photos: Array.isArray(input.photos) ? photos : existing?.photos ?? [],
     coverPhoto:
-      clipStr(input.coverPhoto ?? input.cover_photo, 2000) ??
-      existing?.coverPhoto ??
-      null,
+      input.coverPhoto === null || input.cover_photo === null
+        ? null
+        : clipStr(input.coverPhoto ?? input.cover_photo, 2000) ??
+          existing?.coverPhoto ??
+          null,
     profilePayload,
     onboarded,
     schemaVersion: 1,

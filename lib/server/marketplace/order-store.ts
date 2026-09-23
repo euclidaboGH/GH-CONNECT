@@ -213,10 +213,10 @@ export async function listOrdersForUserDurable(userId: string): Promise<ServerMa
       for (const o of orders) map().set(o.id, o)
       return orders
     }
-  }
-  if (isProd() && dbConfigured()) {
-    // DB configured but RPC failed — do not pretend empty memory is complete history
-    console.error("[marketplace] listOrdersForUserDurable RPC failed")
+    // DB credentials present but RPC/table missing or failed — never treat process
+    // memory as cross-instance durable history in production (or any DB-configured deploy).
+    console.error("[marketplace] listOrdersForUserDurable RPC unavailable or failed")
+    return []
   }
   return listOrdersForUser(uid)
 }

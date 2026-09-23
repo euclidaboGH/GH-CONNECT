@@ -261,6 +261,8 @@ export function GHConnectApp() {
   const [pollOpen, setPollOpen] = useState(false)
   const [challengeOpen, setChallengeOpen] = useState(false)
   const [ecosystemOpen, setEcosystemOpen] = useState(false)
+  /** Service id to focus when Ecosystem opens (e.g. marketplace) */
+  const [ecosystemFocus, setEcosystemFocus] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
   const openSettings = useCallback((section: typeof settingsInitialSection = "main") => {
@@ -286,12 +288,19 @@ export function GHConnectApp() {
     setWalletOpen(false)
   }, [])
   useEffect(() => {
-    const openEco = () => {
+    const openEco = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      let focus: string | null = null
+      if (detail && typeof detail === "object" && typeof (detail as { focus?: unknown }).focus === "string") {
+        const raw = String((detail as { focus: string }).focus).trim().toLowerCase()
+        focus = raw || null
+      }
       setSettingsOpen(false)
       setSettingsInitialSection("main")
       setWalletOpen(false)
       setShowCreateHub(false)
       setBottomNavHidden(false)
+      setEcosystemFocus(focus)
       setEcosystemOpen(true)
     }
     window.addEventListener("ghc:open-ecosystem", openEco)
@@ -302,6 +311,7 @@ export function GHConnectApp() {
   useEffect(() => {
     const onWallet = () => openWallet()
     const onRewards = () => openSettings("rewards")
+    const onMembership = () => openSettings("membership")
     const onSettings = (e: Event) => {
       const section = (e as CustomEvent).detail?.section
       const allowed = ["main", "wallet", "rewards", "membership", "help"] as const
@@ -324,6 +334,7 @@ export function GHConnectApp() {
     }
     window.addEventListener("ghc:open-wallet", onWallet)
     window.addEventListener("ghc:open-rewards", onRewards)
+    window.addEventListener("ghc:open-membership", onMembership)
     window.addEventListener("ghc:open-settings", onSettings)
     window.addEventListener("ghc:start-chat", onStartChat)
     // Ensure Communities tab mounts before community deep-link is applied
@@ -348,6 +359,7 @@ export function GHConnectApp() {
     return () => {
       window.removeEventListener("ghc:open-wallet", onWallet)
       window.removeEventListener("ghc:open-rewards", onRewards)
+      window.removeEventListener("ghc:open-membership", onMembership)
       window.removeEventListener("ghc:open-settings", onSettings)
       window.removeEventListener("ghc:start-chat", onStartChat)
       window.removeEventListener("ghc:ensure-community-tab", onOpenCommunity)
@@ -401,6 +413,7 @@ export function GHConnectApp() {
     setSettingsInitialSection("main")
     setWalletOpen(false)
     setEcosystemOpen(false)
+    setEcosystemFocus(null)
     setShowCreateHub(false)
     setPollOpen(false)
     setChallengeOpen(false)
@@ -687,11 +700,20 @@ export function GHConnectApp() {
           <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
             <ScreenBoundary
               label="GreenHaven Ecosystem"
-              onDismiss={() => setEcosystemOpen(false)}
+              onDismiss={() => {
+                setEcosystemOpen(false)
+                setEcosystemFocus(null)
+              }}
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Suspense fallback={<TabScreenFallback label="Ecosystem" />}>
-                  <GreenHavenEcosystemLazy onBack={() => setEcosystemOpen(false)} />
+                  <GreenHavenEcosystemLazy
+                    onBack={() => {
+                      setEcosystemOpen(false)
+                      setEcosystemFocus(null)
+                    }}
+                    initialFocus={ecosystemFocus}
+                  />
                 </Suspense>
               </div>
             </ScreenBoundary>

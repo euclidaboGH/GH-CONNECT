@@ -1,9 +1,12 @@
 /**
  * POST /api/payments/a2u/complete — mark A2U payment complete on Pi after chain txid known.
+ *
+ * A2U remains admin-gated and incomplete for production exposure (no full chain submit flow).
+ * Keep GHC_A2U_ADMIN_KEY unset / feature unexposed until blockchain submission is finished.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { updateOrderStatus, getOrder } from "@/lib/gh-pay/order-store"
+import { updateOrderStatus } from "@/lib/gh-pay/order-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,21 +22,28 @@ export async function POST(request: Request) {
   const apiKey = (process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
   if (!apiKey) {
     return NextResponse.json({ ok: false, error: "PI_API_KEY not configured" }, { status: 503 })
+  }
 
   const adminKey = (process.env.GHC_A2U_ADMIN_KEY || process.env.GHC_ADMIN_CREDIT_KEY || "").trim()
   const provided = (request.headers.get("x-ghc-a2u-admin-key") || "").trim()
   if (!adminKey || provided !== adminKey) {
     return NextResponse.json(
-      { ok: false, error: "FORBIDDEN", message: "A2U complete requires server admin authorization" },
+      {
+        ok: false,
+        error: "FORBIDDEN",
+        message: "A2U complete requires server admin authorization",
+      },
       { status: 403 }
     )
   }
-  }
 
   const body = await request.json().catch(() => ({}))
-  const paymentId = String(body.paymentId || "").trim()
-  const txid = String(body.txid || "").trim()
-  const orderId = body.orderId != null ? String(body.orderId) : ""
+  const paymentId = String((body as { paymentId?: unknown }).paymentId || "").trim()
+  const txid = String((body as { txid?: unknown }).txid || "").trim()
+  const orderId =
+    (body as { orderId?: unknown }).orderId != null
+      ? String((body as { orderId?: unknown }).orderId)
+      : ""
 
   if (!paymentId || !txid) {
     return NextResponse.json(

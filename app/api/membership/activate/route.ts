@@ -130,11 +130,14 @@ export async function POST(request: Request) {
       )
     }
 
+    // Durable intent must name the exact catalog product (tier+period). Do not
+    // accept a bare purpose "membership" alone — that would let a VIP payment
+    // activate VVIP (or vice versa) when amounts are not checked strictly enough.
     const productId = String(intent.metadata?.productId || "")
     const expected = `membership_${tier}_${period}`
-    if (productId && productId !== expected && intent.purpose !== "membership") {
+    if (!productId || productId !== expected) {
       return NextResponse.json(
-        { ok: false, error: "PRODUCT_MISMATCH", expected, productId },
+        { ok: false, error: "PRODUCT_MISMATCH", expected, productId: productId || null },
         { status: 409 }
       )
     }
@@ -142,16 +145,39 @@ export async function POST(request: Request) {
     const purchaseRef =
       intent.providerPaymentId || paymentId || `pi:${intent.id}`
 
-    const entitlement = await grantEntitlement({
-      userId: auth.userId,
-      tier,
-      billingPeriod: period,
-      source: "pi",
-      purchaseRef,
-      paymentIntentId: intent.id,
-    })
-
-    return NextResponse.json({ ok: true, entitlement })
+    // Payment intent is durable; entitlement table may still be missing in production.
+    // Never report ok:true unless grantEntitlement persisted (or Studio memory path).
+    try {
+      const entitlement = await grantEntitlement({
+        userId: auth.userId,
+        tier,
+        billingPeriod: period,
+        source: "pi",
+        purchaseRef,
+        paymentIntentId: intent.id,
+      })
+      return NextResponse.json({ ok: true, entitlement })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
+      const code =
+        msg.includes("MEMBERSHIP_STORE_UNAVAILABLE") || msg.includes("MEMBERSHIP_DURABLE")
+          ? msg.includes("STORE")
+            ? "MEMBERSHIP_STORE_UNAVAILABLE"
+            : "MEMBERSHIP_DURABLE_WRITE_FAILED"
+          : "MEMBERSHIP_DURABLE_WRITE_FAILED"
+      console.error("[membership/activate] grant after Pi payment failed", code)
+      return NextResponse.json(
+        {
+          ok: false,
+          error: code,
+          message:
+            "Payment was recorded, but membership entitlement could not be stored durably. Retry activation after ghc_membership_entitlements is available.",
+          paymentIntentId: intent.id,
+          purchaseRef,
+        },
+        { status: 503 }
+      )
+    }
   }
 
   // method === "ghc"
@@ -171,14 +197,29 @@ export async function POST(request: Request) {
       const status = spend.error === "INSUFFICIENT_BALANCE" ? 402 : 503
       return NextResponse.json({ ok: false, error: spend.error || "SPEND_FAILED" }, { status })
     }
-    const entitlement = await grantEntitlement({
-      userId: auth.userId,
-      tier,
-      billingPeriod: period,
-      source: "ghc",
-      purchaseRef: referenceId,
-    })
-    return NextResponse.json({ ok: true, entitlement, spend: spend.tx, idempotent: spend.idempotent })
+    try {
+      const entitlement = await grantEntitlement({
+        userId: auth.userId,
+        tier,
+        billingPeriod: period,
+        source: "ghc",
+        purchaseRef: referenceId,
+      })
+      return NextResponse.json({ ok: true, entitlement, spend: spend.tx, idempotent: spend.idempotent })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
+      console.error("[membership/activate] grant after GHC spend failed", msg)
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "MEMBERSHIP_DURABLE_WRITE_FAILED",
+          message:
+            "GHC spend may have been applied, but membership entitlement could not be stored durably.",
+          spendReferenceId: referenceId,
+        },
+        { status: 503 }
+      )
+    }
   }
 
   if (allowMemoryServer()) {

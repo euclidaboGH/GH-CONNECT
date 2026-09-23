@@ -1,163 +1,149 @@
-const CACHE_NAME = 'gh-connect-v1'
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
+/**
+ * GreenHaven service worker — static assets only.
+ *
+ * SECURITY: Never cache authenticated / personalized API responses.
+ * Paths under /api/ are network-only (no put, no match fallback of user data).
+ */
+const CACHE_NAME = "gh-connect-v2-static"
+const STATIC_ASSETS = ["/", "/manifest.json"]
+
+/** Path prefixes that must never be stored in Cache Storage */
+const API_NO_CACHE_PREFIXES = [
+  "/api/auth",
+  "/api/profile",
+  "/api/economy",
+  "/api/membership",
+  "/api/payments",
+  "/api/messaging",
+  "/api/messages",
+  "/api/sessions",
+  "/api/wallet",
+  "/api/notifications",
+  "/api/connections",
+  "/api/verification",
+  "/api/governance",
+  "/api/marketplace",
+  "/api/pi",
+  "/api/",
 ]
 
-// Install event
-self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker')
+function isApiRequest(pathname) {
+  return pathname.includes("/api/")
+}
+
+function isPersonalizedApi(pathname) {
+  return API_NO_CACHE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
+}
+
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('[SW] Failed to cache some assets:', err)
+      return cache.addAll(STATIC_ASSETS).catch(() => {
+        /* ignore partial static precache failures */
       })
     })
   )
   self.skipWaiting()
 })
 
-// Activate event
-self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker')
+self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
           .filter((name) => name !== CACHE_NAME)
-          .map((name) => {
-            console.log('[SW] Deleting old cache:', name)
-            return caches.delete(name)
-          })
+          .map((name) => caches.delete(name))
       )
     })
   )
   self.clients.claim()
 })
 
-// Fetch event - Network-first strategy with fallback
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Skip chrome extensions and non-http protocols
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
     return
   }
 
-  // API requests: network-first
-  if (url.pathname.includes('/api/')) {
+  // All API traffic: network-only. Never write to cache. Never serve cached API bodies.
+  if (isApiRequest(url.pathname)) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const responseClone = response.clone()
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone)
-          })
-          return response
-        })
-        .catch(() => {
-          return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse
-            }
-            return new Response('Network error, and no cache available', {
-              status: 503,
-              statusText: 'Service Unavailable',
-            })
-          })
-        })
+      fetch(request).catch(() => {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: "NETWORK_UNAVAILABLE",
+            message: "API requires a network connection",
+          }),
+          {
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      })
     )
     return
   }
 
-  // Static assets and pages: cache-first
+  // Non-API: cache-first for static shell only (no credentials-bearing API)
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Background update
         fetch(request)
           .then((response) => {
-            const responseClone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone)
-            })
+            if (response && response.ok && request.method === "GET") {
+              const clone = response.clone()
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, clone)
+              })
+            }
           })
-          .catch(() => {
-            // Silently fail background update
-          })
+          .catch(() => {})
         return cachedResponse
       }
 
       return fetch(request)
         .then((response) => {
-          const responseClone = response.clone()
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone)
-          })
+          if (response && response.ok && request.method === "GET" && !isPersonalizedApi(url.pathname)) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, clone)
+            })
+          }
           return response
         })
-        .catch(() => {
-          return caches.match('/index.html')
-        })
+        .catch(() => caches.match("/").then((r) => r || new Response("Offline", { status: 503 })))
     })
   )
 })
 
-// Background sync for message delivery
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-messages') {
-    event.waitUntil(syncMessages())
-  }
-})
-
-async function syncMessages() {
-  try {
-    const cache = await caches.open(CACHE_NAME)
-    const keys = await cache.keys()
-    const messageRequests = keys.filter((req) => req.url.includes('/api/messages'))
-
-    for (const request of messageRequests) {
-      try {
-        await fetch(request)
-        await cache.delete(request)
-      } catch (err) {
-        console.warn('[SW] Message sync failed:', err)
-      }
-    }
-  } catch (err) {
-    console.error('[SW] Background sync error:', err)
-  }
-}
-
-// Push notifications
-self.addEventListener('push', (event) => {
+self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {}
-  const title = data.title || 'GreenHaven'
+  const title = data.title || "GreenHaven"
   const options = {
-    body: data.body || 'You have a new notification',
-    icon: '/icon-dark-32x32.png',
-    badge: '/icon-light-32x32.png',
-    tag: data.tag || 'notification',
+    body: data.body || "You have a new notification",
+    icon: "/icon-dark-32x32.png",
+    badge: "/icon-light-32x32.png",
+    tag: data.tag || "notification",
     requireInteraction: data.requireInteraction || false,
   }
-
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// Notification click
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close()
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
+        if (client.url === "/" && "focus" in client) {
           return client.focus()
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow('/')
+        return clients.openWindow("/")
       }
     })
   )

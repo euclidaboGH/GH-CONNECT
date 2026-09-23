@@ -8,6 +8,7 @@ export {
   ghPayMembership,
   ghPayListMyOrders,
   ghPayGetOrder,
+  retryMembershipActivation,
   isPiPaymentsAvailable,
   waitForPiPayments,
   probePiPayments,

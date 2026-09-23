@@ -376,6 +376,109 @@ export async function rpcEnsureAccountCreatedAt(
   }
 }
 
+/**
+ * Stage a pending reward hold (kind=pending, status=pending).
+ * Amount must already be computed server-side from reward rules — never trust client.
+ * Idempotent on (user_id, reference_id) via ghc_stage_pending RPC.
+ */
+export async function rpcStagePending(
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason?: string
+    sourceEvent?: string
+    ruleId?: string
+    /** Per-rule dailyLimit from reward-rules (null = no daily cap check) */
+    dailyLimit?: number | null
+    /** Per-rule cooldownMs from antiAbuse (null/0 = no cooldown) */
+    cooldownMs?: number | null
+    /** Per-rule maxPerTargetPerDay (null = no target cap) */
+    maxPerTarget?: number | null
+    /** Target id for maxPerTarget (reference part[2] encoding) */
+    targetId?: string | null
+  },
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<{
+  ok: boolean
+  idempotent?: boolean
+  alreadyPosted?: boolean
+  holdId?: string
+  transactionId?: string
+  amount?: number
+  status?: string
+  tx?: Record<string, unknown>
+  error?: string
+}> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_stage_pending`
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      body: JSON.stringify({
+        p_user_id: input.userId,
+        p_amount: input.amount,
+        p_reference_id: input.referenceId,
+        p_reason: input.reason || "Reward",
+        p_source_event: input.sourceEvent || "SYSTEM",
+        p_rule_id: input.ruleId || null,
+        p_daily_limit:
+          input.dailyLimit != null && Number.isFinite(input.dailyLimit)
+            ? Math.floor(Number(input.dailyLimit))
+            : null,
+        p_cooldown_ms:
+          input.cooldownMs != null &&
+          Number.isFinite(input.cooldownMs) &&
+          input.cooldownMs > 0
+            ? Math.floor(Number(input.cooldownMs))
+            : null,
+        p_max_per_target:
+          input.maxPerTarget != null && Number.isFinite(input.maxPerTarget)
+            ? Math.floor(Number(input.maxPerTarget))
+            : null,
+        p_target_id: input.targetId
+          ? String(input.targetId).trim() || null
+          : null,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      const msg =
+        body && typeof body === "object" && "message" in body
+          ? String((body as { message: string }).message)
+          : "SERVER_UNAVAILABLE"
+      return { ok: false, error: msg }
+    }
+    const data = (await res.json()) as Record<string, unknown>
+    if (!data || data.ok === false) {
+      return { ok: false, error: String(data?.error || "STAGE_FAILED") }
+    }
+    return {
+      ok: true,
+      idempotent: Boolean(data.idempotent),
+      alreadyPosted: Boolean(data.alreadyPosted),
+      holdId: data.holdId != null ? String(data.holdId) : undefined,
+      transactionId:
+        data.transactionId != null ? String(data.transactionId) : undefined,
+      amount: data.amount != null ? Number(data.amount) : undefined,
+      status: data.status != null ? String(data.status) : undefined,
+      tx:
+        data.tx && typeof data.tx === "object"
+          ? (data.tx as Record<string, unknown>)
+          : undefined,
+    }
+  } catch {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+}
+
 /** Server-authoritative claim of pending GHC */
 export async function rpcClaimPending(
   userId: string,

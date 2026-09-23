@@ -65,20 +65,12 @@ export async function POST(request: Request) {
   if (!sourceEvent) return jsonErr("INVALID_INPUT", "sourceEvent required", 400)
   if (!referenceId) return jsonErr("INVALID_INPUT", "referenceId required", 400)
 
-  if (isDatabaseConfigured() && !allowMemoryServer()) {
-    // DB path: same engine logic once pending RPC exists; memory engine until then
-    // Still reject client amount-as-authority
+  // Durable DB path preferred (ghc_stage_pending). Memory only when allowMemoryServer().
+  // Client amounts are never authoritative — evaluateRewardAuthoritative uses rule catalog.
+  if (!isDatabaseConfigured() && !allowMemoryServer()) {
     return jsonErr(
       "SERVER_UNAVAILABLE",
-      "Reward evaluate requires GHC_SERVER_MEMORY=1 until DB RPC is wired; client amounts are never trusted",
-      503
-    )
-  }
-
-  if (!allowMemoryServer() && !isDatabaseConfigured()) {
-    return jsonErr(
-      "SERVER_UNAVAILABLE",
-      "Authoritative rewards require database or GHC_SERVER_MEMORY=1",
+      "Authoritative rewards require database configuration (ghc_stage_pending migration) or local memory mode",
       503
     )
   }
@@ -94,13 +86,15 @@ export async function POST(request: Request) {
 
   if (!result.ok) {
     const status =
-      result.error === "DAILY_CAP" ||
-      result.error === "COOLDOWN" ||
-      result.error === "TARGET_CAP" ||
-      result.error === "ALREADY_REWARDED" ||
-      result.error === "ANTI_ABUSE"
-        ? 409
-        : 400
+      result.error === "SERVER_UNAVAILABLE" || result.error === "SCHEMA_MISMATCH"
+        ? 503
+        : result.error === "DAILY_CAP" ||
+            result.error === "COOLDOWN" ||
+            result.error === "TARGET_CAP" ||
+            result.error === "ALREADY_REWARDED" ||
+            result.error === "ANTI_ABUSE"
+          ? 409
+          : 400
     return NextResponse.json(
       {
         ok: false,

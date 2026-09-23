@@ -15,15 +15,26 @@ export async function POST(request: Request) {
   }
 
   const payerId = String(body.fromUserId || body.payerId || "").trim()
-  const amount = Number(body.amount)
   const referenceId = String(body.referenceId || "").trim()
   const note = body.note != null ? String(body.note) : undefined
 
+  // Ignore client-forged identity / balance fields
+  void body.requesterId
+  void body.userId
+  void body.balance
+
   if (!payerId) return jsonErr("INVALID_RECIPIENT", "Payer required", 400)
-  if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return jsonErr("INVALID_AMOUNT", "Invalid amount", 400)
+  if (payerId === auth.userId) {
+    return jsonErr("SELF_TRANSFER", "Cannot request GHC from yourself", 400)
   }
+  if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
+
+  const { validatePositiveGhcAmount } = await import("@/lib/server/economy/amount")
+  const amt = validatePositiveGhcAmount(body.amount, { max: 5_000 })
+  if (!amt.ok) {
+    return jsonErr(amt.code, amt.message, 400)
+  }
+  const amount = amt.amount
 
   // requester ALWAYS from session
   if (isDatabaseConfigured()) {
@@ -56,7 +67,7 @@ export async function POST(request: Request) {
   })
 
   if (!result.ok) {
-    return jsonErr(result.code as any, result.error, 400)
+    return jsonErr(String(result.code || "TRANSFER_FAILED"), String(result.error || "Failed"), 400)
   }
   return jsonOk({ ok: true, request: result.request })
 }

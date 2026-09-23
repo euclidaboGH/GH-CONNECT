@@ -76,7 +76,13 @@ export async function POST(request: Request) {
       creatorId: auth.userId,
       otherUserId,
     })
-    if (!conv) {
+    if (conv && "blocked" in conv && conv.blocked) {
+      return NextResponse.json(
+        { ok: false, error: "BLOCKED" },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+    if (!conv || ("blocked" in conv && conv.blocked)) {
       return NextResponse.json(
         { ok: false, error: "CREATE_FAILED" },
         { status: 503, headers: { "Cache-Control": "no-store" } }

@@ -13,6 +13,7 @@ import {
   markOnboardingCompleted,
   findOrCreateFromVerifiedPi,
 } from "@/lib/server/identity/pi-identity-store"
+import { upsertServerProfile } from "@/lib/server/identity/profile-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -63,6 +64,14 @@ export async function POST(request: Request) {
         },
         { status: 404 }
       )
+    }
+
+    // Also stamp social profile onboarded when durable profile store is available.
+    // Client may also PATCH /api/profile/me; dual-write avoids hydrate races.
+    try {
+      await upsertServerProfile(updated.ghUserId, { onboarded: true })
+    } catch {
+      /* non-blocking — identity onboardingCompleted remains source of gate */
     }
 
     // Idempotent: already-completed still returns ok:true

@@ -96,3 +96,78 @@ export async function upsertListing(
 export function listingsDurable(): boolean {
   return dbConfigured()
 }
+
+/** Public catalog: active listings only. */
+export async function listActiveListings(limit = 50): Promise<ServerMarketListing[]> {
+  if (!dbConfigured()) return []
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return []
+  const lim = Math.min(Math.max(limit, 1), 100)
+  try {
+    const q =
+      `gh_marketplace_listings?status=eq.active&select=id,seller_id,title,description,price,currency,availability,status,kind&order=updated_at.desc&limit=${lim}`
+    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      cache: "no-store",
+    })
+    if (!res.ok) return []
+    const rows = (await res.json()) as Array<Record<string, unknown>>
+    if (!Array.isArray(rows)) return []
+    return rows.map((r) => ({
+      id: String(r.id || ""),
+      sellerId: String(r.seller_id || ""),
+      title: String(r.title || ""),
+      description: r.description != null ? String(r.description) : undefined,
+      price: Number(r.price) || 0,
+      currency: String(r.currency || "GHC"),
+      availability: Number(r.availability) || 0,
+      status: (r.status as ServerMarketListing["status"]) || "active",
+      kind: r.kind != null ? String(r.kind) : undefined,
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Seller's own listings (any status except removed). */
+export async function listSellerListings(
+  sellerId: string,
+  limit = 50
+): Promise<ServerMarketListing[]> {
+  const sid = String(sellerId || "").trim()
+  if (!sid || !dbConfigured()) return []
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return []
+  const lim = Math.min(Math.max(limit, 1), 100)
+  try {
+    const q =
+      `gh_marketplace_listings?seller_id=eq.${encodeURIComponent(sid)}&status=neq.removed&select=id,seller_id,title,description,price,currency,availability,status,kind&order=updated_at.desc&limit=${lim}`
+    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      cache: "no-store",
+    })
+    if (!res.ok) return []
+    const rows = (await res.json()) as Array<Record<string, unknown>>
+    if (!Array.isArray(rows)) return []
+    return rows.map((r) => ({
+      id: String(r.id || ""),
+      sellerId: String(r.seller_id || ""),
+      title: String(r.title || ""),
+      description: r.description != null ? String(r.description) : undefined,
+      price: Number(r.price) || 0,
+      currency: String(r.currency || "GHC"),
+      availability: Number(r.availability) || 0,
+      status: (r.status as ServerMarketListing["status"]) || "active",
+      kind: r.kind != null ? String(r.kind) : undefined,
+    }))
+  } catch {
+    return []
+  }
+}
+

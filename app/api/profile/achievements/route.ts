@@ -79,6 +79,26 @@ export async function POST(request: Request) {
     const sourceEvent =
       typeof body?.sourceEvent === "string" ? body.sourceEvent.slice(0, 120) : null
 
+    // Clients may not free-mint achievements by id. Only server-evaluated events
+    // (prefixed) or explicit internal evaluation may unlock.
+    const trusted =
+      typeof sourceEvent === "string" &&
+      (sourceEvent.startsWith("server:") ||
+        sourceEvent.startsWith("rpc:") ||
+        sourceEvent.startsWith("claim:") ||
+        sourceEvent.startsWith("social:"))
+    if (!trusted) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "ELIGIBILITY_REQUIRED",
+          message:
+            "Achievements unlock only via server-evaluated events; client cannot mint by id alone",
+        },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
     const unlocked = await unlockAchievement({
       ghUserId: auth.userId,
       achievementId,

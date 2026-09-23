@@ -28,6 +28,7 @@ import {
   ghPayPurchase,
   ghPayMembership,
   ghPayListMyOrders,
+  retryMembershipActivation,
 } from "@/lib/gh-pay"
 import type { GhPayOrder } from "@/lib/gh-pay/types"
 import { getProduct } from "@/lib/gh-pay/catalog"
@@ -467,6 +468,26 @@ export async function runGhPayMembership(
     onToast?.(`Starting ${tier.toUpperCase()} membership payment…`, "info")
     const result = await ghPayMembership(tier, period)
     if (result.ok) {
+      // Payment success ≠ entitlement. Recover if activate stayed pending after internal retries.
+      if (result.membershipActivated === false && result.order?.orderId) {
+        const recovered = await retryMembershipActivation(result.order.orderId)
+        if (recovered.membershipActivated) {
+          onToast?.(`${tier.toUpperCase()} membership activated`, "success")
+          return true
+        }
+        onToast?.(
+          "Payment received, but membership is not active yet. Open Premium again to finish activation — your payment will not be charged again.",
+          "info"
+        )
+        return true
+      }
+      if (result.membershipActivated === false) {
+        onToast?.(
+          "Payment received, but membership activation needs another try. Open Premium again when online.",
+          "info"
+        )
+        return true
+      }
       onToast?.(`${tier.toUpperCase()} membership payment completed`, "success")
       return true
     }
