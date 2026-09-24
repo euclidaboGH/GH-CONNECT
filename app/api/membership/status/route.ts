@@ -11,5 +11,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const entitlement = await getEntitlementAuthoritative(auth.userId)
-  return NextResponse.json({ ok: true, entitlement })
+  return NextResponse.json(
+    { ok: true, entitlement },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    }
+  )
 }

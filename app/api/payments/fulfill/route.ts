@@ -12,6 +12,7 @@ import {
   getPaymentIntent,
 } from "@/lib/server/payments/intent-store"
 import { piGetPayment, getPiApiKey } from "@/lib/server/payments/pi-api"
+import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -60,12 +61,43 @@ export async function POST(request: Request) {
     }
 
     if (intent.status === "FULFILLED") {
+      // Idempotent fulfill — still ensure membership entitlement exists
+      let membershipGrant: {
+        granted: boolean
+        error?: string
+        skipped?: boolean
+        tier?: string
+      } | null = null
+      try {
+        const result = await tryGrantMembershipFromCompletedIntent({
+          userId: auth.userId,
+          intent: {
+            id: intent.id,
+            userId: intent.userId,
+            purpose: intent.purpose,
+            status: intent.status,
+            amount: intent.amount,
+            currency: intent.currency,
+            providerPaymentId: intent.providerPaymentId,
+            metadata: intent.metadata,
+          },
+        })
+        membershipGrant = {
+          granted: result.granted,
+          error: result.error,
+          skipped: result.skipped,
+          tier: result.entitlement?.tier,
+        }
+      } catch {
+        /* */
+      }
       return NextResponse.json({
         ok: true,
         idempotent: true,
         paymentId: intent.providerPaymentId,
         intent: getPaymentIntent(intent.id),
         message: "Already fulfilled",
+        membership: membershipGrant,
       })
     }
 
@@ -99,13 +131,62 @@ export async function POST(request: Request) {
     }
 
     const fulfilled = await markIntentFulfilled(intent.id, auth.userId)
+    const finalIntent = fulfilled || getPaymentIntent(intent.id) || intent
+
+    // Membership: grant from verified COMPLETED→FULFILLED intent (idempotent).
+    // Safety net when client never reaches /api/membership/activate.
+    let membershipGrant: {
+      granted: boolean
+      error?: string
+      skipped?: boolean
+      tier?: string
+    } | null = null
+    try {
+      const result = await tryGrantMembershipFromCompletedIntent({
+        userId: auth.userId,
+        intent: {
+          id: finalIntent.id,
+          userId: finalIntent.userId,
+          purpose: finalIntent.purpose,
+          status: finalIntent.status || "FULFILLED",
+          amount: finalIntent.amount,
+          currency: finalIntent.currency,
+          providerPaymentId: finalIntent.providerPaymentId,
+          metadata: finalIntent.metadata,
+        },
+      })
+      membershipGrant = {
+        granted: result.granted,
+        error: result.error,
+        skipped: result.skipped,
+        tier: result.entitlement?.tier,
+      }
+      if (!result.granted && !result.skipped) {
+        console.error(
+          "[payments/fulfill] membership grant deferred",
+          result.error,
+          finalIntent.id
+        )
+      }
+    } catch (e) {
+      console.error(
+        "[payments/fulfill] membership grant error",
+        e instanceof Error ? e.message : e
+      )
+      membershipGrant = {
+        granted: false,
+        error: e instanceof Error ? e.message : "GRANT_FAILED",
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       paymentId: intent.providerPaymentId,
       txid: intent.txid || txid || null,
-      intent: fulfilled || getPaymentIntent(intent.id),
+      intent: finalIntent,
       productId: intent.metadata?.productId || null,
       referenceId: intent.referenceId,
+      membership: membershipGrant,
     })
   } catch (e) {
     return NextResponse.json(

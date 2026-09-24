@@ -250,3 +250,111 @@ export async function grantEntitlement(input: {
   map().set(input.userId, next)
   return next
 }
+
+/**
+ * Server-authoritative membership grant from a COMPLETED/FULFILLED Pi payment intent.
+ * Called from payment complete/fulfill so entitlement does not depend on the client
+ * surviving to call /api/membership/activate after the Pi flow.
+ *
+ * Never grants from CREATED/APPROVED/pending intents.
+ * Tier + period come only from durable intent metadata.productId (catalog id).
+ * Idempotent via purchaseRef.
+ */
+export async function tryGrantMembershipFromCompletedIntent(input: {
+  userId: string
+  intent: {
+    id: string
+    userId: string
+    purpose?: string
+    status: string
+    amount: number
+    currency?: string
+    providerPaymentId?: string | null
+    metadata?: Record<string, unknown> | null
+  }
+}): Promise<{
+  granted: boolean
+  entitlement?: ServerMembershipEntitlement
+  error?: string
+  skipped?: boolean
+}> {
+  const { userId, intent } = input
+  if (!intent || intent.userId !== userId) {
+    return { granted: false, error: "FORBIDDEN" }
+  }
+  if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
+    return { granted: false, error: "PAYMENT_NOT_COMPLETED" }
+  }
+  if (intent.currency && intent.currency !== "PI") {
+    return { granted: false, error: "CURRENCY_MISMATCH", skipped: true }
+  }
+
+  const purpose = String(intent.purpose || intent.metadata?.purpose || "")
+  const productId = String(intent.metadata?.productId || "").toLowerCase()
+  if (purpose !== "membership" && !productId.startsWith("membership_")) {
+    return { granted: false, skipped: true }
+  }
+
+  let tier: "vip" | "vvip" | null = null
+  let period: BillingPeriod | null = null
+  if (productId === "membership_vip_monthly") {
+    tier = "vip"
+    period = "monthly"
+  } else if (productId === "membership_vip_yearly") {
+    tier = "vip"
+    period = "yearly"
+  } else if (productId === "membership_vvip_monthly") {
+    tier = "vvip"
+    period = "monthly"
+  } else if (productId === "membership_vvip_yearly") {
+    tier = "vvip"
+    period = "yearly"
+  } else {
+    const mTier = String(
+      intent.metadata?.tier || intent.metadata?.membershipTier || ""
+    ).toLowerCase()
+    const mPeriod = String(
+      intent.metadata?.period || intent.metadata?.billingPeriod || ""
+    ).toLowerCase()
+    if (
+      (mTier === "vip" || mTier === "vvip") &&
+      (mPeriod === "monthly" || mPeriod === "yearly")
+    ) {
+      tier = mTier
+      period = mPeriod
+    }
+  }
+
+  if (!tier || !period) {
+    return { granted: false, error: "PRODUCT_MISMATCH", skipped: true }
+  }
+
+  const catalog = MEMBERSHIP_SERVER_CATALOG[tier]
+  const expectedPi = period === "yearly" ? catalog.yearlyPi : catalog.monthlyPi
+  if (Math.abs(Number(intent.amount) - expectedPi) > 0.001) {
+    return { granted: false, error: "amount_mismatch" }
+  }
+
+  if (productId && productId !== `membership_${tier}_${period}`) {
+    return { granted: false, error: "PRODUCT_MISMATCH" }
+  }
+
+  const purchaseRef =
+    (intent.providerPaymentId && String(intent.providerPaymentId)) ||
+    `pi:${intent.id}`
+
+  try {
+    const entitlement = await grantEntitlement({
+      userId,
+      tier,
+      billingPeriod: period,
+      source: "pi",
+      purchaseRef,
+      paymentIntentId: intent.id,
+    })
+    return { granted: true, entitlement }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
+    return { granted: false, error: msg }
+  }
+}

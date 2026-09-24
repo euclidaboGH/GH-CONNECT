@@ -241,43 +241,21 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
   const [expandedPlanBenefits, setExpandedPlanBenefits] = useState<Record<string, boolean>>({})
   const [tick, setTick] = useState<number>(0)
+  const [refreshing, setRefreshing] = useState(false)
+  /** Authoritative status from /api/membership/status */
+  const [serverStatus, setServerStatus] = useState<MembershipStatus | null>(null)
 
   // Prefer server entitlement over local-only cache
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      try {
-        const headers: Record<string, string> = {}
-        try {
-          const { IdentityService } = await import("@/lib/identity/identity-service")
-          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
-        } catch { /* */ }
-        const res = await fetch("/api/membership/status", { headers })
-        if (!res.ok || cancelled) return
-        const data = await res.json()
-        if (data?.ok && data?.entitlement) {
-          const e = data.entitlement
-          const mem = getBoundDomainServices()?.membership as {
-            activate?: (i: unknown) => Promise<unknown>
-          } | null
-          // Refresh local cache from server truth
-          if (e.tier === "vip" || e.tier === "vvip") {
-            await mem?.activate?.({
-              tier: e.tier,
-              billingPeriod: e.billingPeriod || "monthly",
-              source: e.source || "external",
-              purchaseTxId: e.purchaseRef,
-              durationMs:
-                e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
-            })
-          }
-          setTick((x) => x + 1)
-        }
-      } catch { /* offline */ }
+      const next = await refreshMembershipFromServer()
+      if (cancelled || !next) return
     })()
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only authoritative hydrate
   }, [])
 
   const [faqOpen, setFaqOpen] = useState<string | null>(null)
@@ -292,10 +270,44 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     }
   }, [tick])
 
-  const currentTier = (status?.tier || "free") as MembershipTierId
+  // Server authority wins when present; never invent paid tier from local alone
+  const currentTier = (
+    serverStatus?.tier ||
+    status?.tier ||
+    "free"
+  ) as MembershipTierId
+  const mapEntitlementToStatus = (
+    e: Record<string, unknown>
+  ): MembershipStatus => {
+    const rawTier = String(e.tier || "free").toLowerCase()
+    const tier: MembershipTierId =
+      rawTier === "vip" || rawTier === "vvip" ? rawTier : "free"
+    return {
+      userId: String(e.userId || e.user_id || "current-user"),
+      tier,
+      active: e.active !== false,
+      expiresAt:
+        e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
+          ? Number(e.expiresAt)
+          : undefined,
+      billingPeriod:
+        e.billingPeriod === "yearly" || e.billingPeriod === "monthly"
+          ? e.billingPeriod
+          : undefined,
+      source:
+        e.source === "ghc" || e.source === "pi" || e.source === "admin"
+          ? e.source === "pi"
+            ? "external"
+            : (e.source as MembershipStatus["source"])
+          : e.source === "external"
+            ? "external"
+            : "default",
+      lastPurchaseTxId: e.purchaseRef ? String(e.purchaseRef) : undefined,
+    } satisfies MembershipStatus
+  }
 
   const refreshMembershipFromServer = async (
-    fallbackTier?: MembershipTierId
+    _fallbackTier?: MembershipTierId
   ): Promise<MembershipStatus | null> => {
     try {
       const headers: Record<string, string> = {}
@@ -313,16 +325,18 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       if (!res.ok) return null
       const data = await res.json().catch(() => ({}))
       if (!data?.ok || !data?.entitlement) return null
-      const e = data.entitlement
+      const e = data.entitlement as Record<string, unknown>
+      const mapped = mapEntitlementToStatus(e)
       const mem = getBoundDomainServices()?.membership as {
         activate?: (i: unknown) => Promise<unknown>
         getStatus?: () => MembershipStatus | null
       } | null
-      if (e.tier === "vip" || e.tier === "vvip") {
+      // Sync local domain cache from server authority (paid only — never invent VIP)
+      if (mapped.tier === "vip" || mapped.tier === "vvip") {
         await mem?.activate?.({
-          tier: e.tier,
-          billingPeriod: e.billingPeriod || "monthly",
-          source: e.source || "pi",
+          tier: mapped.tier,
+          billingPeriod: mapped.billingPeriod || "monthly",
+          source: e.source === "pi" ? "external" : e.source || "external",
           purchaseTxId: e.purchaseRef,
           durationMs:
             e.expiresAt && e.startedAt
@@ -330,36 +344,31 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               : undefined,
         })
       }
+      setServerStatus(mapped)
       setTick((x) => x + 1)
-      try {
-        return mem?.getStatus?.() || null
-      } catch {
-        if (fallbackTier && fallbackTier !== "free") {
-          return {
-            userId: String(e.userId || e.user_id || "current-user"),
-            tier: fallbackTier,
-            active: true,
-            expiresAt:
-              e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
-                ? Number(e.expiresAt)
-                : undefined,
-            billingPeriod:
-              e.billingPeriod === "yearly" || e.billingPeriod === "monthly"
-                ? e.billingPeriod
-                : undefined,
-            source:
-              e.source === "ghc" || e.source === "pi" || e.source === "admin"
-                ? e.source === "pi"
-                  ? "external"
-                  : e.source
-                : "external",
-            lastPurchaseTxId: e.purchaseRef ? String(e.purchaseRef) : undefined,
-          } satisfies MembershipStatus
-        }
-        return null
-      }
+      return mapped
     } catch {
       return null
+    }
+  }
+
+  const handleRefreshMembership = async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      const next = await refreshMembershipFromServer()
+      if (next) {
+        addToast(
+          next.tier === "free"
+            ? "Membership is Free"
+            : `${MEMBERSHIP_PLANS[next.tier].label} is active`,
+          "success"
+        )
+      } else {
+        addToast("Could not refresh membership status", "error")
+      }
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -374,19 +383,19 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       })
       if (ok) {
         setConfirmTier(null)
-        // Payment may succeed before entitlement is visible — force server refresh
+        // Server grants on complete/fulfill; poll status until paid tier appears or retries exhaust
         let next = await refreshMembershipFromServer(tier)
-        if (!next || next.tier === "free") {
-          await new Promise((r) => setTimeout(r, 1200))
+        for (let i = 0; i < 3 && (!next || next.tier === "free"); i++) {
+          await new Promise((r) => setTimeout(r, 800 + i * 400))
           next = await refreshMembershipFromServer(tier)
         }
-        if (next && next.tier !== "free") {
+        if (next && (next.tier === "vip" || next.tier === "vvip")) {
           setSuccessStatus(next)
-          addToast(`${MEMBERSHIP_PLANS[tier].label} is active`, "success")
+          addToast(`${MEMBERSHIP_PLANS[next.tier].label} is active`, "success")
         } else {
           setTick((x) => x + 1)
           addToast(
-            "Payment received. If Premium is not shown yet, pull to refresh or reopen this screen.",
+            "Payment received. Membership activation is finishing — tap Refresh if Premium is not shown yet. You will not be charged again.",
             "info"
           )
         }
@@ -474,11 +483,19 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </div>
         <button
           type="button"
-          onClick={() => setTick((x) => x + 1)}
-          className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"
-          aria-label="Refresh membership status"
+          onClick={() => void handleRefreshMembership()}
+          disabled={refreshing}
+          className="inline-flex min-h-8 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+          aria-label="Refresh membership status from server"
         >
-          Refresh
+          {refreshing ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              Refreshing…
+            </>
+          ) : (
+            "Refresh"
+          )}
         </button>
       </header>
 
@@ -1013,27 +1030,41 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* Post-purchase confirmation */}
-      {successStatus && (
-        <div className="absolute inset-0 z-50 flex items-end bg-black/45 sm:items-center sm:justify-center">
-          <div className="w-full max-w-md rounded-t-3xl border border-border bg-card p-5 shadow-xl sm:mb-8 sm:rounded-3xl">
-            <div className="flex items-center gap-2">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                <Check size={20} />
+      {/* Post-purchase confirmation — only after server-confirmed VIP/VVIP */}
+      {successStatus &&
+        (successStatus.tier === "vip" || successStatus.tier === "vvip") && (
+        <div
+          className="absolute inset-0 z-50 flex items-end bg-black/45 sm:items-center sm:justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="membership-success-title"
+        >
+          <div className="relative w-full max-w-md overflow-hidden rounded-t-3xl border border-emerald-200/80 bg-card p-5 shadow-xl dark:border-emerald-800 sm:mb-8 sm:rounded-3xl">
+            {/* Brief celebratory accent — respects reduced motion */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-400/25 via-teal-300/10 to-transparent motion-safe:animate-pulse"
+              aria-hidden
+            />
+            <div className="relative flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 motion-safe:scale-100">
+                <Sparkles size={22} aria-hidden />
               </span>
               <div>
-                <h3 className="text-base font-bold text-foreground">
+                <h3
+                  id="membership-success-title"
+                  className="text-base font-bold text-foreground"
+                >
                   {MEMBERSHIP_PLANS[successStatus.tier].label} is active
                 </h3>
-                <p className="text-[12px] font-medium text-emerald-700">
-                  {formatUntil(successStatus.expiresAt)}
+                <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-300">
+                  Payment verified · {formatUntil(successStatus.expiresAt)}
                 </p>
               </div>
             </div>
-            <p className="mt-3 text-[12px] text-muted-foreground">
-              Entitlements below are live. Open any item to use it in the product.
+            <p className="relative mt-3 text-[12px] text-muted-foreground">
+              Your plan is live. Entitlements below are available now.
             </p>
-            <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto">
+            <ul className="relative mt-3 max-h-48 space-y-1 overflow-y-auto">
               {MEMBERSHIP_PLANS[successStatus.tier].entitlements.map((key) => {
                 const meta = ENTITLEMENT_META[key]
                 return (
@@ -1057,7 +1088,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             <button
               type="button"
               onClick={() => setSuccessStatus(null)}
-              className="mt-4 w-full rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white"
+              className="relative mt-4 w-full rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white transition active:scale-[0.99]"
             >
               Done
             </button>

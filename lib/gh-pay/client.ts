@@ -23,7 +23,9 @@ export type GhPayResult =
 
 export { isPiPaymentsAvailable, waitForPiPayments, probePiPayments, productForMembership, listProducts, getProduct }
 
-/** Permanent activate failures — do not retry (payment stays successful; grant denied by policy). */
+/** Permanent activate failures — do not retry (payment stays successful; grant denied by policy).
+ * PAYMENT_NOT_COMPLETED and INTENT_REQUIRED are transient: complete may still be in flight.
+ */
 const MEMBERSHIP_ACTIVATE_PERMANENT = new Set([
   "PRODUCT_MISMATCH",
   "amount_mismatch",
@@ -33,8 +35,6 @@ const MEMBERSHIP_ACTIVATE_PERMANENT = new Set([
   "INVALID_TIER",
   "INVALID_PERIOD",
   "INVALID_METHOD",
-  "PAYMENT_NOT_COMPLETED",
-  "INTENT_REQUIRED",
 ])
 
 const ACTIVATE_MAX_ATTEMPTS = 3
