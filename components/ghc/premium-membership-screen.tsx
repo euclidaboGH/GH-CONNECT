@@ -335,10 +335,25 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       } catch {
         if (fallbackTier && fallbackTier !== "free") {
           return {
+            userId: String(e.userId || e.user_id || "current-user"),
             tier: fallbackTier,
-            status: "active",
-            expiresAt: e.expiresAt,
-          } as MembershipStatus
+            active: true,
+            expiresAt:
+              e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
+                ? Number(e.expiresAt)
+                : undefined,
+            billingPeriod:
+              e.billingPeriod === "yearly" || e.billingPeriod === "monthly"
+                ? e.billingPeriod
+                : undefined,
+            source:
+              e.source === "ghc" || e.source === "pi" || e.source === "admin"
+                ? e.source === "pi"
+                  ? "external"
+                  : e.source
+                : "external",
+            lastPurchaseTxId: e.purchaseRef ? String(e.purchaseRef) : undefined,
+          } satisfies MembershipStatus
         }
         return null
       }
