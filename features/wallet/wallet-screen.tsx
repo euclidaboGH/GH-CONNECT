@@ -204,6 +204,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  type TxDateRange = "today" | "7d" | "30d" | "all"
+  const [txDateRange, setTxDateRange] = useState<TxDateRange>("all")
   type PiIntentRow = {
     id: string
     status?: string
