@@ -960,23 +960,6 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           }}
         />
 
-        <div className="mx-3 mt-4 space-y-2">
-          <div className="rounded-2xl border border-border/80 bg-muted/40 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">GHC and π stay separate</p>
-            <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
-            <p className="mt-0.5">{ASSET_POLICY.piRailsCopy}</p>
-            <p className="mt-0.5">{ASSET_POLICY.piPeerCopy}</p>
-          </div>
-          <GhPayPanel
-            compact
-            onToast={(msg, type) => {
-              const level =
-                type === "error" || type === "success" || type === "info" ? type : "info"
-              addToast(msg, level)
-            }}
-          />
-        </div>
-
         {/* Pending GHC — explain why held, then claim */}
         {displayPending > 0 && (
           <button
@@ -1417,6 +1400,25 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               )}
             </>
           )}
+
+
+        {/* GH Pay secondary — after Transactions (Activity) */}
+        <div className="mx-3 mt-4 space-y-2">
+          <div className="rounded-2xl border border-border/80 bg-muted/40 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="font-semibold text-foreground">GHC and π stay separate</p>
+            <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
+            <p className="mt-0.5">{ASSET_POLICY.piRailsCopy}</p>
+            <p className="mt-0.5">{ASSET_POLICY.piPeerCopy}</p>
+          </div>
+          <GhPayPanel
+            compact
+            onToast={(msg, type) => {
+              const level =
+                type === "error" || type === "success" || type === "info" ? type : "info"
+              addToast(msg, level)
+            }}
+          />
+        </div>
 
           {tab === "rewards" && (
             <>

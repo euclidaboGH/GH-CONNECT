@@ -145,7 +145,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
   // Feed: compact Instagram-style rings only (no large "Share a moment" chrome)
   if (scope === "feed") {
     return (
-      <section className="bg-background px-3 py-2.5" aria-label="Stories">
+      <section className="bg-background px-3 py-1.5" aria-label="Stories">
         <p className="mb-2 text-[10px] text-muted-foreground">
           Tip: Community events near you can appear as stories when communities share them — quality over view counts.
         </p>
@@ -153,9 +153,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
           <button
             type="button"
             onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
-            className="w-[4.5rem] shrink-0 text-center"
+            className="w-16 shrink-0 text-center"
           >
-            <div className="relative mx-auto h-[68px] w-[68px] rounded-full border-2 border-dashed border-emerald-500 bg-emerald-50 p-0.5 dark:bg-emerald-950/40">
+            <div className="relative mx-auto h-[56px] w-[56px] rounded-full border-2 border-dashed border-emerald-500 bg-emerald-50 p-0.5 dark:bg-emerald-950/40">
               <LazyImage
                 src={profile.photos?.[0] || "/avatars/user.svg"}
                 alt="Your story"
@@ -177,8 +177,8 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                   try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}
                   return next
                 })
-              }} className="w-[4.5rem] shrink-0 text-center">
-              <div className={`mx-auto h-[68px] w-[68px] rounded-full p-[2.5px] ${
+              }} className="w-16 shrink-0 text-center">
+              <div className={`mx-auto h-[56px] w-[56px] rounded-full p-[2.5px] ${
                 seenStoryIds.includes(story.id)
                   ? "bg-stone-300"
                   : "bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-400"
@@ -368,7 +368,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         <button type="button" onClick={() => ownStory && setViewing(ownStory)} disabled={!ownStory} className="w-20 shrink-0 text-center disabled:opacity-70">
-          <div className="mx-auto h-[4.5rem] w-[4.5rem] rounded-full border-4 border-dashed border-purple-300 bg-purple-50 p-0.5 shadow-sm">
+          <div className="mx-auto h-[4.5rem] w-16 rounded-full border-4 border-dashed border-purple-300 bg-purple-50 p-0.5 shadow-sm">
             <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="Your story" className="h-full w-full rounded-full border-2 border-white object-cover" />
           </div>
           <span className="relative mx-auto mt-1 block w-fit truncate text-[11px] font-semibold text-gray-700">

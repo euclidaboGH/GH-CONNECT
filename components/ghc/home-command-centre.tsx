@@ -11,7 +11,6 @@ import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-conte
 import { listMyCommunitiesForHome } from "@/lib/domains/adapters/my-communities-home"
 import { Calendar } from "lucide-react"
 import { listInvitationsForViewer } from "@/lib/domains/adapters/community-invites-adapter"
-import { CommunityInviteCard } from "./community-invite-card"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
 import { DailyRewardHomeExperience } from "./daily-reward-experience"
@@ -250,11 +249,19 @@ export function HomeCommandCentre({
       <DailyRewardHomeExperience />
 
       {invites.length > 0 ? (
-        <div className="space-y-1.5" aria-label="Community invitations">
-          {invites.slice(0, 2).map((inv: { id: string }) => (
-            <CommunityInviteCard key={inv.id} invitation={inv as any} />
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={() => goTab("communities")}
+          className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-2.5 py-2 text-left transition hover:bg-muted/40"
+          aria-label={`${invites.length} community invitation${invites.length === 1 ? "" : "s"}`}
+        >
+          <span className="text-[12px] font-semibold text-foreground">
+            {invites.length} community invite{invites.length === 1 ? "" : "s"}
+          </span>
+          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+            Review
+          </span>
+        </button>
       ) : null}
 
       {myCommunities.length > 0 ? (

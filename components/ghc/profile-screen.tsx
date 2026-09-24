@@ -62,6 +62,11 @@ export function ProfileScreen({
   const interests = Array.isArray(p.interests) ? p.interests.filter(Boolean) : []
   const intents = Array.isArray(p.connectionIntents) ? p.connectionIntents.filter(Boolean) : []
   const posts = Array.isArray(ghc.posts) ? ghc.posts : []
+  const [profileActivityTab, setProfileActivityTab] = useState<"posts" | "media" | "activity">("posts")
+  const mediaPosts = posts.filter(
+    (post) => Array.isArray(post.images) && post.images.length > 0
+  )
+  const showMediaTab = mediaPosts.length > 0
   const [editOpen, setEditOpen] = useState(false)
   const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
 
@@ -411,54 +416,94 @@ export function ProfileScreen({
           )}
         </section>
 
-        <section className="mt-4 w-full px-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-              Posts
-            </p>
-            <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
-              {posts.length}
-            </span>
+        
+        <section className="mt-4 w-full px-4" aria-label="Personal activity">
+          <div className="flex items-center gap-1 border-b border-border/60">
+            {(
+              [
+                { id: "posts" as const, label: "Posts" as const },
+                ...(showMediaTab
+                  ? [{ id: "media" as const, label: "Media" as const }]
+                  : []),
+                { id: "activity" as const, label: "Activity" as const },
+              ] as { id: "posts" | "media" | "activity"; label: string }[]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setProfileActivityTab(tab.id)}
+                className={`min-h-10 flex-1 px-2 text-[13px] font-semibold transition ${
+                  profileActivityTab === tab.id
+                    ? "border-b-2 border-emerald-600 text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-          {posts.length === 0 ? (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
-                } catch {
-                  /* */
-                }
-              }}
-              className="mt-1.5 w-full rounded-xl border border-dashed border-border bg-card px-3 py-4 text-center"
-            >
-              <p className="text-[13px] font-bold text-foreground">Nothing here yet</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Share a thought, photo, or win with your network.
-              </p>
-            </button>
-          ) : (
-            <ul className="mt-1.5 space-y-1.5">
-              {posts.slice(0, 4).map((post, idx) => {
-                const body = String(post.content || post.text || "").trim()
-                const preview =
-                  body
-                    .replace(/^📊\s*POLL[^\n]*\n?/i, "Poll · ")
-                    .replace(/^🏆\s*CHALLENGE[^\n]*\n?/i, "Challenge · ")
-                    .slice(0, 140) || "Shared a post"
+
+          {(profileActivityTab === "posts" || profileActivityTab === "activity") && (
+            <>
+              {posts.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: {} }))
+                    } catch {
+                      /* */
+                    }
+                  }}
+                  className="mt-3 w-full rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
+                >
+                  <p className="text-[13px] font-semibold text-foreground">No posts yet</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Share a thought, photo, or win with your network.
+                  </p>
+                </button>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {posts.slice(0, profileActivityTab === "activity" ? 12 : 8).map((post, idx) => {
+                    const body = String(post.content || post.text || "").trim()
+                    const preview =
+                      body
+                        .replace(/^📊\s*POLL[^\n]*\n?/i, "Poll · ")
+                        .replace(/^🏆\s*CHALLENGE[^\n]*\n?/i, "Challenge · ")
+                        .slice(0, 140) || "Shared a post"
+                    return (
+                      <li
+                        key={post.id || idx}
+                        className="rounded-xl border border-border/50 bg-card/80 px-3 py-2.5"
+                      >
+                        <p className="line-clamp-2 text-[12px] leading-snug text-foreground">{preview}</p>
+                        {post.createdAt ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {new Date(post.createdAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </p>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+
+          {profileActivityTab === "media" && showMediaTab && (
+            <ul className="mt-2 grid grid-cols-3 gap-1">
+              {mediaPosts.slice(0, 12).map((post, idx) => {
+                const src = post.images?.[0]
                 return (
                   <li
                     key={post.id || idx}
-                    className="rounded-xl border border-border/70 bg-card px-3 py-2.5"
+                    className="aspect-square overflow-hidden rounded-lg bg-muted"
                   >
-                    <p className="line-clamp-2 text-[12px] leading-snug text-foreground">{preview}</p>
-                    {post.createdAt ? (
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        {new Date(post.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
+                    {src ? (
+                      <img src={src} alt="" className="h-full w-full object-cover" />
                     ) : null}
                   </li>
                 )
@@ -466,6 +511,7 @@ export function ProfileScreen({
             </ul>
           )}
         </section>
+
 
         <div className="mt-4 w-full space-y-3 px-4 pb-8">
           <SetupChecklist
