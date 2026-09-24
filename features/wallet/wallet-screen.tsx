@@ -204,17 +204,16 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
-  const [piIntents, setPiIntents] = useState<
-    Array<{
-      id: string
-      status?: string
-      amountPi?: number
-      purpose?: string
-      productId?: string
-      createdAt?: number
-      paymentId?: string
-    }>
-  >([])
+  type PiIntentRow = {
+    id: string
+    status?: string
+    amountPi?: number
+    purpose?: string
+    productId?: string
+    createdAt?: number
+    paymentId?: string
+  }
+  const [piIntents, setPiIntents] = useState<PiIntentRow[]>([])
   const [piIntentsLoading, setPiIntentsLoading] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [query, setQuery] = useState("")
@@ -264,33 +263,35 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             : []
         if (!cancelled) {
           setPiIntents(
-            list.map((raw: Record<string, unknown>) => ({
-              id: String(raw.id || raw.intentId || ""),
-              status: String(raw.status || ""),
-              amountPi:
-                typeof raw.amountPi === "number"
-                  ? raw.amountPi
-                  : typeof raw.amount === "number"
-                    ? raw.amount
-                    : undefined,
-              purpose: String(raw.purpose || raw.category || ""),
-              productId: String(
-                raw.productId ||
-                  (typeof raw.metadata === "object" &&
-                  raw.metadata &&
-                  "productId" in raw.metadata
-                    ? (raw.metadata as { productId?: string }).productId
-                    : "") ||
-                  ""
-              ),
-              createdAt:
-                typeof raw.createdAt === "number"
-                  ? raw.createdAt
-                  : typeof raw.created_at === "number"
-                    ? raw.created_at
-                    : Date.now(),
-              paymentId: String(raw.paymentId || raw.piPaymentId || ""),
-            })).filter((x) => x.id)
+            list
+              .map((raw: Record<string, unknown>): PiIntentRow => ({
+                id: String(raw.id || raw.intentId || ""),
+                status: String(raw.status || ""),
+                amountPi:
+                  typeof raw.amountPi === "number"
+                    ? raw.amountPi
+                    : typeof raw.amount === "number"
+                      ? raw.amount
+                      : undefined,
+                purpose: String(raw.purpose || raw.category || ""),
+                productId: String(
+                  raw.productId ||
+                    (typeof raw.metadata === "object" &&
+                    raw.metadata &&
+                    "productId" in raw.metadata
+                      ? (raw.metadata as { productId?: string }).productId
+                      : "") ||
+                    ""
+                ),
+                createdAt:
+                  typeof raw.createdAt === "number"
+                    ? raw.createdAt
+                    : typeof raw.created_at === "number"
+                      ? raw.created_at
+                      : Date.now(),
+                paymentId: String(raw.paymentId || raw.piPaymentId || ""),
+              }))
+              .filter((x: PiIntentRow) => Boolean(x.id))
           )
         }
       } catch {
