@@ -1280,6 +1280,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
               {assetRail === "ghc" && (
+              <>
               <div className="flex flex-wrap items-center gap-1.5">
                 {(
                   [
