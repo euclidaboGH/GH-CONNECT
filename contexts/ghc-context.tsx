@@ -1007,13 +1007,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             const id = String(r.id || "")
             if (!id) continue
             const existing = byId.get(id)
+            // Fallback object only runs when existing is missing — do not reference existing inside it
+            // (TS narrows existing to never in the falsy branch of `existing || { ... }`).
             byId.set(id, {
               ...(existing || {
                 id,
                 messages: [],
                 members: [],
                 memberIds: r.memberIds || [],
-                name: r.title || existing?.name || "Chat",
+                name: r.title || "Chat",
                 unread: false,
                 unreadCount: 0,
                 updatedAt: r.updatedAt || Date.now(),
