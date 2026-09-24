@@ -295,7 +295,7 @@ export function SettingsScreen({
             <ChevronLeft size={24} />
           </button>
           <h2 className="text-[18px] font-bold">About GreenHaven</h2>
-          <p className="text-[12px] text-muted-foreground">Version 0.56</p>
+          <p className="text-[12px] text-muted-foreground">Version 0.59.4</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <FoundationStatusCard />
@@ -1172,7 +1172,7 @@ export function SettingsScreen({
         },
         {
           title: "About GreenHaven",
-          subtitle: "Version 0.38",
+          subtitle: "Version 0.59.4",
           icon: <Info size={20} strokeWidth={1.75} />,
           action: () => goToSection("about"),
           keywords: "about version mission",

@@ -254,11 +254,17 @@ export function GreenHavenEcosystemScreen({
   const isSearching = Boolean(query.trim())
 
   const categoriesWithServices = useMemo(() => {
+    // When not searching, omit Featured entries from category grids to avoid duplicates
+    const featuredIds = new Set(
+      isSearching ? [] : featured.map((s) => s.id)
+    )
     return SERVICE_CATEGORIES.map((cat) => ({
       ...cat,
-      services: filtered.filter((s) => s.category === cat.id),
+      services: filtered.filter(
+        (s) => s.category === cat.id && !featuredIds.has(s.id)
+      ),
     })).filter((c) => c.services.length > 0)
-  }, [filtered])
+  }, [filtered, featured, isSearching])
 
   const handleSelect = useCallback((service: EcosystemService) => {
     if (isInteractiveStatus(service.status)) {

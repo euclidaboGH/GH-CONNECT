@@ -239,6 +239,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const [confirmTier, setConfirmTier] = useState<MembershipTierId | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
+  const [expandedPlanBenefits, setExpandedPlanBenefits] = useState<Record<string, boolean>>({})
   const [tick, setTick] = useState<number>(0)
 
   // Prefer server entitlement over local-only cache
@@ -817,7 +818,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                         Platform fee discount {plan.platformFeeDiscountPct}%
                       </li>
                     )}
-                    {plan.entitlements.map((key) => {
+                    {(expandedPlanBenefits[tier] ? plan.entitlements : plan.entitlements.slice(0, 5)).map((key) => {
                       const meta = ENTITLEMENT_META[key]
                       const label = meta?.label || key
                       const clickable = !!meta?.link
@@ -844,12 +845,30 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                         </li>
                       )
                     })}
-                    {tier === "free" && (
+                    {tier === "free" && !expandedPlanBenefits[tier] && (
                       <li className="flex items-start gap-2 text-[14px] text-muted-foreground">
                         <X size={14} className="mt-0.5 shrink-0 text-muted-foreground/40" />
                         No paid boosts or priority placement
                       </li>
                     )}
+                    {plan.entitlements.length > 5 ? (
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedPlanBenefits((m) => ({
+                              ...m,
+                              [tier]: !m[tier],
+                            }))
+                          }
+                          className="mt-1 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300"
+                        >
+                          {expandedPlanBenefits[tier]
+                            ? "Show less"
+                            : `View all benefits (${plan.entitlements.length})`}
+                        </button>
+                      </li>
+                    ) : null}
                   </ul>
 
                   {tier !== "free" && !isCurrent && (

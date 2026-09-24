@@ -9,7 +9,6 @@
 import { useMemo } from "react"
 import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-context"
 import { listMyCommunitiesForHome } from "@/lib/domains/adapters/my-communities-home"
-import { buildHomeCommunityPulse } from "@/lib/domains/adapters/home-community-pulse"
 import { Calendar } from "lucide-react"
 import { listInvitationsForViewer } from "@/lib/domains/adapters/community-invites-adapter"
 import { CommunityInviteCard } from "./community-invite-card"
@@ -107,12 +106,6 @@ export function HomeCommandCentre({
     { blockedUserIds: ghcSession.blockedUsers || [] }
   ).filter((i: { status: string }) => i.status === "invited")
 
-  const communityPulse = buildHomeCommunityPulse({
-    viewerId: meId || "",
-    conversations: (ghcSession.conversations || []) as any[],
-    blockedUserIds: ghcSession.blockedUsers || [],
-    maxItems: 3,
-  })
 
   const ghc = useGHCProfile() as {
     profile?: {
@@ -189,220 +182,97 @@ export function HomeCommandCentre({
     hasPhoto: Boolean(avatar),
   })
 
+  // Feed-first: only high-signal chrome. Discover/Ecosystem/People live in their destinations.
+  const showNextStep =
+    nextAction.urgency === "high" ||
+    (completion !== null && completion < 100)
+
   return (
-    <section className="space-y-2.5" aria-label="Home command centre">
-      <header className="flex items-center gap-2.5 px-0.5">
-        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-emerald-200/70 dark:bg-emerald-950 dark:ring-emerald-800">
+    <section className="space-y-2" aria-label="Home command centre">
+      <header className="flex items-center gap-2.5 px-0.5 pb-0.5">
+        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-1 ring-emerald-200/60 dark:bg-emerald-950 dark:ring-emerald-800">
           {avatar ? (
             <img src={avatar} alt="" className="h-full w-full object-cover" />
           ) : (
-            <span className="flex h-full w-full items-center justify-center text-xs font-bold text-emerald-800 dark:text-emerald-200">
+            <span className="flex h-full w-full items-center justify-center text-[11px] font-bold text-emerald-800 dark:text-emerald-200">
               {name.slice(0, 1).toUpperCase()}
             </span>
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold tracking-tight text-foreground">
+          <p className="truncate text-[14px] font-semibold tracking-tight text-foreground">
             {greet}, {name}
           </p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            Social · Communities · Value
-            {completion !== null ? ` · profile ${completion}%` : ""}
-          </p>
+          {completion !== null && completion < 100 ? (
+            <p className="truncate text-[11px] text-muted-foreground">
+              Profile {completion}% complete
+            </p>
+          ) : null}
         </div>
       </header>
 
-      {/* One clear next step — progressive disclosure (not a feature dump) */}
-      <button
-        type="button"
-        onClick={() => {
-          if (nextAction.event) {
-            try {
-              // Prefer destination map when event is a known overlay
-              if (nextAction.event === "ghc:open-wallet") {
-                navigateTo("wallet")
-                return
+      {showNextStep ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (nextAction.event) {
+              try {
+                if (nextAction.event === "ghc:open-wallet") {
+                  navigateTo("wallet")
+                  return
+                }
+                window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} }))
+              } catch {
+                /* */
               }
-              window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} }))
-            } catch {
-              /* */
+              return
             }
-            return
-          }
-          if (nextAction.target !== "home") goTab(nextAction.target)
-        }}
-        className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
-          nextAction.urgency === "high"
-            ? "border-emerald-300/90 bg-gradient-to-r from-emerald-50 to-teal-50/80 dark:border-emerald-800 dark:from-emerald-950/60 dark:to-teal-950/40"
-            : "border-border/60 bg-card/80 hover:border-emerald-200 dark:hover:border-emerald-800"
-        }`}
-        aria-label={`${nextAction.title}. ${nextAction.cta}`}
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
-          <Sparkles className="h-4 w-4" aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[12px] font-bold text-foreground">{nextAction.title}</span>
-          <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
-            {nextAction.body}
+            if (nextAction.target !== "home") goTab(nextAction.target)
+          }}
+          className="flex w-full items-center gap-2.5 rounded-xl border border-border/50 bg-muted/30 px-2.5 py-2 text-left transition active:scale-[0.99] hover:bg-muted/50"
+          aria-label={`${nextAction.title}. ${nextAction.cta}`}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-[12px] font-semibold text-foreground">
+              {nextAction.title}
+            </span>
+            <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground line-clamp-1">
+              {nextAction.body}
+            </span>
           </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-          {nextAction.cta}
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </span>
-      </button>
+          <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+            {nextAction.cta}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </span>
+        </button>
+      ) : null}
 
       <DailyRewardHomeExperience />
 
-      {/* Ecosystem gateway — directory lives in Ecosystem overlay, not Profile */}
-      <button
-        type="button"
-        onClick={() => navigateTo("ecosystem")}
-        className="flex min-h-[44px] w-full items-center gap-3 rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 via-card to-teal-50/50 px-3 py-3 text-left transition hover:border-emerald-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-emerald-900/50 dark:from-emerald-950/50 dark:to-teal-950/30"
-        aria-label="Explore GreenHaven Ecosystem"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/25">
-          <Sparkles className="h-5 w-5" aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[12px] font-bold tracking-tight text-foreground">
-            GreenHaven Ecosystem
-          </span>
-          <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
-            Marketplace · Education · Transport · Community and more
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-          Explore
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </span>
-      </button>
-
-      {/* Social layer shortcuts — flat IA, ≤2 taps from home */}
-      <div className="grid grid-cols-3 gap-1.5" role="region" aria-label="Social shortcuts">
-        <MiniCard
-          title="People"
-          body={networkBody}
-          action="Discover"
-          onAction={() => goTab("discover")}
-          icon={Users}
-        />
-        <MiniCard
-          title="Messages"
-          body={messagesBody}
-          action="Open"
-          onAction={() => goTab("messages")}
-          icon={MessagesSquare}
-        />
-        <MiniCard
-          title="Communities"
-          body={
-            myCommunities.length > 0
-              ? `${myCommunities.length} joined · board & chat`
-              : "Join a group to belong"
-          }
-          action={myCommunities.length > 0 ? "Open" : "Explore"}
-          onAction={() => goTab("communities")}
-          icon={Compass}
-        />
-      </div>
-
       {invites.length > 0 ? (
-        <div className="space-y-2" aria-label="Community invitations">
-          <h3 className="px-0.5 text-[12px] font-bold text-foreground">Community invitations</h3>
-          {invites.slice(0, 3).map((inv) => (
-            <CommunityInviteCard
-              key={inv.communityId}
-              invite={inv}
-              onAccept={async () =>
-                ghcSession.acceptCommunityInvitation
-                  ? ghcSession.acceptCommunityInvitation(inv.communityId)
-                  : false
-              }
-              onDecline={async () =>
-                ghcSession.declineCommunityInvitation
-                  ? ghcSession.declineCommunityInvitation(inv.communityId)
-                  : false
-              }
-              onOpen={() => {
-                try {
-                  openCommunity(inv.communityId)
-                } catch {
-                  goTab("communities")
-                }
-              }}
-            />
+        <div className="space-y-1.5" aria-label="Community invitations">
+          {invites.slice(0, 2).map((inv: { id: string }) => (
+            <CommunityInviteCard key={inv.id} invitation={inv as any} />
           ))}
         </div>
       ) : null}
 
-
-      {communityPulse.hasSignal && communityPulse.items.some((i) => i.kind === "event") ? (
-        <div className="space-y-1.5" aria-label="From your communities">
-          <h3 className="px-0.5 text-[12px] font-bold text-foreground">Happening in your communities</h3>
-          <ul className="space-y-1.5">
-            {communityPulse.items
-              .filter((i) => i.kind === "event")
-              .map((item) => (
-                <li key={`${item.communityId}-${item.title}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        openCommunity(String(item.communityId || ""))
-                      } catch {
-                        goTab("communities")
-                      }
-                    }}
-                    className="flex w-full min-h-12 items-center gap-2.5 rounded-2xl border border-border/70 bg-card px-2.5 py-2 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">
-                      <Calendar className="h-4 w-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-foreground">
-                        {item.title}
-                      </span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {item.subtitle}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="space-y-2" aria-label="My communities">
-        <div className="flex items-center justify-between px-0.5">
-          <h3 className="text-[12px] font-bold text-foreground">My communities</h3>
-          <button
-            type="button"
-            onClick={() => goTab("communities")}
-            className="text-[11px] font-semibold text-teal-700 dark:text-teal-300"
-          >
-            See all
-          </button>
-        </div>
-        {myCommunities.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border px-3 py-4">
-            <p className="text-sm font-semibold text-foreground">You haven’t joined a community yet.</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Belong with people who share your interests.
-            </p>
+      {myCommunities.length > 0 ? (
+        <div className="space-y-1.5" aria-label="My communities">
+          <div className="flex items-center justify-between px-0.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Communities
+            </h3>
             <button
               type="button"
               onClick={() => goTab("communities")}
-              className="mt-2 min-h-10 rounded-xl bg-teal-600 px-3 text-xs font-bold text-white"
+              className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
             >
-              Discover communities
+              See all
             </button>
           </div>
-        ) : (
-          <ul className="space-y-1.5">
-            {myCommunities.map((c) => (
+          <ul className="divide-y divide-border/40 rounded-xl border border-border/40 overflow-hidden">
+            {myCommunities.slice(0, 3).map((c) => (
               <li key={c.id}>
                 <button
                   type="button"
@@ -413,30 +283,27 @@ export function HomeCommandCentre({
                       goTab("communities")
                     }
                   }}
-                  className="flex w-full min-h-12 items-center gap-2.5 rounded-2xl border border-border/70 bg-card px-2.5 py-2 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  className="flex w-full min-h-11 items-center gap-2.5 bg-background px-2.5 py-2 text-left transition hover:bg-muted/40"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-100 text-xs font-bold text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-[11px] font-bold text-foreground">
                     {c.coverImage ? (
                       <img src={c.coverImage} alt="" className="h-full w-full object-cover" />
                     ) : (
                       (c.name || "C").slice(0, 1)
                     )}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-foreground">{c.name}</span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {c.description || c.category || c.membershipState || "Member"}
-                    </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
+                    {c.name}
                   </span>
-                  <span className="text-[11px] font-bold text-teal-700 dark:text-teal-300">Open</span>
                 </button>
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   )
 }
+
 
 export default HomeCommandCentre
