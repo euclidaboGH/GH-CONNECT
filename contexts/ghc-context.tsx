@@ -1007,30 +1007,51 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             const id = String(r.id || "")
             if (!id) continue
             const existing = byId.get(id)
-            // Fallback object only runs when existing is missing — do not reference existing inside it
-            // (TS narrows existing to never in the falsy branch of `existing || { ... }`).
+            const remoteMembers = Array.isArray(r.memberIds)
+              ? r.memberIds.map(String)
+              : []
+            const members =
+              remoteMembers.length > 0
+                ? remoteMembers
+                : existing?.members || existing?.memberIds || []
+            const preview =
+              typeof r.lastMessagePreview === "string" ? r.lastMessagePreview : ""
+            const lastAt =
+              typeof r.lastMessageAt === "number" && Number.isFinite(r.lastMessageAt)
+                ? r.lastMessageAt
+                : existing?.lastMessageTime || Date.now()
+            const updatedAt =
+              typeof r.updatedAt === "number" && Number.isFinite(r.updatedAt)
+                ? r.updatedAt
+                : existing?.updatedAt || lastAt
+            // Fallback object only when existing is missing (do not reference existing inside it).
             byId.set(id, {
               ...(existing || {
                 id,
+                participantId: "",
+                participantName: r.title || "Chat",
+                participantPhoto: "/placeholder.svg?width=40&height=40",
                 messages: [],
-                members: [],
-                memberIds: r.memberIds || [],
-                name: r.title || "Chat",
+                lastMessage: "",
+                lastMessageTime: lastAt,
                 unread: false,
+                online: false,
+                conversationType: "private" as const,
+                members: [],
+                memberIds: [],
+                name: r.title || "Chat",
                 unreadCount: 0,
-                updatedAt: r.updatedAt || Date.now(),
+                updatedAt: lastAt,
               }),
               id,
-              memberIds: Array.isArray(r.memberIds) ? r.memberIds : existing?.memberIds || [],
-              updatedAt: r.updatedAt || existing?.updatedAt || Date.now(),
-              lastMessage: r.lastMessagePreview
-                ? {
-                    ...(existing?.lastMessage || {}),
-                    text: r.lastMessagePreview,
-                    createdAt: r.lastMessageAt || Date.now(),
-                  }
-                : existing?.lastMessage,
-            } as (typeof s.conversations)[0])
+              members,
+              memberIds: members,
+              name: r.title || existing?.name || existing?.groupName || existing?.participantName || "Chat",
+              groupName: r.title || existing?.groupName || existing?.name,
+              updatedAt,
+              lastMessage: preview || existing?.lastMessage || "",
+              lastMessageTime: lastAt,
+            })
           }
           return {
             ...s,

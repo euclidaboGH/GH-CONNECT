@@ -345,6 +345,15 @@ export interface Conversation {
   groupName?: string
   groupPhoto?: string
   members?: string[]
+  /**
+   * Member id list from durable messaging / domain create.
+   * Prefer `members` for UI; keep in sync when both are present.
+   */
+  memberIds?: string[]
+  /** Display label used by some group/community surfaces (alias of groupName) */
+  name?: string
+  /** Last activity timestamp (hydrate / sort); distinct from lastMessageTime */
+  updatedAt?: number
   /** Community/group roles — aligned with domain membership roles */
   groupRoles?: Record<string, "owner" | "admin" | "moderator" | "member">
   createdBy?: string
