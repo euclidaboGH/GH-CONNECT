@@ -60,7 +60,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 /** 2-col phones (≤640), 3-col tablet, 4-col desktop — fluid, no fixed desktop widths */
 const GRID_CLASS =
-  "grid grid-cols-2 gap-2 min-[640px]:grid-cols-3 min-[1024px]:grid-cols-4"
+  "grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[1024px]:grid-cols-4"
 
 function ServiceIcon({ name, size = 20 }: { name: string; size?: number }) {
   const Icon = ICON_MAP[name] || Sparkles
@@ -341,7 +341,7 @@ export function GreenHavenEcosystemScreen({
 
         {!isSearching ? (
           <section className="mt-4 px-3 min-[640px]:px-4" aria-label="Featured services">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            <p className="mb-2 mt-1 px-0.5 text-[12px] font-bold tracking-wide text-foreground">
               Featured
             </p>
             <div className={GRID_CLASS}>

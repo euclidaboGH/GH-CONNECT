@@ -28,10 +28,10 @@ export function WalletToolsGrid({
       <h2 className="mb-2 px-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
         More tools
       </h2>
-      <p className="mb-2 px-0.5 text-[10px] text-muted-foreground">
-        Secondary - transactions, QR, limits, security
+      <p className="mb-2 px-0.5 text-[10px] leading-snug text-muted-foreground">
+        GHC history, statements, and payment methods. Pi payments stay separate from GHC.
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
         {TOOLS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}

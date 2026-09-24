@@ -2,16 +2,31 @@ import { NextResponse } from "next/server"
 import type { GhcTransferErrorCode } from "@/lib/domains/economy-transfer-contract"
 import { hasPrivilegedDatabase, readGhcServerEnv } from "./env"
 
-export function jsonOk(data: unknown, status = 200) {
-  return NextResponse.json(data, { status })
+export function jsonOk(
+  data: unknown,
+  status = 200,
+  init?: { requestId?: string; headers?: Record<string, string> }
+) {
+  const headers: Record<string, string> = { ...(init?.headers || {}) }
+  if (init?.requestId) headers["x-request-id"] = init.requestId
+  return NextResponse.json(data, {
+    status,
+    headers: Object.keys(headers).length ? headers : undefined,
+  })
 }
 
 export function jsonErr(
   code: GhcTransferErrorCode | string,
   message: string,
-  status = 400
+  status = 400,
+  init?: { requestId?: string; headers?: Record<string, string> }
 ) {
-  return NextResponse.json({ ok: false, code, message, error: message }, { status })
+  const headers: Record<string, string> = { ...(init?.headers || {}) }
+  if (init?.requestId) headers["x-request-id"] = init.requestId
+  return NextResponse.json(
+    { ok: false, code, message, error: message },
+    { status, headers: Object.keys(headers).length ? headers : undefined }
+  )
 }
 
 export function isDatabaseConfigured(): boolean {

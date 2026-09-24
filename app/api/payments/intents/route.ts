@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
 import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
 import { ASSET_POLICY } from "@/lib/asset-separation"
@@ -94,14 +95,25 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const reqCtx = getRequestContext(request.headers)
+
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json(
+      { ok: false, error: "AUTH_REQUIRED" },
+      { status: 401, headers: { "x-request-id": reqCtx.requestId } }
+    )
   }
   // Durable when Supabase configured — survives Vercel cold start / multi-instance
+  // Scoped to authenticated user only — never accept client userId override
   const intents = await listIntentsForUserAsync(auth.userId)
   return NextResponse.json(
     { ok: true, intents },
-    { headers: { "Cache-Control": "no-store" } }
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        "x-request-id": reqCtx.requestId,
+      },
+    }
   )
 }

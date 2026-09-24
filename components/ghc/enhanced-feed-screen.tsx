@@ -64,7 +64,7 @@ interface EnhancedFeedScreenProps {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-3 px-3 py-3" aria-hidden role="status" aria-label="Loading feed">
+    <div className="space-y-4 px-3 py-3" aria-hidden role="status" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
         <div key={i} className="animate-pulse rounded-2xl border border-border/40 bg-card p-4">
           <div className="flex items-center gap-3">
@@ -551,7 +551,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         className="gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background px-1 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
-        <div className="space-y-3 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
+        <div className="space-y-4 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
           <HomeCommandCentre
             onCompose={() => {
               try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }

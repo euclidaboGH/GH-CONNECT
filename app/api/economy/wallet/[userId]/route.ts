@@ -1,4 +1,6 @@
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { requireSameUser } from "@/lib/server/foundation/authorization"
+import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { getProcessGhcStore } from "@/lib/server/economy/store"
 import {
   rpcListTransactions,
@@ -88,13 +90,16 @@ export async function GET(
   request: Request,
   ctx: { params: Promise<{ userId: string }> }
 ) {
+  const reqCtx = getRequestContext(request.headers)
   const auth = await resolveAuthenticatedUser(request.headers)
-  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  if (!auth)
+    return jsonErr("AUTH_REQUIRED", "Authentication required", 401, {
+      requestId: reqCtx.requestId,
+    })
 
   const { userId } = await ctx.params
-  if (userId !== auth.userId) {
-    return jsonErr("AUTH_REQUIRED", "You can only load your own wallet ledger", 403)
-  }
+  const owner = requireSameUser(auth, userId)
+  if (!owner.ok) return owner.response
 
   let transactions = [] as ReturnType<typeof getProcessGhcStore> extends never
     ? never

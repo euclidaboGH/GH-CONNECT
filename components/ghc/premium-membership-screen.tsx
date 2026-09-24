@@ -231,7 +231,11 @@ function EntitlementIcon({ name }: { name?: string }) {
 export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHC()
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly")
-  const [busy, setBusy] = useState<MembershipTierId | null>(null)
+  /** Method-scoped busy — never spin both Pi and GHC from one flag */
+  const [busy, setBusy] = useState<{
+    tier: MembershipTierId
+    method: "pi" | "ghc"
+  } | null>(null)
 
   const [confirmTier, setConfirmTier] = useState<MembershipTierId | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
@@ -289,9 +293,63 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const currentTier = (status?.tier || "free") as MembershipTierId
 
+  const refreshMembershipFromServer = async (
+    fallbackTier?: MembershipTierId
+  ): Promise<MembershipStatus | null> => {
+    try {
+      const headers: Record<string, string> = {}
+      try {
+        const { IdentityService } = await import("@/lib/identity/identity-service")
+        Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+      } catch {
+        /* */
+      }
+      const res = await fetch("/api/membership/status", {
+        headers,
+        cache: "no-store",
+        credentials: "include",
+      })
+      if (!res.ok) return null
+      const data = await res.json().catch(() => ({}))
+      if (!data?.ok || !data?.entitlement) return null
+      const e = data.entitlement
+      const mem = getBoundDomainServices()?.membership as {
+        activate?: (i: unknown) => Promise<unknown>
+        getStatus?: () => MembershipStatus | null
+      } | null
+      if (e.tier === "vip" || e.tier === "vvip") {
+        await mem?.activate?.({
+          tier: e.tier,
+          billingPeriod: e.billingPeriod || "monthly",
+          source: e.source || "pi",
+          purchaseTxId: e.purchaseRef,
+          durationMs:
+            e.expiresAt && e.startedAt
+              ? Math.max(0, Number(e.expiresAt) - Number(e.startedAt))
+              : undefined,
+        })
+      }
+      setTick((x) => x + 1)
+      try {
+        return mem?.getStatus?.() || null
+      } catch {
+        if (fallbackTier && fallbackTier !== "free") {
+          return {
+            tier: fallbackTier,
+            status: "active",
+            expiresAt: e.expiresAt,
+          } as MembershipStatus
+        }
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
+
   const purchaseWithPiCoin = async (tier: MembershipTierId) => {
     if (tier === "free" || tier === currentTier) return
-    setBusy(tier)
+    setBusy({ tier, method: "pi" })
     try {
       const ok = await runGhPayMembership(tier as "vip" | "vvip", period, (msg, type) => {
         const t =
@@ -300,7 +358,22 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       })
       if (ok) {
         setConfirmTier(null)
-        setTick((t) => t + 1)
+        // Payment may succeed before entitlement is visible — force server refresh
+        let next = await refreshMembershipFromServer(tier)
+        if (!next || next.tier === "free") {
+          await new Promise((r) => setTimeout(r, 1200))
+          next = await refreshMembershipFromServer(tier)
+        }
+        if (next && next.tier !== "free") {
+          setSuccessStatus(next)
+          addToast(`${MEMBERSHIP_PLANS[tier].label} is active`, "success")
+        } else {
+          setTick((x) => x + 1)
+          addToast(
+            "Payment received. If Premium is not shown yet, pull to refresh or reopen this screen.",
+            "info"
+          )
+        }
       }
     } finally {
       setBusy(null)
@@ -309,7 +382,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const purchaseWithGhcCoin = async (tier: MembershipTierId) => {
     if (tier === "free" || tier === currentTier) return
-    setBusy(tier)
+    setBusy({ tier, method: "ghc" })
     try {
       const mem = getBoundDomainServices()?.membership
       if (!mem?.purchaseWithGhc) {
@@ -319,14 +392,16 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       const result = await mem.purchaseWithGhc(tier, period)
       if (result.ok) {
         setConfirmTier(null)
-        setTick((t) => t + 1)
-        let next: MembershipStatus | null = null
-        try {
-          next = getBoundDomainServices()?.membership?.getStatus?.() || null
-        } catch {
-          next = null
+        let next = await refreshMembershipFromServer(tier)
+        if (!next) {
+          try {
+            next = getBoundDomainServices()?.membership?.getStatus?.() || null
+          } catch {
+            next = null
+          }
         }
         if (next) setSuccessStatus(next)
+        setTick((x) => x + 1)
         addToast(`${MEMBERSHIP_PLANS[tier].label} activated`, "success")
       } else {
         addToast(result.error || "Purchase failed", "error")
@@ -864,11 +939,13 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               {isPiPaymentsAvailable() ? (
                 <button
                   type="button"
-                  disabled={busy === confirmTier}
+                  disabled={busy?.tier === confirmTier && busy?.method === "pi"}
                   onClick={() => void purchase(confirmTier, "pi")}
                   className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
                 >
-                  {busy === confirmTier ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {busy?.tier === confirmTier && busy?.method === "pi" ? (
+                    <Loader2 size={16} className="animate-spin" aria-hidden />
+                  ) : null}
                   Pay with π
                 </button>
               ) : (
@@ -878,11 +955,13 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               )}
               <button
                 type="button"
-                disabled={busy === confirmTier}
+                disabled={busy?.tier === confirmTier && busy?.method === "ghc"}
                 onClick={() => void purchase(confirmTier, "ghc")}
                 className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/40 bg-card py-2.5 text-sm font-bold text-emerald-800 dark:text-emerald-300 disabled:opacity-60"
               >
-                {busy === confirmTier ? <Loader2 size={16} className="animate-spin" /> : null}
+                {busy?.tier === confirmTier && busy?.method === "ghc" ? (
+                  <Loader2 size={16} className="animate-spin" aria-hidden />
+                ) : null}
                 Pay with GHC
               </button>
               <button

@@ -21,6 +21,7 @@ import {
 } from "@/lib/server/economy/store"
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
 import { readGhcServerEnv as readEnv } from "@/lib/server/economy/env"
+import { getRequestContext } from "@/lib/server/foundation/request-context"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -65,9 +66,10 @@ async function rpcSpend(input: {
 }
 
 export async function POST(request: Request) {
+  const reqCtx = getRequestContext(request.headers)
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "x-request-id": reqCtx.requestId } })
   }
 
   const body = await request.json().catch(() => ({}))

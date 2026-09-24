@@ -29,6 +29,7 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  CreditCard,
 } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { SendGhcFlow } from "@/components/ghc/send-ghc-flow"
@@ -201,6 +202,21 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   )
 
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
+  /** GHC ledger vs Pi payment intents — never mixed in one list */
+  const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [piIntents, setPiIntents] = useState<
+    Array<{
+      id: string
+      status?: string
+      amountPi?: number
+      purpose?: string
+      productId?: string
+      createdAt?: number
+      paymentId?: string
+    }>
+  >([])
+  const [piIntentsLoading, setPiIntentsLoading] = useState(false)
+  const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [query, setQuery] = useState("")
   const [showPendingSheet, setShowPendingSheet] = useState(false)
   const [showUtilityHelp, setShowUtilityHelp] = useState(false)
@@ -221,6 +237,87 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     return () => window.removeEventListener("ghc:wallet-refresh", onRefresh)
   }, [])
+
+  // Load durable Pi payment intents when user opens π rail
+  useEffect(() => {
+    if (assetRail !== "pi") return
+    let cancelled = false
+    ;(async () => {
+      setPiIntentsLoading(true)
+      try {
+        const headers: Record<string, string> = {}
+        try {
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/payments/intents", {
+          headers,
+          cache: "no-store",
+          credentials: "include",
+        })
+        if (!res.ok || cancelled) return
+        const data = await res.json().catch(() => ({}))
+        const list = Array.isArray(data?.intents)
+          ? data.intents
+          : Array.isArray(data?.items)
+            ? data.items
+            : []
+        if (!cancelled) {
+          setPiIntents(
+            list.map((raw: Record<string, unknown>) => ({
+              id: String(raw.id || raw.intentId || ""),
+              status: String(raw.status || ""),
+              amountPi:
+                typeof raw.amountPi === "number"
+                  ? raw.amountPi
+                  : typeof raw.amount === "number"
+                    ? raw.amount
+                    : undefined,
+              purpose: String(raw.purpose || raw.category || ""),
+              productId: String(
+                raw.productId ||
+                  (typeof raw.metadata === "object" &&
+                  raw.metadata &&
+                  "productId" in raw.metadata
+                    ? (raw.metadata as { productId?: string }).productId
+                    : "") ||
+                  ""
+              ),
+              createdAt:
+                typeof raw.createdAt === "number"
+                  ? raw.createdAt
+                  : typeof raw.created_at === "number"
+                    ? raw.created_at
+                    : Date.now(),
+              paymentId: String(raw.paymentId || raw.piPaymentId || ""),
+            })).filter((x) => x.id)
+          )
+        }
+      } catch {
+        if (!cancelled) setPiIntents([])
+      } finally {
+        if (!cancelled) setPiIntentsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [assetRail, tick])
+
+  const filteredPiIntents = useMemo(() => {
+    const now = Date.now()
+    const startMs =
+      txDateRange === "today"
+        ? new Date(new Date().toDateString()).getTime()
+        : txDateRange === "7d"
+          ? now - 7 * 86400000
+          : txDateRange === "30d"
+            ? now - 30 * 86400000
+            : 0
+    if (startMs <= 0) return piIntents
+    return piIntents.filter((i) => (i.createdAt || 0) >= startMs)
+  }, [piIntents, txDateRange])
+
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showAddGhc, setShowAddGhc] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<SendRecipient | null>(null)
@@ -448,9 +545,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         const hay = `${tx.reason} ${tx.sourceEvent} ${tx.kind} ${statusLabel(tx.status).text}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
+      const now = Date.now()
+      const startMs =
+        txDateRange === "today"
+          ? new Date(new Date().toDateString()).getTime()
+          : txDateRange === "7d"
+            ? now - 7 * 86400000
+            : txDateRange === "30d"
+              ? now - 30 * 86400000
+              : 0
+      if (startMs > 0 && (tx.createdAt || 0) < startMs) return false
       return true
     })
-  }, [txs, txFilter, query])
+  }, [txs, txFilter, query, txDateRange])
 
   /** Bank-style statement: group by calendar day, newest first */
   const dayGroups = useMemo(() => {
@@ -563,28 +670,92 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     return lines.join("\n")
   }, [balance, displayPending, earned, spent, monthInsight, txs])
 
+  const buildCsvStatement = useCallback(() => {
+    if (assetRail === "pi") {
+      const header = "id,status,amount_pi,purpose,product_id,payment_id,created_at"
+      const rows = piIntents.map((i) =>
+        [
+          i.id,
+          i.status || "",
+          i.amountPi ?? "",
+          (i.purpose || "").replace(/,/g, " "),
+          (i.productId || "").replace(/,/g, " "),
+          i.paymentId || "",
+          i.createdAt ? new Date(i.createdAt).toISOString() : "",
+        ].join(",")
+      )
+      return [header, ...rows].join("\n")
+    }
+    const header =
+      "id,kind,amount_ghc,status,reason,counterparty,created_at"
+    const rows = filteredTxs.map((tx) =>
+      [
+        tx.id,
+        tx.kind || "",
+        tx.amount,
+        tx.status || "",
+        (tx.reason || "").replace(/,/g, " "),
+        String(
+          (tx as { counterpartyName?: string; toUserName?: string; fromUserName?: string })
+            .counterpartyName ||
+            (tx as { toUserName?: string }).toUserName ||
+            (tx as { fromUserName?: string }).fromUserName ||
+            ""
+        ).replace(/,/g, " "),
+        tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
+      ].join(",")
+    )
+    return [header, ...rows].join("\n")
+  }, [assetRail, piIntents, filteredTxs])
+
+  const downloadCsvStatement = useCallback(() => {
+    try {
+      const csv = buildCsvStatement()
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download =
+        assetRail === "pi"
+          ? `greenhaven-pi-statement-${new Date().toISOString().slice(0, 10)}.csv`
+          : `greenhaven-ghc-statement-${new Date().toISOString().slice(0, 10)}.csv`
+      a.rel = "noopener"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setShareMsg("CSV downloaded")
+    } catch {
+      setShareMsg("CSV download failed")
+    }
+    window.setTimeout(() => setShareMsg(null), 2500)
+  }, [assetRail, buildCsvStatement])
+
   const shareStatement = useCallback(async () => {
     const text = buildStatementText()
     try {
+      // Prefer real CSV file download; also offer share/copy of text summary
+      downloadCsvStatement()
       if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({ title: "GHC statement", text })
-        setShareMsg("Shared")
+        try {
+          await navigator.share({ title: "GreenHaven statement", text })
+        } catch {
+          /* user cancelled share — CSV already attempted */
+        }
       } else if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text)
-        setShareMsg("Copied to clipboard")
-      } else {
-        setShareMsg("Copy unavailable on this device")
+        setShareMsg("CSV downloaded · summary copied")
       }
     } catch {
       try {
         await navigator.clipboard.writeText(text)
         setShareMsg("Copied to clipboard")
       } catch {
-        setShareMsg("Could not share")
+        setShareMsg("Could not export statement")
       }
     }
     window.setTimeout(() => setShareMsg(null), 2500)
-  }, [buildStatementText])
+  }, [buildStatementText, downloadCsvStatement])
 
   const submitP2p = useCallback(async () => {
     setP2pError(null)
@@ -761,13 +932,23 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
         <WalletToolsGrid
           onSelect={(id) => {
-            if (id === "tx" || id === "statements") {
+            if (id === "tx") {
               setTab("activity")
               setTxFilter("all")
+              setAssetRail("ghc")
+            } else if (id === "statements") {
+              setTab("activity")
+              setTxFilter("all")
+              // Export current rail as CSV (user can switch GHC / π first)
+              window.setTimeout(() => {
+                try {
+                  ;(document.getElementById("gh-wallet-export-csv") as HTMLButtonElement | null)?.click()
+                } catch { /* */ }
+              }, 0)
             } else if (id === "qr") {
               setP2pMode("receive")
             } else if (id === "methods") {
-              addToast("Payment methods: GHC peer transfers · π via GH Pay", "info")
+              setShowPaymentMethods(true)
             } else if (id === "limits") {
               setTab("about")
             } else if (id === "security") {
@@ -879,6 +1060,16 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             label="Export"
             onClick={() => void shareStatement()}
           />
+          <button
+            id="gh-wallet-export-csv"
+            type="button"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            onClick={() => downloadCsvStatement()}
+          >
+            Export CSV
+          </button>
           <QuickChip
             icon={<HandCoins size={14} />}
             label="Requests"
@@ -1030,9 +1221,65 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                   Transaction history
                 </p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  Posted ledger only · pending shown separately until claimable
+                  GHC ledger and π payments are kept on separate rails — never mixed.
                 </p>
               </div>
+              <div
+                className="flex gap-1 rounded-2xl border border-border bg-muted/40 p-1"
+                role="tablist"
+                aria-label="Asset rail"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetRail === "ghc"}
+                  onClick={() => setAssetRail("ghc")}
+                  className={`flex-1 rounded-xl py-2 text-xs font-bold transition ${
+                    assetRail === "ghc"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  GHC
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetRail === "pi"}
+                  onClick={() => setAssetRail("pi")}
+                  className={`flex-1 rounded-xl py-2 text-xs font-bold transition ${
+                    assetRail === "pi"
+                      ? "bg-violet-600 text-white shadow-sm"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  π Payments
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Date range">
+                {(
+                  [
+                    { id: "today" as const, label: "Today" },
+                    { id: "7d" as const, label: "7d" },
+                    { id: "30d" as const, label: "30d" },
+                    { id: "all" as const, label: "All" },
+                  ] as const
+                ).map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setTxDateRange(r.id)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                      txDateRange === r.id
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {assetRail === "ghc" && (
               <div className="flex flex-wrap items-center gap-1.5">
                 {(
                   [
@@ -1096,6 +1343,73 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                     ))}
                   </div>
                 ))
+              )}
+              </>
+              )}
+
+              {assetRail === "pi" && (
+                <div className="space-y-2">
+                  <div className="rounded-2xl border border-violet-200/80 bg-violet-50/50 px-3 py-2.5 dark:border-violet-900 dark:bg-violet-950/30">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                      π payment history
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      Membership and GH Pay intents only · not GHC ledger transfers
+                    </p>
+                  </div>
+                  {piIntentsLoading ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">Loading π payments…</p>
+                  ) : filteredPiIntents.length === 0 ? (
+                    <EmptyBlock
+                      title="No π payments yet"
+                      body="Complete a membership or GH Pay purchase in Pi Browser to see intents here."
+                    />
+                  ) : (
+                    filteredPiIntents.map((intent) => (
+                      <div
+                        key={intent.id}
+                        className="rounded-2xl border border-border bg-card px-3 py-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">
+                              {intent.purpose || intent.productId || "π payment"}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {intent.createdAt
+                                ? formatWhen(intent.createdAt)
+                                : ""}
+                              {intent.paymentId ? ` · ${intent.paymentId.slice(0, 12)}…` : ""}
+                            </p>
+                            <p className="mt-0.5 text-[10px] font-mono text-muted-foreground/80">
+                              {intent.id}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {typeof intent.amountPi === "number" ? (
+                              <p className="text-sm font-bold text-violet-700 dark:text-violet-300">
+                                {intent.amountPi} π
+                              </p>
+                            ) : null}
+                            <span
+                              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                String(intent.status).toLowerCase().includes("complete") ||
+                                String(intent.status).toLowerCase().includes("fulfill")
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                                  : String(intent.status).toLowerCase().includes("fail") ||
+                                      String(intent.status).toLowerCase().includes("cancel")
+                                    ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
+                                    : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                              }`}
+                            >
+                              {intent.status || "unknown"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </>
           )}
@@ -1174,6 +1488,58 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Pending breakdown sheet */}
+      {showPaymentMethods && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="pay-methods-title">
+          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => setShowPaymentMethods(false)} />
+          <div className="relative z-[1] w-full max-w-md rounded-t-3xl border border-border bg-card p-5 shadow-xl sm:rounded-3xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 id="pay-methods-title" className="text-base font-bold text-foreground">Payment methods</h2>
+              <button type="button" onClick={() => setShowPaymentMethods(false)} className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="mb-3 text-[12px] text-muted-foreground">
+              Only methods that work today are selectable. Cards and bank rails stay Coming soon.
+            </p>
+            <ul className="space-y-2">
+              <li className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/40">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white">GHC</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-foreground">GHC wallet</p>
+                  <p className="text-[11px] text-muted-foreground">Send, request, and receive in-app utility credits</p>
+                  <span className="mt-1 inline-block rounded-full bg-emerald-600/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800 dark:text-emerald-200">Available</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50/60 px-3 py-3 dark:border-violet-900 dark:bg-violet-950/40">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-bold text-white">π</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-foreground">Pi (GH Pay)</p>
+                  <p className="text-[11px] text-muted-foreground">Membership and catalog purchases in Pi Browser</p>
+                  <span className="mt-1 inline-block rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-800 dark:text-violet-200">Available</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 px-3 py-3 opacity-80">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <CreditCard size={18} aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-foreground">Cards / bank</p>
+                  <p className="text-[11px] text-muted-foreground">Not enabled for this release</p>
+                  <span className="mt-1 inline-block rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">Coming soon</span>
+                </div>
+              </li>
+            </ul>
+            <button
+              type="button"
+              onClick={() => setShowPaymentMethods(false)}
+              className="mt-4 w-full rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       {showUtilityHelp && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 sm:items-center" role="dialog" aria-modal="true">
           <button type="button" className="absolute inset-0" aria-label="Dismiss" onClick={() => setShowUtilityHelp(false)} />
