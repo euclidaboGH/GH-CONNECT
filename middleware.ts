@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server"
 
 const KEY = (
   process.env.DOMAIN_VALIDATION_KEY ||
-  "54abde02d97ea6a7769a2d2dfb79332d231b3b4a7f688a0098e75f92d7338a6f70427d5069ebe3cabbf8d04c2b5559746cec7b74076ff32896bbb407cbd506bf"
+  "acfbabbcb8e33ace219dec9ab3d0aa1ff8d043e36c7ee50d2fce7b53bc5ff68c254f1cd4d44f44c6df20451b8e398fca3f81205b9fe638ca23547e5075d1fdf5"
 ).trim()
 
 function plainKey() {
