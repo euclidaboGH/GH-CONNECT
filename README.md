@@ -74,9 +74,11 @@ Architecture notes: `docs/SOCIAL_OS_ROADMAP.md`, `docs/HUMAN_CONNECTION_OS_COMMU
 
 ## Pi domain validation
 
-Static file (required by Pi Developer Portal):
+Set `DOMAIN_VALIDATION_KEY` in Vercel (per environment). The app serves it at:
 
-`public/validation-key.txt` → `https://<your-domain>/validation-key.txt`
+`https://<your-domain>/validation-key.txt` → rewrite → `/api/validation-key`
+
+Do not commit the key. Missing env returns 503 (fail-closed).
 
 ## Deploy (Vercel)
 

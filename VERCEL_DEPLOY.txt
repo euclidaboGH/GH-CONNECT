@@ -24,3 +24,46 @@ VERIFY AFTER DEPLOY:
   curl -i -X POST https://gh-connect-tau.vercel.app/api/auth/pi \
     -H 'Content-Type: application/json' -d '{}'
   Expect JSON (not HTML 500 / not slug-name error)
+
+---
+MAINNET / TESTNET (one repo — same variable NAMES, different Vercel env VALUES)
+
+Production (Mainnet Pi app → https://gh-connect-tau.vercel.app):
+  NEXT_PUBLIC_APP_URL=https://gh-connect-tau.vercel.app
+  NEXT_PUBLIC_PI_SANDBOX=false
+  NEXT_PUBLIC_PI_CLIENT_ID=<Mainnet oAuth Client ID from Pi Portal>
+  NEXT_PUBLIC_PI_PRODUCTION_HOSTS=gh-connect-tau.vercel.app
+  PI_API_KEY=<Mainnet server API key — never NEXT_PUBLIC_>
+  SUPABASE_URL=<Mainnet Supabase URL>
+  SUPABASE_SERVICE_ROLE_KEY=<Mainnet service role — never NEXT_PUBLIC_>
+  DOMAIN_VALIDATION_KEY=<key registered for Mainnet domain in Pi Portal>
+
+Preview (Testnet Pi app → https://gh-connect-5p3o.vercel.app or stable Testnet host):
+  NEXT_PUBLIC_APP_URL=<Testnet deployment origin>
+  NEXT_PUBLIC_PI_SANDBOX=true
+  NEXT_PUBLIC_PI_CLIENT_ID=<Testnet oAuth Client ID from Pi Portal>
+  PI_API_KEY=<Testnet server API key — never NEXT_PUBLIC_>
+  SUPABASE_URL=<Testnet Supabase URL>
+  SUPABASE_SERVICE_ROLE_KEY=<Testnet service role — never NEXT_PUBLIC_>
+  DOMAIN_VALIDATION_KEY=<key for Testnet domain if Portal requires>
+
+Pi Portal redirect URLs (configure in Portal only — not hard-coded in app):
+  Mainnet:  https://gh-connect-tau.vercel.app/signin/callback
+  Testnet:  https://gh-connect-5p3o.vercel.app/signin/callback
+
+Payment routes stay relative (do not hard-code origins):
+  /api/payments/approve
+  /api/payments/complete
+
+Domain validation (after DOMAIN_VALIDATION_KEY is set):
+  curl -i https://<deployment>/validation-key.txt
+  Expect: 200 text/plain body = key from env (not 503)
+
+CRITICAL — Mainnet protection:
+  - ONE GitHub repo for both environments (shared source).
+  - Production MUST keep Mainnet Pi keys + Mainnet Supabase URL/keys.
+  - Preview MUST use Testnet Pi keys + Testnet Supabase URL/keys.
+  - Never point Production SUPABASE_* at the Testnet project.
+  - Never point Preview SUPABASE_* at the Mainnet project.
+  - Database migrations are applied SEPARATELY to each Supabase project.
+  - Shared code fixes deploy to both; data and secrets stay isolated.

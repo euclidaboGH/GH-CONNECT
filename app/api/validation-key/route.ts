@@ -1,19 +1,31 @@
 import { NextResponse } from "next/server"
 
 /**
- * Pi domain ownership — plain text only.
- * Prefer DOMAIN_VALIDATION_KEY env; falls back to embedded key for first deploy.
+ * Pi domain ownership — plain text body only.
+ * Source of truth: DOMAIN_VALIDATION_KEY (Vercel env per deployment domain).
+ * Never embed the real key in source control.
  */
-const KEY = (
-  process.env.DOMAIN_VALIDATION_KEY ||
-  "54abde02d97ea6a7769a2d2dfb79332d231b3b4a7f688a0098e75f92d7338a6f70427d5069ebe3cabbf8d04c2b5559746cec7b74076ff32896bbb407cbd506bf"
-).trim()
-
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function GET() {
-  return new NextResponse(KEY, {
+  const key = (process.env.DOMAIN_VALIDATION_KEY || "").trim()
+
+  if (!key) {
+    return new NextResponse(
+      "DOMAIN_VALIDATION_KEY is not configured for this deployment",
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }
+    )
+  }
+
+  return new NextResponse(key, {
     status: 200,
     headers: {
       "Content-Type": "text/plain; charset=utf-8",

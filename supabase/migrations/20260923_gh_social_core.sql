@@ -249,7 +249,8 @@ DECLARE
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 40), 1), 100);
   v_rows jsonb;
 BEGIN
-  SELECT COALESCE(jsonb_agg(row_to_json(q)::jsonb ORDER BY q.created_at DESC), '[]'::jsonb)
+  -- Order by subquery alias "createdAt" (not created_at); fixes PostgreSQL 42703
+  SELECT COALESCE(jsonb_agg(row_to_json(q)::jsonb ORDER BY q."createdAt" DESC), '[]'::jsonb)
   INTO v_rows
   FROM (
     SELECT

@@ -22,7 +22,7 @@
     "ops:migration-check": "node scripts/print-migration-checklist.mjs"
   },
   "dependencies": {
-    "next": "15.5.24",
+    "next": "15.5.26",
     "react": "^19",
     "react-dom": "^19",
     "@hookform/resolvers": "^3.10.0",
@@ -90,9 +90,9 @@
     "typescript": "^5",
     "@types/qrcode": "^1.5.5",
     "eslint": "^9.15.0",
-    "eslint-config-next": "15.5.24",
+    "eslint-config-next": "15.5.26",
     "@eslint/eslintrc": "^3.2.0",
-    "@next/eslint-plugin-next": "15.5.24"
+    "@next/eslint-plugin-next": "15.5.26"
   },
   "engines": {
     "node": "24.x"

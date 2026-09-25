@@ -11,9 +11,11 @@ import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-conte
 import { listMyCommunitiesForHome } from "@/lib/domains/adapters/my-communities-home"
 import { Calendar } from "lucide-react"
 import { listInvitationsForViewer } from "@/lib/domains/adapters/community-invites-adapter"
+import { buildHomeCommunityPulse } from "@/lib/domains/adapters/home-community-pulse"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
 import { DailyRewardHomeExperience } from "./daily-reward-experience"
+import { CommunityInviteCard } from "@/components/ghc/community-invite-card"
 import {
   createIdentitySeam,
   createConnectionsSeam,
@@ -24,7 +26,6 @@ import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { Users, MessagesSquare, Compass, ArrowRight, Sparkles } from "lucide-react"
 import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
 import { navigateTo, openCommunity } from "@/lib/navigation/navigate"
-// community home strip
 
 function timeGreeting(now = new Date()): string {
   const h = now.getHours()
@@ -94,16 +95,27 @@ export function HomeCommandCentre({
 }) {
   const ghcSession = useGHC() as any
   const meId = IdentityService.getCurrentUserId()
-  const myCommunities = listMyCommunitiesForHome(
-    (ghcSession.conversations || []) as any[],
-    meId,
-    { blockedUserIds: ghcSession.blockedUsers || [], limit: 6 }
-  )
-  const invites = listInvitationsForViewer(
-    (ghcSession.conversations || []) as any[],
-    meId,
-    { blockedUserIds: ghcSession.blockedUsers || [] }
-  ).filter((i: { status: string }) => i.status === "invited")
+  const conversations = (ghcSession.conversations || []) as any[]
+  const blockedUserIds = (ghcSession.blockedUsers || []) as string[]
+  const acceptCommunityInvitation = ghcSession.acceptCommunityInvitation as (
+    communityId: string
+  ) => Promise<boolean>
+  const declineCommunityInvitation = ghcSession.declineCommunityInvitation as (
+    communityId: string
+  ) => Promise<boolean>
+  const myCommunities = listMyCommunitiesForHome(conversations, meId, {
+    blockedUserIds,
+    limit: 6,
+  })
+  const invites = listInvitationsForViewer(conversations, meId, {
+    blockedUserIds,
+  }).filter((i: { status: string }) => i.status === "invited")
+  const communityPulse = buildHomeCommunityPulse({
+    viewerId: meId,
+    conversations,
+    blockedUserIds,
+    maxItems: 3,
+  })
 
 
   const ghc = useGHCProfile() as {
@@ -249,35 +261,48 @@ export function HomeCommandCentre({
       <DailyRewardHomeExperience />
 
       {invites.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => goTab("communities")}
-          className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-2.5 py-2 text-left transition hover:bg-muted/40"
-          aria-label={`${invites.length} community invitation${invites.length === 1 ? "" : "s"}`}
-        >
-          <span className="text-[12px] font-semibold text-foreground">
-            {invites.length} community invite{invites.length === 1 ? "" : "s"}
-          </span>
-          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-            Review
-          </span>
-        </button>
-      ) : null}
-
-      {myCommunities.length > 0 ? (
-        <div className="space-y-1.5" aria-label="My communities">
-          <div className="flex items-center justify-between px-0.5">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Communities
-            </h3>
+        <div className="space-y-2" aria-label={`${invites.length} community invitations`}>
+          {invites.slice(0, 3).map((invite) => (
+            <CommunityInviteCard
+              key={invite.communityId}
+              invite={invite}
+              onAccept={() => acceptCommunityInvitation(invite.communityId)}
+              onDecline={() => declineCommunityInvitation(invite.communityId)}
+              onOpen={() => {
+                try {
+                  openCommunity(invite.communityId)
+                } catch {
+                  goTab("communities")
+                }
+              }}
+            />
+          ))}
+          {invites.length > 3 ? (
             <button
               type="button"
               onClick={() => goTab("communities")}
-              className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+              className="w-full text-center text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
             >
-              See all
+              Review all invites
             </button>
-          </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="space-y-1.5" aria-label="My communities">
+        <div className="flex items-center justify-between px-0.5">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            My communities
+          </h3>
+          <button
+            type="button"
+            onClick={() => goTab("communities")}
+            className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+          >
+            See all
+          </button>
+        </div>
+        {myCommunities.length > 0 ? (
           <ul className="divide-y divide-border/40 rounded-xl border border-border/40 overflow-hidden">
             {myCommunities.slice(0, 3).map((c) => (
               <li key={c.id}>
@@ -301,6 +326,55 @@ export function HomeCommandCentre({
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
                     {c.name}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <button
+            type="button"
+            onClick={() => goTab("communities")}
+            className="w-full rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-left transition hover:bg-muted/40"
+          >
+            <p className="text-[12px] font-medium text-foreground">
+              {"You haven't joined a community yet"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Discover groups that match your interests
+            </p>
+          </button>
+        )}
+      </div>
+
+      {communityPulse.hasSignal ? (
+        <div className="space-y-1.5" aria-label="Happening in your communities">
+          <h3 className="px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Happening in your communities
+          </h3>
+          <ul className="space-y-1 rounded-xl border border-border/40 bg-muted/15 p-2">
+            {communityPulse.items.map((item) => (
+              <li key={`${item.communityId}-${item.title}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      openCommunity(item.communityId)
+                    } catch {
+                      goTab("communities")
+                    }
+                  }}
+                  className="flex w-full min-h-10 items-start gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-muted/40"
+                >
+                  <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-medium text-foreground line-clamp-1">
+                      {item.title}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground line-clamp-1">
+                      {item.communityName}
+                      {item.subtitle ? ` · ${item.subtitle}` : ""}
+                    </span>
                   </span>
                 </button>
               </li>
