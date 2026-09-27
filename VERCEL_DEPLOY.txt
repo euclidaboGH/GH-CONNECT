@@ -1,7 +1,7 @@
 GreenHaven deploy stamp
 version=0.59.4
 node=24.x
-next=15.5.24
+next=15.5.26
 production_url=https://gh-connect-tau.vercel.app
 
 ROOT CAUSE FIXED (Vercel Function Logs):
@@ -67,3 +67,12 @@ CRITICAL — Mainnet protection:
   - Never point Preview SUPABASE_* at the Mainnet project.
   - Database migrations are applied SEPARATELY to each Supabase project.
   - Shared code fixes deploy to both; data and secrets stay isolated.
+
+Status: Phases 1–13 source-complete; 14–15 not started; runtime verification required.
+
+STATUS NOTE
+  This file is a deploy stamp / historical fix log.
+  It does not certify production readiness.
+  Phases 1–13: source-implemented. Phases 14–15: not started.
+  Push to GitHub ≠ Vercel Production approval.
+  See SAFE_TO_PUSH.md and docs/TESTNET_VERIFICATION_GATE.md.

@@ -91,6 +91,11 @@ export function GlobalSearchModal({
   const [debouncedQuery, setDebouncedQuery] = useState("")
   const [tab, setSearchTab] = useState<SearchTab>("all")
   const [recent, setRecent] = useState<string[]>([])
+  const [serverPeople, setServerPeople] = useState<Array<{ userId?: string; displayName?: string; username?: string; bio?: string; avatarUrl?: string; isFollowing?: boolean }>>([])
+  const [serverPosts, setServerPosts] = useState<Array<{ id?: string; content?: string; authorName?: string; video?: string | null }>>([])
+  const [serverVideos, setServerVideos] = useState<Array<{ id?: string; content?: string; authorName?: string; video?: string | null }>>([])
+  const [serverCreators, setServerCreators] = useState<Array<{ userId?: string; displayName?: string; bio?: string }>>([])
+  const [serverOk, setServerOk] = useState(false)
   const requestGen = useRef(0)
   const [resultGen, setResultGen] = useState<number>(0)
 
@@ -104,6 +109,52 @@ export function GlobalSearchModal({
     }, 220)
     return () => window.clearTimeout(t)
   }, [query])
+
+  useEffect(() => {
+    if (!open || debouncedQuery.length < 2) {
+      setServerOk(false)
+      setServerPeople([])
+      setServerPosts([])
+      setServerVideos([])
+      setServerCreators([])
+      return
+    }
+    const cat =
+      tab === "people"
+        ? "people"
+        : tab === "posts"
+          ? "posts"
+          : "all"
+    const ac = new AbortController()
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/social/search?q=${encodeURIComponent(debouncedQuery)}&category=${encodeURIComponent(cat)}&limit=20`,
+          { credentials: "include", headers: { Accept: "application/json" }, signal: ac.signal },
+        )
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          durable?: boolean
+          people?: typeof serverPeople
+          posts?: typeof serverPosts
+          videos?: typeof serverVideos
+          creators?: typeof serverCreators
+        }
+        if (!res.ok || !data.ok || !data.durable) {
+          setServerOk(false)
+          return
+        }
+        setServerPeople(Array.isArray(data.people) ? data.people : [])
+        setServerPosts(Array.isArray(data.posts) ? data.posts : [])
+        setServerVideos(Array.isArray(data.videos) ? data.videos : [])
+        setServerCreators(Array.isArray(data.creators) ? data.creators : [])
+        setServerOk(true)
+      } catch {
+        if (!ac.signal.aborted) setServerOk(false)
+      }
+    })()
+    return () => ac.abort()
+  }, [open, debouncedQuery, tab])
 
   useEffect(() => {
     if (open) void loadRecentAsync().then(setRecent)
@@ -141,6 +192,19 @@ export function GlobalSearchModal({
 
   const people = useMemo(() => {
     if (!q || stale) return []
+    if (serverOk && serverPeople.length > 0) {
+      return serverPeople
+        .filter((p) => p.userId && !blocked.has(String(p.userId)) && !muted.has(String(p.userId)))
+        .map((p) => ({
+          id: String(p.userId),
+          name: String(p.displayName || p.username || "Member"),
+          bio: String(p.bio || ""),
+          photo: String(p.avatarUrl || ""),
+          location: "",
+          interests: [] as string[],
+        }))
+        .slice(0, 16)
+    }
     return (candidates || [])
       .filter((c) => c?.id && !blocked.has(c.id) && !muted.has(c.id))
       .filter((c) => c.id !== "current-user")
@@ -159,7 +223,7 @@ export function GlobalSearchModal({
         )
       })
       .slice(0, 16)
-  }, [candidates, q, blocked, muted, stale])
+  }, [candidates, q, blocked, muted, stale, serverOk, serverPeople])
 
   const idHits = useMemo(() => {
     if (!q || stale) return []

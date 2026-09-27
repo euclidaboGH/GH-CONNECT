@@ -45,11 +45,27 @@ export async function POST(request: Request) {
       )
     }
 
+    // Production-safe: never call Pi /complete without an authenticated owner + durable intent.
+    if (!auth) {
+      return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    }
+
     let intent = intentId
       ? (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
       : (await loadByProviderPaymentId(paymentId)) || getByProviderPaymentId(paymentId)
 
-    if (intent && auth && intent.userId !== auth.userId) {
+    if (!intent) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "INTENT_REQUIRED",
+          detail: "No GreenHaven payment intent bound to this payment",
+        },
+        { status: 404 }
+      )
+    }
+
+    if (intent.userId !== auth.userId) {
       return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
     }
 
@@ -61,7 +77,7 @@ export async function POST(request: Request) {
         skipped?: boolean
         tier?: string
       } | null = null
-      const grantUserId = auth?.userId || intent.userId
+      const grantUserId = auth.userId
       if (grantUserId && intent.userId === grantUserId) {
         try {
           const result = await tryGrantMembershipFromCompletedIntent({
@@ -100,7 +116,7 @@ export async function POST(request: Request) {
     if (intent) {
       await bindProviderPayment(intent.id, paymentId, auth?.userId)
       await transitionIntent(intent.id, "COMPLETION_PENDING", {
-        actor: auth?.userId || "system",
+        actor: auth.userId,
         detail: "Completion requested",
         providerPaymentId: paymentId,
         txid,
@@ -144,7 +160,7 @@ export async function POST(request: Request) {
 
     if (intent) {
       await transitionIntent(intent.id, "COMPLETED", {
-        actor: auth?.userId || "system",
+        actor: auth.userId,
         detail: "Pi developer completed",
         providerPaymentId: paymentId,
         txid,
@@ -165,7 +181,7 @@ export async function POST(request: Request) {
         : null) ||
       (await loadByProviderPaymentId(paymentId)) ||
       getByProviderPaymentId(paymentId)
-    const grantUserId = auth?.userId || completedIntent?.userId
+    const grantUserId = auth.userId
     if (completedIntent && grantUserId && completedIntent.userId === grantUserId) {
       try {
         const result = await tryGrantMembershipFromCompletedIntent({

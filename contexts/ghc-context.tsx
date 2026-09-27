@@ -213,6 +213,7 @@ interface GHCContextType {
     community?: { id: string; name: string } | null,
   ) => Promise<boolean>
   likePost: (postId: string) => Promise<void>
+  reactToPost: (postId: string, reaction?: string) => Promise<void>
   deletePost: (postId: string) => Promise<void>
   editPost: (postId: string, newContent: string) => Promise<void>
   archivePost: (postId: string) => Promise<void>
@@ -1504,50 +1505,52 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const likePost = async (postId: string) => {
-    // Optimistic local toggle
-    setState((s) => {
-      const isLiked = s.likedPostIds.includes(postId)
-      const nextLikedPostIds = isLiked
-        ? s.likedPostIds.filter((id) => id !== postId)
-        : [...s.likedPostIds, postId]
-      const nextLikes = isLiked
-        ? s.likes.filter(
-            (like) =>
-              !(like.fromUserId === "current-user" && like.toUserId === postId)
-          )
-        : [
-            ...s.likes,
-            {
-              id: generateId(),
-              fromUserId: "current-user",
-              toUserId: postId,
-              createdAt: Date.now(),
-            },
-          ]
-      return {
-        ...s,
-        posts: s.posts.map((post) =>
-          post.id === postId
-            ? { ...post, likes: Math.max(0, post.likes + (isLiked ? -1 : 1)) }
-            : post
-        ),
-        likes: nextLikes,
-        likedPostIds: nextLikedPostIds,
-      }
-    })
-    // Durable reconcile
+  /** Durable multi-reaction (like, love, support, …). Server is authority when configured. */
+  const reactToPost = async (postId: string, reaction: string = "like") => {
+    const isLike = reaction === "like" || !reaction
+    if (isLike) {
+      setState((s) => {
+        const isLiked = s.likedPostIds.includes(postId)
+        const nextLikedPostIds = isLiked
+          ? s.likedPostIds.filter((id) => id !== postId)
+          : [...s.likedPostIds, postId]
+        const nextLikes = isLiked
+          ? s.likes.filter(
+              (like) =>
+                !(like.fromUserId === "current-user" && like.toUserId === postId)
+            )
+          : [
+              ...s.likes,
+              {
+                id: generateId(),
+                fromUserId: "current-user",
+                toUserId: postId,
+                createdAt: Date.now(),
+              },
+            ]
+        return {
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId
+              ? { ...post, likes: Math.max(0, post.likes + (isLiked ? -1 : 1)) }
+              : post
+          ),
+          likes: nextLikes,
+          likedPostIds: nextLikedPostIds,
+        }
+      })
+    }
     try {
-      const { socialToggleLike } = await import("@/lib/social/client")
-      const remote = await socialToggleLike(postId)
-      if (remote.ok && remote.durable && typeof remote.likeCount === "number") {
+      const { socialToggleReaction } = await import("@/lib/social/client")
+      const remote = await socialToggleReaction(postId, reaction || "like")
+      if (remote.ok && remote.durable && isLike && typeof remote.likeCount === "number") {
         setState((s) => ({
           ...s,
           posts: s.posts.map((post) =>
             post.id === postId ? { ...post, likes: remote.likeCount as number } : post
           ),
           likedPostIds:
-            remote.liked === false
+            remote.liked === false || remote.active === false
               ? s.likedPostIds.filter((id) => id !== postId)
               : s.likedPostIds.includes(postId)
                 ? s.likedPostIds
@@ -1559,6 +1562,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
+
+  const likePost = async (postId: string) => {
+    return reactToPost(postId, "like")
+  }
 
   const getDomainState = useCallback(() => ({
     profile: state.profile,
@@ -2137,6 +2144,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     postId: string,
     platform: "twitter" | "facebook" | "linkedin" | "copy" | "timeline" | "story" | "private" | "group" = "copy"
   ) => {
+    // Durable share edge — await so callers can observe failure; external copy still independent
+    try {
+      const { socialSharePost } = await import("@/lib/social/client")
+      await socialSharePost(postId)
+    } catch {
+      /* non-blocking for external platforms */
+    }
     // Legacy external platforms still supported; internal shares use ShareService via ShareSheet
     const { ShareService } = await import("@/lib/share-service")
     const ctx = {
@@ -2205,7 +2219,30 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Post saved", "success")
+    try {
+      const { socialToggleSave } = await import("@/lib/social/client")
+      const remote = await socialToggleSave(postId)
+      if (remote.ok === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  bookmarkedBy: (post.bookmarkedBy || []).filter(
+                    (name) => name !== s.profile.displayName
+                  ),
+                }
+              : post
+          ),
+        }))
+        addToast(remote.error || "Could not save post", "error")
+        return
+      }
+      addToast(remote.durable ? "Post saved" : "Post saved on this device", "success")
+    } catch {
+      addToast("Post saved on this device", "success")
+    }
   }
 
   const unsavePost = async (postId: string) => {
@@ -2220,7 +2257,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Post removed from saved", "success")
+    try {
+      const { socialToggleSave } = await import("@/lib/social/client")
+      await socialToggleSave(postId)
+      addToast("Post removed from saved", "success")
+    } catch {
+      addToast("Post removed from saved", "success")
+    }
   }
 
   const hidePost = async (postId: string) => {
@@ -2265,6 +2308,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         return
       }
       recordModerationReport("post", postId, reason)
+      try {
+        const { socialReport } = await import("@/lib/social/client")
+        await socialReport({ targetType: "post", targetId: postId, reason })
+      } catch {
+        /* domain already accepted */
+      }
       addToast("Post reported for review", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -4585,6 +4634,7 @@ const dismissMatchCelebration = useCallback(() => {
       createLocalProfile,
       createPost,
       likePost,
+      reactToPost,
       deletePost,
       editPost,
       archivePost,
@@ -4865,6 +4915,7 @@ const dismissMatchCelebration = useCallback(() => {
       candidates: visibleSession.candidates,
       createPost,
       likePost,
+      reactToPost,
       deletePost,
       editPost,
       archivePost,
@@ -4910,6 +4961,7 @@ const dismissMatchCelebration = useCallback(() => {
       mutedIdsForUi,
       createPost,
       likePost,
+      reactToPost,
       deletePost,
       editPost,
       archivePost,

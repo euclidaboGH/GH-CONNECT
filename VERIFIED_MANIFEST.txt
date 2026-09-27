@@ -1,0 +1,28 @@
+GH-CONNECT VERIFIED MANIFEST
+generated=2026-09-26T20:45:33Z
+canonical_migrations=54
+
+PHASE_13_REQUIRED:
+PRESENT size=2913 path=supabase/migrations/20261005_gh_post_shares.sql
+PRESENT size=2818 path=supabase/migrations/20261005b_gh_notif_share_type.sql
+PRESENT size=2731 path=app/api/social/posts/[id]/share/route.ts
+PRESENT size=4217 path=lib/server/social/notifications.ts
+PRESENT size=972 path=docs/GH_SOCIAL_ENGAGEMENT.md
+PRESENT size=3600 path=docs/PHASE_IMPLEMENTATION_STATUS.md
+
+LATEST_MIGRATIONS:
+supabase/migrations/20260926_gh_reaction_multi_type.sql
+supabase/migrations/20260926_ghc_withdrawal_requests.sql
+supabase/migrations/20260927_gh_content_attention_read.sql
+supabase/migrations/20260927_gh_content_event_access_guard.sql
+supabase/migrations/20260927_gh_content_events.sql
+supabase/migrations/20260928_gh_post_curation.sql
+supabase/migrations/20260929_gh_reputation.sql
+supabase/migrations/20260930_gh_ad_verification.sql
+supabase/migrations/20260930_gh_creator_studio.sql
+supabase/migrations/20261001_gh_media_assets.sql
+supabase/migrations/20261002_gh_follow_status.sql
+supabase/migrations/20261003_gh_social_notifications.sql
+supabase/migrations/20261004_gh_search.sql
+supabase/migrations/20261005_gh_post_shares.sql
+supabase/migrations/20261005b_gh_notif_share_type.sql

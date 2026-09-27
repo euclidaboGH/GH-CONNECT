@@ -21,9 +21,13 @@ import type { CreateHubAction } from "./create-hub-sheet"
 import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation/destinations"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
+import { CreatorStudioOverlay } from "./creator-studio-overlay"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
+)
+const ShortVideoScreen = lazy(() =>
+  import("./short-video-screen").then((m) => ({ default: m.ShortVideoScreen }))
 )
 const PollComposer = lazy(() =>
   import("./poll-composer").then((m) => ({ default: m.PollComposer }))
@@ -258,6 +262,7 @@ export function GHConnectApp() {
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
   const [showCreateHub, setShowCreateHub] = useState(false)
+  const [showShortVideo, setShowShortVideo] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const [challengeOpen, setChallengeOpen] = useState(false)
   const [ecosystemOpen, setEcosystemOpen] = useState(false)
@@ -304,7 +309,12 @@ export function GHConnectApp() {
       setEcosystemOpen(true)
     }
     window.addEventListener("ghc:open-ecosystem", openEco)
-    return () => window.removeEventListener("ghc:open-ecosystem", openEco)
+    const openShort = () => setShowShortVideo(true)
+    window.addEventListener("ghc:open-short-video", openShort)
+    return () => {
+      window.removeEventListener("ghc:open-ecosystem", openEco)
+      window.removeEventListener("ghc:open-short-video", openShort)
+    }
   }, [])
 
   // Deep-links from notifications / identity cards
@@ -937,6 +947,11 @@ export function GHConnectApp() {
           } catch { /* */ }
         }}
       />
+      {showShortVideo && (
+        <Suspense fallback={null}>
+          <ShortVideoScreen open={showShortVideo} onClose={() => setShowShortVideo(false)} />
+        </Suspense>
+      )}
         </Suspense>
       ) : null}
 
@@ -978,6 +993,8 @@ export function GHConnectApp() {
         }}
       />
       </Suspense>
+
+      <CreatorStudioOverlay />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3">
         {visibleToasts.map((toast) => (

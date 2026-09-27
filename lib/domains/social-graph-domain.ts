@@ -523,6 +523,7 @@ export function createSocialGraphDomain(getCtx: () => GraphCtx) {
         validate: (i) => transitionGate(s, i.userId, "mute"),
         mutate: (i) => {
           socialGraphStore.addEdge(s.currentUserId, i.userId, "mute")
+          persistEdge(s, "mute", i.userId)
           return { mutedUsers: Array.from(new Set([...(s.mutedUsers || []), i.userId])) }
         },
         eventType: "MUTE_CREATED",
@@ -539,6 +540,7 @@ export function createSocialGraphDomain(getCtx: () => GraphCtx) {
         validate: (i) => transitionGate(s, i.userId, "unmute"),
         mutate: (i) => {
           socialGraphStore.removeEdge(s.currentUserId, i.userId, "mute")
+          persistEdge(s, "unmute", i.userId)
           return { mutedUsers: (s.mutedUsers || []).filter((id) => id !== i.userId) }
         },
         eventType: "MUTE_REMOVED",

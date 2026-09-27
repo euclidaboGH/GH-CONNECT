@@ -131,11 +131,70 @@ export function NotificationBell({
       setItems([])
       setUnread(0)
     }
+    // Merge durable social notifications (server-authoritative)
+    void (async () => {
+      try {
+        const res = await fetch("/api/social/notifications?limit=40", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          notifications?: Array<{
+            id?: string
+            type?: string
+            title?: string
+            body?: string
+            createdAt?: number
+            readAt?: string | null
+            actorUserId?: string
+            entityId?: string
+            entityType?: string
+          }>
+        }
+        if (!res.ok || !data.ok || !Array.isArray(data.notifications)) return
+        const mapped: Notification[] = data.notifications.map((n) => ({
+          id: String(n.id || ""),
+          type: (n.type === "follow"
+            ? "follow"
+            : n.type === "post_like"
+              ? "like"
+              : n.type === "post_comment" || n.type === "comment_reply"
+                ? "comment"
+                : "system") as NotificationType,
+          title: String(n.title || "Activity"),
+          message: String(n.body || ""),
+          icon: "🔔",
+          timestamp: Number(n.createdAt) || Date.now(),
+          read: Boolean(n.readAt),
+          data: {
+            durable: true,
+            actorUserId: n.actorUserId,
+            entityId: n.entityId,
+            entityType: n.entityType,
+            socialType: n.type,
+          },
+        }))
+        setItems((prev) => {
+          const byId = new Map<string, Notification>()
+          for (const x of [...mapped, ...prev]) {
+            if (x.id && !byId.has(x.id)) byId.set(x.id, x)
+          }
+          return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        })
+        setUnread((prev) => {
+          const durableUnread = mapped.filter((m) => !m.read).length
+          return Math.max(prev, durableUnread)
+        })
+      } catch {
+        /* local-only remains */
+      }
+    })()
   }, [])
 
   useEffect(() => {
     refresh()
-    const id = window.setInterval(refresh, 4000)
+    const id = window.setInterval(refresh, 12000)
     return () => window.clearInterval(id)
   }, [refresh])
 
@@ -161,6 +220,14 @@ export function NotificationBell({
     } catch {
       /* */
     }
+    if (n.data && (n.data as { durable?: boolean }).durable && n.id) {
+      void fetch("/api/social/notifications", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+      }).catch(() => null)
+    }
     const link = resolveNotificationDeepLink(n)
     navigateNotificationDeepLink(link)
     onOpenTarget?.(n)
@@ -174,6 +241,12 @@ export function NotificationBell({
     } catch {
       /* */
     }
+    void fetch("/api/social/notifications", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAll: true }),
+    }).catch(() => null)
     refresh()
   }
 

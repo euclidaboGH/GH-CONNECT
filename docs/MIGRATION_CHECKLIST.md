@@ -1,65 +1,133 @@
-# Supabase migration verification (read-only)
+# Supabase migration checklist (operator)
 
 **Never** drop production tables to “fix” identity or ledger data.  
 **Never** disable RLS in Production for debugging.
 
-## 1. Confirm migration files exist in the repo
+| Item | Value |
+|------|------:|
+| Canonical directory | `supabase/migrations/` |
+| On-disk count | **54** |
+| Latest sequence id | `20261005b_gh_notif_share_type.sql` |
 
-| Migration | Purpose |
-|-----------|---------|
-| `20260908_gh_pi_identities.sql` | Pi → GH user mapping |
-| `20260908_gh_sessions.sql` | Server sessions |
-| `20260919_gh_user_profiles_and_progress.sql` | Profile / achievements / progress |
-| `20260919_gh_messaging_durable.sql` | Conversations + messages |
-| Economy series (`20260821` … wallet snapshot) | GHC ledger / claims / spends |
+Copies under `staging-required-migrations/` / `staging-gap-package/` are **not** additional canonical migrations.
 
-Apply **only** via Supabase SQL editor or CLI with review. Prefer Staging first.
+Filenames are **sequence ids** (ordering), not necessarily calendar deployment dates.
 
-## 2. Read-only existence checks (SQL editor)
+Machine listing: `node scripts/print-migration-checklist.mjs`
+
+---
+
+## Classification legend
+
+| Class | Operator action |
+|-------|-----------------|
+| **REQUIRED** | Apply on Testnet (then Production when ready), oldest → newest |
+| **REQUIRES_APPROVAL** | Apply only after product/security review |
+| **PROPOSAL** | Do **not** apply unless explicitly approved |
+
+There are **no Phase 14 or Phase 15** migrations in this repository.
+
+---
+
+## Full inventory (54)
+
+| # | File | Class | Purpose (from migration header) |
+|--:|------|-------|----------------------------------|
+| 1 | `20260821_ghc_economy_ledger.sql` | REQUIRED | GHC authoritative ledger |
+| 2 | `20260822_ghc_account_and_claim.sql` | REQUIRED | Account created_at + claim pending GHC |
+| 3 | `20260822_ghc_economy_events_rls.sql` | REQUIRED | RLS on economy notification events |
+| 4 | `20260822_ghc_notification_events.sql` | REQUIRED | Economy event notification fields + dedupe |
+| 5 | `20260822_ghc_public_identities.sql` | REQUIRED | Server-authoritative public GH IDs |
+| 6 | `20260822_ghc_rls_tighten_events.sql` | REQUIRED | Tighten economy events SELECT RLS |
+| 7 | `20260822_ghc_transfer_request_rpcs.sql` | REQUIRED | Transfer-request RPCs (atomic accept) |
+| 8 | `20260903_economy_v12_atomic_daily_claim.sql` | REQUIRED | Atomic daily claim (streak + ledger) |
+| 9 | `20260903_economy_v12_claim_streak_and_population.sql` | REQUIRED | Claim/streak authoritative state |
+| 10 | `20260903_economy_v12_telemetry_note.sql` | REQUIRED | Economy v1.2 support notes (non-destructive) |
+| 11 | `20260904_ghc_ledger_spend_rpc.sql` | REQUIRED | Authoritative GHC spend (debit-only) |
+| 12 | `20260904_membership_entitlements_and_activity_caps.sql` | REQUIRED | Membership entitlements + activity caps |
+| 13 | `20260904_pi_payment_intents_durable.sql` | REQUIRED | Durable Pi payment intents |
+| 14 | `20260905_connection_request_intents.sql` | **REQUIRES_APPROVAL** | Connection request intent durability |
+| 15 | `20260905_p0_activity_governor_durable.sql` | REQUIRED | Multi-instance activity caps + demand |
+| 16 | `20260906_community_join_reasons_proposal.sql` | **PROPOSAL** | Join-reason storage (not auto-apply) |
+| 17 | `20260907_community_governance_log_proposal.sql` | **PROPOSAL** | Moderation log + safety reports proposal |
+| 18 | `20260908_gh_pi_identities.sql` | REQUIRED | Durable Pi ↔ GH identity mapping |
+| 19 | `20260908_gh_sessions.sql` | REQUIRED | Server sessions |
+| 20 | `20260908_gh_step_ups.sql` | REQUIRED | Step-up authentication records |
+| 21 | `20260908_gh_webauthn_credentials.sql` | REQUIRED | WebAuthn credential storage |
+| 22 | `20260908_ghc_spend_sign_and_idempotency.sql` | REQUIRED | Spend signing + idempotency |
+| 23 | `20260911_ghc_wallet_snapshot.sql` | REQUIRED | Wallet snapshot support |
+| 24 | `20260912_marketplace_listings_and_list_rpc.sql` | REQUIRED | Marketplace listings + list RPC |
+| 25 | `20260912_marketplace_orders_durable.sql` | REQUIRED | Durable marketplace orders |
+| 26 | `20260914_verification_requests_durable.sql` | REQUIRED | Verification requests durability |
+| 27 | `20260919_gh_messaging_durable.sql` | REQUIRED | Conversations + messages |
+| 28 | `20260919_gh_user_profiles_and_progress.sql` | REQUIRED | Profiles, progress, achievements |
+| 29 | `20260922_ghc_stage_pending.sql` | REQUIRED | Stage pending GHC |
+| 30 | `20260922_ghc_stage_pending_limits.sql` | REQUIRED | Stage pending limits |
+| 31 | `20260923_gh_communities_core.sql` | REQUIRED | Communities core |
+| 32 | `20260923_gh_pass5_soft_limits_polls.sql` | REQUIRED | Soft limits + polls foundation |
+| 33 | `20260923_gh_poll_vote_validate.sql` | REQUIRED | Poll vote validation |
+| 34 | `20260923_gh_social_core.sql` | REQUIRED | Social core (posts, reactions, follows, …) |
+| 35 | `20260923_ghc_ledger_rpc_acl.sql` | REQUIRED | Ledger RPC ACL |
+| 36 | `20260923_ghc_user_accounts_rls_lockdown.sql` | REQUIRED | `ghc_user_accounts` RLS lockdown |
+| 37 | `20260925_gh_poll_vote_authoritative.sql` | REQUIRED | Authoritative poll vote RPC |
+| 38 | `20260925_gh_post_list_feed_order_fix.sql` | REQUIRED | Feed ORDER BY alias fix (`createdAt`) |
+| 39 | `20260925_rpc_acl_lockdown.sql` | REQUIRED | Global RPC ACL lockdown (service_role) |
+| 40 | `20260926_gh_reaction_multi_type.sql` | REQUIRED | Multi-type durable reactions (Phase 1) |
+| 41 | `20260926_ghc_withdrawal_requests.sql` | REQUIRED | GHC → π withdrawal requests |
+| 42 | `20260927_gh_content_attention_read.sql` | REQUIRED | Attention read model (Phase 2.5) |
+| 43 | `20260927_gh_content_event_access_guard.sql` | REQUIRED | Attention access/visibility guard |
+| 44 | `20260927_gh_content_events.sql` | REQUIRED | Content attention events (Phase 2.2) |
+| 45 | `20260928_gh_post_curation.sql` | REQUIRED | Post curation upvote/downvote (Phase 3) |
+| 46 | `20260929_gh_reputation.sql` | REQUIRED | Reputation foundation (Phase 4) |
+| 47 | `20260930_gh_ad_verification.sql` | REQUIRED | Pi Ads verification events (Phase 6; no rewards) |
+| 48 | `20260930_gh_creator_studio.sql` | REQUIRED | Creator Studio + tip intents (Phase 5; no settlement) |
+| 49 | `20261001_gh_media_assets.sql` | REQUIRED | Durable media assets (Phase 8) |
+| 50 | `20261002_gh_follow_status.sql` | REQUIRED | Follow status + counts (Phase 10) |
+| 51 | `20261003_gh_social_notifications.sql` | REQUIRED | Social notifications (Phase 11) |
+| 52 | `20261004_gh_search.sql` | REQUIRED | Server search/discovery (Phase 12) |
+| 53 | `20261005_gh_post_shares.sql` | REQUIRED | Durable shares (Phase 13) |
+| 54 | `20261005b_gh_notif_share_type.sql` | REQUIRED | Share notification type constraint |
+
+**Counts:** REQUIRED **51** · REQUIRES_APPROVAL **1** · PROPOSAL **2** · Total **54**
+
+---
+
+## Recommended apply order (Testnet)
+
+1. REQUIRED rows **1–13** (economy / payments / membership)  
+2. Skip or review **14** (`connection_request_intents`)  
+3. REQUIRED **15**  
+4. **Do not apply 16–17** (PROPOSAL) unless approved  
+5. REQUIRED **18–54** (identity → social Phases 1–13)
+
+Always apply **oldest sequence id first** within the set you choose to run.
+
+---
+
+## Post-apply smoke SQL
 
 ```sql
--- Tables present?
-select to_regclass('public.gh_pi_identities') as gh_pi_identities;
-select to_regclass('public.gh_sessions') as gh_sessions;
-select to_regclass('public.gh_user_profiles') as gh_user_profiles;
-select to_regclass('public.gh_user_achievements') as gh_user_achievements;
-select to_regclass('public.gh_conversations') as gh_conversations;
-select to_regclass('public.gh_messages') as gh_messages;
+select to_regclass('public.gh_pi_identities');
+select to_regclass('public.gh_sessions');
+select to_regclass('public.gh_user_profiles');
+select to_regclass('public.gh_conversations');
+select to_regclass('public.gh_posts');
+select to_regclass('public.gh_post_shares');
+select to_regclass('public.gh_social_notifications');
+select to_regclass('public.ghc_payment_intents');
+select to_regclass('public.ghc_membership_entitlements');
 ```
 
-Expected: each returns the relation name, not `null`.
+Then: `GET /api/health` and `docs/IDOR_TEST_CHECKLIST.md` on Staging/Testnet before Production.
 
-## 3. RLS smoke (do not change policies)
+---
 
-```sql
--- As service role (Dashboard SQL runs as privileged): should succeed
-select count(*) from public.gh_pi_identities;
-```
+## Implementation vs apply status
 
-From the **anon** key (client): PostgREST should not return arbitrary rows  
-(deny-all / no broad SELECT policies on these tables).
+| Layer | Status |
+|-------|--------|
+| SQL files in repo | Present (54) |
+| Applied on Testnet Supabase | **Operator action** — not certified by this document |
+| Applied on Mainnet Supabase | **Operator action** — not certified by this document |
 
-## 4. Runtime proof
-
-After deploy:
-
-```http
-GET /api/health
-```
-
-Expect checks:
-
-- `identity_durable` = pass  
-- `session_durable` = pass  
-- `supabase_config` = pass  
-- `messaging_durable` = pass (after messaging migration)  
-
-Production with critical failures → HTTP **503**.
-
-## 5. Staging mirror
-
-1. Create/use a Staging Supabase project.  
-2. Apply the same migrations.  
-3. Point Vercel **Preview** env at Staging.  
-4. Run IDOR checklist (`docs/IDOR_TEST_CHECKLIST.md`).  
-5. Only then apply to Production.
+Source presence ≠ database applied.

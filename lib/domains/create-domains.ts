@@ -210,6 +210,7 @@ export function createDomainServices(
             const {
               socialFollow,
               socialBlock,
+              socialMute,
               socialConnectionRequest,
               socialConnectionAccept,
             } = await import("@/lib/social/client")
@@ -231,15 +232,7 @@ export function createDomainServices(
             } else if (t === "friend_accept") {
               await socialConnectionAccept(target)
             } else if (t === "mute" || t === "unmute") {
-              await fetch("/api/social/mutes", {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  targetUserId: target,
-                  mute: t === "mute",
-                }),
-              })
+              await socialMute(target, t === "mute")
             } else if (t === "restrict" || t === "unrestrict") {
               await fetch("/api/social/restricts", {
                 method: "POST",

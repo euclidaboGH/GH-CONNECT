@@ -142,7 +142,7 @@ export async function POST(request: Request) {
     })
   }
 
-  // Create shell intent if none (orphan incomplete from Pi)
+  // Create shell intent only if Pi payment identity can be bound to this session user.
   if (!intent) {
     const amount = Number(payment.amount) || 0
     if (!(amount > 0)) {
@@ -152,6 +152,44 @@ export async function POST(request: Request) {
         action: "manual_review",
         paymentId,
       })
+    }
+    const piUid = String(
+      (payment as { user_uid?: string; from_uid?: string }).user_uid ||
+        (payment as { user_uid?: string; from_uid?: string }).from_uid ||
+        ""
+    ).trim()
+    if (!piUid) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "PI_PAYER_UNVERIFIED",
+          action: "manual_review",
+          detail: "Cannot bind orphan incomplete payment without Pi payer identity",
+          paymentId,
+        },
+        { status: 403 }
+      )
+    }
+    // Map Pi app uid → GH user; must equal authenticated session user
+    let payerGhUserId = piUid
+    try {
+      const { getByPiAppUid } = await import("@/lib/server/identity/pi-identity-store")
+      const mapping = await getByPiAppUid(piUid)
+      if (mapping?.ghUserId) payerGhUserId = mapping.ghUserId
+    } catch {
+      /* mapping unavailable — compare pi uid to session userId (bootstrap scheme) */
+    }
+    if (payerGhUserId !== auth.userId && piUid !== auth.userId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "FORBIDDEN",
+          action: "manual_review",
+          detail: "Incomplete payment payer does not match authenticated user",
+          paymentId,
+        },
+        { status: 403 }
+      )
     }
     intent = await createPaymentIntent({
       userId: auth.userId,
@@ -163,6 +201,7 @@ export async function POST(request: Request) {
       metadata: {
         recovered: true,
         piPaymentId: paymentId,
+        piPayerUid: piUid,
       },
     })
     await bindProviderPayment(intent.id, paymentId, auth.userId)

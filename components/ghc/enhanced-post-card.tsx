@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useRef, useEffect } from "react"
-import { Heart, MessageCircle, Share2, MoreVertical, Bookmark, Link as LinkIcon, Eye, X, ShieldCheck, Pencil, Trash2, Pin, Archive, Copy } from "lucide-react"
+import { Heart, MessageCircle, Share2, ChevronUp, ChevronDown, MoreVertical, Bookmark, Link as LinkIcon, Eye, X, ShieldCheck, Pencil, Trash2, Pin, Archive, Copy } from "lucide-react"
 import type { Post, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
@@ -12,6 +12,8 @@ import { resolveAvatarUrl } from "@/lib/avatar"
 import { isOwnAuthor } from "@/lib/ownership"
 import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
+import { socialRecordAttention, socialSetCuration } from "@/lib/social/client"
+import { shouldSendAttention } from "@/lib/social/attention-client"
 
 const REACTIONS: PostReaction[] = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -28,6 +30,7 @@ interface EnhancedPostCardProps {
   isSaved: boolean
   isOwnPost?: boolean
   onLike: (postId: string, isDouble?: boolean) => void
+  onReact?: (postId: string, reaction: PostReaction["type"]) => void
   onComment: (postId: string) => void
   onShare: (postId: string) => void
   onSave: (postId: string) => void
@@ -54,6 +57,7 @@ function EnhancedPostCardInner({
   isSaved,
   isOwnPost = false,
   onLike,
+  onReact,
   onComment,
   onShare,
   onSave,
@@ -85,6 +89,68 @@ function EnhancedPostCardInner({
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
+  const [upvoteCount, setUpvoteCount] = useState(0)
+  const [downvoteCount, setDownvoteCount] = useState(0)
+  const [curationBusy, setCurationBusy] = useState(false)
+
+  const handleCuration = async (choice: "upvote" | "downvote") => {
+    if (curationBusy) return
+    setCurationBusy(true)
+    try {
+      const res = await socialSetCuration(post.id, choice)
+      if (res.ok && res.choice) {
+        setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
+        if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
+        if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
+      }
+    } finally {
+      setCurationBusy(false)
+    }
+  }
+
+  const visibleSinceRef = useRef<number | null>(null)
+  const qualifiedSentRef = useRef(false)
+
+  // Phase 2.4 — view / qualified_view (fail-soft, server authoritative)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof IntersectionObserver === "undefined") return
+    const postId = post.id
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          if (shouldSendAttention(postId, "view")) {
+            void socialRecordAttention(postId, "view")
+          }
+          if (visibleSinceRef.current == null) {
+            visibleSinceRef.current = Date.now()
+          }
+        } else if (visibleSinceRef.current != null && !qualifiedSentRef.current) {
+          const dwell = Date.now() - visibleSinceRef.current
+          visibleSinceRef.current = null
+          if (dwell >= 3000 && shouldSendAttention(postId, "qualified_view")) {
+            qualifiedSentRef.current = true
+            void socialRecordAttention(postId, "qualified_view", { dwellMs: dwell })
+          }
+        }
+      },
+      { threshold: [0, 0.5, 1] }
+    )
+    obs.observe(el)
+    return () => {
+      obs.disconnect()
+      // flush qualified on unmount if dwell met
+      if (visibleSinceRef.current != null && !qualifiedSentRef.current) {
+        const dwell = Date.now() - visibleSinceRef.current
+        if (dwell >= 3000 && shouldSendAttention(postId, "qualified_view")) {
+          void socialRecordAttention(postId, "qualified_view", { dwellMs: dwell })
+        }
+      }
+    }
+  }, [post.id])
 
   // Double-tap to like
   const handleImageTap = () => {
@@ -138,12 +204,24 @@ function EnhancedPostCardInner({
   }
 
   const handleQuickReaction = (reaction: PostReaction) => {
-    // Trigger reaction animation and haptic feedback
     if ("vibrate" in navigator) {
-      navigator.vibrate(100)
+      try {
+        navigator.vibrate(100)
+      } catch {
+        /* ignore */
+      }
     }
     setShowReactions(false)
-    // In production, would send reaction to backend
+    if (reaction.type === "like") {
+      onLike(post.id)
+      return
+    }
+    if (onReact) {
+      onReact(post.id, reaction.type)
+      return
+    }
+    // Fallback: treat non-like as like for backward compatibility
+    onLike(post.id)
   }
 
   // Media gallery navigation
@@ -508,6 +586,39 @@ function EnhancedPostCardInner({
           icon={<Share2 size={20} aria-hidden />}
           onClick={() => onShare(post.id)}
         />
+      </div>
+      {/* Phase 3 curation — quality signal only (not nested inside Share) */}
+      <div className="flex items-center justify-end gap-0.5 border-t border-border/40 px-2 py-1">
+        <button
+          type="button"
+          disabled={curationBusy}
+          aria-label="Upvote"
+          aria-pressed={curationChoice === "upvote"}
+          onClick={() => void handleCuration("upvote")}
+          className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-xs font-semibold transition ${
+            curationChoice === "upvote"
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+              : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+          }`}
+        >
+          <ChevronUp size={18} />
+          {upvoteCount > 0 ? <span className="ml-0.5 tabular-nums">{upvoteCount}</span> : null}
+        </button>
+        <button
+          type="button"
+          disabled={curationBusy}
+          aria-label="Downvote"
+          aria-pressed={curationChoice === "downvote"}
+          onClick={() => void handleCuration("downvote")}
+          className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-xs font-semibold transition ${
+            curationChoice === "downvote"
+              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+              : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+          }`}
+        >
+          <ChevronDown size={18} />
+          {downvoteCount > 0 ? <span className="ml-0.5 tabular-nums">{downvoteCount}</span> : null}
+        </button>
       </div>
     </div>
   )

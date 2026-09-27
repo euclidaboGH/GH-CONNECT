@@ -49,6 +49,7 @@ import { DEFAULT_ECONOMY_LIMITS } from "@/lib/domains/economy-types"
 import { QuickChip, TxRow, EmptyBlock } from "./wallet-activity"
 import { WalletHeader } from "./wallet-header"
 import { WalletBalanceCard } from "./wallet-balance"
+import { WithdrawGhcPanel } from "./withdraw-ghc-panel"
 import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
@@ -903,6 +904,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           monthSpent={monthInsight.monthSpent}
           onOpenPending={() => setShowPendingSheet(true)}
         />
+
+        <WithdrawGhcPanel />
 
         <WalletPrimaryActions
           onSend={() => {

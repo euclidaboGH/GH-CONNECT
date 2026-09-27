@@ -3,6 +3,7 @@
  * Optional durable mirror for community safety reports.
  */
 import { NextRequest, NextResponse } from "next/server"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,6 +16,11 @@ export async function POST(req: NextRequest) {
       durability: "session",
       message: "Governance server mode off — report stored in session only on client.",
     })
+  }
+
+  const auth = await resolveAuthenticatedUser(req.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
   try {

@@ -177,7 +177,7 @@ export function applyDiscoveryFilters(
     filtered = filtered.filter((c) => (c as any).isVerified === true)
   }
 
-  // Distance filter (mock: based on location similarity)
+  // Distance filter when candidate.distance is present on supplied data (not GPS-derived here)
   if (filters.distance < 50) {
     filtered = filtered.filter((c) => (c as any).distance <= filters.distance)
   }

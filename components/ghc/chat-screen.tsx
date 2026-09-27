@@ -1,6 +1,11 @@
 "use client"
 
-/** @deprecated Prefer MessageScreen from screens-complete / messages-screen — kept for compatibility. */
+/**
+ * @deprecated LEGACY — not used by the active GH-Connect shell.
+ * Prefer Messages / community surfaces wired through ghc-context.
+ * Kept only because `components/ghc/index.ts` re-exports `ChatScreen`.
+ * Do not render fabricated groups or member counts.
+ */
 
 import { useState, useMemo, useCallback } from "react"
 import { useGHCMessaging, useGHCShell } from "@/contexts/ghc-context"
@@ -27,32 +32,10 @@ interface Group {
   privacy?: "public" | "private" | "invite-only"
 }
 
-// Mock featured groups data - lazily initialized for faster startup
-const createFeaturedGroups = (): Group[] => [
-  { id: "fg1", name: "Tech Enthusiasts Hub", description: "AI, web dev, startups & innovation", icon: "💻", category: "tech", members: 5234, onlineMembers: 342, isJoined: false, isFeatured: true, createdAt: Date.now() - 7776000000, privacy: "public" },
-  { id: "fg2", name: "Fitness & Wellness", description: "Workouts, nutrition & health coaching", icon: "💪", category: "communities", members: 3821, onlineMembers: 187, isJoined: false, isFeatured: true, createdAt: Date.now() - 2592000000, privacy: "public" },
-  { id: "fg3", name: "Professional Network", description: "Business, career growth & mentorship", icon: "🤝", category: "business", members: 8921, onlineMembers: 512, isJoined: false, isFeatured: true, createdAt: Date.now() - 1209600000, privacy: "public" },
-]
-
-const createSuggestedGroups = (): Group[] => [
-  { id: "sg1", name: "Photography Masters", description: "Share work, get feedback & tips", icon: "📸", category: "art", members: 2145, onlineMembers: 89, isJoined: false, createdAt: Date.now() - 5184000000, privacy: "public" },
-  { id: "sg2", name: "Adventure Travel", description: "Budget trips, stories & recommendations", icon: "✈️", category: "communities", members: 4532, onlineMembers: 234, isJoined: false, createdAt: Date.now() - 3888000000, privacy: "public" },
-  { id: "sg3", name: "Food & Cooking", description: "Recipes, restaurant reviews & foodie chat", icon: "🍕", category: "communities", members: 3214, onlineMembers: 145, isJoined: false, createdAt: Date.now() - 1814400000, privacy: "public" },
-]
-
-// Use lazy refs to avoid recreating arrays on every render
-const featuredGroupsRef = { current: null as Group[] | null }
-const suggestedGroupsRef = { current: null as Group[] | null }
-
-const getFeaturedGroups = () => {
-  if (!featuredGroupsRef.current) featuredGroupsRef.current = createFeaturedGroups()
-  return featuredGroupsRef.current
-}
-
-const getSuggestedGroups = () => {
-  if (!suggestedGroupsRef.current) suggestedGroupsRef.current = createSuggestedGroups()
-  return suggestedGroupsRef.current
-}
+// No fabricated groups or member counts — legacy screen is fail-closed empty.
+const EMPTY_GROUPS: Group[] = []
+const getFeaturedGroups = (): Group[] => EMPTY_GROUPS
+const getSuggestedGroups = (): Group[] => EMPTY_GROUPS
 
 export function ChatScreen() {
   const { addToast, createGroup } = useGHCMessaging()
@@ -301,7 +284,7 @@ export function ChatScreen() {
             {/* Empty state */}
             {!organizedGroups.featured.length && !organizedGroups.myGroupsList.length && !organizedGroups.suggested.length && (
               <div className="px-4 py-12 text-center">
-                <p className="text-gray-500 text-sm">No groups yet. Create one or discover new groups!</p>
+                <p className="text-gray-500 text-sm">This legacy screen has no live group catalog. Use Communities or Messages from the main app.</p>
                 <button
                   onClick={() => setShowCreateGroup(true)}
                   className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg text-sm font-medium hover:bg-pink-600"

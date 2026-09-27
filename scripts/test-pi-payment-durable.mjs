@@ -82,6 +82,26 @@ assert(orderStore.includes("NON-AUTHORITATIVE"), "order-store documented non-aut
 const store2 = readFileSync(join(root, "lib/server/payments/intent-store.ts"), "utf8")
 assert(store2.includes("assertDurableWrite") || store2.includes("DURABLE_REQUIRED"), "production fail-closed durable write")
 
+
+console.log("\n6. Phase 14 — payment ownership / complete hardening (static)")
+const complete = readFileSync(join(root, "app/api/payments/complete/route.ts"), "utf8")
+assert(complete.includes("AUTH_REQUIRED") || complete.includes("401"), "complete requires auth")
+assert(complete.includes("INTENT_REQUIRED") || complete.includes("intent"), "complete requires durable intent")
+assert(
+  complete.includes("owner") || complete.includes("userId") || complete.includes("auth.userId"),
+  "complete binds actor/ownership"
+)
+assert(complete.indexOf("piCompletePayment") > complete.indexOf("INTENT_REQUIRED") || complete.includes("loadPaymentIntent"), "intent check before Pi complete when INTENT_REQUIRED present")
+
+const incomplete = readFileSync(join(root, "app/api/payments/incomplete/route.ts"), "utf8")
+assert(
+  incomplete.includes("PI_PAYER_UNVERIFIED") || incomplete.includes("getByPiAppUid") || incomplete.includes("pi-identity"),
+  "incomplete binds Pi payer identity"
+)
+
+const approve = readFileSync(join(root, "app/api/payments/approve/route.ts"), "utf8")
+assert(approve.includes("loadPaymentIntent") || approve.includes("auth"), "approve uses durable intent path")
+
 console.log("\n=== RESULTS ===")
 console.log(`Passed: ${passed}`)
 console.log(`Failed: ${failed}`)

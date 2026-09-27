@@ -4,6 +4,7 @@
  * Without DB wiring, returns durable:false (honest).
  */
 import { NextRequest, NextResponse } from "next/server"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
       durability: "session",
       message: "Governance server mode off — client session log remains authoritative for this process only.",
     })
+  }
+
+  const auth = await resolveAuthenticatedUser(req.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
   try {

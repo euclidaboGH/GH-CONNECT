@@ -68,6 +68,25 @@ export async function socialDeletePost(
   })
 }
 
+export async function socialToggleReaction(
+  postId: string,
+  reaction: string = "like"
+): Promise<{
+  ok: boolean
+  durable: boolean
+  reaction?: string
+  active?: boolean
+  liked?: boolean
+  likeCount?: number | null
+  error?: string
+}> {
+  return json(`/api/social/posts/${encodeURIComponent(postId)}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ reaction: reaction || "like" }),
+  })
+}
+
+/** @deprecated Prefer socialToggleReaction(postId, "like") */
 export async function socialToggleLike(
   postId: string
 ): Promise<{
@@ -77,10 +96,7 @@ export async function socialToggleLike(
   likeCount?: number | null
   error?: string
 }> {
-  return json(`/api/social/posts/${encodeURIComponent(postId)}/reactions`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  })
+  return socialToggleReaction(postId, "like")
 }
 
 export async function socialAddComment(
@@ -121,15 +137,65 @@ export async function socialFetchFollows(): Promise<{
   durable: boolean
   following: string[]
   followers: string[]
+  followingCount: number
+  followersCount: number
 }> {
-  const data = await json<{ following?: string[]; followers?: string[] }>(
-    "/api/social/follows"
-  )
+  const data = await json<{
+    following?: string[]
+    followers?: string[]
+    followingCount?: number
+    followersCount?: number
+  }>("/api/social/follows")
+  const following = Array.isArray(data.following) ? data.following : []
+  const followers = Array.isArray(data.followers) ? data.followers : []
   return {
     ok: data.ok !== false,
     durable: Boolean(data.durable),
-    following: Array.isArray(data.following) ? data.following : [],
-    followers: Array.isArray(data.followers) ? data.followers : [],
+    following,
+    followers,
+    followingCount: Number(data.followingCount) || following.length,
+    followersCount: Number(data.followersCount) || followers.length,
+  }
+}
+
+/** Authoritative relationship + counts for a target profile. */
+export async function socialFetchFollowStatus(targetUserId: string): Promise<{
+  ok: boolean
+  durable: boolean
+  isFollowing: boolean
+  blocked: boolean
+  followersCount: number
+  followingCount: number
+  error?: string
+}> {
+  const id = String(targetUserId || "").trim()
+  if (!id) {
+    return {
+      ok: false,
+      durable: false,
+      isFollowing: false,
+      blocked: false,
+      followersCount: 0,
+      followingCount: 0,
+      error: "TARGET_REQUIRED",
+    }
+  }
+  const data = await json<{
+    isFollowing?: boolean
+    blocked?: boolean
+    followersCount?: number
+    followingCount?: number
+    error?: string
+    durable?: boolean
+  }>(`/api/social/follows?targetUserId=${encodeURIComponent(id)}`)
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    isFollowing: Boolean(data.isFollowing),
+    blocked: Boolean(data.blocked),
+    followersCount: Number(data.followersCount) || 0,
+    followingCount: Number(data.followingCount) || 0,
+    error: data.error,
   }
 }
 
@@ -140,6 +206,28 @@ export async function socialBlock(
   return json("/api/social/blocks", {
     method: "POST",
     body: JSON.stringify({ targetUserId, block }),
+  })
+}
+
+export async function socialMute(
+  targetUserId: string,
+  mute: boolean
+): Promise<{ ok: boolean; durable: boolean; muted?: boolean; error?: string }> {
+  return json("/api/social/mutes", {
+    method: "POST",
+    body: JSON.stringify({ targetUserId, mute }),
+  })
+}
+
+export async function socialReport(input: {
+  targetType: string
+  targetId: string
+  reason: string
+  details?: string
+}): Promise<{ ok: boolean; durable?: boolean; error?: string }> {
+  return json("/api/reports", {
+    method: "POST",
+    body: JSON.stringify(input),
   })
 }
 
@@ -182,6 +270,62 @@ export async function socialToggleSave(
     body: JSON.stringify({ postId }),
   })
 }
+
+/** Durable share edge — does not copy content; server increments share_count. */
+export async function socialSharePost(
+  postId: string
+): Promise<{ ok: boolean; durable: boolean; shareCount?: number | null; error?: string }> {
+  const id = String(postId || "").trim()
+  if (!id) return { ok: false, durable: false, error: "POST_REQUIRED" }
+  return json(`/api/social/posts/${encodeURIComponent(id)}/share`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/**
+ * Fail-soft attention ping. Never throws to callers; no economy side effects.
+ */
+export async function socialRecordAttention(
+  postId: string,
+  eventType: "view" | "qualified_view" | "complete" | "save" | "share",
+  opts?: { dwellMs?: number }
+): Promise<void> {
+  const id = String(postId || "").trim()
+  if (!id) return
+  try {
+    await json(`/api/social/posts/${encodeURIComponent(id)}/attention`, {
+      method: "POST",
+      body: JSON.stringify({
+        eventType,
+        ...(opts?.dwellMs != null ? { dwellMs: opts.dwellMs } : {}),
+      }),
+    })
+  } catch {
+    /* feed must keep working */
+  }
+}
+
+/** Server attention/engagement aggregates (author or public post). Fail-soft. */
+export async function socialFetchPostInsights(postId: string): Promise<{
+  ok: boolean
+  durable?: boolean
+  metrics?: Record<string, number> | null
+  isAuthor?: boolean
+  error?: string
+  reason?: string
+}> {
+  const id = String(postId || "").trim()
+  if (!id) return { ok: false, error: "INVALID_ID" }
+  try {
+    return await json(`/api/social/posts/${encodeURIComponent(id)}/insights`, {
+      method: "GET",
+    })
+  } catch {
+    return { ok: true, durable: false, metrics: null, reason: "NETWORK" }
+  }
+}
+
 
 export async function socialConnectionRequest(input: {
   toUserId: string
@@ -290,4 +434,65 @@ export async function socialDecideJoinRequest(
     method: "POST",
     body: JSON.stringify({ applicantId, approve }),
   })
+}
+
+/** Phase 3 curation — quality signal only. Fail-soft if DB down. */
+export async function socialSetCuration(
+  postId: string,
+  choice: "upvote" | "downvote" | "neutral"
+): Promise<{
+  ok: boolean
+  durable?: boolean
+  choice?: string
+  upvoteCount?: number | null
+  downvoteCount?: number | null
+  error?: string
+  reason?: string
+}> {
+  const id = String(postId || "").trim()
+  if (!id) return { ok: false, error: "INVALID_ID" }
+  try {
+    return await json(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
+      method: "POST",
+      body: JSON.stringify({ choice }),
+    })
+  } catch {
+    return { ok: true, durable: false, choice, reason: "NETWORK" }
+  }
+}
+
+/** Phase 4 reputation — trust signal only. */
+export async function socialFetchReputation(): Promise<{
+  ok: boolean
+  durable?: boolean
+  totalPoints?: number
+  level?: number
+  levelName?: string
+  pointsToNext?: number | null
+  progressRatio?: number
+  error?: string
+}> {
+  try {
+    return await json("/api/social/reputation", { method: "GET" })
+  } catch {
+    return { ok: true, durable: false, totalPoints: 0, level: 1, levelName: "Seed" }
+  }
+}
+
+export async function socialRecordReputationEvent(
+  eventType: string,
+  opts?: { idempotencyKey?: string; sourceRef?: string }
+): Promise<{ ok: boolean; error?: string; totalPoints?: number; level?: number }> {
+  try {
+    return await json("/api/social/reputation", {
+      method: "POST",
+      body: JSON.stringify({
+        eventType,
+        idempotencyKey: opts?.idempotencyKey,
+        sourceRef: opts?.sourceRef,
+      }),
+    })
+  } catch {
+    return { ok: false, error: "NETWORK" }
+  }
 }

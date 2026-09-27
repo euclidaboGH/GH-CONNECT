@@ -5,6 +5,8 @@ import { Image as ImageIcon, Video, X, Globe, Users, Lock, MapPin, Tag, FileText
 import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
+import { compressImageFile } from "@/lib/media/compress-image"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
@@ -193,12 +195,30 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setSelectedVideo(null)
         addToast(`Photo ready (${sizeMb} MB → optimized)`, "success")
       } else {
+        const validated = validateImageFiles(Array.from(files), 10)
         const images = await Promise.all(
-          validateImageFiles(Array.from(files)).map((file) => readFileAsDataUrl(file, "image")),
+          validated.map(async (file) => {
+            const sizeMb = (file.size / (1024 * 1024)).toFixed(1)
+            if (file.size > 2 * 1024 * 1024) {
+              addToast(`Optimizing photo (${sizeMb} MB)…`, "info")
+            }
+            // Always compress for feed — prevents oversized post payloads
+            const dataUrl = await compressImageFile(file, { purpose: "feed", preferWebp: true })
+            // Prefer durable storage when configured; else keep data URL
+            try {
+              const blob = await (await fetch(dataUrl)).blob()
+              const up = await uploadDurableMedia(blob)
+              if (up.ok && up.url) return up.url
+            } catch {
+              /* keep data URL */
+            }
+            return dataUrl
+          }),
         )
         setSelectedImages((prev) => [...prev, ...images].slice(0, 10))
         setSelectedVideo(null)
         setStoryMedia(null)
+        addToast(images.length === 1 ? "Photo ready" : `${images.length} photos ready`, "success")
       }
     } catch {
       addToast("Unable to add photo — try a smaller file", "error")

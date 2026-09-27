@@ -14,6 +14,7 @@ import {
 import { GreenHavenIdentityCard } from "./greenhaven-identity-card"
 import { SignatureGhIdCard } from "./signature-gh-id"
 import { ExpandableBio } from "./profile-components"
+import { ReputationBadge } from "./reputation-badge"
 
 function toHandle(displayName: string, username?: string | null): string {
   if (username && username.trim()) {
@@ -145,6 +146,8 @@ export function ProfileHeroMeta({
         <span className="h-6 w-px bg-border" aria-hidden />
         <StatCell label="Following" value={followingCount} />
       </div>
+
+      <ReputationBadge />
 
       {/* GreenHaven Identity — compact card */}
       <div className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-card dark:border-emerald-900 dark:from-emerald-950/40">

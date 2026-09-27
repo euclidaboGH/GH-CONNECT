@@ -1,4 +1,4 @@
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
@@ -16,8 +16,8 @@ export function validateMediaFile(file: File, kind: "image" | "video") {
   return file
 }
 
-export function validateImageFiles(files: File[], maxCount = 4) {
+export function validateImageFiles(files: File[], maxCount = 10) {
   return files.slice(0, maxCount).map((file) => validateMediaFile(file, "image"))
 }
 
-export const MEDIA_LIMITS = { maxImageBytes: MAX_IMAGE_BYTES, maxVideoBytes: MAX_VIDEO_BYTES, maxImages: 4 } as const
+export const MEDIA_LIMITS = { maxImageBytes: MAX_IMAGE_BYTES, maxVideoBytes: MAX_VIDEO_BYTES, maxImages: 10 } as const

@@ -1,5 +1,12 @@
 # GreenHaven (GH Connect)
 
+## Implementation status
+
+- **Phases 1–13:** source-implemented (social economy through engagement). See `docs/PHASE_IMPLEMENTATION_STATUS.md`.
+- **Phases 14–15:** not started.
+- **Testnet / production:** not claimed until `docs/TESTNET_VERIFICATION_GATE.md` exit criteria pass.
+
+
 Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.
 
 ## Stack

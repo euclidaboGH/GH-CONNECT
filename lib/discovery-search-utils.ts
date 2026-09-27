@@ -59,14 +59,14 @@ export function performSearch(
       p.authorName.toLowerCase().includes(lowerQuery)
   )
 
-  // Search communities (mock)
+  // Filter supplied communities by name/description (caller provides list)
   const communitiesResults = communities.filter(
     (c) =>
       c.name?.toLowerCase().includes(lowerQuery) ||
       c.description?.toLowerCase().includes(lowerQuery)
   )
 
-  // Search businesses (mock)
+  // Filter supplied businesses by name/category (caller provides list)
   const businessesResults = businesses.filter(
     (b) =>
       b.name?.toLowerCase().includes(lowerQuery) ||

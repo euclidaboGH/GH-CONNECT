@@ -8,6 +8,8 @@ import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { socialRecordAttention } from "@/lib/social/client"
+import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
@@ -304,6 +306,26 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     [likedPosts, likePost, addToast]
   )
 
+
+  const handleReact = useCallback(
+    async (postId: string, reaction: string) => {
+      try {
+        const ghc = (await import("@/contexts/ghc-context")) as { useGHC?: unknown }
+        // Prefer context method if parent already provides likePost path via reactToPost
+      } catch {
+        /* noop */
+      }
+      try {
+        const { socialToggleReaction } = await import("@/lib/social/client")
+        await socialToggleReaction(postId, reaction)
+      } catch (error) {
+        console.error("[Reaction Error]", error)
+        addToast("Could not update reaction. Try again.", "error")
+      }
+    },
+    [addToast]
+  )
+
   useEffect(() => {
     const open = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
@@ -334,7 +356,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       } else {
         setBookmarkedPostIds((prev) => [...prev, postId])
         setSaveCollectionPostId(postId)
-        if (savePost) void savePost(postId)
+        if (savePost) {
+          void savePost(postId)
+          if (shouldSendAttention(postId, "save")) void socialRecordAttention(postId, "save")
+        }
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to save post")
@@ -620,6 +645,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     }
                     handleLike(id)
                   }}
+                  onReact={(id, reaction) => {
+                    if (!perms.canLike(rankedPost.post.authorId)) {
+                      addToast("You can't react to this post", "error")
+                      return
+                    }
+                    void handleReact(id, reaction)
+                  }}
                   onComment={() => {
                     if (!perms.canComment(rankedPost.post.authorId)) {
                       addToast("You can't comment on this post", "error")
@@ -706,13 +738,28 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             }}
             onComplete={(result: ShareResult) => {
               applyShareResult?.(result)
-              if (result.ok) {
+              if (!result.ok) return
+              void (async () => {
+                let durableOk = true
+                if (sharePostId) {
+                  try {
+                    const { socialSharePost } = await import("@/lib/social/client")
+                    const remote = await socialSharePost(sharePostId)
+                    durableOk = remote.ok !== false
+                  } catch {
+                    durableOk = false
+                  }
+                  if (shouldSendAttention(sharePostId, "share")) {
+                    void socialRecordAttention(sharePostId, "share")
+                  }
+                }
                 if (result.link) addToast("Link copied", "success")
                 else if (result.repost) addToast("Shared to your timeline", "success")
                 else if (result.story) addToast("Added to your story", "success")
                 else if (result.messages?.length) addToast("Sent", "success")
+                else if (!durableOk) addToast("Could not sync share to server", "error")
                 else addToast("Shared", "success")
-              }
+              })()
             }}
             onFindPeople={() => setTab?.("discover")}
             onDiscoverCommunities={() => setTab?.("communities")}

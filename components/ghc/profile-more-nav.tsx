@@ -11,7 +11,7 @@
  * Marketplace and Ecosystem are reached from Home → Ecosystem, not Profile.
  */
 
-import { Heart, Wallet, Gift, Crown, Settings, HelpCircle } from "lucide-react"
+import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles } from "lucide-react"
 import { navigateTo, openMembership } from "@/lib/navigation/navigate"
 
 type NavItem = {
@@ -72,6 +72,17 @@ export function ProfileMoreNav({
       onClick: () => {
         if (onOpenWallet) onOpenWallet()
         else navigateTo("wallet")
+      },
+    },
+    {
+      id: "creator-studio",
+      label: "Creator",
+      icon: <Sparkles size={16} />,
+      hint: "Studio",
+      onClick: () => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("ghc:open-creator-studio"))
+        }
       },
     },
     {

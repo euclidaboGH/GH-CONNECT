@@ -4,7 +4,9 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,6 +51,10 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const rl = checkRateLimit(`comment:${auth.userId}`, 40, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+  }
   const { id } = await ctx.params
   const postId = String(id || "").trim()
   if (!postId) {
@@ -88,5 +94,65 @@ export async function POST(
       { status }
     )
   }
+  void (async () => {
+    const authorId = await lookupPostAuthor(postId)
+    if (authorId && authorId !== auth.userId) {
+      const isReply = Boolean(comment.parentId)
+      await emitSocialNotification({
+        recipientUserId: authorId,
+        actorUserId: auth.userId,
+        type: isReply ? "comment_reply" : "post_comment",
+        entityType: "post",
+        entityId: postId,
+        title: isReply ? "New reply" : "New comment",
+        body: isReply ? "Someone replied on your post" : "Someone commented on your post",
+        dedupeKey: `comment:${comment.id}`,
+        metadata: { postId, commentId: comment.id },
+      })
+    }
+    // Server-side @username mentions (max 5) — resolve against profiles, not client IDs
+    const handles = Array.from(
+      new Set(
+        (String(comment.text || "").match(/@([a-zA-Z0-9_]{2,32})/g) || [])
+          .map((m) => m.slice(1).toLowerCase())
+          .slice(0, 5)
+      )
+    )
+    if (handles.length === 0) return
+    const envMod = await import("@/lib/server/economy/env")
+    const env = envMod.readGhcServerEnv()
+    if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
+    for (const handle of handles) {
+      try {
+        const url = new URL(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles`)
+        url.searchParams.set("username", `ilike.${handle}`)
+        url.searchParams.set("select", "gh_user_id,username")
+        url.searchParams.set("limit", "1")
+        const res = await fetch(url.toString(), {
+          headers: {
+            apikey: env.supabaseServiceRoleKey,
+            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          },
+          cache: "no-store",
+        })
+        const rows = (await res.json().catch(() => [])) as Array<{ gh_user_id?: string }>
+        const uid = rows[0]?.gh_user_id ? String(rows[0].gh_user_id) : ""
+        if (!uid || uid === auth.userId) continue
+        await emitSocialNotification({
+          recipientUserId: uid,
+          actorUserId: auth.userId,
+          type: "mention",
+          entityType: "post",
+          entityId: postId,
+          title: "You were mentioned",
+          body: "Someone mentioned you in a comment",
+          dedupeKey: `mention:${comment.id}:${uid}`,
+          metadata: { postId, commentId: comment.id, handle },
+        })
+      } catch {
+        /* ignore single mention failure */
+      }
+    }
+  })()
   return NextResponse.json({ ok: true, durable: true, comment })
 }
