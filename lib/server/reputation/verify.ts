@@ -5,16 +5,38 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import type { ReputationEventType } from "@/lib/server/reputation/config"
 
+type RestGetSuccess = {
+  ok: true
+  data: unknown
+}
+
+type RestGetFailure = {
+  ok: false
+  data: null
+  error: string
+}
+
+type RestGetResult = RestGetSuccess | RestGetFailure
+
 async function restGet(
   pathAndQuery: string
-): Promise<{ ok: boolean; data: unknown; error?: string }> {
+): Promise<RestGetResult> {
   const env = readGhcServerEnv()
+
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return { ok: false, error: "DB_UNAVAILABLE" }
+    return {
+      ok: false,
+      data: null,
+      error: "DB_UNAVAILABLE",
+    }
   }
+
   try {
     const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${pathAndQuery.replace(/^\//, "")}`,
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${pathAndQuery.replace(
+        /^\//,
+        ""
+      )}`,
       {
         headers: {
           Accept: "application/json",
@@ -24,13 +46,38 @@ async function restGet(
         cache: "no-store",
       }
     )
-    if (!res.ok) {
-      return { ok: false, error: `HTTP_${res.status}` }
-    }
+
     const data = await res.json().catch(() => null)
-    return { ok: true, data }
+
+    if (!res.ok) {
+      const errorObject =
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data)
+          ? (data as Record<string, unknown>)
+          : null
+
+      return {
+        ok: false,
+        data: null,
+        error: String(
+          (errorObject &&
+            (errorObject.message || errorObject.error)) ||
+            `HTTP_${res.status}`
+        ),
+      }
+    }
+
+    return {
+      ok: true,
+      data,
+    }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "NETWORK" }
+    return {
+      ok: false,
+      data: null,
+      error: e instanceof Error ? e.message : "NETWORK",
+    }
   }
 }
 
@@ -40,22 +87,54 @@ async function restGet(
  */
 export async function verifyProfileComplete(
   userId: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const q =
     `gh_user_profiles?gh_user_id=eq.${encodeURIComponent(userId)}` +
     `&select=gh_user_id,onboarded,display_name&limit=1`
+
   const res = await restGet(q)
-  if (!res.ok) return { ok: false, error: res.error || "PROOF_FAILED" }
-  const rows = Array.isArray(res.data) ? res.data : []
-  const row = rows[0] as
-    | { onboarded?: boolean; display_name?: string | null }
-    | undefined
-  if (!row) return { ok: false, error: "PROFILE_NOT_FOUND" }
-  if (row.onboarded !== true) return { ok: false, error: "PROFILE_NOT_ONBOARDED" }
-  if (!String(row.display_name || "").trim()) {
-    return { ok: false, error: "PROFILE_INCOMPLETE" }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: res.error || "PROOF_FAILED",
+    }
   }
-  return { ok: true }
+
+  const rows = Array.isArray(res.data) ? res.data : []
+
+  const row = rows[0] as
+    | {
+        gh_user_id?: string
+        onboarded?: boolean
+        display_name?: string | null
+      }
+    | undefined
+
+  if (!row) {
+    return {
+      ok: false,
+      error: "PROFILE_NOT_FOUND",
+    }
+  }
+
+  if (row.onboarded !== true) {
+    return {
+      ok: false,
+      error: "PROFILE_NOT_ONBOARDED",
+    }
+  }
+
+  if (!String(row.display_name || "").trim()) {
+    return {
+      ok: false,
+      error: "PROFILE_INCOMPLETE",
+    }
+  }
+
+  return {
+    ok: true,
+  }
 }
 
 /**
@@ -63,16 +142,42 @@ export async function verifyProfileComplete(
  */
 export async function verifyFirstPost(
   userId: string
-): Promise<{ ok: boolean; error?: string; postId?: string }> {
+): Promise<
+  | { ok: true; postId: string }
+  | { ok: false; error: string }
+> {
   const q =
     `gh_posts?author_id=eq.${encodeURIComponent(userId)}` +
     `&deleted_at=is.null&select=id&order=created_at.asc&limit=1`
+
   const res = await restGet(q)
-  if (!res.ok) return { ok: false, error: res.error || "PROOF_FAILED" }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: res.error || "PROOF_FAILED",
+    }
+  }
+
   const rows = Array.isArray(res.data) ? res.data : []
-  const row = rows[0] as { id?: string } | undefined
-  if (!row?.id) return { ok: false, error: "NO_QUALIFYING_POST" }
-  return { ok: true, postId: String(row.id) }
+
+  const row = rows[0] as
+    | {
+        id?: string
+      }
+    | undefined
+
+  if (!row?.id) {
+    return {
+      ok: false,
+      error: "NO_QUALIFYING_POST",
+    }
+  }
+
+  return {
+    ok: true,
+    postId: String(row.id),
+  }
 }
 
 /**
@@ -83,8 +188,14 @@ export function forcedIdempotencyKey(
   eventType: ReputationEventType,
   userId: string
 ): string | null {
-  if (eventType === "profile_complete") return `profile_complete:${userId}`
-  if (eventType === "first_post") return `first_post:${userId}`
+  if (eventType === "profile_complete") {
+    return `profile_complete:${userId}`
+  }
+
+  if (eventType === "first_post") {
+    return `first_post:${userId}`
+  }
+
   return null
 }
 

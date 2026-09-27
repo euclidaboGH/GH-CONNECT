@@ -72,14 +72,28 @@ export function minGhcForWithdrawal(ghcPerPi: number = getApprovedGhcPerPi()): n
   return WITHDRAWAL_MIN_PI * (ghcPerPi > 0 ? ghcPerPi : getApprovedGhcPerPi())
 }
 
+type RpcJsonSuccess = {
+  ok: true
+  data: Record<string, unknown>
+}
+
+type RpcJsonFailure = {
+  ok: false
+  error: string
+}
+
+type RpcJsonResult = RpcJsonSuccess | RpcJsonFailure
+
 async function rpcJson(
   fn: string,
   args: Record<string, unknown>
-): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+): Promise<RpcJsonResult> {
   const env = readGhcServerEnv()
+
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "DB_UNAVAILABLE" }
   }
+
   try {
     const res = await fetch(
       `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${fn}`,
@@ -91,16 +105,36 @@ async function rpcJson(
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
         body: JSON.stringify(args),
+        cache: "no-store",
       }
     )
-    const data = (await res.json().catch(() => null)) as unknown
+
+    const raw = await res.json().catch(() => null)
+
+    const data =
+      raw && typeof raw === "object" && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : null
+
     if (!res.ok) {
-      const errObj = data && typeof data === "object" ? (data as Record<string, unknown>) : {}
-      return { ok: false, error: String(errObj.message || errObj.error || `HTTP_${res.status}`) }
+      return {
+        ok: false,
+        error: String(
+          (data && (data.message || data.error)) ||
+            `HTTP_${res.status}`
+        ),
+      }
     }
-    return { ok: true, data }
+
+    return {
+      ok: true,
+      data: data || {},
+    }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "RPC_FAILED" }
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "RPC_FAILED",
+    }
   }
 }
 
