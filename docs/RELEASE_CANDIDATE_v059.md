@@ -27,8 +27,8 @@
 ## Migrations (apply manually before production traffic)
 
 1. Prior ledger migrations (`20260821_*`, `20260822_*`)
-2. `20260903_economy_v12_claim_streak_and_population.sql`
-3. `20260903_economy_v12_atomic_daily_claim.sql`
+2. `202609030001_economy_v12_claim_streak_and_population.sql`
+3. `202609030002_economy_v12_atomic_daily_claim.sql`
 
 ## Blockers before production promote
 

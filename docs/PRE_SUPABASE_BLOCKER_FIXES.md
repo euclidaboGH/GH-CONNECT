@@ -5,7 +5,7 @@
 | Item | Fix |
 |------|-----|
 | P0 A2U syntax | `app/api/payments/a2u/complete/route.ts` — closed `apiKey` guard; removed premature `}` |
-| P1 RLS | Additive migration `20260923_ghc_user_accounts_rls_lockdown.sql` — deny client ALL on `ghc_user_accounts` |
+| P1 RLS | Additive migration `202609230002_ghc_user_accounts_rls_lockdown.sql` — deny client ALL on `ghc_user_accounts` |
 | P1 Service worker | `public/sw.js` — `/api/**` network-only; never cache personalized responses; cache name bumped to `gh-connect-v2-static` |
 | P2 Profile arrays | `lib/server/identity/profile-store.ts` — explicit empty `photos` / `interests` / etc. clear existing |
 

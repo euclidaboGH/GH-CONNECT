@@ -380,6 +380,10 @@ export function createMessagingDomain(deps: {
         input,
         validate: (i) => {
           if (!(i.newText || "").trim()) return "Message cannot be empty"
+          // No durable PATCH message API — refuse rather than toast durable success
+          if (isDurableMessagingEnabled()) {
+            return "Message editing is not available on durable messaging yet"
+          }
           return null
         },
         authorize: (i) => {

@@ -1,5 +1,6 @@
 /**
  * PATCH /api/social/posts/[id]/edit — edit own post content only.
+ * POST is accepted as an alias (same handler) so older clients do not get 405.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
@@ -10,6 +11,10 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Ctx = { params: Promise<{ id: string }> }
+
+export async function POST(request: Request, ctx: Ctx) {
+  return PATCH(request, ctx)
+}
 
 export async function PATCH(request: Request, ctx: Ctx) {
   const auth = await resolveAuthenticatedUser(request.headers)

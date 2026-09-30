@@ -4,8 +4,19 @@
  * GHC → Pi withdrawal request UI (platform settlement — not instant Pi send).
  * Rate: server REFERENCE_GHC_PER_PI (100 GHC per 1 π by default). 100 GHC ≠ 100 π.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { IdentityService } from "@/lib/identity/identity-service"
+
+function newWithdrawalIdempotencyKey(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return `wd_${crypto.randomUUID()}`
+    }
+  } catch {
+    /* */
+  }
+  return `wd_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+}
 
 type Quote = {
   ghcPerPi: number
@@ -46,6 +57,8 @@ export function WithdrawGhcPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  /** Stable across retries of the same submit; rotated only after success */
+  const idempotencyKeyRef = useRef(newWithdrawalIdempotencyKey())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -117,7 +130,7 @@ export function WithdrawGhcPanel() {
         body: JSON.stringify({
           ghcAmount: amountNum,
           piWalletAddress: wallet.trim(),
-          idempotencyKey: `wd_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -125,6 +138,8 @@ export function WithdrawGhcPanel() {
         setError(data.message || data.error || "Request failed")
         return
       }
+      // New key only after accepted request so double-click / retry stays idempotent
+      idempotencyKeyRef.current = newWithdrawalIdempotencyKey()
       setSuccess(
         data.message ||
           "Withdrawal request created. Pi is not sent instantly — GreenHaven will process settlement."

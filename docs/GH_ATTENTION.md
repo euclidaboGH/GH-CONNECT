@@ -43,7 +43,7 @@ Any future economy that uses attention must be a **separate** phase with its own
 
 | Object | Location | Relevance |
 |--------|----------|-----------|
-| `gh_posts` | `20260923_gh_social_core.sql` | Has `like_count`, `comment_count`, `share_count`. **No `view_count`.** |
+| `gh_posts` | `202609230006_gh_social_core.sql` | Has `like_count`, `comment_count`, `share_count`. **No `view_count`.** |
 | `gh_saves` + `gh_save_toggle` | Same migration | Durable **save** already exists (user × post). |
 | `gh_story_views` + `gh_story_view` | Same migration | Per-viewer story views (PK story_id, viewer_id). |
 | Reactions / comments / follows | Phase 1 | Separate social graph actions—not attention events. |

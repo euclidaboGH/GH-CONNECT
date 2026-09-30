@@ -72,16 +72,8 @@ export function minGhcForWithdrawal(ghcPerPi: number = getApprovedGhcPerPi()): n
   return WITHDRAWAL_MIN_PI * (ghcPerPi > 0 ? ghcPerPi : getApprovedGhcPerPi())
 }
 
-type RpcJsonSuccess = {
-  ok: true
-  data: Record<string, unknown>
-}
-
-type RpcJsonFailure = {
-  ok: false
-  error: string
-}
-
+type RpcJsonSuccess = { ok: true; data: unknown }
+type RpcJsonFailure = { ok: false; error: string }
 type RpcJsonResult = RpcJsonSuccess | RpcJsonFailure
 
 async function rpcJson(
@@ -89,11 +81,9 @@ async function rpcJson(
   args: Record<string, unknown>
 ): Promise<RpcJsonResult> {
   const env = readGhcServerEnv()
-
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "DB_UNAVAILABLE" }
   }
-
   try {
     const res = await fetch(
       `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${fn}`,
@@ -108,33 +98,14 @@ async function rpcJson(
         cache: "no-store",
       }
     )
-
-    const raw = await res.json().catch(() => null)
-
-    const data =
-      raw && typeof raw === "object" && !Array.isArray(raw)
-        ? (raw as Record<string, unknown>)
-        : null
-
+    const data = (await res.json().catch(() => null)) as unknown
     if (!res.ok) {
-      return {
-        ok: false,
-        error: String(
-          (data && (data.message || data.error)) ||
-            `HTTP_${res.status}`
-        ),
-      }
+      const errObj = data && typeof data === "object" ? (data as Record<string, unknown>) : {}
+      return { ok: false, error: String(errObj.message || errObj.error || `HTTP_${res.status}`) }
     }
-
-    return {
-      ok: true,
-      data: data || {},
-    }
+    return { ok: true, data }
   } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "RPC_FAILED",
-    }
+    return { ok: false, error: e instanceof Error ? e.message : "RPC_FAILED" }
   }
 }
 
@@ -185,14 +156,18 @@ export async function createWithdrawalRequest(input: {
     p_idempotency_key: input.idempotencyKey,
     p_min_pi: WITHDRAWAL_MIN_PI,
   })
-  if (!result.ok || !result.data) {
+  if (!result.ok) {
     return { ok: false, error: result.error || "CREATE_FAILED" }
   }
   const data = result.data
-  if (data.ok === false) {
-    return { ok: false, error: String(data.error || "CREATE_FAILED") }
+  if (!data || typeof data !== "object") {
+    return { ok: false, error: "CREATE_FAILED" }
   }
-  const req = data.request as Record<string, unknown>
+  const dataObj = data as Record<string, unknown>
+  if (dataObj.ok === false) {
+    return { ok: false, error: String(dataObj.error || "CREATE_FAILED") }
+  }
+  const req = dataObj.request as Record<string, unknown>
   return {
     ok: true,
     duplicate: Boolean(data.duplicate),
@@ -236,13 +211,17 @@ export async function operatorSetWithdrawalStatus(input: {
     p_settlement_ref: input.settlementRef ?? null,
     p_reject_reason: input.rejectReason ?? null,
   })
-  if (!result.ok || !result.data) {
+  if (!result.ok) {
     return { ok: false, error: result.error || "STATUS_FAILED" }
   }
-  if (result.data.ok === false) {
-    return { ok: false, error: String(result.data.error || "STATUS_FAILED") }
+  if (!result.data || typeof result.data !== "object") {
+    return { ok: false, error: "STATUS_FAILED" }
   }
-  const req = mapRow(result.data.request as Record<string, unknown>)
+  const statusData = result.data as Record<string, unknown>
+  if (statusData.ok === false) {
+    return { ok: false, error: String(statusData.error || "STATUS_FAILED") }
+  }
+  const req = mapRow(statusData.request as Record<string, unknown>)
 
   // On completed: permanent ledger debit once (idempotent spend ref)
   if (input.status === "completed" && req.userId) {

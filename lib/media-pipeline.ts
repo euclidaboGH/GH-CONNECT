@@ -63,7 +63,7 @@ export interface MediaPipelineOptions {
   quality?: number
   /** Prefer uploading when API base is configured */
   upload?: boolean
-  /** Override upload path (default /media) */
+  /** Override upload path (default /api/media) */
   uploadPath?: string
   getAuthHeaders?: () => Record<string, string>
   /** Allow inline data URL fallback when upload unavailable (offline prototype) */
@@ -140,15 +140,20 @@ export async function uploadMediaBlob(
     fileName?: string
   }
 ): Promise<{ url: string }> {
+  // Prefer same-origin durable API. Optional NEXT_PUBLIC_API_URL / __GHC_API_URL__ for remote.
   const base = resolveApiBaseUrl()
-  if (!base) throw new Error("No media upload endpoint configured")
+  const path = opts.path || "/api/media"
+  const endpoint = base
+    ? `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`
+    : path
 
   const form = new FormData()
   form.append("file", blob, opts.fileName || `media_${Date.now()}.jpg`)
   form.append("mimeType", opts.mimeType)
 
-  const res = await fetch(`${base.replace(/\/$/, "")}${opts.path || "/media"}`, {
+  const res = await fetch(endpoint, {
     method: "POST",
+    credentials: "include",
     headers: {
       ...(opts.getAuthHeaders?.() || {}),
     },
@@ -158,8 +163,14 @@ export async function uploadMediaBlob(
     const text = await res.text().catch(() => "")
     throw new Error(text || `Upload failed (${res.status})`)
   }
-  const data = (await res.json()) as { url?: string; key?: string }
-  const url = data.url || data.key
+  const data = (await res.json()) as {
+    url?: string
+    key?: string
+    mediaId?: string
+    ok?: boolean
+  }
+  // Prefer durable media URL; fall back to key/id only if URL absent
+  const url = data.url || data.key || (data.mediaId ? String(data.mediaId) : "")
   if (!url) throw new Error("Upload response missing media reference")
   return { url }
 }
@@ -184,13 +195,13 @@ export async function processMediaFile(
         options.quality ?? DEFAULT_QUALITY
       )
 
-      const shouldUpload =
-        options.upload !== false && Boolean(resolveApiBaseUrl())
+      // Same-origin /api/media works without NEXT_PUBLIC_API_URL
+      const shouldUpload = options.upload !== false
 
       if (shouldUpload) {
         stage = "uploading"
         const { url } = await uploadMediaBlob(blob, {
-          path: options.uploadPath,
+          path: options.uploadPath || "/api/media",
           mimeType: blob.type || "image/jpeg",
           getAuthHeaders: options.getAuthHeaders,
           fileName: file.name,
@@ -245,11 +256,11 @@ export async function processMediaFile(
 
     // Video: validate + object URL / upload; no client re-encode in this phase
     stage = "transformed"
-    const shouldUpload = options.upload !== false && Boolean(resolveApiBaseUrl())
+    const shouldUpload = options.upload !== false
     if (shouldUpload) {
       stage = "uploading"
       const { url } = await uploadMediaBlob(file, {
-        path: options.uploadPath || "/media",
+        path: options.uploadPath || "/api/media",
         mimeType: file.type,
         getAuthHeaders: options.getAuthHeaders,
         fileName: file.name,

@@ -322,6 +322,56 @@ export function CommunitiesScreen() {
     }
   })
 
+  /** Server public directory from GET /api/communities — no fabricated rows */
+  const [remoteDirectory, setRemoteDirectory] = useState<CommunityRow[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void import("@/lib/social/client")
+      .then(({ socialListCommunities }) => socialListCommunities(50))
+      .then((res) => {
+        if (cancelled) return
+        const rows: CommunityRow[] = []
+        for (const raw of res.communities || []) {
+          if (!raw || typeof raw !== "object") continue
+          const r = raw as Record<string, unknown>
+          const id = String(r.id || "").trim()
+          const name = String(r.name || "").trim()
+          if (!id || !name) continue
+          const createdBy = String(r.createdBy || r.created_by || "").trim()
+          rows.push({
+            id,
+            conversationType: "group",
+            groupName: name,
+            participantName: name,
+            participantId: createdBy,
+            lastMessage: String(r.purpose || r.description || "").slice(0, 120),
+            lastMessageTime:
+              typeof r.createdAt === "number"
+                ? r.createdAt
+                : typeof r.created_at === "number"
+                  ? r.created_at
+                  : 0,
+            // Do not fabricate member ids — only known creator if present
+            members: createdBy ? [createdBy] : [],
+            createdBy,
+            description: r.description != null ? String(r.description) : undefined,
+            privacy: r.privacy != null ? String(r.privacy) : "public",
+            category: r.category != null ? String(r.category) : undefined,
+            kind: "community",
+            communityId: id,
+          })
+        }
+        setRemoteDirectory(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteDirectory([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     if (!communityLocalCacheAllowed()) return
     try {
@@ -394,13 +444,15 @@ export function CommunitiesScreen() {
   const communityGroups = useMemo(() => {
     const persisted = loadPersistedCommunities()
     const map = new Map<string, CommunityRow>()
+    // Remote directory first; local/state rows override with richer membership data
+    for (const c of remoteDirectory) map.set(c.id, c)
     for (const c of seeds) map.set(c.id, c as CommunityRow)
     for (const c of persisted) {
       if (isCommunityConversationRow(c as any)) map.set(c.id, c as unknown as CommunityRow)
     }
     for (const c of fromState) map.set(c.id, c)
     return Array.from(map.values())
-  }, [fromState, seeds])
+  }, [fromState, seeds, remoteDirectory])
 
   const isJoined = useCallback(
     (c: CommunityRow) => {

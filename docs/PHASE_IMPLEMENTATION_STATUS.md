@@ -23,7 +23,7 @@ Static/automated green **does not** imply Testnet verified or production ready.
 | Location | Count |
 |----------|------:|
 | `supabase/migrations/*.sql` (canonical files on disk) | **54** |
-| Latest sequencing id | `20261005b_gh_notif_share_type.sql` |
+| Latest sequencing id | `20261006_gh_notif_share_type.sql` |
 
 Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations.
 
@@ -54,7 +54,7 @@ See **docs/MIGRATION_CHECKLIST.md** for REQUIRED vs PROPOSAL classification. Do 
 
 ```
 supabase/migrations/20261005_gh_post_shares.sql
-supabase/migrations/20261005b_gh_notif_share_type.sql
+supabase/migrations/20261006_gh_notif_share_type.sql
 app/api/social/posts/[id]/share/route.ts
 lib/server/social/notifications.ts
 lib/social/client.ts          # socialSharePost()

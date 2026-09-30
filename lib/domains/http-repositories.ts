@@ -47,6 +47,7 @@ async function req<T>(
 ): Promise<T> {
   const fetchFn = cfg.fetchImpl || fetch
   const res = await fetchFn(`${cfg.baseUrl.replace(/\/$/, "")}${path}`, {
+    credentials: "include",
     ...init,
     headers: { ...headers(cfg), ...(init?.headers || {}) },
   })
@@ -97,15 +98,21 @@ export function createHttpPostRepository(cfg: HttpRepoConfig): PostRepository & 
     get: (id) => cache.find((p) => p.id === id),
     save: (post) => {
       cache = [post, ...cache.filter((p) => p.id !== post.id)]
-      fireWrite(cfg, "/posts", { method: "POST", body: JSON.stringify(post) })
+      fireWrite(cfg, "/social/posts", { method: "POST", body: JSON.stringify(post) })
     },
     update: (id, patch) => {
       cache = cache.map((p) => (p.id === id ? { ...p, ...patch } : p))
-      fireWrite(cfg, `/posts/${id}`, { method: "PATCH", body: JSON.stringify(patch) })
+      // Route accepts PATCH (preferred) and POST alias — send PATCH for correct contract
+      fireWrite(cfg, `/social/posts/${id}/edit`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      })
     },
     hydrate: async () => {
       try {
-        cache = await req<Post[]>(cfg, "/posts")
+        const data = await req<{ posts?: Post[]; ok?: boolean }>(cfg, "/social/feed")
+        if (Array.isArray(data?.posts)) cache = data.posts
+        else if (Array.isArray(data)) cache = data as unknown as Post[]
       } catch (e) {
         console.warn("[http-post] hydrate", e)
       }
@@ -122,7 +129,7 @@ export function createHttpMessageRepository(cfg: HttpRepoConfig): MessageReposit
     append: (conversationId, message) => {
       const list = [...(byConv.get(conversationId) || []), message]
       byConv.set(conversationId, list)
-      fireWrite(cfg, `/conversations/${conversationId}/messages`, {
+      fireWrite(cfg, `/messaging/conversations/${conversationId}/messages`, {
         method: "POST",
         body: JSON.stringify(message),
       })
@@ -132,17 +139,39 @@ export function createHttpMessageRepository(cfg: HttpRepoConfig): MessageReposit
         m.id === messageId ? { ...m, ...patch } : m
       )
       byConv.set(conversationId, list)
-      fireWrite(cfg, `/conversations/${conversationId}/messages/${messageId}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      })
+      // Soft-delete is the only durable message mutation on this collection route.
+      // There is no PATCH /messages/:id — never invent content-edit network writes.
+      const p = patch as {
+        deleted?: boolean
+        isDeleted?: boolean
+        deletedAt?: number | null
+        status?: string
+      }
+      const deleted =
+        Boolean(p.deleted) ||
+        Boolean(p.isDeleted) ||
+        p.deletedAt != null ||
+        p.status === "deleted"
+      if (deleted) {
+        fireWrite(
+          cfg,
+          `/messaging/conversations/${conversationId}/messages?messageId=${encodeURIComponent(messageId)}`,
+          { method: "DELETE" }
+        )
+      }
+      // Content edits, reactions, delivery status: local cache only (no matching REST mutation).
     },
     hydrateConversation: async (conversationId) => {
       try {
-        const messages = await req<Message[]>(
+        const data = await req<{ messages?: Message[]; ok?: boolean }>(
           cfg,
-          `/conversations/${conversationId}/messages`
+          `/messaging/conversations/${conversationId}/messages`
         )
+        const messages = Array.isArray(data?.messages)
+          ? data.messages
+          : Array.isArray(data)
+            ? (data as unknown as Message[])
+            : []
         byConv.set(conversationId, messages)
         return messages
       } catch (e) {
@@ -165,21 +194,24 @@ export function createHttpConversationRepository(
       cache = exists
         ? cache.map((c) => (c.id === conversation.id ? { ...c, ...conversation } : c))
         : [conversation, ...cache]
-      fireWrite(cfg, "/conversations", {
+      fireWrite(cfg, "/messaging/conversations", {
         method: "POST",
         body: JSON.stringify(conversation),
       })
     },
     update: (id, patch) => {
+      // Local cache only — no PATCH /api/messaging/conversations/:id route exists
+      // (collection is GET/POST; per-id has messages/ and read/ only).
       cache = cache.map((c) => (c.id === id ? { ...c, ...patch } : c))
-      fireWrite(cfg, `/conversations/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      })
     },
     hydrate: async () => {
       try {
-        cache = await req<Conversation[]>(cfg, "/conversations")
+        const data = await req<{ conversations?: Conversation[]; ok?: boolean }>(
+          cfg,
+          "/messaging/conversations"
+        )
+        if (Array.isArray(data?.conversations)) cache = data.conversations
+        else if (Array.isArray(data)) cache = data as unknown as Conversation[]
       } catch (e) {
         console.warn("[http-conv] hydrate", e)
       }
@@ -195,19 +227,22 @@ export function createHttpStoryRepository(
     list: () => cache,
     save: (story) => {
       cache = [story, ...cache.filter((s) => s.id !== story.id)]
-      fireWrite(cfg, "/stories", { method: "POST", body: JSON.stringify(story) })
+      fireWrite(cfg, "/social/stories", { method: "POST", body: JSON.stringify(story) })
     },
     update: (id, patch) => {
+      // Local cache only — no PATCH /api/social/stories/:id route exists.
       cache = cache.map((s) => (s.id === id ? { ...s, ...patch } : s))
-      fireWrite(cfg, `/stories/${id}`, { method: "PATCH", body: JSON.stringify(patch) })
     },
     remove: (id) => {
+      // Local cache only — no DELETE /api/social/stories/:id route exists.
+      // Create uses POST /api/social/stories; list uses GET.
       cache = cache.filter((s) => s.id !== id)
-      fireWrite(cfg, `/stories/${id}`, { method: "DELETE" })
     },
     hydrate: async () => {
       try {
-        cache = await req<StoryItem[]>(cfg, "/stories")
+        const data = await req<{ stories?: StoryItem[]; ok?: boolean }>(cfg, "/social/stories")
+        if (Array.isArray(data?.stories)) cache = data.stories
+        else if (Array.isArray(data)) cache = data as unknown as StoryItem[]
       } catch (e) {
         console.warn("[http-story] hydrate", e)
       }
@@ -233,27 +268,16 @@ export function createHttpSocialGraphRepository(
   return {
     getSnapshot: () => snap,
     applyPatch: (patch) => {
+      // Local only — no PUT /api/social/snapshot route (follows/blocks use dedicated APIs)
       snap = { ...snap, ...patch }
-      fireWrite(cfg, "/social/snapshot", {
-        method: "PUT",
-        body: JSON.stringify(snap),
-      })
     },
     recordEdge: (input) => {
-      fireWrite(cfg, "/social/edges", {
-        method: "POST",
-        body: JSON.stringify(input),
-      })
+      // Local only — no POST /api/social/edges; durable edges use /api/social/follows|blocks|mutes
+      void input
     },
     hydrate: async () => {
-      try {
-        const remote = await req<SocialGraphSnapshotData>(cfg, "/social/snapshot")
-        snap = { ...snap, ...remote }
-        return snap
-      } catch (e) {
-        console.warn("[http-social] hydrate", e)
-        return null
-      }
+      // No snapshot aggregate endpoint — keep process cache
+      return snap
     },
   }
 }
@@ -278,11 +302,12 @@ export function createHttpProfileRepository(
     get: () => profile,
     update: (patch) => {
       profile = { ...profile, ...patch }
-      fireWrite(cfg, "/profile", { method: "PATCH", body: JSON.stringify(patch) })
+      fireWrite(cfg, "/profile/me", { method: "PATCH", body: JSON.stringify(patch) })
     },
     hydrate: async () => {
       try {
-        profile = await req<Profile>(cfg, "/profile")
+        const data = await req<{ profile?: Profile; ok?: boolean } & Profile>(cfg, "/profile/me")
+        profile = (data as { profile?: Profile }).profile || (data as Profile)
         return profile
       } catch (e) {
         console.warn("[http-profile] hydrate", e)
@@ -603,11 +628,15 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
 
 export function resolveApiBaseUrl(): string | null {
   if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL
+    const v = String(process.env.NEXT_PUBLIC_API_URL).trim()
+    if (v) return v.replace(/\/$/, "")
   }
   if (typeof window !== "undefined") {
-    const w = (window as any).__GHC_API_URL__
-    if (typeof w === "string" && w.length > 0) return w
+    const w = (window as unknown as { __GHC_API_URL__?: string }).__GHC_API_URL__
+    if (typeof w === "string" && w.trim().length > 0) return w.trim().replace(/\/$/, "")
+    // Same-origin Next.js App Router — enable HTTP economy/social repos without env.
+    // Paths are `/economy/...` relative to this base → `/api/economy/...`.
+    return "/api"
   }
   return null
 }

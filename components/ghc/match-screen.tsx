@@ -58,7 +58,6 @@ import {
   type ConnectionMode,
 } from "./discovery-components"
 import { CONTINENT_LABELS, candidateInContinent, type ContinentId } from "@/lib/discovery-continents"
-import { CommunitiesSection } from "./communities-section"
 import { ProfilePreviewPage } from "./profile-preview-page"
 import { EmptyMatchesState, MatchCard, MatchCardSkeleton, MatchTabs, MatchIntentionFilters, resolveMatchIntention } from "./matches-components"
 import type { MatchIntention } from "@/lib/ghc-types"

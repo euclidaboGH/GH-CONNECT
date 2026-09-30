@@ -123,7 +123,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
     } else {
       el.pause()
     }
-  }, [playing, muted, current?.id, index])
+  }, [playing, muted, current, current?.id, index])
 
   const onTimeUpdate = () => {
     const el = videoRef.current
@@ -222,7 +222,6 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
             <div className="space-y-2 px-4 pb-6 pt-2">
               <div className="flex items-center gap-2">
                 {current.authorPhoto ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={current.authorPhoto}
                     alt=""

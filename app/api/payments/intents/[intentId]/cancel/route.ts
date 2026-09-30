@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { getPaymentIntent, transitionIntent } from "@/lib/server/payments/intent-store"
+import {
+  getPaymentIntent,
+  loadPaymentIntent,
+  transitionIntent,
+} from "@/lib/server/payments/intent-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,7 +18,8 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const { intentId } = await ctx.params
-  const intent = getPaymentIntent(intentId)
+  // Durable-first so cancel works after cold start / multi-instance
+  const intent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
   if (!intent) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }

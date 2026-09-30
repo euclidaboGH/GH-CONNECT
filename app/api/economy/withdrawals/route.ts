@@ -46,9 +46,18 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const ghcAmount = Number(body.ghcAmount)
   const piWalletAddress = String(body.piWalletAddress || body.walletAddress || "").trim()
-  const idempotencyKey = String(
-    body.idempotencyKey || body.clientRequestId || `wd_${auth.userId}_${Date.now()}`
-  ).trim()
+  // Require stable client key — Date.now() fallback would allow accidental duplicate requests
+  const idempotencyKey = String(body.idempotencyKey || body.clientRequestId || "").trim()
+  if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "idempotencyKey (8–128 chars) is required to prevent duplicate withdrawal requests",
+      },
+      { status: 400 }
+    )
+  }
 
   if (!Number.isFinite(ghcAmount) || ghcAmount <= 0) {
     return NextResponse.json({ ok: false, error: "INVALID_AMOUNT" }, { status: 400 })

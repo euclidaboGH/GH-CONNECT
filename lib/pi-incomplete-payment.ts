@@ -54,6 +54,7 @@ export async function recoverIncompletePayment(
   try {
     const res = await fetch("/api/payments/incomplete", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(IdentityService.getAuthHeaders?.() || {}),

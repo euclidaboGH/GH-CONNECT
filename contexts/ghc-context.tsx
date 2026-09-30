@@ -104,6 +104,7 @@ import { domainEvents } from "@/lib/realtime/event-bus"
 import { subscribeDomainCache } from "@/lib/realtime/use-domain-events"
 import { transportBridge } from "@/lib/realtime/transport-bridge"
 import { createDomainServices, bindDomainServices, type DomainServices } from "@/lib/domains"
+import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import {
   loadPersistedCommunities,
   persistCommunityConversation,
@@ -1446,6 +1447,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
 
       // Durable write — server is authoritative when Supabase social core is applied
+      let durableStatus: "ok" | "local" | "unconfirmed" = "local"
       try {
         const { socialCreatePost } = await import("@/lib/social/client")
         const remote = await socialCreatePost({
@@ -1464,16 +1466,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           listingId: newPost.listingId,
           listingKind: newPost.listingKind,
         })
-        if (remote.ok && remote.durable && remote.post?.id && remote.post.id !== newPost.id) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((p) =>
-              p.id === newPost.id ? { ...p, id: String(remote.post!.id) } : p
-            ),
-          }))
+        if (remote.ok === false) {
+          durableStatus = "unconfirmed"
+        } else if (remote.durable) {
+          durableStatus = "ok"
+          if (remote.post?.id && remote.post.id !== newPost.id) {
+            setState((s) => ({
+              ...s,
+              posts: s.posts.map((p) =>
+                p.id === newPost.id ? { ...p, id: String(remote.post!.id) } : p
+              ),
+            }))
+          }
+        } else {
+          durableStatus = "local"
         }
       } catch {
-        /* offline / studio — local session remains until durable path available */
+        durableStatus = state.isOnline ? "unconfirmed" : "local"
       }
 
       // Queue for sync if offline
@@ -1496,7 +1505,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
       // Notification
       notificationSystem.addNotification("share", "Posted", "Your post is live on Feed", "✓", { open: "feed", section: "post" })
-      addToast("Posted to your feed", "success")
+      if (durableStatus === "ok") {
+        addToast("Posted to your feed", "success")
+      } else if (durableStatus === "unconfirmed") {
+        addToast("Posted on this device — server save not confirmed", "info")
+      } else {
+        addToast("Posted on this device", "success")
+      }
       return true
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
@@ -1543,6 +1558,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     try {
       const { socialToggleReaction } = await import("@/lib/social/client")
       const remote = await socialToggleReaction(postId, reaction || "like")
+      if (remote.ok === false && isLike) {
+        // Roll back optimistic like toggle
+        setState((s) => {
+          const wasOptimisticLiked = s.likedPostIds.includes(postId)
+          // After optimistic update, wasOptimisticLiked is the NEW state; invert
+          const nextLiked = wasOptimisticLiked
+            ? s.likedPostIds.filter((id) => id !== postId)
+            : [...s.likedPostIds, postId]
+          return {
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    likes: Math.max(0, post.likes + (wasOptimisticLiked ? -1 : 1)),
+                  }
+                : post
+            ),
+            likedPostIds: nextLiked,
+          }
+        })
+        return
+      }
       if (remote.ok && remote.durable && isLike && typeof remote.likeCount === "number") {
         setState((s) => ({
           ...s,
@@ -1558,7 +1596,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         }))
       }
     } catch {
-      /* local-only */
+      /* local-only — keep optimistic state when network unavailable */
     }
   }
 
@@ -1828,11 +1866,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       try {
         const { socialDeletePost } = await import("@/lib/social/client")
-        await socialDeletePost(postId)
+        const remote = await socialDeletePost(postId)
+        if (remote.ok === false) {
+          addToast(
+            remote.error || "Deleted on this device — server not confirmed",
+            "info"
+          )
+          return
+        }
+        addToast(remote.durable ? "Post deleted" : "Post deleted on this device", "success")
       } catch {
-        /* local soft-delete still applied */
+        addToast("Deleted on this device — server not confirmed", "info")
       }
-      addToast("Post deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete post", "error")
@@ -1895,17 +1940,41 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       try {
         const { socialAddComment } = await import("@/lib/social/client")
-        await socialAddComment(postId, {
+        const remote = await socialAddComment(postId, {
           id: newComment.id,
           text: normalizedText,
           authorName: newComment.authorName,
           authorPhoto: newComment.authorPhoto,
           parentId: replyToCommentId,
         })
+        if (remote.ok === false) {
+          addToast(
+            remote.error ||
+              (replyToCommentId
+                ? "Reply saved on this device — server not confirmed"
+                : "Comment saved on this device — server not confirmed"),
+            "info"
+          )
+          return
+        }
+        addToast(
+          remote.durable
+            ? replyToCommentId
+              ? "Reply posted"
+              : "Comment posted"
+            : replyToCommentId
+              ? "Reply saved on this device"
+              : "Comment saved on this device",
+          "success"
+        )
       } catch {
-        /* local comment remains until durable path available */
+        addToast(
+          replyToCommentId
+            ? "Reply saved on this device — server not confirmed"
+            : "Comment saved on this device — server not confirmed",
+          "info"
+        )
       }
-      addToast(replyToCommentId ? "Reply posted" : "Comment posted", "success")
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -1939,11 +2008,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       try {
         const { socialEditPost } = await import("@/lib/social/client")
-        await socialEditPost(postId, result.data.content)
+        const durable = await socialEditPost(postId, result.data.content)
+        if (durable && durable.ok === false) {
+          addToast(
+            durable.error || "Could not save post edit on the server",
+            "error"
+          )
+          return
+        }
+        addToast(
+          durable?.durable === false
+            ? "Post updated on this device"
+            : "Post updated",
+          "success"
+        )
       } catch {
-        /* local edit remains until durable path available */
+        addToast("Could not save post edit on the server", "error")
       }
-      addToast("Post updated", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not update post", "error")
@@ -1951,27 +2032,36 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const archivePost = async (postId: string) => {
+    // Local-only: no durable archive API/RPC exists (soft-delete is DELETE /api/social/posts/:id).
+    // Do not imply server persistence. Feed filters isArchived client-side until a durable path ships.
+    const post = state.posts.find((p) => p.id === postId)
+    if (!post) {
+      addToast("Post not found", "error")
+      return
+    }
     setState((s) => ({
       ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId
-          ? { ...post, isArchived: true, archivedAt: Date.now() }
-          : post
+      posts: s.posts.map((p) =>
+        p.id === postId ? { ...p, isArchived: true, archivedAt: Date.now() } : p
       ),
     }))
-    addToast("Post archived", "success")
+    addToast("Post archived on this device", "success")
   }
 
   const unarchivePost = async (postId: string) => {
+    // Local-only — same limitation as archivePost (no server contract).
+    const post = state.posts.find((p) => p.id === postId)
+    if (!post) {
+      addToast("Post not found", "error")
+      return
+    }
     setState((s) => ({
       ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId
-          ? { ...post, isArchived: false, archivedAt: undefined }
-          : post
+      posts: s.posts.map((p) =>
+        p.id === postId ? { ...p, isArchived: false, archivedAt: undefined } : p
       ),
     }))
-    addToast("Post restored from archive", "success")
+    addToast("Post restored on this device", "success")
   }
 
   const editComment = async (postId: string, commentId: string, newText: string) => {
@@ -2086,6 +2176,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const pinComment = async (postId: string, commentId: string) => {
+    // Local-only — no durable comment-pin API/RPC.
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -2097,10 +2188,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Comment pinned", "success")
+    addToast("Comment pinned on this device", "success")
   }
 
   const unpinComment = async (postId: string, commentId: string) => {
+    // Local-only — no durable comment-pin API/RPC.
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -2112,10 +2204,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Comment unpinned", "success")
+    addToast("Comment unpinned on this device", "success")
   }
 
   const createQuoteRepost = async (originalPostId: string, quoteText: string) => {
+    // Local-only until durable posts accept quoteOf (no migration/API for quote metadata yet).
     const originalPost = state.posts.find((p) => p.id === originalPostId)
     if (!originalPost) {
       addToast("Original post not found", "error")
@@ -2137,7 +2230,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       quoteOf: originalPostId,
     }
     setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
-    addToast("Quote repost created", "success")
+    addToast("Quote repost created on this device", "success")
   }
 
   const sharePost = async (
@@ -2246,6 +2339,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const unsavePost = async (postId: string) => {
+    const prevBookmarks = state.posts.find((p) => p.id === postId)?.bookmarkedBy
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -2259,10 +2353,25 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }))
     try {
       const { socialToggleSave } = await import("@/lib/social/client")
-      await socialToggleSave(postId)
-      addToast("Post removed from saved", "success")
+      const remote = await socialToggleSave(postId)
+      if (remote.ok === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId
+              ? { ...post, bookmarkedBy: prevBookmarks || post.bookmarkedBy }
+              : post
+          ),
+        }))
+        addToast(remote.error || "Could not remove saved post", "error")
+        return
+      }
+      addToast(
+        remote.durable ? "Post removed from saved" : "Removed from saved on this device",
+        "success"
+      )
     } catch {
-      addToast("Post removed from saved", "success")
+      addToast("Removed from saved on this device", "success")
     }
   }
 
@@ -3142,6 +3251,7 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const pinMessage = useCallback(async (conversationId: string, messageId: string) => {
+    // Local-only — no durable message-pin API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) =>
@@ -3150,10 +3260,11 @@ const dismissMatchCelebration = useCallback(() => {
           : c
       ),
     }))
-    addToast("Message pinned", "success")
+    addToast("Message pinned on this device", "success")
   }, [addToast])
 
   const unpinMessage = useCallback(async (conversationId: string, messageId: string) => {
+    // Local-only — no durable message-pin API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) =>
@@ -3162,11 +3273,16 @@ const dismissMatchCelebration = useCallback(() => {
           : c
       ),
     }))
-    addToast("Message unpinned", "success")
+    addToast("Message unpinned on this device", "success")
   }, [addToast])
 
   const sendVoiceNote = useCallback(
     async (conversationId: string, audioBlob: Blob, waveform: number[]) => {
+      // Durable messaging API is text-only; do not claim durable delivery for voice.
+      if (isDurableMessagingEnabled()) {
+        addToast("Voice notes are not available with durable messaging yet", "error")
+        return
+      }
       try {
         const message = await createVoiceNoteMessage(audioBlob, waveform, "current-user")
         setState((s) => ({
@@ -3178,7 +3294,7 @@ const dismissMatchCelebration = useCallback(() => {
           ),
         }))
         analytics.trackEvent("voice_note_sent", { conversationId }, state.profile.displayName)
-        addToast("Voice note sent", "success")
+        addToast("Voice note sent on this device", "success")
       } catch (error) {
         errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
         addToast("Failed to send voice note", "error")
@@ -3189,6 +3305,11 @@ const dismissMatchCelebration = useCallback(() => {
 
   const sendMediaMessage = useCallback(
     async (conversationId: string, mediaUrl: string, type: "image" | "file" | "video", fileName?: string) => {
+      // Durable messaging API is text-only; do not claim durable delivery for attachments.
+      if (isDurableMessagingEnabled()) {
+        addToast("Media messages are not available with durable messaging yet", "error")
+        return
+      }
       const message: Message = {
         id: generateId(),
         senderId: "current-user",
@@ -3208,13 +3329,20 @@ const dismissMatchCelebration = useCallback(() => {
       }))
 
       analytics.trackEvent("media_sent", { conversationId, type }, state.profile.displayName)
-      addToast(`${type === "image" ? "Photo" : type === "video" ? "Video" : "File"} sent`, "success")
+      addToast(
+        `${type === "image" ? "Photo" : type === "video" ? "Video" : "File"} sent on this device`,
+        "success"
+      )
     },
     [state.profile.displayName, state.conversations, addToast]
   )
 
   const scheduleMessage = useCallback(
     async (conversationId: string, text: string, scheduledFor: number) => {
+      if (isDurableMessagingEnabled()) {
+        addToast("Scheduled messages are not available with durable messaging yet", "error")
+        return
+      }
       const message: Message = {
         id: generateId(),
         senderId: "current-user",
@@ -3232,13 +3360,17 @@ const dismissMatchCelebration = useCallback(() => {
       }))
 
       analytics.trackEvent("message_scheduled", { conversationId }, state.profile.displayName)
-      addToast("Message scheduled", "success")
+      addToast("Message scheduled on this device", "success")
     },
     [state.profile.displayName, state.conversations, addToast]
   )
 
   const sendDisappearingMessage = useCallback(
     async (conversationId: string, text: string, expiresInSeconds: number = 300) => {
+      if (isDurableMessagingEnabled()) {
+        addToast("Disappearing messages are not available with durable messaging yet", "error")
+        return
+      }
       const message: Message = {
         id: generateId(),
         senderId: "current-user",
@@ -3259,7 +3391,7 @@ const dismissMatchCelebration = useCallback(() => {
       }))
 
       analytics.trackEvent("disappearing_message_sent", { conversationId }, state.profile.displayName)
-      addToast("Disappearing message sent", "success")
+      addToast("Disappearing message sent on this device", "success")
     },
     [state.profile.displayName, state.conversations, addToast]
   )
@@ -3284,11 +3416,12 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const pinConversation = useCallback(async (conversationId: string) => {
+    // Local-only — no durable conversation pin API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
     }))
-    addToast("Conversation pinned", "success")
+    addToast("Conversation pinned on this device", "success")
   }, [addToast])
 
   const unpinConversation = useCallback(async (conversationId: string) => {
@@ -3296,15 +3429,16 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
     }))
-    addToast("Conversation unpinned", "success")
+    addToast("Conversation unpinned on this device", "success")
   }, [addToast])
 
   const archiveConversation = useCallback(async (conversationId: string) => {
+    // Local-only — no durable conversation archive API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
     }))
-    addToast("Conversation archived", "success")
+    addToast("Conversation archived on this device", "success")
   }, [addToast])
 
   const unarchiveConversation = useCallback(async (conversationId: string) => {
@@ -3312,15 +3446,19 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
     }))
-    addToast("Conversation unarchived", "success")
+    addToast("Conversation unarchived on this device", "success")
   }, [addToast])
 
   const muteConversation = useCallback(async (conversationId: string, muteHours: number = 1) => {
+    // Local-only conversation mute (graph muteUser is separate durable path).
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, muteHours) : c)),
     }))
-    addToast(`Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""}`, "success")
+    addToast(
+      `Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""} on this device`,
+      "success"
+    )
   }, [addToast])
 
   const unmuteConversation = useCallback(async (conversationId: string) => {
@@ -3328,7 +3466,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, 0) : c)),
     }))
-    addToast("Notifications unmuted", "success")
+    addToast("Notifications unmuted on this device", "success")
   }, [addToast])
 
   const setTypingIndicator = useCallback(async (conversationId: string, isTyping: boolean) => {
@@ -3434,20 +3572,32 @@ const dismissMatchCelebration = useCallback(() => {
                 : c
             ),
           }))
+          // Durable pending membership: POST /api/communities/:id/join → gh_community_join
+          // (non-public → status "pending"). Never toast "Joined" for a request-only path.
+          try {
+            const { socialJoinCommunity } = await import("@/lib/social/client")
+            const durable = await socialJoinCommunity(communityId)
+            if (durable.ok === false) {
+              addToast(
+                durable.error || "Request saved on this device — server not confirmed",
+                "info"
+              )
+              return true
+            }
+            if (String(durable.status || "") === "active") {
+              addToast("Joined community", "success")
+              return true
+            }
+          } catch {
+            addToast("Request saved on this device — server not confirmed", "info")
+            return true
+          }
           addToast("Join request sent — waiting for approval", "info")
           return true
         }
         const result = await domains.community.joinCommunity(communityId)
-        if (result.ok) {
-          try {
-            const { socialJoinCommunity } = await import("@/lib/social/client")
-            await socialJoinCommunity(communityId)
-          } catch {
-            /* local join remains */
-          }
-        }
         if (!result.ok) {
-          // Seed/demo communities may not be in conversations yet — admit locally
+          // Seed/demo communities may not be in conversations yet — admit locally only in hybrid
           if (!conv) {
             setState((s) => {
               const existing = s.conversations.find((c) => c.id === communityId)
@@ -3472,11 +3622,26 @@ const dismissMatchCelebration = useCallback(() => {
               return s
             })
             markJoined(communityId)
-            addToast("Joined community", "success")
+            addToast("Joined community on this device", "success")
             return true
           }
           addToast(result.error, "error")
           return false
+        }
+        let durableOk: boolean | null = null
+        try {
+          const { socialJoinCommunity } = await import("@/lib/social/client")
+          const durable = await socialJoinCommunity(communityId)
+          durableOk = durable.ok !== false
+          if (durable.ok === false) {
+            addToast(
+              durable.error || "Joined locally — server membership not confirmed",
+              "info"
+            )
+          }
+        } catch {
+          durableOk = false
+          addToast("Joined locally — server membership not confirmed", "info")
         }
         setState((s) => {
           const memberId = IdentityService.getCurrentUserId() || "current-user"
@@ -3503,7 +3668,9 @@ const dismissMatchCelebration = useCallback(() => {
           return { ...s, conversations: next }
         })
         markJoined(communityId)
-        addToast("Joined community", "success")
+        if (durableOk !== false) {
+          addToast("Joined community", "success")
+        }
         analytics.trackEvent("community_joined", { communityId }, state.profile.displayName)
         return true
       } catch (err) {
@@ -3522,6 +3689,18 @@ const dismissMatchCelebration = useCallback(() => {
         if (!result.ok) {
           addToast(result.error, "error")
           return false
+        }
+        try {
+          const { socialLeaveCommunity } = await import("@/lib/social/client")
+          const durable = await socialLeaveCommunity(communityId)
+          if (durable.ok === false) {
+            addToast(
+              durable.error || "Left locally — server leave not confirmed",
+              "info"
+            )
+          }
+        } catch {
+          addToast("Left locally — server leave not confirmed", "info")
         }
         setState((s) => {
           const next: Conversation[] = s.conversations.map((c) =>
@@ -3643,11 +3822,20 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not approve", "error")
           return false
         }
+        let durableOk: boolean | null = null
         try {
           const { socialDecideJoinRequest } = await import("@/lib/social/client")
-          await socialDecideJoinRequest(communityId, userId, true)
+          const durable = await socialDecideJoinRequest(communityId, userId, true)
+          durableOk = durable.ok !== false
+          if (durable.ok === false) {
+            addToast(
+              durable.error || "Approved on this device — server not confirmed",
+              "info"
+            )
+          }
         } catch {
-          /* local approval remains */
+          durableOk = false
+          addToast("Approved on this device — server not confirmed", "info")
         }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName ||
@@ -3675,7 +3863,9 @@ const dismissMatchCelebration = useCallback(() => {
             referenceId: `join_accepted:${communityId}:${userId}`,
           })
         } catch { /* */ }
-        addToast("Join request approved", "success")
+        if (durableOk !== false) {
+          addToast("Join request approved", "success")
+        }
         return true
       } catch {
         addToast("Could not approve request", "error")
@@ -3693,11 +3883,20 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not decline", "error")
           return false
         }
+        let durableOk: boolean | null = null
         try {
           const { socialDecideJoinRequest } = await import("@/lib/social/client")
-          await socialDecideJoinRequest(communityId, userId, false)
+          const durable = await socialDecideJoinRequest(communityId, userId, false)
+          durableOk = durable.ok !== false
+          if (durable.ok === false) {
+            addToast(
+              durable.error || "Declined on this device — server not confirmed",
+              "info"
+            )
+          }
         } catch {
-          /* local decline remains */
+          durableOk = false
+          addToast("Declined on this device — server not confirmed", "info")
         }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
@@ -3718,7 +3917,9 @@ const dismissMatchCelebration = useCallback(() => {
             referenceId: `join_declined:${communityId}:${userId}`,
           })
         } catch { /* */ }
-        addToast("Join request declined", "info")
+        if (durableOk !== false) {
+          addToast("Join request declined", "info")
+        }
         return true
       } catch {
         addToast("Could not decline request", "error")
@@ -3792,6 +3993,22 @@ const dismissMatchCelebration = useCallback(() => {
           ),
         }))
         try {
+          const { socialJoinCommunity } = await import("@/lib/social/client")
+          const durable = await socialJoinCommunity(communityId)
+          if (durable.ok === false) {
+            addToast(
+              durable.error || "Request saved on this device — server not confirmed",
+              "info"
+            )
+          } else if (String(durable.status || "") === "active") {
+            addToast("Joined community", "success")
+          } else {
+            addToast("Join request sent — waiting for approval", "info")
+          }
+        } catch {
+          addToast("Request saved on this device — server not confirmed", "info")
+        }
+        try {
           const communityName =
             (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
           emitCommunityNotification({
@@ -3803,7 +4020,6 @@ const dismissMatchCelebration = useCallback(() => {
             referenceId: `join_request:${communityId}:${IdentityService.getCurrentUserId()}`,
           })
         } catch { /* */ }
-        addToast("Request sent", "info")
         return true
       } catch (err) {
         addToast("Could not send request", "error")
@@ -4505,7 +4721,7 @@ const dismissMatchCelebration = useCallback(() => {
       }))
       try {
         const { socialCreateStory } = await import("@/lib/social/client")
-        await socialCreateStory({
+        const remote = await socialCreateStory({
           id: result.data.id,
           ownerId: result.data.ownerId,
           name: result.data.name,
@@ -4516,8 +4732,19 @@ const dismissMatchCelebration = useCallback(() => {
           expiresAt: result.data.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
           createdAt: result.data.createdAt,
         })
+        if (remote.ok === false) {
+          addToast(
+            remote.error || "Story visible on this device — server not confirmed",
+            "info"
+          )
+          return
+        }
+        addToast(
+          remote.durable ? "Story published" : "Story saved on this device",
+          "success"
+        )
       } catch {
-        /* local story remains until durable path available */
+        addToast("Story visible on this device — server not confirmed", "info")
       }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))

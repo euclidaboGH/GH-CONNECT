@@ -5,6 +5,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getPaymentIntent,
+  loadPaymentIntent,
   transitionIntent,
   bindProviderPayment,
 } from "@/lib/server/payments/intent-store"
@@ -22,12 +23,13 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const { intentId } = await ctx.params
-  const intent = getPaymentIntent(intentId)
+  // Durable-first: cold starts must recover from DB, not process memory alone
+  const intent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
   if (!intent || intent.userId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
 
-  if (intent.status === "COMPLETED") {
+  if (intent.status === "COMPLETED" || intent.status === "FULFILLED") {
     return NextResponse.json({ ok: true, intent, recovered: false, message: "Already completed" })
   }
 
