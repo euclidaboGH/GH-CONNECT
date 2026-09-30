@@ -167,10 +167,16 @@ export async function createWithdrawalRequest(input: {
   if (dataObj.ok === false) {
     return { ok: false, error: String(dataObj.error || "CREATE_FAILED") }
   }
-  const req = dataObj.request as Record<string, unknown>
+  const req =
+    dataObj.request && typeof dataObj.request === "object"
+      ? (dataObj.request as Record<string, unknown>)
+      : null
+  if (!req) {
+    return { ok: false, error: "CREATE_FAILED" }
+  }
   return {
     ok: true,
-    duplicate: Boolean(data.duplicate),
+    duplicate: Boolean(dataObj.duplicate),
     request: mapRow(req),
   }
 }
