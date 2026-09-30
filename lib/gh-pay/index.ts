@@ -9,6 +9,7 @@ export {
   ghPayListMyOrders,
   ghPayGetOrder,
   retryMembershipActivation,
+  cancelPendingPiPaymentResume,
   isPiPaymentsAvailable,
   waitForPiPayments,
   probePiPayments,

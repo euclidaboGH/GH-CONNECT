@@ -186,9 +186,14 @@ export const IdentityService = {
           : identity.verificationState,
       accountStatus: identity.accountStatus === "setup" && piUid ? "active" : identity.accountStatus,
       isLocalStudioId: isStudioPlaceholderId(userId),
+      // Once onboarding is complete on this device, do not flip back to required
+      // on transient Pi reauth / PIN step-up / non-durable bridge responses.
+      // Hard clear() still resets. Explicit false from server still applies.
       needsOnboarding:
         typeof input.needsOnboarding === "boolean"
-          ? input.needsOnboarding
+          ? identity.needsOnboarding === false && input.needsOnboarding === true
+            ? false
+            : input.needsOnboarding
           : identity.needsOnboarding,
       serverVerifiedAt: input.verifiedByServer ? Date.now() : identity.serverVerifiedAt,
       updatedAt: Date.now(),

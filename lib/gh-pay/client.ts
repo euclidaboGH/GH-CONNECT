@@ -245,6 +245,74 @@ export async function retryMembershipActivation(orderId: string): Promise<{
 }
 
 /**
+ * One-shot in-memory wait for device PIN unlock during Pi payment step-up.
+ * Does NOT store amount, secrets, tokens, or PIN. Consumed exactly once.
+ * Listener is attached BEFORE lock is requested to avoid race.
+ */
+const PIN_RESUME_TIMEOUT_MS = 120_000
+
+type PendingPinResume = {
+  action: string
+  resolve: (ok: boolean) => void
+  timer: ReturnType<typeof setTimeout>
+  onUnlocked: (ev: Event) => void
+}
+
+let pendingPinResume: PendingPinResume | null = null
+
+function clearPendingPinResume(): void {
+  if (!pendingPinResume) return
+  try {
+    window.removeEventListener("ghc:security-unlocked", pendingPinResume.onUnlocked)
+  } catch {
+    /* */
+  }
+  try {
+    clearTimeout(pendingPinResume.timer)
+  } catch {
+    /* */
+  }
+  pendingPinResume = null
+}
+
+function waitForPinUnlock(action: string): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false)
+  // Only one pending payment resume at a time — reject a second concurrent wait
+  if (pendingPinResume) {
+    return Promise.resolve(false)
+  }
+  return new Promise((resolve) => {
+    const onUnlocked = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent<{ action?: string }>).detail
+        // Resume only for matching action (or generic unlock without action filter)
+        if (detail?.action && detail.action !== action) return
+      } catch {
+        /* accept unlock */
+      }
+      const slot = pendingPinResume
+      clearPendingPinResume()
+      slot?.resolve(true)
+    }
+    const timer = setTimeout(() => {
+      const slot = pendingPinResume
+      clearPendingPinResume()
+      slot?.resolve(false)
+    }, PIN_RESUME_TIMEOUT_MS)
+    pendingPinResume = { action, resolve, timer, onUnlocked }
+    window.addEventListener("ghc:security-unlocked", onUnlocked)
+  })
+}
+
+/** Cancel any dangling PIN resume (logout / hard reset callers may use). */
+export function cancelPendingPiPaymentResume(): void {
+  if (!pendingPinResume) return
+  const slot = pendingPinResume
+  clearPendingPinResume()
+  slot.resolve(false)
+}
+
+/**
  * User → App purchase for a catalog product.
  */
 export async function ghPayPurchase(
@@ -264,27 +332,52 @@ export async function ghPayPurchase(
 
   // Step-up: local app lock must be unlocked recently when PIN is configured.
   // Does not replace Pi Wallet authorization or server approve/complete.
+  // When locked: wait for PIN unlock and resume THIS invocation once (user does not re-tap Buy).
   try {
     const { canPerformSensitiveAction, hasPinConfigured, setSoftLocked } = await import(
       "@/lib/session-security"
     )
     const uid = IdentityService.getCurrentUserId()
-    const step = canPerformSensitiveAction("pi_payment", {
+    let step = canPerformSensitiveAction("pi_payment", {
       pinConfigured: hasPinConfigured(uid),
     })
     if (!step.allowed) {
+      if (pendingPinResume) {
+        return {
+          ok: false,
+          error: "Complete the current PIN unlock to continue payment.",
+        }
+      }
       setSoftLocked(true)
+      // Attach listener BEFORE dispatch so unlock cannot race past us
+      const waitPromise = waitForPinUnlock("pi_payment")
       try {
-        window.dispatchEvent(new CustomEvent("ghc:security-lock-required", { detail: { action: "pi_payment" } }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:security-lock-required", { detail: { action: "pi_payment" } })
+        )
       } catch {
         /* */
       }
-      return {
-        ok: false,
-        error:
-          step.reason === "locked"
-            ? "Unlock GreenHaven with your PIN, then try payment again."
-            : "Confirm your device PIN to continue with this payment.",
+      const unlocked = await waitPromise
+      if (!unlocked) {
+        return {
+          ok: false,
+          cancelled: true,
+          error:
+            step.reason === "locked"
+              ? "PIN unlock timed out or was cancelled. Try payment again."
+              : "Device PIN was not confirmed. Try payment again.",
+        }
+      }
+      // Re-check after unlock (fresh step-up window)
+      step = canPerformSensitiveAction("pi_payment", {
+        pinConfigured: hasPinConfigured(uid),
+      })
+      if (!step.allowed) {
+        return {
+          ok: false,
+          error: "Device still locked. Unlock with your PIN, then try payment again.",
+        }
       }
     }
   } catch {

@@ -200,7 +200,20 @@ export function MessageScreen() {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
       })
     } catch {
+      // Restore draft so the user can retry; avoid silent failure
       setDraft(text)
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: {
+              message: "Message couldn't be sent. Check your connection and try again.",
+              type: "error",
+            },
+          })
+        )
+      } catch {
+        /* */
+      }
     } finally {
       setSending(false)
     }

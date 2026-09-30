@@ -28,52 +28,70 @@ export function SessionLockGate({ children }: { children: React.ReactNode }) {
   } = useSessionLock()
   const { reinitialize } = usePiAuth()
 
-  if (needsPinSetup && !pinConfigured) {
-    return (
-      <PinSheet
-        mode="setup"
-        title="Protect this device"
-        subtitle={`Create a ${PIN_MIN_LEN}–${PIN_MAX_LEN} digit PIN. After ${Math.round(idleLockMs / 60000)} min idle we’ll ask for it to unlock this device — not to log you out of Pi. Your Pi account remains the real identity.`}
-        primaryLabel="Save PIN"
-        onSubmit={async (pin) => {
-          const r = await configurePin(pin)
-          return r
-        }}
-        secondaryLabel="Set up later"
-        onSecondary={skipPinSetupForNow}
-      />
-    )
-  }
+  /**
+   * CRITICAL: Never unmount children while PIN setup/lock is shown.
+   * Unmounting drops GHCProvider/profile state and forced returning users
+   * through registration after a successful PIN unlock (e.g. during Pi payment).
+   * Keep the tree mounted and overlay the PIN UI instead.
+   */
+  const showPinSetup = needsPinSetup && !pinConfigured
+  const showUnlock = isLocked && !showPinSetup
 
-  if (isLocked) {
-    return (
-      <PinSheet
-        mode="unlock"
-        title="Unlock this device"
-        subtitle={
-          pinConfigured
-            ? "Enter your GreenHaven PIN to continue on this phone. You are not logged out — this only unlocks the app, like a banking app lock."
-            : "This device was locked for safety. Confirm with Pi Network to continue. Your profile and onboarding stay saved."
+  return (
+    <>
+      <div
+        className={
+          showPinSetup || showUnlock
+            ? "pointer-events-none invisible fixed inset-0 -z-10 h-0 w-0 overflow-hidden opacity-0"
+            : "contents"
         }
-        primaryLabel={pinConfigured ? "Unlock device" : "Continue with Pi"}
-        onSubmit={async (pin) => {
-          if (!pinConfigured) {
-            // Re-auth with Pi without wiping identity / onboarding flags
-            void reinitialize()
-            return { ok: true }
-          }
-          return unlockWithPin(pin)
-        }}
-        secondaryLabel="Use Pi instead"
-        onSecondary={() => {
-          // Do not IdentityService.clear() — preserves onboarded profile after PIN unlock path
-          void reinitialize()
-        }}
-      />
-    )
-  }
+        aria-hidden={showPinSetup || showUnlock}
+      >
+        {children}
+      </div>
 
-  return <>{children}</>
+      {showPinSetup ? (
+        <PinSheet
+          mode="setup"
+          title="Protect this device"
+          subtitle={`Create a ${PIN_MIN_LEN}–${PIN_MAX_LEN} digit PIN. After ${Math.round(idleLockMs / 60000)} min idle we’ll ask for it to unlock this device — not to log you out of Pi. Your Pi account remains the real identity.`}
+          primaryLabel="Save PIN"
+          onSubmit={async (pin) => {
+            const r = await configurePin(pin)
+            return r
+          }}
+          secondaryLabel="Set up later"
+          onSecondary={skipPinSetupForNow}
+        />
+      ) : null}
+
+      {showUnlock ? (
+        <PinSheet
+          mode="unlock"
+          title="Unlock this device"
+          subtitle={
+            pinConfigured
+              ? "Enter your GreenHaven PIN to continue on this phone. You are not logged out — this only unlocks the app, like a banking app lock."
+              : "This device was locked for safety. Confirm with Pi Network to continue. Your profile and onboarding stay saved."
+          }
+          primaryLabel={pinConfigured ? "Unlock device" : "Continue with Pi"}
+          onSubmit={async (pin) => {
+            if (!pinConfigured) {
+              // Re-auth with Pi without wiping identity / onboarding flags
+              void reinitialize()
+              return { ok: true }
+            }
+            return unlockWithPin(pin)
+          }}
+          secondaryLabel="Use Pi instead"
+          onSecondary={() => {
+            // Do not IdentityService.clear() — preserves onboarded profile after PIN unlock path
+            void reinitialize()
+          }}
+        />
+      ) : null}
+    </>
+  )
 }
 
 function PinSheet({

@@ -170,7 +170,9 @@ interface GHCContextType {
   settings: Settings
   posts: Post[]
   stories: StoryItem[]
-  publishStory: (story: StoryItem) => Promise<void>
+  publishStory: (story: StoryItem) => Promise<{ ok: boolean; durable?: boolean; error?: string }>
+  /** Canonical durable feed refresh (server when online; preserves local feed on failure) */
+  refreshFeed: () => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   /** Opens/creates private chat with story owner via Messaging domain */
   replyToStory: (storyId: string) => Promise<string | null>
   tab: Tab
@@ -436,6 +438,7 @@ const GHCFeedContext = createContext<{
   candidates: Candidate[]
   createPost: GHCContextType["createPost"]
   likePost: GHCContextType["likePost"]
+  reactToPost: GHCContextType["reactToPost"]
   deletePost: GHCContextType["deletePost"]
   editPost: GHCContextType["editPost"]
   archivePost: GHCContextType["archivePost"]
@@ -455,6 +458,7 @@ const GHCFeedContext = createContext<{
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
+  refreshFeed: () => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   followUser: GHCContextType["followUser"]
   unfollowFromPost: GHCContextType["unfollowFromPost"]
   muteUser: GHCContextType["muteUser"]
@@ -1506,11 +1510,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       // Notification
       notificationSystem.addNotification("share", "Posted", "Your post is live on Feed", "✓", { open: "feed", section: "post" })
       if (durableStatus === "ok") {
-        addToast("Posted to your feed", "success")
+        addToast("Post published", "success")
       } else if (durableStatus === "unconfirmed") {
-        addToast("Posted on this device — server save not confirmed", "info")
+        addToast("Saved on this device — server publish not confirmed", "info")
       } else {
-        addToast("Posted on this device", "success")
+        addToast("Saved on this device", "info")
       }
       return true
     } catch (error) {
@@ -1579,6 +1583,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             likedPostIds: nextLiked,
           }
         })
+        addToast(remote.error || "Could not update reaction", "error")
         return
       }
       if (remote.ok && remote.durable && isLike && typeof remote.likeCount === "number") {
@@ -2032,24 +2037,52 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const archivePost = async (postId: string) => {
-    // Local-only: no durable archive API/RPC exists (soft-delete is DELETE /api/social/posts/:id).
-    // Do not imply server persistence. Feed filters isArchived client-side until a durable path ships.
     const post = state.posts.find((p) => p.id === postId)
     if (!post) {
       addToast("Post not found", "error")
       return
     }
+    // Optimistic local archive; reconcile with server when durable
     setState((s) => ({
       ...s,
       posts: s.posts.map((p) =>
         p.id === postId ? { ...p, isArchived: true, archivedAt: Date.now() } : p
       ),
     }))
-    addToast("Post archived on this device", "success")
+    try {
+      const res = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/archive`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...IdentityService.getAuthHeaders(),
+        },
+        body: JSON.stringify({ archived: true }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        durable?: boolean
+        error?: string
+      }
+      if (!res.ok || data.ok === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((p) =>
+            p.id === postId ? { ...p, isArchived: false, archivedAt: undefined } : p
+          ),
+        }))
+        addToast(data.error || "Could not archive post", "error")
+        return
+      }
+      addToast(
+        data.durable ? "Post archived" : "Post archived on this device",
+        data.durable ? "success" : "info"
+      )
+    } catch {
+      addToast("Post archived on this device", "info")
+    }
   }
 
   const unarchivePost = async (postId: string) => {
-    // Local-only — same limitation as archivePost (no server contract).
     const post = state.posts.find((p) => p.id === postId)
     if (!post) {
       addToast("Post not found", "error")
@@ -2061,7 +2094,37 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         p.id === postId ? { ...p, isArchived: false, archivedAt: undefined } : p
       ),
     }))
-    addToast("Post restored on this device", "success")
+    try {
+      const res = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/archive`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...IdentityService.getAuthHeaders(),
+        },
+        body: JSON.stringify({ archived: false }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        durable?: boolean
+        error?: string
+      }
+      if (!res.ok || data.ok === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((p) =>
+            p.id === postId ? { ...p, isArchived: true, archivedAt: Date.now() } : p
+          ),
+        }))
+        addToast(data.error || "Could not restore post", "error")
+        return
+      }
+      addToast(
+        data.durable ? "Post restored" : "Post restored on this device",
+        data.durable ? "success" : "info"
+      )
+    } catch {
+      addToast("Post restored on this device", "info")
+    }
   }
 
   const editComment = async (postId: string, commentId: string, newText: string) => {
@@ -2208,18 +2271,56 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const createQuoteRepost = async (originalPostId: string, quoteText: string) => {
-    // Local-only until durable posts accept quoteOf (no migration/API for quote metadata yet).
     const originalPost = state.posts.find((p) => p.id === originalPostId)
     if (!originalPost) {
       addToast("Original post not found", "error")
       return
     }
+    const text = (quoteText || "").trim()
+    // Prefer durable createPost path with quote metadata (migration 56: quote_of_post_id)
+    try {
+      const { socialCreatePost } = await import("@/lib/social/client")
+      const remote = await socialCreatePost({
+        content: text || `Quoted @${originalPost.authorName}`,
+        images: [],
+        video: null,
+        pdf: null,
+        pdfName: null,
+        visibility: "public",
+        quoteOf: originalPostId,
+      } as Parameters<typeof socialCreatePost>[0] & { quoteOf: string })
+      if (remote.ok && remote.post) {
+        const durablePost = {
+          id: String(remote.post.id || generateId()),
+          authorId: IdentityService.getCurrentUserId() || "current-user",
+          authorName: state.profile.displayName || "You",
+          authorPhoto: state.profile.photos[0] || "/placeholder.svg?width=32&height=32",
+          content: text || `Quoted @${originalPost.authorName}`,
+          images: [] as string[],
+          video: null as string | null,
+          pdf: null as string | null,
+          pdfName: null as string | null,
+          likes: 0,
+          comments: [] as Post["comments"],
+          createdAt: Date.now(),
+          quoteOf: originalPostId,
+        } as Post
+        setState((s) => ({ ...s, posts: [durablePost, ...s.posts] }))
+        addToast(
+          remote.durable ? "Quote repost published" : "Quote repost saved on this device",
+          remote.durable ? "success" : "info"
+        )
+        return
+      }
+    } catch {
+      /* fall through to local */
+    }
     const newPost: Post = {
       id: generateId(),
-      authorId: "current-user",
+      authorId: IdentityService.getCurrentUserId() || "current-user",
       authorName: state.profile.displayName || "You",
       authorPhoto: state.profile.photos[0] || "/placeholder.svg?width=32&height=32",
-      content: quoteText,
+      content: text || `Quoted @${originalPost.authorName}`,
       images: [],
       video: null,
       pdf: null,
@@ -2230,7 +2331,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       quoteOf: originalPostId,
     }
     setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
-    addToast("Quote repost created on this device", "success")
+    addToast("Quote repost saved on this device", "info")
   }
 
   const sharePost = async (
@@ -3084,7 +3185,12 @@ const dismissMatchCelebration = useCallback(() => {
       addToast("Message updated", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
-      addToast("Cannot edit this message", "error")
+      addToast(
+        err instanceof Error && err.message
+          ? err.message
+          : "Could not edit message. Try again.",
+        "error"
+      )
     }
   }, [domains, state.profile.displayName, addToast])
 
@@ -3251,7 +3357,6 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const pinMessage = useCallback(async (conversationId: string, messageId: string) => {
-    // Local-only — no durable message-pin API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) =>
@@ -3260,11 +3365,42 @@ const dismissMatchCelebration = useCallback(() => {
           : c
       ),
     }))
-    addToast("Message pinned on this device", "success")
+    try {
+      const res = await fetch(
+        `/api/messaging/conversations/${encodeURIComponent(conversationId)}/messages`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...IdentityService.getAuthHeaders(),
+          },
+          body: JSON.stringify({ messageId, pinned: true }),
+        }
+      )
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        durable?: boolean
+        error?: string
+      }
+      if (!res.ok || data.ok === false) {
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId
+              ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, isPinned: false } : m)) }
+              : c
+          ),
+        }))
+        addToast(data.error || "Could not pin message", "error")
+        return
+      }
+      addToast(data.durable ? "Message pinned" : "Message pinned on this device", data.durable ? "success" : "info")
+    } catch {
+      addToast("Message pinned on this device", "info")
+    }
   }, [addToast])
 
   const unpinMessage = useCallback(async (conversationId: string, messageId: string) => {
-    // Local-only — no durable message-pin API.
     setState((s) => ({
       ...s,
       conversations: s.conversations.map((c) =>
@@ -3273,7 +3409,39 @@ const dismissMatchCelebration = useCallback(() => {
           : c
       ),
     }))
-    addToast("Message unpinned on this device", "success")
+    try {
+      const res = await fetch(
+        `/api/messaging/conversations/${encodeURIComponent(conversationId)}/messages`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...IdentityService.getAuthHeaders(),
+          },
+          body: JSON.stringify({ messageId, pinned: false }),
+        }
+      )
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        durable?: boolean
+        error?: string
+      }
+      if (!res.ok || data.ok === false) {
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId
+              ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, isPinned: true } : m)) }
+              : c
+          ),
+        }))
+        addToast(data.error || "Could not unpin message", "error")
+        return
+      }
+      addToast(data.durable ? "Message unpinned" : "Message unpinned on this device", data.durable ? "success" : "info")
+    } catch {
+      addToast("Message unpinned on this device", "info")
+    }
   }, [addToast])
 
   const sendVoiceNote = useCallback(
@@ -4699,7 +4867,7 @@ const dismissMatchCelebration = useCallback(() => {
     }
   }, [addToast])
 
-  const publishStory = useCallback(async (story: StoryItem) => {
+  const publishStory = useCallback(async (story: StoryItem): Promise<{ ok: boolean; durable?: boolean; error?: string }> => {
     try {
       const prepared: StoryItem = {
         ...story,
@@ -4712,8 +4880,7 @@ const dismissMatchCelebration = useCallback(() => {
       }
       const result = await domains.stories.publish(prepared)
       if (!result.ok) {
-        addToast(result.error, "error")
-        return
+        return { ok: false, error: result.error || "Could not publish story" }
       }
       setState((s) => ({
         ...s,
@@ -4733,24 +4900,77 @@ const dismissMatchCelebration = useCallback(() => {
           createdAt: result.data.createdAt,
         })
         if (remote.ok === false) {
-          addToast(
-            remote.error || "Story visible on this device — server not confirmed",
-            "info"
-          )
-          return
+          return {
+            ok: true,
+            durable: false,
+            error: remote.error || "Story saved on this device — server not confirmed",
+          }
         }
-        addToast(
-          remote.durable ? "Story published" : "Story saved on this device",
-          "success"
-        )
+        return { ok: true, durable: Boolean(remote.durable) }
       } catch {
-        addToast("Story visible on this device — server not confirmed", "info")
+        return {
+          ok: true,
+          durable: false,
+          error: "Story saved on this device — server not confirmed",
+        }
       }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
-      addToast("This story could not be saved safely", "error")
+      return { ok: false, error: "This story could not be saved safely" }
     }
-  }, [addToast, domains, state.profile.displayName, state.profile.photos])
+  }, [domains, state.profile.displayName, state.profile.photos])
+
+  /**
+   * Canonical durable feed refresh — server authoritative when online.
+   * Reconciles remote posts with local-only optimistic items; never wipes feed on failure.
+   */
+  const refreshFeed = useCallback(async (): Promise<{ ok: boolean; durable?: boolean; error?: string }> => {
+    try {
+      const { socialFetchFeed } = await import("@/lib/social/client")
+      const feed = await socialFetchFeed({ limit: 40 })
+      if (!feed.ok) {
+        return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
+      }
+      if (feed.durable && Array.isArray(feed.posts) && feed.posts.length > 0) {
+        setState((s) => {
+          const remotePosts = feed.posts.map((p) => ({
+            id: String(p.id),
+            authorId: String(p.authorId || ""),
+            authorName: String(p.authorName || "Member"),
+            authorPhoto: String(p.authorPhoto || ""),
+            content: String(p.content || ""),
+            images: Array.isArray(p.images) ? (p.images as string[]) : [],
+            video: (p.video as string | null) ?? null,
+            pdf: (p.pdf as string | null) ?? null,
+            pdfName: (p.pdfName as string | null) ?? null,
+            likes: Number(p.likes) || 0,
+            comments: Array.isArray(p.comments) ? p.comments : [],
+            createdAt: Number(p.createdAt) || Date.now(),
+            visibility: (p.visibility as Post["visibility"]) || "public",
+            deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
+          })) as Post[]
+          const remoteIds = new Set(remotePosts.map((p) => p.id))
+          const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+          const nextPosts = [...remotePosts, ...localOnly].sort(
+            (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+          )
+          const liked = feed.posts
+            .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
+            .map((p) => String(p.id))
+          const nextLiked = liked.length
+            ? Array.from(new Set([...(s.likedPostIds || []), ...liked]))
+            : s.likedPostIds
+          return { ...s, posts: nextPosts, likedPostIds: nextLiked }
+        })
+        return { ok: true, durable: true }
+      }
+      // Server reachable but empty / non-durable — preserve existing local feed
+      return { ok: true, durable: Boolean(feed.durable) }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not refresh feed"
+      return { ok: false, durable: false, error: message }
+    }
+  }, [])
 
   /**
    * Story reply → Messaging domain: open or create private conversation with story owner.
@@ -4836,6 +5056,7 @@ const dismissMatchCelebration = useCallback(() => {
       posts: visibleSession.posts,
       stories: visibleSession.stories,
       publishStory,
+      refreshFeed,
       replyToStory,
       tab: state.tab,
       toasts: state.toasts,
@@ -5162,6 +5383,7 @@ const dismissMatchCelebration = useCallback(() => {
       reportPost,
       reportContent,
       publishStory,
+      refreshFeed,
       followUser,
       unfollowFromPost,
       muteUser,
@@ -5202,6 +5424,7 @@ const dismissMatchCelebration = useCallback(() => {
       unpinComment,
       createQuoteRepost,
       sharePost,
+      refreshFeed,
       applyShareResult,
       savePost,
       unsavePost,

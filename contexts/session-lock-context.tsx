@@ -108,6 +108,10 @@ export function SessionLockProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) {
       setSecurityState("SIGNED_OUT")
       setIsLocked(false)
+      // Drop any in-flight payment PIN resume — user is signed out
+      void import("@/lib/gh-pay/client")
+        .then((m) => m.cancelPendingPiPaymentResume?.())
+        .catch(() => {})
       return
     }
     const uid = IdentityService.getCurrentUserId()
@@ -276,6 +280,17 @@ export function SessionLockProvider({ children }: { children: ReactNode }) {
         setIsLocked(false)
         setSecurityState("ACTIVE")
         touchActivity()
+        // Notify one-shot listeners (e.g. ghPayPurchase awaiting step-up).
+        // Does not carry PIN, tokens, or payment payload.
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:security-unlocked", {
+              detail: { action: "pi_payment" },
+            })
+          )
+        } catch {
+          /* */
+        }
         return { ok: true }
       }
       if (result.forcePiReauth) {
@@ -314,6 +329,15 @@ export function SessionLockProvider({ children }: { children: ReactNode }) {
       setIsLocked(false)
       setSecurityState("ACTIVE")
       touchActivity()
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:security-unlocked", {
+            detail: { action: "pi_payment" },
+          })
+        )
+      } catch {
+        /* */
+      }
     }
     return result
   }, [])

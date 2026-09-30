@@ -346,8 +346,22 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           // @ts-expect-error optional client field
           storyMode,
         }
-        await publishStory(next)
-        addToast(`Story shared · ${storyAudience === "everyone" ? "Public" : storyAudience} · 24h`, "success")
+        const storyResult = await publishStory(next)
+        if (!storyResult?.ok) {
+          addToast(storyResult?.error || "Could not publish story", "error")
+          return
+        }
+        if (storyResult.durable) {
+          addToast(
+            `Story shared · ${storyAudience === "everyone" ? "Public" : storyAudience} · 24h`,
+            "success"
+          )
+        } else {
+          addToast(
+            storyResult.error || "Story saved on this device — not published to server",
+            "info"
+          )
+        }
         close()
       }
     } catch {
@@ -397,7 +411,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           aria-busy={isPublishing}
           className="min-h-9 rounded-full bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
         >
-          {isPublishing ? "…" : mode === "post" ? "Post" : "Share"}
+          {isPublishing ? (mode === "post" ? "Posting…" : "Sharing…") : mode === "post" ? "Post" : "Share"}
         </button>
       </header>
 

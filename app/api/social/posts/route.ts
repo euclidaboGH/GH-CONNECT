@@ -163,6 +163,11 @@ export async function POST(request: Request) {
   const id =
     clientId && /^post_[a-zA-Z0-9_-]{6,80}$/.test(clientId) ? clientId : genId()
 
+  // Quote reference: only accept a stable post id string (server does not trust client content of original)
+  const quoteOfRaw = body.quoteOf != null ? String(body.quoteOf).trim() : ""
+  const quoteOf =
+    quoteOfRaw && /^[a-zA-Z0-9_-]{6,120}$/.test(quoteOfRaw) ? quoteOfRaw : null
+
   const row = {
     id,
     authorId: auth.userId,
@@ -180,6 +185,7 @@ export async function POST(request: Request) {
     communityName: body.communityName ? String(body.communityName) : null,
     contentType,
     createdAt: Date.now(),
+    ...(quoteOf ? { quoteOf } : {}),
   }
 
   if (!socialDbConfigured()) {
@@ -208,6 +214,45 @@ export async function POST(request: Request) {
       { ok: false, error: data.error || "CREATE_REJECTED" },
       { status: 400 }
     )
+  }
+
+  // Best-effort attach quote_of_post_id when migration 56 is applied
+  if (quoteOf) {
+    try {
+      const { readGhcServerEnv } = await import("@/lib/server/economy/env")
+      const env = readGhcServerEnv()
+      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+        // Verify original exists and is not deleted
+        const check = await fetch(
+          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(quoteOf)}&deleted_at=is.null&select=id&limit=1`,
+          {
+            headers: {
+              apikey: env.supabaseServiceRoleKey,
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+            },
+            cache: "no-store",
+          }
+        )
+        const found = (await check.json().catch(() => [])) as unknown[]
+        if (Array.isArray(found) && found.length > 0) {
+          await fetch(
+            `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(id)}`,
+            {
+              method: "PATCH",
+              headers: {
+                apikey: env.supabaseServiceRoleKey,
+                Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ quote_of_post_id: quoteOf }),
+              cache: "no-store",
+            }
+          )
+        }
+      }
+    } catch {
+      /* column may not exist until migration 56 */
+    }
   }
 
   return NextResponse.json({ ok: true, durable: true, post: row })

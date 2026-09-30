@@ -153,8 +153,8 @@ function ConversationItemBase({
       className={`group border-b border-border/40 transition-colors ${isSelected ? "bg-emerald-50/60 dark:bg-emerald-950/30" : "bg-card hover:bg-muted/40"}`}
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}
     >
-      <button onClick={onClick} className="flex min-h-[68px] w-full items-center px-3.5 py-2.5 text-left transition active:bg-emerald-50/50 sm:px-4" aria-label={`Open conversation with ${conversation.participantName}`}>
-        <div className="flex items-center gap-3">
+      <div className="flex min-h-[68px] w-full items-center px-3.5 py-2.5 text-left transition active:bg-emerald-50/50 sm:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="relative shrink-0">
             <button
               type="button"
@@ -162,7 +162,7 @@ function ConversationItemBase({
                 event.stopPropagation()
                 onOpenProfile?.()
               }}
-              className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="block min-h-[44px] min-w-[44px] rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               aria-label={
                 conversation.conversationType === "group" ||
                 (conversation as { isCommunity?: boolean }).isCommunity ||
@@ -208,7 +208,12 @@ function ConversationItemBase({
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onClick}
+            className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+            aria-label={`Open conversation with ${conversation.participantName}`}
+          >
             <div className="flex items-center gap-2">
               <p className={`min-w-0 flex-1 truncate text-[15px] text-gray-950 ${hasUnread ? "font-semibold" : "font-medium"}`}>
                 {(conversation.conversationType === "group" || (conversation as { isCommunity?: boolean }).isCommunity)
@@ -245,9 +250,9 @@ function ConversationItemBase({
                 )}
               </div>
             </div>
-          </div>
+          </button>
         </div>
-      </button>
+      </div>
 
       <div className="hidden gap-2 border-t border-gray-50 px-3 py-1.5 transition group-hover:flex">
         {onPin && <button onClick={(e) => { e.stopPropagation(); onPin(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}

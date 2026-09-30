@@ -33,6 +33,7 @@ export type DurableMessage = {
   editedAt: number | null
   deletedAt: number | null
   deletedBy: string | null
+  isPinned?: boolean
 }
 
 const memConv = new Map<string, DurableConversation>()
@@ -302,6 +303,7 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
     editedAt: row.edited_at ? Date.parse(String(row.edited_at)) : null,
     deletedAt: row.deleted_at ? Date.parse(String(row.deleted_at)) : null,
     deletedBy: row.deleted_by != null ? String(row.deleted_by) : null,
+    isPinned: Boolean(row.is_pinned),
   }
 }
 
@@ -477,6 +479,251 @@ export async function markConversationRead(input: {
     if (!ok && isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
   }
   return { ok: true }
+}
+
+/**
+ * Edit own message body. Durable when DB configured (requires migration 55 RPCs
+ * or direct PATCH). Sender + membership enforced.
+ */
+export async function editMessage(input: {
+  conversationId: string
+  messageId: string
+  actorId: string
+  body: string
+}): Promise<
+  | { ok: true; message: DurableMessage; durable: boolean }
+  | { ok: false; error: string }
+> {
+  const cid = String(input.conversationId || "").trim()
+  const mid = String(input.messageId || "").trim()
+  const uid = String(input.actorId || "").trim()
+  const body = String(input.body || "").trim().slice(0, 8000)
+  if (!body) return { ok: false, error: "EMPTY_BODY" }
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+
+  if (dbConfigured()) {
+    const env = readGhcServerEnv()
+    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+      // Prefer RPC when migration 55 applied
+      try {
+        const rpcRes = await fetch(
+          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_edit_message`,
+          {
+            method: "POST",
+            headers: {
+              apikey: env.supabaseServiceRoleKey,
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify({
+              p_message_id: mid,
+              p_actor_id: uid,
+              p_body: body,
+            }),
+            cache: "no-store",
+          }
+        )
+        const rpcData = (await rpcRes.json().catch(() => null)) as {
+          ok?: boolean
+          error?: string
+          body?: string
+          edited_at?: string
+        } | null
+        if (rpcRes.ok && rpcData && rpcData.ok === true) {
+          const q = `gh_messages?id=eq.${encodeURIComponent(mid)}&select=*&limit=1`
+          const fetched = await rest<Array<Record<string, unknown>>>(q)
+          if (fetched.ok && fetched.data?.[0]) {
+            return { ok: true, message: rowToMessage(fetched.data[0]), durable: true }
+          }
+          return {
+            ok: true,
+            durable: true,
+            message: {
+              id: mid,
+              conversationId: cid,
+              senderId: uid,
+              clientMessageId: null,
+              body: String(rpcData.body || body),
+              status: "sent",
+              createdAt: Date.now(),
+              editedAt: rpcData.edited_at
+                ? Date.parse(String(rpcData.edited_at))
+                : Date.now(),
+              deletedAt: null,
+              deletedBy: null,
+            },
+          }
+        }
+        if (rpcData && rpcData.ok === false) {
+          return { ok: false, error: String(rpcData.error || "EDIT_FAILED") }
+        }
+      } catch {
+        /* fall through to PATCH */
+      }
+    }
+    // Fallback PATCH: ownership enforced by sender_id filter
+    const patch = await rest(
+      `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&deleted_at=is.null`,
+      {
+        method: "PATCH",
+        prefer: "return=representation",
+        body: JSON.stringify({
+          body,
+          edited_at: new Date().toISOString(),
+        }),
+      }
+    )
+    if (patch.ok && Array.isArray(patch.data) && (patch.data as unknown[])[0]) {
+      return {
+        ok: true,
+        durable: true,
+        message: rowToMessage((patch.data as Array<Record<string, unknown>>)[0]),
+      }
+    }
+    if (isProd()) return { ok: false, error: "EDIT_FAILED" }
+  }
+
+  const list = memMessages.get(cid) || []
+  const idx = list.findIndex((m) => m.id === mid && m.senderId === uid)
+  if (idx < 0) return { ok: false, error: "NOT_FOUND" }
+  if (list[idx].deletedAt) return { ok: false, error: "DELETED" }
+  list[idx] = { ...list[idx], body, editedAt: Date.now() }
+  memMessages.set(cid, list)
+  return { ok: true, message: list[idx], durable: false }
+}
+
+/** Pin / unpin a message within a conversation (member only). */
+export async function pinMessage(input: {
+  conversationId: string
+  messageId: string
+  actorId: string
+  pinned: boolean
+}): Promise<{ ok: true; durable: boolean } | { ok: false; error: string }> {
+  const cid = String(input.conversationId || "").trim()
+  const mid = String(input.messageId || "").trim()
+  const uid = String(input.actorId || "").trim()
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+
+  if (dbConfigured()) {
+    const env = readGhcServerEnv()
+    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+      try {
+        const rpcRes = await fetch(
+          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_pin_message`,
+          {
+            method: "POST",
+            headers: {
+              apikey: env.supabaseServiceRoleKey,
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              p_message_id: mid,
+              p_actor_id: uid,
+              p_pinned: Boolean(input.pinned),
+            }),
+            cache: "no-store",
+          }
+        )
+        const rpcData = (await rpcRes.json().catch(() => null)) as {
+          ok?: boolean
+          error?: string
+        } | null
+        if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
+        if (rpcData?.ok === false) return { ok: false, error: String(rpcData.error || "PIN_FAILED") }
+      } catch {
+        /* fall through */
+      }
+    }
+    const patch = await rest(
+      `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&deleted_at=is.null`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ is_pinned: Boolean(input.pinned) }),
+      }
+    )
+    if (patch.ok) return { ok: true, durable: true }
+    if (isProd()) return { ok: false, error: "PIN_FAILED" }
+  }
+
+  const list = memMessages.get(cid) || []
+  const idx = list.findIndex((m) => m.id === mid)
+  if (idx < 0) return { ok: false, error: "NOT_FOUND" }
+  list[idx] = { ...list[idx], isPinned: Boolean(input.pinned) }
+  memMessages.set(cid, list)
+  return { ok: true, durable: false }
+}
+
+/** Personal conversation preferences (pin/archive/mute) — never global. */
+export async function setConversationPrefs(input: {
+  conversationId: string
+  ghUserId: string
+  isPinned?: boolean
+  isArchived?: boolean
+  mutedUntil?: number | null
+}): Promise<{ ok: true; durable: boolean } | { ok: false; error: string }> {
+  const cid = String(input.conversationId || "").trim()
+  const uid = String(input.ghUserId || "").trim()
+  if (!cid || !uid) return { ok: false, error: "INVALID" }
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+
+  if (dbConfigured()) {
+    const env = readGhcServerEnv()
+    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+      try {
+        const rpcRes = await fetch(
+          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_set_conversation_prefs`,
+          {
+            method: "POST",
+            headers: {
+              apikey: env.supabaseServiceRoleKey,
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              p_conversation_id: cid,
+              p_actor_id: uid,
+              p_is_pinned: input.isPinned ?? null,
+              p_is_archived: input.isArchived ?? null,
+              p_muted_until:
+                input.mutedUntil != null
+                  ? new Date(input.mutedUntil).toISOString()
+                  : null,
+              p_clear_mute: input.mutedUntil === null,
+            }),
+            cache: "no-store",
+          }
+        )
+        const rpcData = (await rpcRes.json().catch(() => null)) as {
+          ok?: boolean
+          error?: string
+        } | null
+        if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
+        if (rpcData?.ok === false) {
+          return { ok: false, error: String(rpcData.error || "PREFS_FAILED") }
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    const patchBody: Record<string, unknown> = {}
+    if (typeof input.isPinned === "boolean") patchBody.is_pinned = input.isPinned
+    if (typeof input.isArchived === "boolean") patchBody.is_archived = input.isArchived
+    if (input.mutedUntil === null) patchBody.muted_until = null
+    else if (typeof input.mutedUntil === "number") {
+      patchBody.muted_until = new Date(input.mutedUntil).toISOString()
+    }
+    if (Object.keys(patchBody).length) {
+      const patch = await rest(
+        `gh_conversation_members?conversation_id=eq.${encodeURIComponent(cid)}&gh_user_id=eq.${encodeURIComponent(uid)}`,
+        { method: "PATCH", body: JSON.stringify(patchBody) }
+      )
+      if (patch.ok) return { ok: true, durable: true }
+      if (isProd()) return { ok: false, error: "PREFS_FAILED" }
+    }
+  }
+  return { ok: true, durable: false }
 }
 
 /** True if either direction has a block row. */

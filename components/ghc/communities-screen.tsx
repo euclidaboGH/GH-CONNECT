@@ -20,10 +20,12 @@ import {
   Compass,
   Sparkles,
   MapPin,
+  ArrowLeft,
 } from "lucide-react"
 import { useGHCMessaging } from "@/contexts/ghc-context"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { useScrollHeader } from "@/lib/use-scroll-header"
+import { navigateTo } from "@/lib/navigation/navigate"
 import { GroupCard } from "./group-card"
 import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
 import { PremiumCommunityHub } from "./premium-community-hub"
@@ -546,13 +548,17 @@ export function CommunitiesScreen() {
       }
       const ok = await joinCommunity(row.id)
       if (ok) {
-        // Domain join succeeded. Mirror to Class D cache only in Studio for list hydration.
+        // Domain join / request succeeded. Toast authority is in joinCommunity
+        // (Joined vs Request sent vs device-only) — never blanket "Joined" for pending.
         if (communityLocalCacheAllowed()) {
-          setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
+          const meId = IdentityService.getCurrentUserId()
+          const after = resolveMembershipState(row, meId)
+          if (after === "member" || after === "owner" || after === "admin" || after === "moderator") {
+            setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
+          }
         }
         setHubKey((k) => k + 1)
         setJoinPickerRow(null)
-        addToast(`Joined ${row.groupName || row.participantName}`, "success")
         return true
       }
       setJoinError(userFacingJoinError("join_failed"))
@@ -883,6 +889,31 @@ export function CommunitiesScreen() {
         title="Communities"
         compact={headerCompact}
         hidden={headerHidden}
+        leading={
+          <button
+            type="button"
+            onClick={() => {
+              // Canonical shell navigation — Home tab (no reload / no history hack)
+              if (!navigateTo("home")) setTab?.("home")
+            }}
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted active:scale-95"
+            aria-label="Back to Home"
+          >
+            <ArrowLeft size={18} strokeWidth={2.25} aria-hidden />
+          </button>
+        }
+        compactLeading={
+          <button
+            type="button"
+            onClick={() => {
+              if (!navigateTo("home")) setTab?.("home")
+            }}
+            className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground active:scale-95"
+            aria-label="Back to Home"
+          >
+            <ArrowLeft size={16} strokeWidth={2.25} aria-hidden />
+          </button>
+        }
         actions={
           <button
             type="button"

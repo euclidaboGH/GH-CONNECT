@@ -380,21 +380,51 @@ export function createMessagingDomain(deps: {
         input,
         validate: (i) => {
           if (!(i.newText || "").trim()) return "Message cannot be empty"
-          // No durable PATCH message API — refuse rather than toast durable success
-          if (isDurableMessagingEnabled()) {
-            return "Message editing is not available on durable messaging yet"
-          }
           return null
         },
         authorize: (i) => {
           const gate = evaluateSendPermission({ conversationId: i.conversationId })
           return gate.allowed ? null : gate.reason
         },
-        mutate: (i) => {
+        mutate: async (i) => {
           const conv = deps.getConversation?.(i.conversationId)
           const message = conv?.messages?.find((m) => m.id === i.messageId)
           if (!message) throw new Error("Message not found")
           if (resolveMessageStatus(message) === "deleted") throw new Error("Message deleted")
+          // Durable path: PATCH /api/messaging/conversations/:id/messages
+          if (isDurableMessagingEnabled()) {
+            try {
+              const { IdentityService } = await import("@/lib/identity/identity-service")
+              const res = await fetch(
+                `/api/messaging/conversations/${encodeURIComponent(i.conversationId)}/messages`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...IdentityService.getAuthHeaders(),
+                  },
+                  body: JSON.stringify({ messageId: i.messageId, body: i.newText.trim() }),
+                }
+              )
+              const data = (await res.json().catch(() => ({}))) as {
+                ok?: boolean
+                error?: string
+                message?: Message
+                durable?: boolean
+              }
+              if (!res.ok || data.ok === false) {
+                throw new Error(data.error || "Could not edit message on server")
+              }
+              if (data.message) {
+                if (deps.repository) {
+                  deps.repository.update(i.conversationId, i.messageId, data.message)
+                }
+                return { message: data.message }
+              }
+            } catch (e) {
+              throw e instanceof Error ? e : new Error("Could not edit message")
+            }
+          }
           const edited = handleMessageEdit(message, i.newText.trim(), actorId)
           if (!edited) throw new Error("Cannot edit this message")
           if (deps.repository) {
@@ -632,11 +662,29 @@ export function createMessagingDomain(deps: {
         name: "messaging.setPinned",
         actorId,
         input: { conversationId, pinned },
-        mutate: (i) => {
+        mutate: async (i) => {
           const conv = deps.getConversation?.(i.conversationId)
           if (!conv) throw new Error("Conversation not found")
           toggleConversationPin(conv)
           deps.patchConversation?.(i.conversationId, { isPinned: i.pinned } as any)
+          if (shouldAttemptDurableMessaging(false)) {
+            try {
+              const { IdentityService } = await import("@/lib/identity/identity-service")
+              await fetch(
+                `/api/messaging/conversations/${encodeURIComponent(i.conversationId)}/prefs`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...IdentityService.getAuthHeaders(),
+                  },
+                  body: JSON.stringify({ isPinned: i.pinned }),
+                }
+              )
+            } catch {
+              /* local prefs already applied */
+            }
+          }
           return { conversationId: i.conversationId, isPinned: i.pinned }
         },
       })
@@ -650,11 +698,29 @@ export function createMessagingDomain(deps: {
         name: "messaging.setArchived",
         actorId,
         input: { conversationId, archived },
-        mutate: (i) => {
+        mutate: async (i) => {
           const conv = deps.getConversation?.(i.conversationId)
           if (!conv) throw new Error("Conversation not found")
           toggleConversationArchive(conv)
           deps.patchConversation?.(i.conversationId, { isArchived: i.archived } as any)
+          if (shouldAttemptDurableMessaging(false)) {
+            try {
+              const { IdentityService } = await import("@/lib/identity/identity-service")
+              await fetch(
+                `/api/messaging/conversations/${encodeURIComponent(i.conversationId)}/prefs`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...IdentityService.getAuthHeaders(),
+                  },
+                  body: JSON.stringify({ isArchived: i.archived }),
+                }
+              )
+            } catch {
+              /* local prefs already applied */
+            }
+          }
           return { conversationId: i.conversationId, isArchived: i.archived }
         },
       })
@@ -669,11 +735,32 @@ export function createMessagingDomain(deps: {
         name: "messaging.setMuted",
         actorId,
         input: { conversationId, muted, muteHours },
-        mutate: (i) => {
+        mutate: async (i) => {
           const conv = deps.getConversation?.(i.conversationId)
           if (!conv) throw new Error("Conversation not found")
           toggleConversationMute(conv, i.muteHours)
           deps.patchConversation?.(i.conversationId, { isMuted: i.muted } as any)
+          if (shouldAttemptDurableMessaging(false)) {
+            try {
+              const { IdentityService } = await import("@/lib/identity/identity-service")
+              const mutedUntil = i.muted
+                ? Date.now() + (Number(i.muteHours) || 24) * 60 * 60 * 1000
+                : null
+              await fetch(
+                `/api/messaging/conversations/${encodeURIComponent(i.conversationId)}/prefs`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...IdentityService.getAuthHeaders(),
+                  },
+                  body: JSON.stringify({ mutedUntil }),
+                }
+              )
+            } catch {
+              /* local prefs already applied */
+            }
+          }
           return { conversationId: i.conversationId, isMuted: i.muted }
         },
       })

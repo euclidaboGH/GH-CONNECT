@@ -140,7 +140,7 @@ export function RelationshipActions({
           }
         }
       } catch {
-        addToast("Something went wrong", "error")
+        addToast("Action couldn't complete. Check your connection and try again.", "error")
       } finally {
         setBusy(null)
       }

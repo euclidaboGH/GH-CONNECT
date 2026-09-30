@@ -90,11 +90,11 @@ function FeedSkeleton() {
 
 export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenProps) {
   const {
-    posts, profile, candidates, likePost, addComment, editComment, deleteComment,
+    posts, profile, candidates, likePost, reactToPost, addComment, editComment, deleteComment,
     addCommentReaction, removeCommentReaction, pinComment, addToast, followUser,
     blockUser, reportPost, reportContent, deletePost, following, friends,
     blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
-    muteUser, unfollowFromPost, archivePost, savePost, unsavePost,
+    muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed,
   } = useGHCFeed()
   const { setTab: shellSetTab } = useGHCShell()
   const { conversations } = useGHCMessaging()
@@ -272,10 +272,19 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try {
       setIsRefreshing(true)
       setFeedError(null)
-      // Simulate refresh
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      const result = await refreshFeed()
+      if (!result.ok) {
+        const err = new Error(result.error || "Failed to refresh feed")
+        setFeedError(err)
+        addToast(result.error || "Failed to refresh. Try again.", "error")
+        return
+      }
       setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
-      addToast("Feed refreshed!", "success")
+      if (result.durable) {
+        addToast("Feed refreshed", "success")
+      } else {
+        addToast("Showing local feed — server feed unavailable", "info")
+      }
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to refresh feed")
       console.error("[Refresh Error]", err)
@@ -310,20 +319,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const handleReact = useCallback(
     async (postId: string, reaction: string) => {
       try {
-        const ghc = (await import("@/contexts/ghc-context")) as { useGHC?: unknown }
-        // Prefer context method if parent already provides likePost path via reactToPost
-      } catch {
-        /* noop */
-      }
-      try {
-        const { socialToggleReaction } = await import("@/lib/social/client")
-        await socialToggleReaction(postId, reaction)
+        await reactToPost(postId, reaction)
       } catch (error) {
         console.error("[Reaction Error]", error)
         addToast("Could not update reaction. Try again.", "error")
       }
     },
-    [addToast]
+    [reactToPost, addToast]
   )
 
   useEffect(() => {
@@ -346,22 +348,23 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
   }, [])
 
-  const handleSave = useCallback((postId: string) => {
+  const handleSave = useCallback(async (postId: string) => {
+    const isBookmarked = bookmarkedPostIds.includes(postId)
+    const previous = bookmarkedPostIds
     try {
-      const isBookmarked = bookmarkedPostIds.includes(postId)
       if (isBookmarked) {
         setBookmarkedPostIds((prev) => prev.filter((id) => id !== postId))
-        if (unsavePost) void unsavePost(postId)
-        addToast("Removed from bookmarks", "info")
+        if (unsavePost) await unsavePost(postId)
       } else {
         setBookmarkedPostIds((prev) => [...prev, postId])
         setSaveCollectionPostId(postId)
         if (savePost) {
-          void savePost(postId)
+          await savePost(postId)
           if (shouldSendAttention(postId, "save")) void socialRecordAttention(postId, "save")
         }
       }
     } catch (error) {
+      setBookmarkedPostIds(previous)
       const err = error instanceof Error ? error : new Error("Failed to save post")
       console.error("[Save Error]", err)
       addToast("Failed to save post. Try again.", "error")
@@ -543,11 +546,12 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           <div className="flex items-start gap-3">
             <div className="text-red-600 mt-0.5" aria-hidden="true">⚠️</div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-red-900">Something went wrong</h3>
-              <p className="text-xs text-red-700 mt-1">{feedError.message}</p>
+              <h3 className="text-sm font-semibold text-red-900">Couldn&apos;t load your feed</h3>
+              <p className="text-xs text-red-700 mt-1">{feedError.message || "Check your connection and try again."}</p>
               <button
+                type="button"
                 onClick={() => { setFeedError(null); void handleRefresh() }}
-                className="mt-2 text-xs font-semibold text-red-600 hover:text-red-700 underline"
+                className="mt-2 min-h-9 rounded-full px-3 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
               >
                 Try again
               </button>

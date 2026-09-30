@@ -157,7 +157,8 @@ export function GhPayPanel({
       }
       setBusy(productId)
       try {
-        notify(`Starting ${label}…`, "info")
+        // Lifecycle (UX only — PIN is device unlock; Pi Wallet authorizes π)
+        notify("Preparing Pi payment…", "info")
         const result = await ghPayPurchase(productId)
         if (result.ok) {
           if (productId === "pipeline_verification") writeVerified()
@@ -167,16 +168,24 @@ export function GhPayPanel({
           return
         }
         if (result.cancelled) {
-          notify("Payment cancelled", "info")
+          const pinRelated =
+            typeof result.error === "string" &&
+            (result.error.includes("PIN") || result.error.includes("Device PIN"))
+          notify(
+            pinRelated
+              ? "Device PIN was not confirmed — payment was not started"
+              : "Payment cancelled in Pi Wallet — nothing was charged",
+            "info"
+          )
           return
         }
-        const msg = result.error || "Payment failed"
+        const msg = result.error || "Payment could not be completed"
         setError(msg)
         const pid = (result as { paymentId?: string }).paymentId
         if (pid) setLastPaymentId(String(pid))
         notify(classifyPaymentError(msg).title, "error")
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Payment failed"
+        const msg = e instanceof Error ? e.message : "Payment could not be completed"
         setError(msg)
         notify(classifyPaymentError(msg).title, "error")
       } finally {
@@ -288,6 +297,12 @@ export function GhPayPanel({
         </p>
       ) : null}
 
+      {busy ? (
+        <p className="mt-2 rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100" role="status">
+          Preparing payment… If asked, enter your <strong>GreenHaven device PIN</strong> (unlocks this app only). Pi Wallet still authorizes the π charge.
+        </p>
+      ) : null}
+
       {/* Commerce products */}
       <ul className="mt-3 space-y-2">
         {products.map((p) => {
@@ -298,8 +313,9 @@ export function GhPayPanel({
               <button
                 type="button"
                 disabled={Boolean(busy)}
+                aria-busy={isBusy}
                 onClick={() => void runProduct(p.id, p.title)}
-                className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5 text-left transition hover:bg-muted/40 disabled:opacity-60"
+                className="flex w-full min-h-[48px] items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5 text-left transition hover:bg-muted/40 disabled:opacity-60 active:scale-[0.99]"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">
                   <Icon size={16} />
@@ -315,7 +331,7 @@ export function GhPayPanel({
                   <span className="block text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                     {isBusy ? (
                       <span className="inline-flex items-center gap-0.5">
-                        <Loader2 size={10} className="animate-spin" /> Paying
+                        <Loader2 size={10} className="animate-spin" aria-hidden /> Processing
                       </span>
                     ) : (
                       "Buy"
