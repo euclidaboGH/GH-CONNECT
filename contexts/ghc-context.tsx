@@ -1337,6 +1337,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       try {
         if (typeof window !== "undefined") {
           window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
+          const { stampLocalOnboardingComplete } = await import("@/lib/onboarding-local")
+          stampLocalOnboardingComplete({
+            userId: IdentityService.getCurrentUserId() || profile.id,
+            username: profile.username || profile.displayName,
+          })
         }
       } catch {
         /* */

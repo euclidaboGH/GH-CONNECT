@@ -210,6 +210,16 @@ export const IdentityService = {
       accountStatus: "active",
       updatedAt: Date.now(),
     }
+    try {
+      void import("@/lib/onboarding-local").then((m) =>
+        m.stampLocalOnboardingComplete({
+          userId: identity.ghUserId || identity.piUid,
+          username: identity.username,
+        })
+      )
+    } catch {
+      /* */
+    }
     emit()
   },
 

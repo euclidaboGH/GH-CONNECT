@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronRight, Clock, TrendingUp, TrendingDown } from "lucide-react"
+import { ChevronRight, Clock, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import type { GhcTransaction } from "@/lib/domains/economy-types"
 import { TX_LABELS } from "./wallet-types"
@@ -20,71 +20,73 @@ export function QuickChip({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition active:scale-[0.98]"
+      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition active:scale-[0.98] hover:bg-muted/50"
     >
       {icon}
       {label}
-      <ChevronRight size={12} className="text-muted-foreground" />
+      <ChevronRight size={12} className="text-muted-foreground" aria-hidden />
     </button>
   )
 }
 
 export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void }) {
   const positive = tx.amount >= 0
-  const isPending = tx.status === "pending"
+  const isPending = (tx.status || "").toLowerCase() === "pending" || tx.kind === "pending"
+  const title =
+    TX_LABELS[tx.kind] && !tx.reason
+      ? TX_LABELS[tx.kind]
+      : tx.reason || TX_LABELS[tx.kind] || tx.kind
+
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-start gap-3 rounded-2xl border border-border bg-card px-3 py-3 text-left transition hover:bg-muted/30 active:scale-[0.99]"
+      className="flex w-full items-center gap-3 border-b border-border/60 bg-card px-3.5 py-3.5 text-left transition last:border-b-0 hover:bg-muted/25 active:bg-muted/40"
     >
       <div
-        className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
           isPending
-            ? "bg-amber-50 text-amber-700"
+            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
             : positive
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-rose-50 text-rose-700"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+              : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200"
         }`}
+        aria-hidden
       >
         {isPending ? (
-          <Clock size={14} />
+          <Clock size={18} strokeWidth={2.25} />
         ) : positive ? (
-          <TrendingUp size={14} />
+          <ArrowDownLeft size={18} strokeWidth={2.25} />
         ) : (
-          <TrendingDown size={14} />
+          <ArrowUpRight size={18} strokeWidth={2.25} />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">
-            {TX_LABELS[tx.kind] && !tx.reason
-              ? TX_LABELS[tx.kind]
-              : tx.reason || TX_LABELS[tx.kind] || tx.kind}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="truncate text-[14px] font-semibold leading-snug text-foreground">{title}</p>
           <span
-            className={`inline-flex shrink-0 items-center gap-1 text-sm font-bold ${
+            className={`inline-flex shrink-0 items-center gap-0.5 text-[14px] font-bold tabular-nums ${
               isPending
-                ? "text-amber-700"
+                ? "text-amber-800 dark:text-amber-300"
                 : positive
-                  ? "text-emerald-700"
-                  : "text-rose-700"
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-foreground"
             }`}
           >
-            <GhcCoinIcon size={16} />
             {positive ? "+" : ""}
-            {formatGhc(tx.amount)}
+            {formatGhc(Math.abs(tx.amount))}
+            <span className="ml-0.5 text-[10px] font-semibold text-muted-foreground">GHC</span>
           </span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <StatusChip status={tx.status || (tx.kind === "pending" ? "pending" : "posted")} />
           <span className="text-[11px] text-muted-foreground">
-            {TX_LABELS[tx.kind] || tx.kind}
+            {formatWhen(tx.createdAt)}
             {tx.sourceEvent ? ` · ${tx.sourceEvent}` : ""}
           </span>
         </div>
-        <p className="text-[10px] text-muted-foreground/80">{formatWhen(tx.createdAt)}</p>
       </div>
+      <ChevronRight size={16} className="shrink-0 text-muted-foreground/50" aria-hidden />
     </button>
   )
 }
@@ -113,7 +115,7 @@ export function StatusChip({ status }: { status: string }) {
 
 export function EmptyBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl bg-muted/40 bg-card px-4 py-10 text-center">
+    <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-12 text-center">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted/80">
         <GhcCoinIcon size={28} />
       </div>

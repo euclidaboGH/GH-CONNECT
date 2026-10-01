@@ -10,6 +10,69 @@ import { readLocalProfiles, findLocalProfile } from "@/lib/local-profiles"
 
 export type ClientOnboardingStatus = "unknown" | "required" | "complete" | "unavailable"
 
+/** Device stamp written after successful onboarding — survives PIN unlock / remount */
+const ONBOARDING_STAMP_KEY = "ghc.onboarding.completed.v1"
+
+export function stampLocalOnboardingComplete(input?: {
+  userId?: string | null
+  username?: string | null
+}): void {
+  if (typeof window === "undefined") return
+  try {
+    const payload = {
+      at: Date.now(),
+      userId: input?.userId || null,
+      username: input?.username || null,
+    }
+    window.localStorage.setItem(ONBOARDING_STAMP_KEY, JSON.stringify(payload))
+  } catch {
+    /* */
+  }
+}
+
+export function readLocalOnboardingStamp(): {
+  at: number
+  userId: string | null
+  username: string | null
+} | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_STAMP_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as {
+      at?: number
+      userId?: string | null
+      username?: string | null
+    }
+    if (!p || typeof p.at !== "number") return null
+    return {
+      at: p.at,
+      userId: p.userId ? String(p.userId) : null,
+      username: p.username ? String(p.username) : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** True when this device has completed onboarding for the same (or sole) user */
+export function hasLocalOnboardingStampForUser(input: {
+  userId?: string | null
+  username?: string | null
+}): boolean {
+  const stamp = readLocalOnboardingStamp()
+  if (!stamp) return false
+  const uid = (input.userId || "").trim()
+  const un = (input.username || "").trim().toLowerCase()
+  if (uid && stamp.userId && stamp.userId === uid) return true
+  if (un && stamp.username && stamp.username.toLowerCase() === un) return true
+  // Same device, stamp exists, identity ids still hydrating — do not force registration
+  if (!uid && !un && stamp.at > 0) return true
+  // Stamp without userId (older) + current user present: still honor device completion
+  if (stamp.at > 0 && !stamp.userId && !stamp.username) return true
+  return false
+}
+
 export function isCompletedProfileShape(p: Partial<Profile> | null | undefined): boolean {
   if (!p) return false
   if (p.onboarded === true) return true
@@ -134,15 +197,25 @@ export function resolveUiOnboardingGate(input: {
   const profileComplete = isCompletedProfileShape(input.profile)
   if (profileComplete) return "complete"
 
-  // Device-local completed profile for this same user — recovery only when server
-  // still says required (legacy rows before durable store). Does not invent new users.
+  const uid =
+    input.userId || (input.profile as { id?: string } | undefined)?.id || null
+  const un =
+    input.username ||
+    (input.profile as { username?: string } | undefined)?.username ||
+    (input.profile as { displayName?: string } | undefined)?.displayName ||
+    null
+
+  // Device stamp from a previous successful finish on this phone (PIN unlock / remount safe)
+  if (hasLocalOnboardingStampForUser({ userId: uid, username: un })) {
+    return "complete"
+  }
+
+  // Device-local completed profile for this same user — recovery when server
+  // still says required (legacy rows / failed onboarding-complete write).
   if (pi === "required" || input.serverVerified) {
     const local = findCompletedLocalProfileForUser({
-      userId: input.userId || (input.profile as { id?: string } | undefined)?.id,
-      username:
-        input.username ||
-        (input.profile as { username?: string } | undefined)?.username ||
-        (input.profile as { displayName?: string } | undefined)?.displayName,
+      userId: uid,
+      username: un,
     })
     if (local) return "complete"
   }

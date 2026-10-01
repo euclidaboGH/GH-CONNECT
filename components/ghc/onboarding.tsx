@@ -229,6 +229,17 @@ export function Onboarding() {
   }, [phase])
   const [step, setStep] = useState<OnboardingStep>(1)
   const [formData, setFormData] = useState({
+    firstName: (() => {
+      const n = (safeProfile.displayName || "").trim()
+      if (!n) return ""
+      return n.split(/\s+/)[0] || ""
+    })(),
+    lastName: (() => {
+      const n = (safeProfile.displayName || "").trim()
+      if (!n) return ""
+      const parts = n.split(/\s+/)
+      return parts.length > 1 ? parts.slice(1).join(" ") : ""
+    })(),
     displayName: safeProfile.displayName || piUsername || "",
     age: safeProfile.age || 18,
     bornDate: (safeProfile as any).bornDate || "",
@@ -251,7 +262,8 @@ export function Onboarding() {
 
   const validateStep = () => {
     const nextErrors: Record<string, string> = {}
-    const cleanName = formData.displayName.trim().replace(/\s+/g, " ")
+    const composedName = `${formData.firstName} ${formData.lastName}`.trim().replace(/\s+/g, " ")
+    const cleanName = composedName || formData.displayName.trim().replace(/\s+/g, " ")
     const cleanCity = formData.city.trim().replace(/\s+/g, " ")
     const cleanCountry = formData.country.trim()
     const cleanState = formData.state.trim()
@@ -261,8 +273,14 @@ export function Onboarding() {
       value.length >= min && new Set(value.toLowerCase().split(/\s+/)).size > 1 && !/(.)\1{4,}/u.test(value)
 
     if (step === 1) {
-      if (cleanName.length < 2 || cleanName.length > 60 || !looksLikeWords(cleanName) || !hasMeaningfulText(cleanName, 2))
-        nextErrors.displayName = "Use your real name with letters and spaces."
+      const first = formData.firstName.trim().replace(/\s+/g, " ")
+      const last = formData.lastName.trim().replace(/\s+/g, " ")
+      if (first.length < 1 || first.length > 40 || !looksLikeWords(first))
+        nextErrors.firstName = "Enter your first name (letters only)."
+      if (last.length < 1 || last.length > 40 || !looksLikeWords(last))
+        nextErrors.lastName = "Enter your surname / last name (letters only)."
+      if (cleanName.length < 2 || cleanName.length > 60 || !looksLikeWords(cleanName))
+        nextErrors.displayName = "First name and surname must form a valid full name."
       const derived = formData.bornDate ? ageFromBornDate(formData.bornDate) : null
       const ageNum = derived !== null ? derived : Number(formData.age)
       if (formData.bornDate && !isAdultFromBornDate(formData.bornDate)) nextErrors.age = "You must be at least 18 years old."
@@ -294,8 +312,9 @@ export function Onboarding() {
   const handleNext = async () => {
     if (!validateStep()) return
     if (step === 1) {
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim().replace(/\s+/g, " ")
       await updateProfile({
-        displayName: formData.displayName.trim().replace(/\s+/g, " "),
+        displayName: fullName,
         age: formData.bornDate ? (ageFromBornDate(formData.bornDate) ?? formData.age) : formData.age,
         bornDate: formData.bornDate,
         gender: formData.gender as Gender,
@@ -548,19 +567,49 @@ export function Onboarding() {
               </div>
 
               <div className="space-y-3.5 rounded-3xl border border-white/8 bg-white/[0.04] p-4 backdrop-blur-sm">
-                <div>
-                  <label className="mb-1.5 block text-[12px] font-bold text-white/60">Display Name *</label>
-                  <input
-                    type="text"
-                    value={formData.displayName}
-                    onChange={(e) => setFormData((p) => ({ ...p, displayName: e.target.value }))}
-                    placeholder="Your name"
-                    maxLength={60}
-                    autoComplete="name"
-                    className={fieldClass}
-                  />
-                  {errors.displayName && <p className="mt-1 text-xs text-rose-400">{errors.displayName}</p>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-[12px] font-bold text-white/60">First name *</label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => {
+                        const firstName = e.target.value
+                        setFormData((p) => ({
+                          ...p,
+                          firstName,
+                          displayName: `${firstName} ${p.lastName}`.trim().replace(/\s+/g, " "),
+                        }))
+                      }}
+                      placeholder="Given name"
+                      maxLength={40}
+                      autoComplete="given-name"
+                      className={fieldClass}
+                    />
+                    {errors.firstName && <p className="mt-1 text-xs text-rose-400">{errors.firstName}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[12px] font-bold text-white/60">Surname *</label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => {
+                        const lastName = e.target.value
+                        setFormData((p) => ({
+                          ...p,
+                          lastName,
+                          displayName: `${p.firstName} ${lastName}`.trim().replace(/\s+/g, " "),
+                        }))
+                      }}
+                      placeholder="Family name"
+                      maxLength={40}
+                      autoComplete="family-name"
+                      className={fieldClass}
+                    />
+                    {errors.lastName && <p className="mt-1 text-xs text-rose-400">{errors.lastName}</p>}
+                  </div>
                 </div>
+                {errors.displayName && <p className="text-xs text-rose-400">{errors.displayName}</p>}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

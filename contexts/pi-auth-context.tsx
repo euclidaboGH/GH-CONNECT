@@ -535,6 +535,17 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             onboardingStatus = "complete"
             isReturning = true
             needsOnboarding = false
+            try {
+              const { stampLocalOnboardingComplete } = await import(
+                "@/lib/onboarding-local"
+              )
+              stampLocalOnboardingComplete({
+                userId: ghUserId,
+                username: verifiedUsername,
+              })
+            } catch {
+              /* */
+            }
           }
         }
 

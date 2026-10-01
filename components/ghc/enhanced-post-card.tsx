@@ -587,38 +587,43 @@ function EnhancedPostCardInner({
           onClick={() => onShare(post.id)}
         />
       </div>
-      {/* Phase 3 curation — quality signal only (not nested inside Share) */}
-      <div className="flex items-center justify-end gap-0.5 border-t border-border/40 px-2 py-1">
-        <button
-          type="button"
-          disabled={curationBusy}
-          aria-label="Upvote"
-          aria-pressed={curationChoice === "upvote"}
-          onClick={() => void handleCuration("upvote")}
-          className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-xs font-semibold transition ${
-            curationChoice === "upvote"
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-          }`}
-        >
-          <ChevronUp size={18} />
-          {upvoteCount > 0 ? <span className="ml-0.5 tabular-nums">{upvoteCount}</span> : null}
-        </button>
-        <button
-          type="button"
-          disabled={curationBusy}
-          aria-label="Downvote"
-          aria-pressed={curationChoice === "downvote"}
-          onClick={() => void handleCuration("downvote")}
-          className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-xs font-semibold transition ${
-            curationChoice === "downvote"
-              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-              : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-          }`}
-        >
-          <ChevronDown size={18} />
-          {downvoteCount > 0 ? <span className="ml-0.5 tabular-nums">{downvoteCount}</span> : null}
-        </button>
+      {/* Quality ranking — upvote / downvote (feeds ranking engine) */}
+      <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-muted/20 px-3 py-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Quality
+        </p>
+        <div className="flex items-center gap-1" role="group" aria-label="Content quality ranking">
+          <button
+            type="button"
+            disabled={curationBusy}
+            aria-label="Upvote — improve ranking"
+            aria-pressed={curationChoice === "upvote"}
+            onClick={() => void handleCuration("upvote")}
+            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
+              curationChoice === "upvote"
+                ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <ChevronUp size={18} strokeWidth={2.5} aria-hidden />
+            <span className="tabular-nums text-[11px]">{upvoteCount > 0 ? upvoteCount : ""}</span>
+          </button>
+          <button
+            type="button"
+            disabled={curationBusy}
+            aria-label="Downvote — lower ranking"
+            aria-pressed={curationChoice === "downvote"}
+            onClick={() => void handleCuration("downvote")}
+            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
+              curationChoice === "downvote"
+                ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-900/40 dark:text-rose-300"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <ChevronDown size={18} strokeWidth={2.5} aria-hidden />
+            <span className="tabular-nums text-[11px]">{downvoteCount > 0 ? downvoteCount : ""}</span>
+          </button>
+        </div>
       </div>
     </div>
   )

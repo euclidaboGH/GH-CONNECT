@@ -905,8 +905,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           onOpenPending={() => setShowPendingSheet(true)}
         />
 
-        <WithdrawGhcPanel />
-
+        {/* Fintech pattern: balance → primary actions (not withdraw first) */}
         <WalletPrimaryActions
           onSend={() => {
             if (balance <= 0 && (displayPending > 0 || pending > 0)) {
@@ -934,33 +933,6 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             setP2pSuccess(null)
           }}
           onAdd={() => setShowAddGhc(true)}
-        />
-
-        <WalletToolsGrid
-          onSelect={(id) => {
-            if (id === "tx") {
-              setTab("activity")
-              setTxFilter("all")
-              setAssetRail("ghc")
-            } else if (id === "statements") {
-              setTab("activity")
-              setTxFilter("all")
-              // Export current rail as CSV (user can switch GHC / π first)
-              window.setTimeout(() => {
-                try {
-                  ;(document.getElementById("gh-wallet-export-csv") as HTMLButtonElement | null)?.click()
-                } catch { /* */ }
-              }, 0)
-            } else if (id === "qr") {
-              setP2pMode("receive")
-            } else if (id === "methods") {
-              setShowPaymentMethods(true)
-            } else if (id === "limits") {
-              setTab("about")
-            } else if (id === "security") {
-              setTab("about")
-            }
-          }}
         />
 
         {/* Pending GHC — explain why held, then claim */}
@@ -1324,13 +1296,15 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 />
               ) : (
                 dayGroups.map((group) => (
-                  <div key={group.day} className="space-y-2">
-                    <p className="sticky top-0 z-[1] bg-background/95 px-0.5 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+                  <div key={group.day} className="space-y-1.5">
+                    <p className="sticky top-0 z-[1] bg-background/95 px-0.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
                       {group.day}
                     </p>
-                    {group.items.map((tx) => (
-                      <TxRow key={tx.id} tx={tx} onOpen={() => setSelectedTx(tx)} />
-                    ))}
+                    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                      {group.items.map((tx) => (
+                        <TxRow key={tx.id} tx={tx} onOpen={() => setSelectedTx(tx)} />
+                      ))}
+                    </div>
                   </div>
                 ))
               )}
@@ -1405,13 +1379,49 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           )}
 
 
-        {/* GH Pay secondary — after Transactions (Activity) */}
-        <div className="mx-3 mt-4 space-y-2">
-          <div className="rounded-2xl border border-border/80 bg-muted/40 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">GHC and π stay separate</p>
+        {/* Settlement & tools — below primary activity, not mixed into the hero */}
+        <div className="mx-3 mt-5 space-y-3">
+          <div className="rounded-2xl border border-border bg-card p-1 shadow-sm">
+            <p className="px-3 pt-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              GHC settlement
+            </p>
+            <p className="px-3 pb-2 text-[11px] leading-relaxed text-muted-foreground">
+              Request Pi settlement of eligible GHC. Not an instant transfer · rate 100 GHC per 1 π.
+            </p>
+            <WithdrawGhcPanel />
+          </div>
+
+          <WalletToolsGrid
+            onSelect={(id) => {
+              if (id === "tx") {
+                setTab("activity")
+                setTxFilter("all")
+                setAssetRail("ghc")
+              } else if (id === "statements") {
+                setTab("activity")
+                setTxFilter("all")
+                window.setTimeout(() => {
+                  try {
+                    ;(document.getElementById("gh-wallet-export-csv") as HTMLButtonElement | null)?.click()
+                  } catch { /* */ }
+                }, 0)
+              } else if (id === "qr") {
+                setP2pMode("receive")
+              } else if (id === "methods") {
+                setShowPaymentMethods(true)
+              } else if (id === "limits" || id === "security") {
+                setTab("about")
+              }
+            }}
+          />
+
+          <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="font-semibold text-foreground">Pay with π (Pi Browser)</p>
             <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
             <p className="mt-0.5">{ASSET_POLICY.piRailsCopy}</p>
-            <p className="mt-0.5">{ASSET_POLICY.piPeerCopy}</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground/90">
+              GreenHaven device PIN only unlocks this app — Pi Wallet authorizes π charges.
+            </p>
           </div>
           <GhPayPanel
             compact

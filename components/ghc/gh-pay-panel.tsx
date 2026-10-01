@@ -292,9 +292,13 @@ export function GhPayPanel({
       </div>
 
       {!inPi ? (
-        <p className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-          Pi payments only work inside the Pi Browser on your live app URL.
-        </p>
+        <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-bold">Open this app in the Pi Browser</p>
+          <p className="mt-1">
+            π payments require the official Pi Browser (not Chrome/Safari). Use your live GreenHaven
+            URL from Develop → your app, or the production link inside Pi. Device PIN is not a π charge.
+          </p>
+        </div>
       ) : null}
 
       {busy ? (

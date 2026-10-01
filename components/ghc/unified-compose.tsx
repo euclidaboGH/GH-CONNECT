@@ -243,21 +243,57 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
   }
 
-    const handleVideo = async (file: File | undefined) => {
+  const handleVideo = async (file: File | undefined) => {
     if (!file) return
+    const sizeMb = file.size / (1024 * 1024)
+    // Keep mobile uploads responsive — reject extreme sizes early
+    if (sizeMb > 40) {
+      addToast("Video must be under 40 MB. Compress or trim it, then try again.", "error")
+      return
+    }
+    setUploadProgress(sizeMb > 8 ? `Preparing video (${sizeMb.toFixed(0)} MB)…` : "Preparing video…")
     try {
       if (mode === "story") {
-        const url = URL.createObjectURL(file)
-        setStoryMedia({ type: "video", url })
+        try {
+          const up = await uploadDurableMedia(file)
+          if (up.ok && up.url) {
+            setStoryMedia({ type: "video", url: up.url })
+          } else {
+            setStoryMedia({ type: "video", url: URL.createObjectURL(file) })
+          }
+        } catch {
+          setStoryMedia({ type: "video", url: URL.createObjectURL(file) })
+        }
         setSelectedImages([])
         setSelectedVideo(null)
+        addToast("Video ready for story", "success")
       } else {
-        // Post mode: video can accompany photos (Facebook-style mixed media)
+        // Prefer durable media URL when available (smaller payload, better feed performance)
+        try {
+          const up = await uploadDurableMedia(file)
+          if (up.ok && up.url) {
+            setSelectedVideo(up.url)
+            setStoryMedia(null)
+            addToast("Video attached", "success")
+            return
+          }
+        } catch {
+          /* fall through */
+        }
+        if (sizeMb > 12) {
+          addToast(
+            "Large video — attach may be slow offline. Prefer Wi‑Fi or a shorter clip.",
+            "info"
+          )
+        }
         setSelectedVideo(await readFileAsDataUrl(file, "video"))
         setStoryMedia(null)
+        addToast("Video attached", "success")
       }
     } catch {
-      addToast("Unable to add video", "error")
+      addToast("Unable to add video — try a shorter clip under 40 MB", "error")
+    } finally {
+      setUploadProgress(null)
     }
   }
 
