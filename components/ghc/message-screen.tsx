@@ -90,13 +90,21 @@ export function MessageScreen() {
         markedRef.current = null
       })
     }
+    const onReconcile = () => {
+      // After realtime reconnect / online: drop ephemeral draft UI only (server remains authority)
+      setDraft("")
+      setWindowSize(MESSAGE_WINDOW)
+      markedRef.current = null
+    }
     window.addEventListener("ghc:navigate-tab", onTab as EventListener)
     window.addEventListener("ghc:tab-change", onTab as EventListener)
     window.addEventListener("ghc:open-conversation", onOpenConversation as EventListener)
+    window.addEventListener("ghc:messaging-reconcile", onReconcile as EventListener)
     return () => {
       window.removeEventListener("ghc:navigate-tab", onTab as EventListener)
       window.removeEventListener("ghc:tab-change", onTab as EventListener)
       window.removeEventListener("ghc:open-conversation", onOpenConversation as EventListener)
+      window.removeEventListener("ghc:messaging-reconcile", onReconcile as EventListener)
     }
   }, [])
 

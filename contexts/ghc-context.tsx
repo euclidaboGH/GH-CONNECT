@@ -1832,29 +1832,54 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           break
       }
     })
-    transportBridge.startLocal()
+    // Realtime: local bus always; WebSocket only when NEXT_PUBLIC_GH_REALTIME_URL is set
+    // (never invent /realtime on the API host — that is not a real service).
     try {
-            const { presenceStore } = require("@/lib/realtime/presence")
-      presenceStore.setSelf("current-user")
+      const { bootstrapRealtimeTransport } = require("@/lib/realtime/transport-bridge")
+      bootstrapRealtimeTransport()
+    } catch {
+      try {
+        transportBridge.startLocal()
+      } catch {
+        /* */
+      }
+    }
+    try {
+      const { presenceStore } = require("@/lib/realtime/presence")
+      const { IdentityService } = require("@/lib/identity/identity-service")
+      const uid = IdentityService.getCurrentUserId?.() || "current-user"
+      presenceStore.setSelf(uid)
       presenceStore.startHeartbeat(30_000)
     } catch {
       /* optional */
     }
-    try {
-            const { resolveApiBaseUrl } = require("@/lib/domains/http-repositories")
-            const { enableWebSocketTransport } = require("@/lib/realtime/transport-bridge")
-      const base = resolveApiBaseUrl()
-      if (base) {
-        const wsUrl = base.replace(/^http/, "ws") + "/realtime"
-        void enableWebSocketTransport(wsUrl)
+    // After reconnect / online: refresh messaging + wallet surfaces (no fake data)
+    const onReconcile = () => {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+      } catch {
+        /* */
       }
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:messaging-reconcile"))
+      } catch {
+        /* */
+      }
+    }
+    try {
+      window.addEventListener("ghc:realtime-reconcile", onReconcile)
     } catch {
-      /* stay on LocalTransport */
+      /* */
     }
     return () => {
       unsub()
       try {
-                const { presenceStore } = require("@/lib/realtime/presence")
+        window.removeEventListener("ghc:realtime-reconcile", onReconcile)
+      } catch {
+        /* */
+      }
+      try {
+        const { presenceStore } = require("@/lib/realtime/presence")
         presenceStore.stopHeartbeat()
       } catch {
         /* */

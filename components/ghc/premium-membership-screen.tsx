@@ -427,9 +427,22 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         }
         if (next) setSuccessStatus(next)
         setTick((x) => x + 1)
-        addToast(`${MEMBERSHIP_PLANS[tier].label} activated`, "success")
+        const already = Boolean((result as { alreadyActive?: boolean }).alreadyActive)
+        addToast(
+          already
+            ? `${MEMBERSHIP_PLANS[tier].label} is already active`
+            : `${MEMBERSHIP_PLANS[tier].label} activated`,
+          "success"
+        )
       } else {
-        addToast(result.error || "Purchase failed", "error")
+        const err = result.error || "Purchase failed"
+        addToast(err, "error")
+        if (/insufficient/i.test(err)) {
+          // Nudge user toward wallet without inventing balance
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: { tab: "wallet" } }))
+          } catch { /* */ }
+        }
       }
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Purchase failed", "error")

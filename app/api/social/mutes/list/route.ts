@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRest } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   }
   if (!socialDbConfigured()) {
     return NextResponse.json(
-      { ok: true, durable: false, mutedIds: [] },
+      nonDurableReadResponse("Mutes list", { mutedIds: [] }).body,
       { headers: { "Cache-Control": "no-store" } }
     )
   }

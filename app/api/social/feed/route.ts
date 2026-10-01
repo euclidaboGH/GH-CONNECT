@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
+import { nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,10 +35,11 @@ export async function GET(request: Request) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json(
-      { ok: true, durable: false, posts: [], message: "SOCIAL_DB_UNAVAILABLE" },
-      { headers: { "Cache-Control": "no-store" } }
-    )
+    const nd = nonDurableReadResponse("Social feed", { posts: [], message: "SOCIAL_DB_UNAVAILABLE" })
+    return NextResponse.json(nd.body, {
+      status: nd.status,
+      headers: { "Cache-Control": "no-store" },
+    })
   }
 
   const url = new URL(request.url)

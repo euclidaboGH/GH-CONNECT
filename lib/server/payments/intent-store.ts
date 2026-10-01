@@ -11,6 +11,14 @@ import type {
 import { PAYMENT_STATUS_RANK } from "./intent-types"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
+function isPaymentProd(): boolean {
+  return (
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.GHC_ENV === "production"
+  )
+}
+
 const g = globalThis as unknown as {
   __ghPaymentIntents?: Map<string, PaymentIntent>
   __ghPaymentIntentsByProvider?: Map<string, string>
@@ -218,10 +226,17 @@ export function getPaymentIntent(id: string): PaymentIntent | null {
 
 export async function loadPaymentIntent(id: string): Promise<PaymentIntent | null> {
   // Prefer durable record so completed/refunded state is not masked by stale process cache
-  const fromDb = await loadFromDbById(id)
-  if (fromDb) {
-    map().set(fromDb.id, fromDb)
-    return fromDb
+  if (dbConfigured()) {
+    const fromDb = await loadFromDbById(id)
+    if (fromDb) {
+      map().set(fromDb.id, fromDb)
+      return fromDb
+    }
+    // Production: DB is authority. Do not treat process-memory-only intents as durable truth.
+    // (RPC null covers both "not found" and transport errors — never invent durable state.)
+    if (isPaymentProd()) {
+      return null
+    }
   }
   return map().get(id) || null
 }
@@ -235,9 +250,15 @@ export function getByProviderPaymentId(providerPaymentId: string): PaymentIntent
 export async function loadByProviderPaymentId(
   providerPaymentId: string
 ): Promise<PaymentIntent | null> {
-  const mem = getByProviderPaymentId(providerPaymentId)
-  if (mem) return mem
-  return loadFromDbByProvider(providerPaymentId)
+  if (dbConfigured()) {
+    const fromDb = await loadFromDbByProvider(providerPaymentId)
+    if (fromDb) {
+      cachePut(fromDb)
+      return fromDb
+    }
+    if (isPaymentProd()) return null
+  }
+  return getByProviderPaymentId(providerPaymentId)
 }
 
 export async function createPaymentIntent(input: CreatePaymentIntentInput): Promise<PaymentIntent> {
@@ -456,11 +477,16 @@ export async function listIntentsForUserAsync(userId: string): Promise<PaymentIn
       cache: "no-store",
     })
     if (!res.ok) {
-      // Soft fallback to memory cache for this process only
+      if (isPaymentProd()) {
+        throw new Error("PAYMENT_INTENT_STORE_UNAVAILABLE")
+      }
       return listIntentsForUser(uid)
     }
     const rows = (await res.json()) as Array<Record<string, unknown>>
-    if (!Array.isArray(rows)) return listIntentsForUser(uid)
+    if (!Array.isArray(rows)) {
+      if (isPaymentProd()) throw new Error("PAYMENT_INTENT_STORE_UNAVAILABLE")
+      return listIntentsForUser(uid)
+    }
 
     const intents = rows.map((row) => {
       const intent = rowToIntent({
@@ -504,7 +530,11 @@ export async function listIntentsForUserAsync(userId: string): Promise<PaymentIn
       return intent
     })
     return intents
-  } catch {
+  } catch (e) {
+    if (isPaymentProd()) {
+      if (e instanceof Error && e.message === "PAYMENT_INTENT_STORE_UNAVAILABLE") throw e
+      throw new Error("PAYMENT_INTENT_STORE_UNAVAILABLE")
+    }
     return listIntentsForUser(uid)
   }
 }

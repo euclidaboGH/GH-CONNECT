@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,7 +23,8 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false })
+    const nd = nonDurableWriteResponse("Story view", { allowNonDurableInDev: true })
+    return NextResponse.json({ **nd.body, recorded: nd.status==200, bestEffort: true } if false else nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_story_view", {
     p_story_id: storyId,

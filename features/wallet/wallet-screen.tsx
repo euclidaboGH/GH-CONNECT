@@ -612,7 +612,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         typ === "WALLET_TRANSFER_COMPLETED" ||
         typ === "WALLET_BALANCE_UPDATED" ||
         typ === "WALLET_TRANSFER_FAILED" ||
-        typ === "WALLET_TRANSFER_CREATED"
+        typ === "WALLET_TRANSFER_CREATED" ||
+        typ === "PREMIUM_ACTIVATED" ||
+        typ === "PREMIUM_UPDATED"
       ) {
         setTick((x) => x + 1)
         void refresh()
@@ -1285,7 +1287,20 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {filteredTxs.length === 0 ? (
+              {refreshing && filteredTxs.length === 0 ? (
+                <div className="space-y-2 rounded-2xl border border-border bg-card p-3" role="status" aria-label="Loading transactions">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-3 py-2">
+                      <div className="h-11 w-11 animate-pulse rounded-full bg-muted" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-3 w-2/3 max-w-[12rem] animate-pulse rounded bg-muted" />
+                        <div className="h-2.5 w-1/3 max-w-[6rem] animate-pulse rounded bg-muted" />
+                      </div>
+                      <div className="h-3 w-14 animate-pulse rounded bg-muted" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredTxs.length === 0 ? (
                 <EmptyBlock
                   title={txs.length === 0 ? EMPTY_STATES.activity.title : "No matching transactions"}
                   body={

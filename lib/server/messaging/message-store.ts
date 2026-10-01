@@ -590,6 +590,7 @@ export async function editMessage(input: {
   if (list[idx].deletedAt) return { ok: false, error: "DELETED" }
   list[idx] = { ...list[idx], body, editedAt: Date.now() }
   memMessages.set(cid, list)
+  if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
   return { ok: true, message: list[idx], durable: false }
 }
 
@@ -652,6 +653,7 @@ export async function pinMessage(input: {
   if (idx < 0) return { ok: false, error: "NOT_FOUND" }
   list[idx] = { ...list[idx], isPinned: Boolean(input.pinned) }
   memMessages.set(cid, list)
+  if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
   return { ok: true, durable: false }
 }
 
@@ -723,6 +725,7 @@ export async function setConversationPrefs(input: {
       if (isProd()) return { ok: false, error: "PREFS_FAILED" }
     }
   }
+  if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
   return { ok: true, durable: false }
 }
 

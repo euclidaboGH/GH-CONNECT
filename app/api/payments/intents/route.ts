@@ -106,14 +106,29 @@ export async function GET(request: Request) {
   }
   // Durable when Supabase configured — survives Vercel cold start / multi-instance
   // Scoped to authenticated user only — never accept client userId override
-  const intents = await listIntentsForUserAsync(auth.userId)
-  return NextResponse.json(
-    { ok: true, intents },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-        "x-request-id": reqCtx.requestId,
-      },
-    }
-  )
+  try {
+    const intents = await listIntentsForUserAsync(auth.userId)
+    return NextResponse.json(
+      { ok: true, intents },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+          "x-request-id": reqCtx.requestId,
+        },
+      }
+    )
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "PAYMENT_INTENT_STORE_UNAVAILABLE"
+    const code = msg.includes("PAYMENT_INTENT") ? msg : "PAYMENT_INTENT_STORE_UNAVAILABLE"
+    return NextResponse.json(
+      { ok: false, error: code },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "x-request-id": reqCtx.requestId,
+        },
+      }
+    )
+  }
 }

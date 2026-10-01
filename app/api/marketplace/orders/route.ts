@@ -67,6 +67,26 @@ export async function POST(request: Request) {
       { status: 409 }
     )
   }
+
+  // Finite stock without atomic reservation can oversell under concurrent requests.
+  // Production fails closed until a durable reserve RPC/migration is applied.
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.GHC_ENV === "production"
+  const hasAtomicReserve = process.env.GH_MARKETPLACE_ATOMIC_RESERVE === "1"
+  if (isProd && listing.availability < 9999 && !hasAtomicReserve) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "STOCK_RESERVATION_UNAVAILABLE",
+        message:
+          "Concurrent-safe stock reservation is not enabled. Order not created. Apply marketplace reserve RPC and set GH_MARKETPLACE_ATOMIC_RESERVE=1.",
+        available: listing.availability,
+      },
+      { status: 503 }
+    )
+  }
   if (!Number.isFinite(listing.price) || listing.price < 0) {
     return NextResponse.json({ ok: false, error: "INVALID_LISTING_PRICE" }, { status: 500 })
   }

@@ -6,7 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getEntitlement,
-  getEntitlementAuthoritative,
+  tryGetEntitlementAuthoritative,
   grantEntitlement,
   MEMBERSHIP_SERVER_CATALOG,
 } from "@/lib/server/membership/entitlement-store"
@@ -22,6 +22,7 @@ import {
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
 import { readGhcServerEnv as readEnv } from "@/lib/server/economy/env"
 import { getRequestContext } from "@/lib/server/foundation/request-context"
+import { z } from "zod"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -72,22 +73,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "x-request-id": reqCtx.requestId } })
   }
 
-  const body = await request.json().catch(() => ({}))
-  const tier = String(body.tier || "").toLowerCase()
-  const period = String(body.period || body.billingPeriod || "monthly").toLowerCase()
-  const method = String(body.method || "").toLowerCase()
-
-  if (tier !== "vip" && tier !== "vvip") {
-    return NextResponse.json({ ok: false, error: "INVALID_TIER" }, { status: 400 })
+  const raw = await request.json().catch(() => ({}))
+  const schema = z.object({
+    tier: z.enum(["vip", "vvip"]),
+    period: z.enum(["monthly", "yearly"]).optional(),
+    billingPeriod: z.enum(["monthly", "yearly"]).optional(),
+    method: z.enum(["pi", "ghc"]),
+    intentId: z.string().max(120).optional(),
+    paymentId: z.string().max(120).optional(),
+    spendReferenceId: z.string().max(160).optional(),
+  })
+  const parsed = schema.safeParse({
+    ...raw,
+    tier: String((raw as { tier?: string }).tier || "").toLowerCase(),
+    period: String((raw as { period?: string }).period || "").toLowerCase() || undefined,
+    billingPeriod: String((raw as { billingPeriod?: string }).billingPeriod || "").toLowerCase() || undefined,
+    method: String((raw as { method?: string }).method || "").toLowerCase(),
+  })
+  if (!parsed.success) {
+    return NextResponse.json(
+      { ok: false, error: "INVALID_BODY", details: parsed.error.flatten() },
+      { status: 400, headers: { "x-request-id": reqCtx.requestId } }
+    )
   }
-  if (period !== "monthly" && period !== "yearly") {
-    return NextResponse.json({ ok: false, error: "INVALID_PERIOD" }, { status: 400 })
-  }
-  if (method !== "pi" && method !== "ghc") {
-    return NextResponse.json({ ok: false, error: "INVALID_METHOD" }, { status: 400 })
-  }
+  const tier = parsed.data.tier
+  const period = (parsed.data.period || parsed.data.billingPeriod || "monthly") as "monthly" | "yearly"
+  const method = parsed.data.method
+  const body = { ...raw, ...parsed.data, period, tier, method }
 
   const catalog = MEMBERSHIP_SERVER_CATALOG[tier as "vip" | "vvip"]
+
+  // Idempotent / already-active: same tier still valid — do not charge again
+  try {
+    const existingResult = await tryGetEntitlementAuthoritative(auth.userId)
+    if (
+      existingResult.ok &&
+      existingResult.entitlement.tier === tier &&
+      existingResult.entitlement.active !== false &&
+      (!existingResult.entitlement.expiresAt ||
+        existingResult.entitlement.expiresAt > Date.now() + 60_000)
+    ) {
+      return NextResponse.json(
+        {
+          ok: true,
+          entitlement: existingResult.entitlement,
+          alreadyActive: true,
+          message: "Membership already active for this tier",
+        },
+        { status: 200 }
+      )
+    }
+  } catch {
+    /* continue — store may be unavailable; spend path will surface errors */
+  }
 
   if (method === "pi") {
     const intentId = String(body.intentId || "").trim()
@@ -197,7 +235,17 @@ export async function POST(request: Request) {
     })
     if (!spend.ok) {
       const status = spend.error === "INSUFFICIENT_BALANCE" ? 402 : 503
-      return NextResponse.json({ ok: false, error: spend.error || "SPEND_FAILED" }, { status })
+      return NextResponse.json(
+        {
+          ok: false,
+          error: spend.error || "SPEND_FAILED",
+          message:
+            spend.error === "INSUFFICIENT_BALANCE"
+              ? "Insufficient GHC balance for this membership plan"
+              : "Could not complete GHC membership spend",
+        },
+        { status }
+      )
     }
     try {
       const entitlement = await grantEntitlement({
@@ -263,5 +311,16 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  return NextResponse.json({ ok: true, entitlement: await getEntitlementAuthoritative(auth.userId) })
+  const result = await tryGetEntitlementAuthoritative(auth.userId)
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" },
+      { status: 503 }
+    )
+  }
+  return NextResponse.json({
+    ok: true,
+    entitlement: result.entitlement,
+    source: result.source,
+  })
 }

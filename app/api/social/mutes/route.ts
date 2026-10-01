@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,8 @@ export async function POST(request: Request) {
   }
   const mute = body.mute !== false && body.mute !== "false"
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, muted: mute })
+    const nd = nonDurableWriteResponse("Mute", { extra: { muted: mute } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_mute_set", {
     p_muter: auth.userId,

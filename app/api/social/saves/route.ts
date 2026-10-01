@@ -5,6 +5,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,7 +25,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "POST_REQUIRED" }, { status: 400 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, saved: true })
+    const nd = nonDurableWriteResponse("Save post")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_save_toggle", {
     p_user_id: auth.userId,

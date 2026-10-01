@@ -9,6 +9,29 @@
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
 
+
+function mapMembershipError(code: unknown, status?: number): string {
+  const c = String(code || "").toUpperCase()
+  if (c.includes("INSUFFICIENT") || status === 402) {
+    return "Insufficient GHC balance. Earn or claim available GHC, then try again."
+  }
+  if (c.includes("ALREADY_ACTIVE") || c.includes("ALREADY_MEMBER")) {
+    return "This membership is already active on your account."
+  }
+  if (c.includes("AUTH")) return "Sign in required to purchase membership."
+  if (c.includes("STORE_UNAVAILABLE") || c.includes("DURABLE_WRITE")) {
+    return "Membership could not be saved on the server. If GHC was spent, contact support with your receipt."
+  }
+  if (c.includes("SERVER_UNAVAILABLE") || status === 503) {
+    return "Membership service is temporarily unavailable. Try again shortly."
+  }
+  if (c.includes("PRODUCT_MISMATCH") || c.includes("AMOUNT_MISMATCH")) {
+    return "Payment does not match the selected plan. No entitlement was granted."
+  }
+  const raw = String(code || "").trim()
+  return raw || "Membership purchase failed"
+}
+
 export type MembershipTierId = "free" | "vip" | "vvip"
 
 /** Entitlement keys — check via hasEntitlement(), not scattered UI conditionals */
@@ -546,26 +569,9 @@ export function createMembershipDomain(deps: {
               e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
           })
         }
-        // Server denied — do not grant locally
-        if (res.status === 401 || res.status === 503) {
-          // Offline / unauthenticated studio: fall back to local only with payment proof present
-          if (payment.paymentId && payment.txid) {
-            return this.activate({
-              tier,
-              billingPeriod,
-              source: "external",
-              purchaseTxId: `${payment.provider}:${payment.paymentId}:${payment.txid}`,
-            })
-          }
-        }
-        return {
-          ok: false,
-          error: data?.error || data?.message || "Server did not activate membership",
-          phase: "permission",
-          requestId: payment.paymentId,
-        }
-      } catch {
-        if (payment.paymentId && payment.txid) {
+        // Production: never invent VIP/VVIP from client-side payment ids alone
+        const { allowLocalAuthFallback } = await import("@/lib/system-config")
+        if (allowLocalAuthFallback() && payment.paymentId && payment.txid && (res.status === 401 || res.status === 503)) {
           return this.activate({
             tier,
             billingPeriod,
@@ -575,7 +581,23 @@ export function createMembershipDomain(deps: {
         }
         return {
           ok: false,
-          error: "Activation failed",
+          error: mapMembershipError(data?.error || data?.message, res.status),
+          phase: "permission",
+          requestId: payment.paymentId,
+        }
+      } catch {
+        const { allowLocalAuthFallback } = await import("@/lib/system-config")
+        if (allowLocalAuthFallback() && payment.paymentId && payment.txid) {
+          return this.activate({
+            tier,
+            billingPeriod,
+            source: "external",
+            purchaseTxId: `${payment.provider}:${payment.paymentId}:${payment.txid}`,
+          })
+        }
+        return {
+          ok: false,
+          error: "Could not reach membership server. Payment was not granted locally.",
           phase: "permission",
           requestId: "local",
         }
@@ -612,7 +634,7 @@ export function createMembershipDomain(deps: {
         const data = await res.json().catch(() => ({}))
         if (res.ok && data?.ok && data?.entitlement) {
           const e = data.entitlement
-          return this.activate({
+          const activated = await this.activate({
             tier: e.tier === "vvip" ? "vvip" : "vip",
             billingPeriod,
             source: "ghc",
@@ -620,17 +642,39 @@ export function createMembershipDomain(deps: {
             durationMs:
               e.expiresAt && e.startedAt ? Math.max(0, e.expiresAt - e.startedAt) : undefined,
           })
+          if (activated.ok && data.alreadyActive) {
+            return { ...activated, alreadyActive: true } as typeof activated & { alreadyActive: true }
+          }
+          return activated
         }
-        if (res.status !== 503 && res.status !== 401 && data?.error) {
+        // Prefer explicit server errors (insufficient balance, already active, etc.)
+        if (data?.error || data?.message) {
           return {
             ok: false,
-            error: data.error || data.message || "Purchase failed",
+            error: mapMembershipError(data.error || data.message, res.status),
+            phase: "permission",
+            requestId: "server",
+          }
+        }
+        if (res.status === 401) {
+          return {
+            ok: false,
+            error: "Sign in required to purchase membership",
             phase: "permission",
             requestId: "server",
           }
         }
       } catch {
-        /* fall through to local spend */
+        /* fall through only in studio */
+      }
+      const { allowLocalAuthFallback } = await import("@/lib/system-config")
+      if (!allowLocalAuthFallback()) {
+        return {
+          ok: false,
+          error: "Membership server unavailable. GHC was not spent.",
+          phase: "permission",
+          requestId: "server",
+        }
       }
       if (!deps.spendGhc) {
         return { ok: false, error: "GHC spend not available", phase: "permission", requestId: "local" }
@@ -642,7 +686,12 @@ export function createMembershipDomain(deps: {
         referenceId: `${tier}_${billingPeriod}`,
       })
       if (!paid.ok) {
-        return { ok: false, error: paid.error || "Payment failed", phase: "permission", requestId: "local" }
+        return {
+          ok: false,
+          error: mapMembershipError(paid.error || "Payment failed", 402),
+          phase: "permission",
+          requestId: "local",
+        }
       }
       return this.activate({
         tier,

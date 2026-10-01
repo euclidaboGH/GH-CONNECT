@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -82,7 +83,8 @@ export async function POST(
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, comment })
+    const nd = nonDurableWriteResponse("Comment create")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_comment_create", { p_row: comment })

@@ -6,8 +6,9 @@ export {
   LocalTransport,
   WebSocketTransport,
   enableWebSocketTransport,
+  bootstrapRealtimeTransport,
 } from "./transport-bridge"
-export type { RealtimeTransport } from "./transport-bridge"
+export type { RealtimeTransport, RealtimeConnectionState } from "./transport-bridge"
 export {
   presenceStore,
   getPresenceSnapshot,

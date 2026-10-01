@@ -50,6 +50,7 @@ export type DomainEventType =
   | "CONVERSATION_CREATED"
   // Presence
   | "PRESENCE_CHANGED"
+  | "REALTIME_CONNECTION"
   // Stories
   | "STORY_CREATED"
   | "STORY_EXPIRED"

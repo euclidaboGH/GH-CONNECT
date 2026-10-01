@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,8 @@ export async function POST(req: Request) {
     }
     const env = readGhcServerEnv()
     if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-      return NextResponse.json({ ok: true, durable: false })
+      const nd = nonDurableWriteResponse("Connection decline")
+      return NextResponse.json(nd.body, { status: nd.status })
     }
     const res = await fetch(`${env.supabaseUrl}/rest/v1/rpc/ghc_connection_request_decline`, {
       method: "POST",
@@ -33,7 +35,8 @@ export async function POST(req: Request) {
       }),
     })
     if (!res.ok) {
-      return NextResponse.json({ ok: true, durable: false })
+      const nd = nonDurableWriteResponse("Connection decline")
+      return NextResponse.json(nd.body, { status: nd.status })
     }
     const row = await res.json().catch(() => null)
     return NextResponse.json({ ok: true, durable: true, request: row })

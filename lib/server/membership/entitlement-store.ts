@@ -115,14 +115,23 @@ function rowToEntitlement(row: Record<string, unknown>, userId: string): ServerM
   })
 }
 
+export type EntitlementLoadResult =
+  | { ok: true; entitlement: ServerMembershipEntitlement; source: "db" | "default" | "memory" }
+  | { ok: false; error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+
 /**
  * Load membership from database (authoritative).
- * Returns null if DB not configured or row missing / error.
+ * Distinguishes: row found | confirmed absent | store error.
  */
 export async function loadEntitlementFromDb(
   userId: string
-): Promise<ServerMembershipEntitlement | null> {
-  if (!hasPrivilegedDatabase(readGhcServerEnv())) return null
+): Promise<
+  | { ok: true; entitlement: ServerMembershipEntitlement | null }
+  | { ok: false; error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+> {
+  if (!hasPrivilegedDatabase(readGhcServerEnv())) {
+    return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+  }
   const env = readGhcServerEnv()
   try {
     const url = `${env.supabaseUrl!.replace(/\/$/, "")}/rest/v1/ghc_membership_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`
@@ -133,47 +142,60 @@ export async function loadEntitlementFromDb(
       },
       cache: "no-store",
     })
-    if (!res.ok) return null
+    // Table missing / network / RLS misconfig → unavailable (not "free")
+    if (res.status === 404 || res.status === 503 || res.status >= 500) {
+      return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+    }
+    if (!res.ok) {
+      // 401/403/PGRST... treat as store unavailable for membership authority
+      return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+    }
     const rows = (await res.json()) as Record<string, unknown>[]
-    if (!Array.isArray(rows) || rows.length === 0) return null
-    return rowToEntitlement(rows[0], userId)
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { ok: true, entitlement: null }
+    }
+    return { ok: true, entitlement: rowToEntitlement(rows[0], userId) }
   } catch {
-    return null
+    return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
   }
 }
 
 /**
  * Authoritative membership read.
- * Production + DB: database only (memory is cache after successful load).
- * Production + no DB: fail closed as free only if memory mode forbidden; else Studio memory.
+ * Missing row in a healthy store → free.
+ * Store unavailable → throws so API can return 503 (not fake free).
  */
 export async function getEntitlementAuthoritative(
   userId: string
 ): Promise<ServerMembershipEntitlement> {
+  const result = await tryGetEntitlementAuthoritative(userId)
+  if (!result.ok) {
+    throw new Error(result.error)
+  }
+  return result.entitlement
+}
+
+/** Non-throwing authoritative read for routes that need 503 vs free. */
+export async function tryGetEntitlementAuthoritative(
+  userId: string
+): Promise<EntitlementLoadResult> {
   if (isDatabaseConfigured()) {
     const fromDb = await loadEntitlementFromDb(userId)
-    if (fromDb) {
-      map().set(userId, fromDb)
-      return fromDb
+    if (!fromDb.ok) return fromDb
+    if (fromDb.entitlement) {
+      map().set(userId, fromDb.entitlement)
+      return { ok: true, entitlement: fromDb.entitlement, source: "db" }
     }
-    // No row yet → free; do not invent paid tier from memory
-    const cached = map().get(userId)
-    if (cached && cached.tier !== "free" && cached.purchaseRef) {
-      // Stale paid cache without DB row is unsafe — drop to free in production authority
-      const free = defaultFree(userId)
-      map().set(userId, free)
-      return free
-    }
+    // Confirmed no row → free (do not use stale paid cache)
     const free = defaultFree(userId)
     map().set(userId, free)
-    return free
+    return { ok: true, entitlement: free, source: "default" }
   }
 
-  // No DB: Studio/test memory only
   if (!allowMemoryServer()) {
-    return defaultFree(userId)
+    return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
   }
-  return getEntitlement(userId)
+  return { ok: true, entitlement: getEntitlement(userId), source: "memory" }
 }
 
 /**
@@ -201,7 +223,11 @@ export async function grantEntitlement(input: {
   paymentIntentId?: string
 }): Promise<ServerMembershipEntitlement> {
   const now = Date.now()
-  const prev = await getEntitlementAuthoritative(input.userId)
+  const prevResult = await tryGetEntitlementAuthoritative(input.userId)
+  if (!prevResult.ok) {
+    throw new Error("MEMBERSHIP_STORE_UNAVAILABLE")
+  }
+  const prev = prevResult.entitlement
   if (prev.purchaseRef === input.purchaseRef && prev.tier === input.tier && prev.active) {
     return prev
   }

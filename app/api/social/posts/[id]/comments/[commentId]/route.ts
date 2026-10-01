@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,7 +26,8 @@ export async function DELETE(request: Request, ctx: Ctx) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false })
+    const nd = nonDurableWriteResponse("Comment delete")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   // Inline soft-delete via REST (no separate RPC required for Pass 3)

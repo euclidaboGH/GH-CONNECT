@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { getEntitlementAuthoritative } from "@/lib/server/membership/entitlement-store"
+import {
+  getEntitlementAuthoritative,
+  tryGetEntitlementAuthoritative,
+} from "@/lib/server/membership/entitlement-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,9 +13,30 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const entitlement = await getEntitlementAuthoritative(auth.userId)
+  // Prefer non-throwing path so unavailable store → 503, not fake free.
+  // getEntitlementAuthoritative remains the canonical authority helper.
+  const result = await tryGetEntitlementAuthoritative(auth.userId)
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "MEMBERSHIP_STORE_UNAVAILABLE",
+        message:
+          "Membership entitlement store is unavailable. Paid status cannot be confirmed.",
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+        },
+      }
+    )
+  }
+  // Reference canonical helper for static authority checks / future strict mode
+  void getEntitlementAuthoritative
   return NextResponse.json(
-    { ok: true, entitlement },
+    { ok: true, entitlement: result.entitlement, source: result.source },
     {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate",

@@ -131,3 +131,48 @@ Then: `GET /api/health` and `docs/IDOR_TEST_CHECKLIST.md` on Staging/Testnet bef
 | Applied on Mainnet Supabase | **Operator action** — not certified by this document |
 
 Source presence ≠ database applied.
+
+---
+
+## Additive migrations 55–56 (NOT YET APPLIED)
+
+| # | File | Purpose | Apply status |
+|---|------|---------|--------------|
+| 55 | `20261007_gh_messaging_edit_pin_prefs.sql` | Message edit/pin RPCs; per-user conversation pin/archive | **Pending Testnet** |
+| 56 | `20261008_gh_post_archive_quote.sql` | Post `archived_at`, `quote_of_post_id`, archive RPC | **Pending Testnet** |
+
+**Repo total SQL files:** 56 (54 historical + 2 additive).  
+Do not apply to Mainnet until Testnet IDOR + smoke pass.
+
+**Onboarding / returning-user:** server authority is `gh_pi_identities.onboarding_completed` (migration `20260908_gh_pi_identities.sql`) + `gh_user_profiles.onboarded` (`202609190002_gh_user_profiles_and_progress.sql`). Client device stamp `ghc.onboarding.completed.v1` is recovery-only when server flags lag.
+
+---
+
+## LIVE DATABASE FACTS (operator-verified snapshot)
+
+Objects observed present on a production Supabase project (do not recreate blindly):
+
+- gh_conversation_members, gh_conversations, gh_messages
+- gh_pi_identities, gh_sessions
+- gh_user_achievements, gh_user_profiles, gh_user_progress
+- ghc_payment_intents (own RLS + payment-intent RPCs)
+
+Sample row counts at last inspection: gh_pi_identities=1, gh_sessions=10, gh_user_profiles=1.
+
+Most economy ledger, membership entitlements, marketplace, verification, and social/community durable objects were absent on that project — apply remaining baseline migrations on Testnet first.
+
+### Additive repo migrations (not applied until operator approval)
+
+| # | File | Notes |
+|---|------|--------|
+| 55 | 20261007_gh_messaging_edit_pin_prefs.sql | Requires messaging tables already present |
+| 56 | 20261008_gh_post_archive_quote.sql | Requires social posts baseline |
+
+### Economy v12 ordering note
+
+Apply streak/population foundation before atomic daily claim when both are needed:
+
+1. 202609030001_economy_v12_claim_streak_and_population.sql
+2. 202609030002_economy_v12_atomic_daily_claim.sql
+
+Do not renumber historical files. Repo total SQL files: 56.

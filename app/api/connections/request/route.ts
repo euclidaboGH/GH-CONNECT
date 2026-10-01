@@ -8,6 +8,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { normalizeIntents } from "@/lib/connection-intents"
 import { validateConnectionIntents } from "@/lib/domains/adapters/unified-connection-request"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -36,12 +37,13 @@ export async function POST(req: Request) {
     // Relationship state is re-checked server-side when durable RPCs exist; never trust client "already connected"
     const env = readGhcServerEnv()
     if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-      return NextResponse.json({
-        ok: true,
-        durable: false,
-        message: "SERVER_DB_UNAVAILABLE — session graph remains authority until migration + env",
-        intents,
+      const nd = nonDurableWriteResponse("Connection request", {
+        extra: {
+          message: "SERVER_DB_UNAVAILABLE — session graph remains authority until migration + env",
+          intents,
+        },
       })
+      return NextResponse.json(nd.body, { status: nd.status })
     }
 
     const res = await fetch(`${env.supabaseUrl}/rest/v1/rpc/ghc_connection_request_upsert`, {
@@ -63,13 +65,14 @@ export async function POST(req: Request) {
     if (!res.ok) {
       const text = await res.text().catch(() => "")
       // Function missing until migration applied
-      return NextResponse.json({
-        ok: true,
-        durable: false,
-        message: "RPC_UNAVAILABLE",
-        detail: text.slice(0, 200),
-        intents,
+      const nd = nonDurableWriteResponse("Connection request", {
+        extra: {
+          message: "RPC_UNAVAILABLE",
+          detail: text.slice(0, 200),
+          intents,
+        },
       })
+      return NextResponse.json(nd.body, { status: nd.status })
     }
     const row = await res.json().catch(() => null)
     return NextResponse.json({ ok: true, durable: true, request: row, intents })

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,8 @@ export async function POST(request: Request) {
   }
   const restrict = body.restrict !== false && body.restrict !== "false"
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, restricted: restrict })
+    const nd = nonDurableWriteResponse("Restrict", { extra: { restricted: restrict } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_restrict_set", {
     p_restrictor: auth.userId,

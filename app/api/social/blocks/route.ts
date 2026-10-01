@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,7 +26,8 @@ export async function POST(request: Request) {
   const block = body.block !== false && body.block !== "false"
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, blocked: block })
+    const nd = nonDurableWriteResponse("Block", { extra: { blocked: block } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_block_set", {

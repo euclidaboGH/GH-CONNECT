@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,10 +20,11 @@ export async function GET(request: Request) {
   void auth
 
   if (!socialDbConfigured()) {
-    return NextResponse.json(
-      { ok: true, durable: false, communities: [] },
-      { headers: { "Cache-Control": "no-store" } }
-    )
+    const nd = nonDurableReadResponse("Communities list", { communities: [] })
+    return NextResponse.json(nd.body, {
+      status: nd.status,
+      headers: { "Cache-Control": "no-store" },
+    })
   }
 
   const limit = Math.min(
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
     : "public"
 
   const row = {
-    id: String(body.id || "").trim() || genId(),
+    id: genId(),
     name,
     purpose: String(body.purpose || "").slice(0, 200),
     description: String(body.description || "").slice(0, 2000),
@@ -73,7 +75,8 @@ export async function POST(request: Request) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, community: row })
+    const nd = nonDurableWriteResponse("Community create", { extra: { community: null } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_community_create", { p_row: row })
@@ -82,6 +85,12 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { ok: false, error: data?.error || result.error || "CREATE_FAILED" },
       { status: 503 }
+    )
+  }
+  if (!row || (typeof row === "object" && (row as { id?: string }).id == null && !(row as { community?: unknown }).community)) {
+    return NextResponse.json(
+      { ok: false, error: "CREATE_CONFLICT_OR_EMPTY", message: "Community was not created" },
+      { status: 409 }
     )
   }
   return NextResponse.json({ ok: true, durable: true, community: row })

@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -26,7 +27,8 @@ export async function POST(request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, role })
+    const nd = nonDurableWriteResponse("Community role", { extra: { role } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_community_set_role", {
     p_community_id: communityId,

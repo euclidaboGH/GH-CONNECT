@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,7 +34,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, content })
+    const nd = nonDurableWriteResponse("Post edit")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const env = readGhcServerEnv()

@@ -10,6 +10,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { resolveMediaAssets } from "@/lib/server/media/asset-store"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -46,7 +47,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, posts: [] })
+    const nd = nonDurableReadResponse("Posts list", { posts: [] })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_post_list_feed", {
     p_viewer_id: auth.userId,

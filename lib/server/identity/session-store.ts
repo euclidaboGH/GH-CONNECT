@@ -334,11 +334,19 @@ export async function validateSession(
   const tokenHash = hashToken(token)
 
   let rec: SessionRecord | null = memByHash.get(tokenHash) || null
-  if (!rec && dbConfigured()) {
-    rec = await dbSelectByHash(tokenHash)
-    if (rec) {
-      memByHash.set(tokenHash, rec)
-      memById.set(rec.id, rec)
+  // Durable store is authoritative when configured: always re-read so revocation
+  // on another instance invalidates process-local cache.
+  if (dbConfigured()) {
+    const fromDb = await dbSelectByHash(tokenHash)
+    if (fromDb) {
+      rec = fromDb
+      memByHash.set(tokenHash, fromDb)
+      memById.set(fromDb.id, fromDb)
+    } else if (rec) {
+      // DB has no active row (revoked/deleted) — drop cache; do not trust memory
+      memByHash.delete(tokenHash)
+      memById.delete(rec.id)
+      rec = null
     }
   }
   if (!rec) return null

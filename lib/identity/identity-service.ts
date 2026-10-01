@@ -213,7 +213,7 @@ export const IdentityService = {
     try {
       void import("@/lib/onboarding-local").then((m) =>
         m.stampLocalOnboardingComplete({
-          userId: identity.ghUserId || identity.piUid,
+          userId: identity.userId || identity.piUserId,
           username: identity.username,
         })
       )

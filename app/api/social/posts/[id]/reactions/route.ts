@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { normalizeReactionType } from "@/lib/social/reactions"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,7 +42,7 @@ export async function POST(
   if (!socialDbConfigured()) {
     return NextResponse.json({
       ok: true,
-      durable: false,
+      durable: false, // may be best-effort analytics
       reaction,
       active: true,
       liked: reaction === "like",

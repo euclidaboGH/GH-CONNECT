@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "INVALID_VOTE" }, { status: 400 })
     }
     if (!socialDbConfigured()) {
-      return NextResponse.json({ ok: true, durable: false })
+      const nd = nonDurableWriteResponse("Poll vote")
+      return NextResponse.json(nd.body, { status: nd.status })
     }
     const result = await socialRpc("gh_poll_vote", {
       p_poll_id: pollId,
@@ -70,7 +72,8 @@ export async function POST(request: Request) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, poll: row })
+    const nd = nonDurableWriteResponse("Poll create")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_poll_create", { p_row: row })
   const data = result.data as { ok?: boolean; error?: string }

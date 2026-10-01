@@ -107,3 +107,13 @@ console.log(`Passed: ${passed}`)
 console.log(`Failed: ${failed}`)
 if (failed > 0) process.exit(1)
 console.log("ALL PI DURABLE PAYMENT TESTS PASSED")
+
+
+// Phase 4 — production load must not use memory as durable authority
+const intentStoreSrc = readFileSync(new URL("../lib/server/payments/intent-store.ts", import.meta.url), "utf8")
+if (!intentStoreSrc.includes("Production: DB is authority")) {
+  console.error("FAIL: loadPaymentIntent missing production memory guard")
+  process.exitCode = 1
+} else {
+  console.log("  ✓ loadPaymentIntent production memory guard")
+}

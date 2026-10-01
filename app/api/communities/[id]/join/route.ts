@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,7 +23,8 @@ export async function POST(_request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, status: "active" })
+    const nd = nonDurableWriteResponse("Community join", { extra: { status: "unavailable" } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_community_join", {
     p_community_id: communityId,
@@ -53,7 +55,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false })
+    const nd = nonDurableWriteResponse("Community leave")
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_community_leave", {
     p_community_id: communityId,

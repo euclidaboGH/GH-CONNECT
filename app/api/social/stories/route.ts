@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, stories: [] })
+    const nd = nonDurableReadResponse("Stories", { stories: [] })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_story_list_active", {
     p_viewer_id: auth.userId,
@@ -70,7 +72,8 @@ export async function POST(request: Request) {
   }
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({ ok: true, durable: false, story: row })
+    const nd = nonDurableWriteResponse("Story create", { extra: { story: null } })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_story_create", { p_row: row })

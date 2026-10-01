@@ -74,6 +74,22 @@ export type ReadinessReport = {
     staking: "/api/pi/staking"
     signInCallback: "/signin/callback"
   }
+  /**
+   * Configured credentials ≠ applied schema.
+   * schemaProbe is lightweight (boolean flags from env/durable helpers only).
+   * Full object probes belong to operator migration checklist.
+   */
+  schemaReadiness: {
+    probe: "config_and_durable_flags"
+    identity: "ready" | "configured_unverified" | "missing"
+    sessions: "ready" | "configured_unverified" | "missing"
+    messaging: "ready" | "configured_unverified" | "missing"
+    payments: "configured_unverified" | "missing"
+    economyLedger: "configured_unverified" | "missing"
+    membership: "configured_unverified" | "missing"
+    marketplace: "configured_unverified" | "missing"
+    socialCommunity: "configured_unverified" | "missing"
+  }
   ts: string
 }
 
@@ -339,6 +355,39 @@ export function evaluateReadiness(opts?: {
       paymentsHealth: "/api/payments/health",
       staking: "/api/pi/staking",
       signInCallback: "/signin/callback",
+    },
+    schemaReadiness: {
+      probe: "config_and_durable_flags" as const,
+      identity: identityDurable
+        ? ("ready" as const)
+        : supabaseConfigured
+          ? ("configured_unverified" as const)
+          : ("missing" as const),
+      sessions: sessionDurable
+        ? ("ready" as const)
+        : supabaseConfigured
+          ? ("configured_unverified" as const)
+          : ("missing" as const),
+      messaging: messagingDurable
+        ? ("ready" as const)
+        : supabaseConfigured
+          ? ("configured_unverified" as const)
+          : ("missing" as const),
+      payments: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      economyLedger: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      membership: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      marketplace: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      socialCommunity: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
     },
     ts: new Date().toISOString(),
   }
