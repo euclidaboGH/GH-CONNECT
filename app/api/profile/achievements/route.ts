@@ -8,7 +8,6 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   listAchievementsForUser,
-  unlockAchievement,
   getProgress,
   isAchievementStoreDurable,
 } from "@/lib/server/identity/achievement-store"
@@ -80,6 +79,8 @@ export async function POST(request: Request) {
     // Preferring prefixes like "server:" / "rpc:" is a client-forgery vector.
     // Unlock only via internal server modules (reward engine, claim RPCs), not this public POST.
     void body?.sourceEvent
+    void achievementId
+    void auth
     return NextResponse.json(
       {
         ok: false,
@@ -88,27 +89,6 @@ export async function POST(request: Request) {
           "Achievements unlock only through server-evaluated progress. Client cannot mint achievements by id or sourceEvent.",
       },
       { status: 403, headers: { "Cache-Control": "no-store" } }
-    )
-
-    // Unreachable — kept for type-narrowing if future internal flag is added
-    const unlocked = await unlockAchievement({
-      ghUserId: auth.userId,
-      achievementId,
-      sourceEvent: null,
-    })
-    if (!unlocked) {
-      return NextResponse.json(
-        { ok: false, error: "ACHIEVEMENT_PERSIST_FAILED" },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      )
-    }
-    return NextResponse.json(
-      {
-        ok: true,
-        durable: isAchievementStoreDurable(),
-        achievement: unlocked,
-      },
-      { headers: { "Cache-Control": "no-store" } }
     )
   } catch (err) {
     console.error(
