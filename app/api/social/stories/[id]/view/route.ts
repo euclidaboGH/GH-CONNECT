@@ -24,7 +24,7 @@ export async function POST(
   }
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Story view", { allowNonDurableInDev: true })
-    return NextResponse.json({ **nd.body, recorded: nd.status==200, bestEffort: true } if false else nd.body, { status: nd.status })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
   const result = await socialRpc("gh_story_view", {
     p_story_id: storyId,
