@@ -34,13 +34,21 @@ export async function GET(
   }
   // Viewer identity is session-bound; post visibility policy is enforced in feed/RPC layer.
   // Comments are not publicly enumerable without auth.
-  void auth
-  const result = await socialRpc("gh_comment_list", { p_post_id: postId })
+  const url = new URL(request.url)
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 50), 1), 100)
+  const result = await socialRpc("gh_comment_list", {
+    p_post_id: postId,
+    p_viewer_id: auth.userId,
+    p_limit: limit,
+  })
   const data = result.data as { comments?: unknown[] }
+  let comments = Array.isArray(data?.comments) ? data.comments : []
+  // Defense in depth if RPC ignores p_limit
+  if (comments.length > limit) comments = comments.slice(0, limit)
   return NextResponse.json({
     ok: true,
     durable: result.ok,
-    comments: Array.isArray(data?.comments) ? data.comments : [],
+    comments,
   })
 }
 
@@ -71,6 +79,9 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400 })
   }
 
+  // Ownership: authorId is always session user — never trust body.authorId / body.userId
+  void body.authorId
+  void body.userId
   const comment = {
     id: String(body.id || "").trim() || genId(),
     postId,

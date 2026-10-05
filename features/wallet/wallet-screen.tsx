@@ -895,20 +895,27 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        <WalletBalanceCard
-          balance={balance}
-          balanceVisible={balanceVisible}
-          onToggleVisible={() => setBalanceVisible((v) => !v)}
-          refreshing={refreshing}
-          lastSynced={lastSynced}
-          pending={displayPending}
-          monthEarned={monthInsight.monthEarned}
-          monthSpent={monthInsight.monthSpent}
-          onOpenPending={() => setShowPendingSheet(true)}
-        />
+        {/* ZONE: BALANCE */}
+        <div className="mt-1">
+          <p className="gh-type-meta mx-3 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
+            Balance
+          </p>
+          <WalletBalanceCard
+            balance={balance}
+            balanceVisible={balanceVisible}
+            onToggleVisible={() => setBalanceVisible((v) => !v)}
+            refreshing={refreshing}
+            lastSynced={lastSynced}
+            pending={displayPending}
+            monthEarned={monthInsight.monthEarned}
+            monthSpent={monthInsight.monthSpent}
+            onOpenPending={() => setShowPendingSheet(true)}
+          />
+        </div>
 
-        {/* Fintech pattern: balance → primary actions (not withdraw first) */}
+        {/* ZONE: ACTIONS — balance → primary actions (not withdraw first) */}
         <WalletPrimaryActions
+          disabled={!!claimingHoldId}
           onSend={() => {
             if (balance <= 0 && (displayPending > 0 || pending > 0)) {
               setSendEducate(
@@ -961,8 +968,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           </button>
         )}
 
-        {/* Secondary: Rewards · Membership · Boost · Statement */}
-        <div className="mx-3 mt-3 flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
+        {/* ZONE: TOOLS — secondary shortcuts (not primary money actions) */}
+        <p className="gh-type-meta mx-3 mt-3 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
+          Tools
+        </p>
+        <div className="mx-3 flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
           <QuickChip
             icon={<Gift size={14} />}
             label="Rewards"
@@ -1130,8 +1140,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         </p>
         </div>
 
-        {/* Tabs */}
-        <div className="mx-3 mt-4 flex gap-1 rounded-2xl border border-border bg-card p-1">
+        {/* ZONE: ACTIVITY */}
+        <p className="gh-type-meta mx-3 mt-4 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
+          Activity
+        </p>
+        <div className="gh-card mx-3 flex gap-1 p-1">
           {(
             [
               { id: "activity" as const, label: "Activity" },
@@ -1143,7 +1156,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`flex-1 rounded-xl py-2 text-xs font-bold transition ${
+              className={`flex-1 rounded-[var(--gh-radius-sm)] py-2.5 text-xs font-bold transition ${
                 tab === t.id
                   ? "bg-emerald-600 text-white"
                   : "text-muted-foreground hover:bg-muted"
@@ -1692,7 +1705,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                         type="button"
                         disabled={claimingHoldId === h.id || h.claimState === "review"}
                         onClick={() => void claimPendingHold(h.id)}
-                        className="mt-2.5 w-full rounded-xl bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60 active:scale-[0.99]"
+                        className="gh-btn gh-btn-primary mt-2.5 w-full text-[12px] disabled:pointer-events-none disabled:opacity-60"
                       >
                         {h.claimState === "review"
                           ? "Under review"

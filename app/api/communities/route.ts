@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,7 +50,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
+  const rl = checkRateLimit(`community-create:${auth.userId}`, 5, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+  }
+
   const body = await request.json().catch(() => ({}))
+  // Creator is always session — never trust client ownership fields
+  void body.createdBy
+  void body.ownerId
+  void body.userId
+  void body.creatorId
+
   const name = String(body.name || "").trim()
   if (!name || name.length > 80) {
     return NextResponse.json({ ok: false, error: "INVALID_NAME" }, { status: 400 })

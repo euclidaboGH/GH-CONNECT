@@ -40,7 +40,9 @@ export function readGhcServerEnv(): GhcServerEnv {
     // VERCEL_ENV=production / NODE_ENV=production / GHC_ENV=production always deny.
     allowDevAuth:
       !isProduction &&
-      (process.env.GHC_ALLOW_DEV_AUTH === "1" || process.env.NODE_ENV === "test"),
+      (process.env.GHC_ALLOW_DEV_AUTH === "1" ||
+        process.env.GHC_ALLOW_DEV_AUTH === "true" ||
+        process.env.NODE_ENV === "test"),
     isProduction,
   }
 }

@@ -2,10 +2,12 @@
  * GHC → Pi withdrawal (server-authoritative).
  * Rate: REFERENCE_GHC_PER_PI from economic-config (100 GHC per 1 π reference).
  * Minimum: 100 π equivalent → ghcMin = 100 * ghcPerPi.
+ *
+ * Settlement uses atomic RPC ghc_withdrawal_settle (debit + completed in one txn).
+ * Ordinary ghc_execute_spend is intentionally NOT used for settlement.
  */
 import { REFERENCE_GHC_PER_PI } from "@/lib/server/economy/economic-config"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { executeDurableGhcSpend } from "@/lib/server/economy/store"
 
 export const WITHDRAWAL_MIN_PI = 100 as const
 
@@ -130,13 +132,11 @@ export async function getWithdrawalQuote(ledgerBalance: number, lockedGhc: numbe
 export async function fetchLockedGhc(userId: string): Promise<number> {
   const result = await rpcJson("ghc_withdrawal_locked_ghc", { p_user_id: userId })
   if (!result.ok) return 0
-  // RPC may return scalar
   const raw = result.data
   if (typeof raw === "number") return Math.max(0, raw)
   if (raw && typeof raw === "object" && "ghc_withdrawal_locked_ghc" in raw) {
     return Math.max(0, Number((raw as { ghc_withdrawal_locked_ghc: number }).ghc_withdrawal_locked_ghc))
   }
-  // PostgREST often returns bare number as JSON number — handled above; else try value
   const n = Number(raw as unknown)
   return Number.isFinite(n) ? Math.max(0, n) : 0
 }
@@ -203,6 +203,11 @@ export async function listWithdrawalsForUser(userId: string): Promise<Withdrawal
   }
 }
 
+/**
+ * Operator status transitions.
+ * Non-complete: ghc_withdrawal_set_status only.
+ * Complete: atomic ghc_withdrawal_settle (debit + completed in one transaction).
+ */
 export async function operatorSetWithdrawalStatus(input: {
   id: string
   operatorId: string
@@ -210,45 +215,54 @@ export async function operatorSetWithdrawalStatus(input: {
   settlementRef?: string
   rejectReason?: string
 }): Promise<{ ok: boolean; request?: WithdrawalRequest; error?: string }> {
-  const result = await rpcJson("ghc_withdrawal_set_status", {
+  if (input.status !== "completed") {
+    const result = await rpcJson("ghc_withdrawal_set_status", {
+      p_id: input.id,
+      p_operator_id: input.operatorId,
+      p_status: input.status,
+      p_settlement_ref: input.settlementRef ?? null,
+      p_reject_reason: input.rejectReason ?? null,
+    })
+    if (!result.ok) {
+      return { ok: false, error: result.error || "STATUS_FAILED" }
+    }
+    if (!result.data || typeof result.data !== "object") {
+      return { ok: false, error: "STATUS_FAILED" }
+    }
+    const statusData = result.data as Record<string, unknown>
+    if (statusData.ok === false) {
+      return { ok: false, error: String(statusData.error || "STATUS_FAILED") }
+    }
+    return { ok: true, request: mapRow(statusData.request as Record<string, unknown>) }
+  }
+
+  if (!input.settlementRef || !String(input.settlementRef).trim()) {
+    return { ok: false, error: "SETTLEMENT_REF_REQUIRED" }
+  }
+
+  const settled = await rpcJson("ghc_withdrawal_settle", {
     p_id: input.id,
     p_operator_id: input.operatorId,
-    p_status: input.status,
-    p_settlement_ref: input.settlementRef ?? null,
-    p_reject_reason: input.rejectReason ?? null,
+    p_settlement_ref: String(input.settlementRef).trim(),
   })
-  if (!result.ok) {
-    return { ok: false, error: result.error || "STATUS_FAILED" }
+  if (!settled.ok) {
+    return { ok: false, error: settled.error || "SETTLE_FAILED" }
   }
-  if (!result.data || typeof result.data !== "object") {
-    return { ok: false, error: "STATUS_FAILED" }
+  if (!settled.data || typeof settled.data !== "object") {
+    return { ok: false, error: "SETTLE_FAILED" }
   }
-  const statusData = result.data as Record<string, unknown>
-  if (statusData.ok === false) {
-    return { ok: false, error: String(statusData.error || "STATUS_FAILED") }
-  }
-  const req = mapRow(statusData.request as Record<string, unknown>)
-
-  // On completed: permanent ledger debit once (idempotent spend ref)
-  if (input.status === "completed" && req.userId) {
-    const spend = await executeDurableGhcSpend({
-      userId: req.userId,
-      amount: req.ghcAmount,
-      referenceId: `withdrawal_settle:${req.id}`,
-      reason: "GHC withdrawal settled to Pi",
-      sourceEvent: "WITHDRAWAL_SETTLE",
-    })
-    if (!spend.ok && spend.error !== "INSUFFICIENT" /* prefer surface real errors */) {
-      // Idempotent re-complete may already have spent
-      if (!spend.ok) {
-        return {
-          ok: false,
-          error: spend.error || "SETTLE_SPEND_FAILED",
-          request: req,
-        }
-      }
+  const body = settled.data as Record<string, unknown>
+  if (body.ok === false) {
+    return {
+      ok: false,
+      error: String(body.error || "SETTLE_FAILED"),
+      request: body.request
+        ? mapRow(body.request as Record<string, unknown>)
+        : undefined,
     }
   }
-
-  return { ok: true, request: req }
+  if (!body.request || typeof body.request !== "object") {
+    return { ok: false, error: "SETTLE_FAILED" }
+  }
+  return { ok: true, request: mapRow(body.request as Record<string, unknown>) }
 }

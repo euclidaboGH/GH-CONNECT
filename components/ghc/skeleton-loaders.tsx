@@ -14,17 +14,17 @@ export function ImageSkeleton({ className = "" }: { className?: string }) {
 
 export function CardSkeleton() {
   return (
-    <div className="w-full space-y-3 rounded-2xl border border-gray-100 bg-white p-4">
+    <div className="gh-card w-full space-y-3 p-4">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 animate-pulse rounded-full bg-gray-200" />
+        <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
         <div className="flex-1 space-y-2">
-          <div className="h-3 w-1/3 animate-pulse rounded bg-gray-200" />
-          <div className="h-2.5 w-1/4 animate-pulse rounded bg-gray-100" />
+          <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
+          <div className="h-2.5 w-1/4 animate-pulse rounded bg-muted/70" />
         </div>
       </div>
-      <div className="h-4 w-full animate-pulse rounded bg-gray-100" />
-      <div className="h-4 w-4/5 animate-pulse rounded bg-gray-100" />
-      <div className="h-40 w-full animate-pulse rounded-xl bg-gray-100" />
+      <div className="h-4 w-full animate-pulse rounded bg-muted/80" />
+      <div className="h-4 w-4/5 animate-pulse rounded bg-muted/60" />
+      <div className="h-40 w-full animate-pulse rounded-[var(--gh-radius-md)] bg-muted/50" />
     </div>
   )
 }
@@ -66,10 +66,10 @@ export function DiscoverCardSkeleton() {
 export function MessageSkeleton() {
   return (
     <div className="flex items-center gap-3 p-3">
-      <div className="h-11 w-11 animate-pulse rounded-full bg-gray-200" />
+      <div className="h-11 w-11 animate-pulse rounded-full bg-muted" />
       <div className="flex-1 space-y-2">
-        <div className="h-3.5 w-1/3 animate-pulse rounded bg-gray-200" />
-        <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100" />
+        <div className="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-2/3 animate-pulse rounded bg-muted/70" />
       </div>
     </div>
   )
@@ -87,9 +87,27 @@ export function FeedSkeleton({ count = 3 }: { count?: number }) {
 
 export function ConversationListSkeleton({ count = 6 }: { count?: number }) {
   return (
-    <div className="divide-y divide-gray-50" aria-busy="true" aria-label="Loading messages">
+    <div className="divide-y divide-border/60" aria-busy="true" aria-label="Loading messages">
       {Array.from({ length: count }).map((_, i) => (
         <MessageSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+/** Wallet activity list placeholder */
+export function WalletActivitySkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <div className="space-y-2" aria-busy="true" aria-label="Loading activity">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="gh-card flex items-center gap-3 p-3">
+          <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
+            <div className="h-2.5 w-1/3 animate-pulse rounded bg-muted/70" />
+          </div>
+          <div className="h-3 w-12 animate-pulse rounded bg-muted" />
+        </div>
       ))}
     </div>
   )

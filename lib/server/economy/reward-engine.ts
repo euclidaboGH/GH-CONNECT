@@ -1,3 +1,4 @@
+import { ACTIVITY_DAILY_CAP_GHC, ACTIVITY_WEEKLY_CAP_GHC, ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 /**
  * Server-authoritative reward evaluation + anti-abuse.
  *
@@ -15,7 +16,6 @@ import {
   commitActivityEmission,
   computeAndCommitActivityEmissionDurable,
 } from "@/lib/server/economy/activity-emission"
-import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 import { lagosDayKey } from "@/lib/server/economy/claim-engine"
 
 /** Minimum account age (ms) before social rewards (follow/like/comment) */
@@ -27,7 +27,7 @@ import {
   getGhcAuthoritativeStore,
   type GhcAuthoritativeStore,
 } from "@/lib/server/economy/store"
-import { rpcStagePending } from "@/lib/server/economy/db"
+import { rpcActivityStageReward } from "@/lib/server/economy/db"
 import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
 
 export type EvaluateRewardInput = {
@@ -278,23 +278,9 @@ export async function evaluateRewardAuthoritative(
   }
 
   const day = lagosDayKey()
-  // Caps + demand committed only after successful path; durable when DB configured.
-  // We compute durable grant early; if later anti-abuse fails, granted cap room is consumed
-  // (conservative). Prefer compute then ledger — durable try_grant is authoritative room.
-  const emission = await computeAndCommitActivityEmissionDurable({
-    userId: input.userId,
-    baseAmountGhc: baseAmount,
-    dayKey: day,
-  })
-  if (!emission.ok) {
-    return {
-      ok: false,
-      error: emission.error,
-      deniedReasons: [emission.error, `DAY_REM_${emission.dayRemaining}`, `WEEK_REM_${emission.weekRemaining}`],
-    }
-  }
-  const amount = emission.grantedGhc
 
+  // Anti-abuse and self-target MUST run before durable emission grant.
+  // Rejected actions must not consume daily/weekly activity emission room.
   const legitimacy = verifyActionLegitimacy({
     userId: input.userId,
     sourceEvent,
@@ -316,9 +302,24 @@ export async function evaluateRewardAuthoritative(
   // Durable DB path: stage pending via RPC with atomic limit checks
   // (dailyLimit / cooldownMs / maxPerTargetPerDay — same semantics as memory path)
   if (isDatabaseConfigured()) {
-    const staged = await rpcStagePending({
+    // Atomic emission grant + pending stage (single DB transaction).
+    // Limit/cooldown/cap failures consume zero emission capacity.
+    const weekKey = (() => {
+      const d = new Date(`${day}T12:00:00Z`)
+      const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+      const dayOfYear =
+        Math.floor((d.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+      const week = Math.floor((dayOfYear - 1) / 7)
+      return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`
+    })()
+
+    const staged = await rpcActivityStageReward({
       userId: input.userId,
-      amount,
+      baseAmount,
+      dayKey: day,
+      weekKey,
+      dailyCap: ACTIVITY_DAILY_CAP_GHC,
+      weeklyCap: ACTIVITY_WEEKLY_CAP_GHC,
       referenceId,
       reason: rule.description || sourceEvent,
       sourceEvent,
@@ -327,6 +328,7 @@ export async function evaluateRewardAuthoritative(
       cooldownMs: rule.antiAbuse?.cooldownMs ?? null,
       maxPerTarget: rule.antiAbuse?.maxPerTargetPerDay ?? null,
       targetId: input.targetId ?? null,
+      stageAmount: null,
     })
     if (!staged.ok) {
       const err = staged.error || "PENDING_FAILED"
@@ -334,14 +336,17 @@ export async function evaluateRewardAuthoritative(
         ok: false,
         error: err,
         deniedReasons:
-          err === "DAILY_CAP" || err === "COOLDOWN" || err === "TARGET_CAP"
+          err === "DAILY_CAP" ||
+          err === "COOLDOWN" ||
+          err === "TARGET_CAP" ||
+          err === "ACTIVITY_CAP_REACHED"
             ? [err]
             : undefined,
       }
     }
     const holdId = staged.holdId || staged.transactionId || referenceId
     const stagedAmount =
-      staged.amount != null && Number.isFinite(staged.amount) ? staged.amount : amount
+      staged.amount != null && Number.isFinite(staged.amount) ? staged.amount : baseAmount
     return {
       ok: true,
       amount: stagedAmount,
@@ -359,8 +364,8 @@ export async function evaluateRewardAuthoritative(
         sourceEvent,
       },
       economicVersion: ECONOMY_VERSION,
-      m: emission.m,
-      g: emission.g,
+      m: 1,
+      g: 1,
     }
   }
 
@@ -371,7 +376,7 @@ export async function evaluateRewardAuthoritative(
 
   const store = getGhcAuthoritativeStore()
 
-  // Idempotency by referenceId (memory)
+  // Idempotency + limits BEFORE emission so rejected actions do not consume room
   if (hasReference(store, input.userId, referenceId)) {
     return { ok: false, error: "ALREADY_REWARDED", deniedReasons: ["DUPLICATE_REFERENCE"] }
   }
@@ -409,6 +414,24 @@ export async function evaluateRewardAuthoritative(
       }
     }
   }
+
+  const emission = await computeAndCommitActivityEmissionDurable({
+    userId: input.userId,
+    baseAmountGhc: baseAmount,
+    dayKey: day,
+  })
+  if (!emission.ok) {
+    return {
+      ok: false,
+      error: emission.error,
+      deniedReasons: [
+        emission.error,
+        `DAY_REM_${emission.dayRemaining}`,
+        `WEEK_REM_${emission.weekRemaining}`,
+      ],
+    }
+  }
+  const amount = emission.grantedGhc
 
   const result = await executeAuthoritativePending(store, {
     userId: input.userId,

@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 40), 1), 100)
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 40), 1), 50)
   const before = url.searchParams.get("before")
   const beforeMs = before ? Number(before) : null
 

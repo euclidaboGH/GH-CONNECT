@@ -66,9 +66,9 @@ interface EnhancedFeedScreenProps {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-4 px-3 py-3" aria-hidden role="status" aria-label="Loading feed">
+    <div className="space-y-4 px-3 py-3" role="status" aria-busy="true" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="animate-pulse rounded-2xl border border-border/40 bg-card p-4">
+        <div key={i} className="gh-card animate-pulse p-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-muted" />
             <div className="flex-1 space-y-2">
@@ -80,7 +80,7 @@ function FeedSkeleton() {
             <div className="h-3 w-full rounded bg-muted/80" />
             <div className="h-3 w-4/5 rounded bg-muted/60" />
           </div>
-          <div className="mt-3 h-36 rounded-xl bg-muted/50" />
+          <div className="mt-3 h-36 rounded-[var(--gh-radius-md)] bg-muted/50" />
         </div>
       ))}
     </div>
@@ -156,11 +156,22 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const observerTargetRef = useRef<HTMLDivElement>(null)
 
   const loadMorePosts = useCallback(async () => {
+    if (isLoadingMore) return
     try {
       setIsLoadingMore(true)
-      // Simulate loading
-      await new Promise((resolve) => setTimeout(resolve, 800))
-      setDisplayedPostsCount((prev) => prev + 5)
+      const sorted = [...(posts || [])].sort(
+        (a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+      )
+      const oldest = sorted.length ? Number(sorted[sorted.length - 1]?.createdAt) || 0 : 0
+      if (oldest > 0 && typeof refreshFeed === "function") {
+        const page = await refreshFeed({ before: oldest, append: true, limit: 20 })
+        if (page.ok && (page.appended || 0) > 0) {
+          setDisplayedPostsCount((prev) => prev + Math.min(20, page.appended || 20))
+          return
+        }
+      }
+      // Local window expand when server has no older page
+      setDisplayedPostsCount((prev) => prev + MOBILE_PAGE_SIZES.feed)
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to load more posts")
       console.error("[Load More Error]", err)
@@ -168,7 +179,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     } finally {
       setIsLoadingMore(false)
     }
-  }, [addToast])
+  }, [addToast, isLoadingMore, posts, refreshFeed])
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -615,11 +626,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         : "Posts from people and communities you follow will show up here. Use Discover to grow your network, or the + button to share."
               }
               action={
-                activeFilter === "following" || activeFilter === "friends"
-                  ? { label: "Find people", onClick: () => setTab?.("discover") }
-                  : activeFilter === "communities"
-                    ? { label: "Explore communities", onClick: () => setTab?.("discover") }
-                    : { label: "Discover people", onClick: () => setTab?.("discover") }
+                activeFilter === "communities"
+                  ? { label: "Explore communities", onClick: () => setTab?.("communities") }
+                  : { label: "Discover people", onClick: () => setTab?.("discover") }
               }
               secondaryAction={
                 activeFilter !== "for-you"
@@ -630,7 +639,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
                       },
                     }
-                  : { label: "Discover people", onClick: () => setTab?.("discover") }
+                  : undefined
               }
             />
           ) : (

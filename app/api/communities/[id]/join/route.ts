@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +22,10 @@ export async function POST(_request: Request, ctx: Ctx) {
   const communityId = String(id || "").trim()
   if (!communityId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
+  }
+  const rl = checkRateLimit(`community-join:${auth.userId}`, 20, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community join", { extra: { status: "unavailable" } })

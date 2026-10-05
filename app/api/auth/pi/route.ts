@@ -105,6 +105,8 @@ export async function POST(request: Request) {
 
     const isReturning = !isNew && record.onboardingCompleted === true
     const needsOnboarding = record.onboardingCompleted !== true
+    // Existing mapping row (may still need onboarding form if onboardingCompleted was never stamped)
+    const identityExisted = !isNew
 
     // Issue GH server session only after verified Pi identity
     const ua = request.headers.get("user-agent")
@@ -143,6 +145,7 @@ export async function POST(request: Request) {
         verified: true,
         isNew,
         isReturning,
+        identityExisted,
         needsOnboarding,
         durable: identityDurable,
         sessionDurable,

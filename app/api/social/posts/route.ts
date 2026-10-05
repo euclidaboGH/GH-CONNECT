@@ -170,6 +170,42 @@ export async function POST(request: Request) {
   const quoteOf =
     quoteOfRaw && /^[a-zA-Z0-9_-]{6,120}$/.test(quoteOfRaw) ? quoteOfRaw : null
 
+  // Community posts: require active membership (session user) — never trust client role claims
+  const communityId =
+    body.communityId != null ? String(body.communityId).trim() : ""
+  if (communityId) {
+    if (!socialDbConfigured()) {
+      return NextResponse.json(
+        { ok: false, error: "SOCIAL_DB_UNAVAILABLE", durable: false },
+        { status: 503 }
+      )
+    }
+    const roleRes = await socialRpc("gh_community_member_role", {
+      p_community_id: communityId,
+      p_user_id: auth.userId,
+    })
+    const roleData = roleRes.data as {
+      ok?: boolean
+      role?: string
+      status?: string
+      error?: string
+    }
+    const status = String(roleData?.status || "").toLowerCase()
+    const role = String(roleData?.role || "").toLowerCase()
+    const activeMember =
+      roleRes.ok &&
+      (status === "active" || (!status && Boolean(role))) &&
+      status !== "banned" &&
+      status !== "pending" &&
+      status !== "rejected"
+    if (!activeMember) {
+      return NextResponse.json(
+        { ok: false, error: "NOT_A_MEMBER", message: "Join this community before posting." },
+        { status: 403 }
+      )
+    }
+  }
+
   const row = {
     id,
     authorId: auth.userId,
@@ -183,7 +219,7 @@ export async function POST(request: Request) {
     visibility,
     listingId: body.listingId ? String(body.listingId) : null,
     listingKind: body.listingKind ? String(body.listingKind) : null,
-    communityId: body.communityId ? String(body.communityId) : null,
+    communityId: communityId || null,
     communityName: body.communityName ? String(body.communityName) : null,
     contentType,
     createdAt: Date.now(),

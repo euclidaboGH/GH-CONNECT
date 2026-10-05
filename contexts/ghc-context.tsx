@@ -172,7 +172,7 @@ interface GHCContextType {
   stories: StoryItem[]
   publishStory: (story: StoryItem) => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   /** Canonical durable feed refresh (server when online; preserves local feed on failure) */
-  refreshFeed: () => Promise<{ ok: boolean; durable?: boolean; error?: string }>
+  refreshFeed: (opts?: { before?: number; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
   /** Opens/creates private chat with story owner via Messaging domain */
   replyToStory: (storyId: string) => Promise<string | null>
   tab: Tab
@@ -458,7 +458,7 @@ const GHCFeedContext = createContext<{
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
-  refreshFeed: () => Promise<{ ok: boolean; durable?: boolean; error?: string }>
+  refreshFeed: (opts?: { before?: number; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
   followUser: GHCContextType["followUser"]
   unfollowFromPost: GHCContextType["unfollowFromPost"]
   muteUser: GHCContextType["muteUser"]
@@ -1339,8 +1339,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
           const { stampLocalOnboardingComplete } = await import("@/lib/onboarding-local")
           stampLocalOnboardingComplete({
-            userId: IdentityService.getCurrentUserId() || profile.id,
-            username: profile.username || profile.displayName,
+            userId: profile?.id || null,
+            username: profile?.username || profile?.displayName || null,
+            altUserIds: [profile?.id],
           })
         }
       } catch {
@@ -4954,31 +4955,55 @@ const dismissMatchCelebration = useCallback(() => {
    * Canonical durable feed refresh — server authoritative when online.
    * Reconciles remote posts with local-only optimistic items; never wipes feed on failure.
    */
-  const refreshFeed = useCallback(async (): Promise<{ ok: boolean; durable?: boolean; error?: string }> => {
+  const mapRemoteFeedPosts = (feedPosts: Partial<Post>[]) =>
+    feedPosts.map((p) => ({
+      id: String(p.id),
+      authorId: String(p.authorId || ""),
+      authorName: String(p.authorName || "Member"),
+      authorPhoto: String(p.authorPhoto || ""),
+      content: String(p.content || ""),
+      images: Array.isArray(p.images) ? (p.images as string[]) : [],
+      video: (p.video as string | null) ?? null,
+      pdf: (p.pdf as string | null) ?? null,
+      pdfName: (p.pdfName as string | null) ?? null,
+      likes: Number(p.likes) || 0,
+      comments: Array.isArray(p.comments) ? p.comments : [],
+      createdAt: Number(p.createdAt) || Date.now(),
+      visibility: (p.visibility as Post["visibility"]) || "public",
+      deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
+    })) as Post[]
+
+  const refreshFeed = useCallback(async (opts?: {
+    before?: number
+    append?: boolean
+    limit?: number
+  }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
     try {
       const { socialFetchFeed } = await import("@/lib/social/client")
-      const feed = await socialFetchFeed({ limit: 40 })
+      const feed = await socialFetchFeed({
+        limit: opts?.limit ?? 40,
+        before: opts?.before,
+      })
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
       }
       if (feed.durable && Array.isArray(feed.posts) && feed.posts.length > 0) {
+        const remotePosts = mapRemoteFeedPosts(feed.posts)
         setState((s) => {
-          const remotePosts = feed.posts.map((p) => ({
-            id: String(p.id),
-            authorId: String(p.authorId || ""),
-            authorName: String(p.authorName || "Member"),
-            authorPhoto: String(p.authorPhoto || ""),
-            content: String(p.content || ""),
-            images: Array.isArray(p.images) ? (p.images as string[]) : [],
-            video: (p.video as string | null) ?? null,
-            pdf: (p.pdf as string | null) ?? null,
-            pdfName: (p.pdfName as string | null) ?? null,
-            likes: Number(p.likes) || 0,
-            comments: Array.isArray(p.comments) ? p.comments : [],
-            createdAt: Number(p.createdAt) || Date.now(),
-            visibility: (p.visibility as Post["visibility"]) || "public",
-            deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
-          })) as Post[]
+          if (opts?.append) {
+            const existingIds = new Set(s.posts.map((p) => p.id))
+            const onlyNew = remotePosts.filter((p) => !existingIds.has(p.id))
+            const nextPosts = [...s.posts, ...onlyNew].sort(
+              (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+            )
+            const liked = feed.posts
+              .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
+              .map((p) => String(p.id))
+            const nextLiked = liked.length
+              ? Array.from(new Set([...(s.likedPostIds || []), ...liked]))
+              : s.likedPostIds
+            return { ...s, posts: nextPosts, likedPostIds: nextLiked }
+          }
           const remoteIds = new Set(remotePosts.map((p) => p.id))
           const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
           const nextPosts = [...remotePosts, ...localOnly].sort(
@@ -4992,10 +5017,10 @@ const dismissMatchCelebration = useCallback(() => {
             : s.likedPostIds
           return { ...s, posts: nextPosts, likedPostIds: nextLiked }
         })
-        return { ok: true, durable: true }
+        return { ok: true, durable: true, appended: remotePosts.length }
       }
       // Server reachable but empty / non-durable — preserve existing local feed
-      return { ok: true, durable: Boolean(feed.durable) }
+      return { ok: true, durable: Boolean(feed.durable), appended: 0 }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not refresh feed"
       return { ok: false, durable: false, error: message }

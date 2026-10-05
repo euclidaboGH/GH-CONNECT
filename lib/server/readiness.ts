@@ -242,16 +242,21 @@ export function evaluateReadiness(opts?: {
   })
 
   // --- High: network consistency ---
+  // Production + sandbox flag is a critical misconfiguration (Testnet π / keys on Mainnet host).
+  const sandboxInProduction = Boolean(isProduction && sandbox)
   checks.push({
     id: "pi_network_mode",
     label: "Pi network mode (sandbox vs mainnet)",
-    status: "info",
-    severity: "info",
-    detail: sandbox
-      ? "sandbox=true → expect Testnet portal app + Testnet API key"
-      : "sandbox=false → expect Mainnet portal app + Mainnet API key (real π)",
-    remediation:
-      "Align NEXT_PUBLIC_PI_SANDBOX, Developer Portal App Network, and PI_API_KEY network. Mixing causes approve failures and auth confusion.",
+    status: sandboxInProduction ? "fail" : "info",
+    severity: sandboxInProduction ? "critical" : "info",
+    detail: sandboxInProduction
+      ? "NEXT_PUBLIC_PI_SANDBOX appears enabled while runtime is production — refuse treating this as Mainnet-ready"
+      : sandbox
+        ? "sandbox=true → expect Testnet portal app + Testnet API key"
+        : "sandbox=false → expect Mainnet portal app + Mainnet API key (real π)",
+    remediation: sandboxInProduction
+      ? "On Vercel Production set NEXT_PUBLIC_PI_SANDBOX=false and use Mainnet Pi credentials + Mainnet Supabase"
+      : "Align NEXT_PUBLIC_PI_SANDBOX, Developer Portal App Network, and PI_API_KEY network. Mixing causes approve failures and auth confusion.",
   })
 
   // --- Critical security: dev auth must not be on in production ---
@@ -278,17 +283,39 @@ export function evaluateReadiness(opts?: {
     })
   }
 
-  // --- Medium: memory ledger in production ---
-  if (isProduction && memoryFinancial && !durableOk) {
+  // --- Critical: memory financial flag must not be set in production ---
+  // allowMemoryServer() already returns false on Vercel/production; this flags misconfiguration.
+  if (isProduction && memoryFinancial) {
     checks.push({
       id: "memory_finance",
       label: "Financial store durability",
-      status: "warn",
-      severity: "high",
+      status: "fail",
+      severity: "critical",
       detail:
-        "GHC_SERVER_MEMORY may be active without durable identity — acceptable only for controlled demos",
+        "GHC_SERVER_MEMORY is set in a production runtime — process memory must never be financial authority",
       remediation:
-        "Prefer Supabase ledger for production money paths; keep memory for local/dev",
+        "Unset GHC_SERVER_MEMORY on Production. Require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY for ledger paths",
+    })
+  } else if (isProduction && !supabaseConfigured) {
+    checks.push({
+      id: "memory_finance",
+      label: "Financial store durability",
+      status: "fail",
+      severity: "critical",
+      detail:
+        "Production runtime without privileged Supabase configuration — durable GHC ledger unavailable",
+      remediation:
+        "Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Production (never rely on process memory)",
+    })
+  } else {
+    checks.push({
+      id: "memory_finance",
+      label: "Financial store durability",
+      status: "pass",
+      severity: "high",
+      detail: isProduction
+        ? "Production memory financial flag not set; durable DB path expected"
+        : "Non-production: memory ledger allowed only when allowMemoryServer() permits",
     })
   }
 

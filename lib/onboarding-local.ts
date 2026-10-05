@@ -1,8 +1,9 @@
 /**
  * Local onboarding completion heuristics for returning-user UX.
- * Server onboardingCompleted remains authoritative when durable.
- * When the identity store is memory-only or races hydration, avoid
- * forcing registration again if a complete local profile already exists.
+ * Server onboardingCompleted remains authoritative when durable and true.
+ * When the identity store is memory-only, races hydration, or never stamped
+ * onboardingCompleted, avoid forcing registration again if this device already
+ * finished GreenHaven setup for the same person.
  */
 
 import type { Profile } from "@/lib/ghc-types"
@@ -16,13 +17,23 @@ const ONBOARDING_STAMP_KEY = "ghc.onboarding.completed.v1"
 export function stampLocalOnboardingComplete(input?: {
   userId?: string | null
   username?: string | null
+  /** Optional alternate ids (Pi uid, GH id) so remount matching is robust */
+  altUserIds?: Array<string | null | undefined>
 }): void {
   if (typeof window === "undefined") return
   try {
+    const ids = new Set<string>()
+    const primary = (input?.userId || "").trim()
+    if (primary) ids.add(primary)
+    for (const a of input?.altUserIds || []) {
+      const t = (a || "").trim()
+      if (t) ids.add(t)
+    }
     const payload = {
       at: Date.now(),
-      userId: input?.userId || null,
+      userId: primary || (ids.size ? [...ids][0] : null),
       username: input?.username || null,
+      altUserIds: [...ids],
     }
     window.localStorage.setItem(ONBOARDING_STAMP_KEY, JSON.stringify(payload))
   } catch {
@@ -34,6 +45,7 @@ export function readLocalOnboardingStamp(): {
   at: number
   userId: string | null
   username: string | null
+  altUserIds: string[]
 } | null {
   if (typeof window === "undefined") return null
   try {
@@ -43,33 +55,81 @@ export function readLocalOnboardingStamp(): {
       at?: number
       userId?: string | null
       username?: string | null
+      altUserIds?: unknown
     }
     if (!p || typeof p.at !== "number") return null
+    const alts: string[] = []
+    if (Array.isArray(p.altUserIds)) {
+      for (const x of p.altUserIds) {
+        if (typeof x === "string" && x.trim()) alts.push(x.trim())
+      }
+    }
+    if (p.userId && !alts.includes(String(p.userId))) alts.push(String(p.userId))
     return {
       at: p.at,
       userId: p.userId ? String(p.userId) : null,
       username: p.username ? String(p.username) : null,
+      altUserIds: alts,
     }
   } catch {
     return null
   }
 }
 
+function normId(s: string | null | undefined): string {
+  return (s || "").trim()
+}
+
+function idsOverlap(
+  candidates: Array<string | null | undefined>,
+  stampIds: string[]
+): boolean {
+  const set = new Set(stampIds.map((x) => x.trim()).filter(Boolean))
+  if (set.size === 0) return false
+  for (const c of candidates) {
+    const t = normId(c)
+    if (t && set.has(t)) return true
+  }
+  return false
+}
+
 /** True when this device has completed onboarding for the same (or sole) user */
 export function hasLocalOnboardingStampForUser(input: {
   userId?: string | null
   username?: string | null
+  /** Pi app uid, GH user id, and any aliases from auth lifecycle */
+  candidateUserIds?: Array<string | null | undefined>
 }): boolean {
   const stamp = readLocalOnboardingStamp()
   if (!stamp) return false
-  const uid = (input.userId || "").trim()
+
+  const candidates = [
+    input.userId,
+    ...(input.candidateUserIds || []),
+  ]
+  if (idsOverlap(candidates, stamp.altUserIds.length ? stamp.altUserIds : [stamp.userId || ""])) {
+    return true
+  }
+
   const un = (input.username || "").trim().toLowerCase()
-  if (uid && stamp.userId && stamp.userId === uid) return true
   if (un && stamp.username && stamp.username.toLowerCase() === un) return true
+
   // Same device, stamp exists, identity ids still hydrating — do not force registration
-  if (!uid && !un && stamp.at > 0) return true
-  // Stamp without userId (older) + current user present: still honor device completion
-  if (stamp.at > 0 && !stamp.userId && !stamp.username) return true
+  const anyCandidate = candidates.some((c) => normId(c).length > 0)
+  if (!anyCandidate && !un && stamp.at > 0) return true
+
+  // Stamp without bound user (older) + current user present: honor device completion
+  if (stamp.at > 0 && !stamp.userId && !stamp.username && stamp.altUserIds.length === 0) {
+    return true
+  }
+
+  // Single-user device: stamp exists with a bound id, current session has a verified id
+  // but ids differ only by format race (common Pi uid vs GH id). Prefer not forcing
+  // registration when a completed local profile also exists for this username.
+  if (stamp.at > 0 && un && stamp.username && stamp.username.toLowerCase() === un) {
+    return true
+  }
+
   return false
 }
 
@@ -77,12 +137,35 @@ export function isCompletedProfileShape(p: Partial<Profile> | null | undefined):
   if (!p) return false
   if (p.onboarded === true) return true
   const name = typeof p.displayName === "string" ? p.displayName.trim() : ""
+  if (!name) return false
   const photos = Array.isArray(p.photos) ? p.photos : []
-  if (name.length > 0 && photos.length > 0) return true
-  if (name.length > 0 && Array.isArray(p.interests) && p.interests.length >= 2) return true
+  if (photos.length > 0) return true
+  if (Array.isArray(p.interests) && p.interests.length >= 2) return true
   // Name + city + mode is enough signal of a finished registration form
   if (
-    name.length > 0 &&
+    typeof p.city === "string" &&
+    p.city.trim().length > 0 &&
+    typeof p.primaryMode === "string" &&
+    p.primaryMode.length > 0
+  ) {
+    return true
+  }
+  // Returning-user recovery: name alone after a prior session is weak but better
+  // than wiping them through full registration when a device stamp also exists.
+  // Callers that need strict shape should check stamp separately.
+  return false
+}
+
+/** Stricter shape for "looks like they finished the form" without stamp */
+export function isStrongCompletedProfileShape(p: Partial<Profile> | null | undefined): boolean {
+  if (!p) return false
+  if (p.onboarded === true) return true
+  const name = typeof p.displayName === "string" ? p.displayName.trim() : ""
+  if (!name) return false
+  const photos = Array.isArray(p.photos) ? p.photos : []
+  if (photos.length > 0) return true
+  if (Array.isArray(p.interests) && p.interests.length >= 2) return true
+  if (
     typeof p.city === "string" &&
     p.city.trim().length > 0 &&
     typeof p.primaryMode === "string" &&
@@ -97,18 +180,27 @@ export function isCompletedProfileShape(p: Partial<Profile> | null | undefined):
 export function findCompletedLocalProfileForUser(input: {
   userId?: string | null
   username?: string | null
+  candidateUserIds?: Array<string | null | undefined>
 }): Profile | null {
   if (typeof window === "undefined") return null
+  const ids = new Set<string>()
+  for (const x of [input.userId, ...(input.candidateUserIds || [])]) {
+    const t = normId(x)
+    if (t) ids.add(t)
+  }
+  const un = (input.username || "").trim().toLowerCase()
   try {
     const locals = readLocalProfiles()
     for (const lp of locals) {
-      if (!isCompletedProfileShape(lp)) continue
-      if (input.userId && (lp.id === input.userId || (lp as { localId?: string }).localId === input.userId)) {
-        return lp
-      }
+      if (!isStrongCompletedProfileShape(lp) && !isCompletedProfileShape(lp)) continue
+      const lpId = normId(lp.id)
+      const localId = normId((lp as { localId?: string }).localId)
+      if (lpId && ids.has(lpId)) return lp
+      if (localId && ids.has(localId)) return lp
       if (
-        input.username &&
-        (lp.username === input.username || lp.displayName === input.username)
+        un &&
+        (String(lp.username || "").toLowerCase() === un ||
+          String(lp.displayName || "").toLowerCase() === un)
       ) {
         return lp
       }
@@ -124,7 +216,9 @@ export function findCompletedLocalProfileForUser(input: {
         }
         if (typeof activeId === "string") {
           const active = findLocalProfile(activeId)
-          if (active && isCompletedProfileShape(active)) return active
+          if (active && (isStrongCompletedProfileShape(active) || isCompletedProfileShape(active))) {
+            return active
+          }
         }
       }
     } catch {
@@ -133,15 +227,14 @@ export function findCompletedLocalProfileForUser(input: {
     const raw = window.localStorage.getItem("ghc.profile")
     if (raw) {
       const p = JSON.parse(raw) as Profile
-      if (isCompletedProfileShape(p)) return p
+      if (isStrongCompletedProfileShape(p) || isCompletedProfileShape(p)) return p
     }
-    // Session / legacy keys sometimes used after PIN unlock
     for (const key of ["ghc.profile.v1", "greenhaven.profile", "gh-connect.profile"]) {
       try {
         const r = window.localStorage.getItem(key)
         if (!r) continue
         const p = JSON.parse(r) as Profile
-        if (isCompletedProfileShape(p)) return p
+        if (isStrongCompletedProfileShape(p) || isCompletedProfileShape(p)) return p
       } catch {
         /* */
       }
@@ -154,22 +247,42 @@ export function findCompletedLocalProfileForUser(input: {
 
 /**
  * Resolve client onboarding status after server bridge.
- * Prefer server when durable returning; otherwise honor completed local profile.
+ * Prefer server when durable returning; otherwise honor completed local profile / stamp.
  */
 export function resolveClientOnboardingStatus(input: {
   serverVerified: boolean
   needsOnboarding: boolean
   isReturning: boolean
+  /** Identity row existed before this login (may still need onboarding form) */
+  identityExisted?: boolean
   userId?: string | null
   username?: string | null
+  candidateUserIds?: Array<string | null | undefined>
 }): ClientOnboardingStatus {
   if (!input.serverVerified) return "unknown"
+  // Server says finished
   if (input.isReturning || input.needsOnboarding === false) return "complete"
+
+  const candidates = [input.userId, ...(input.candidateUserIds || [])]
+  if (
+    hasLocalOnboardingStampForUser({
+      userId: input.userId,
+      username: input.username,
+      candidateUserIds: candidates,
+    })
+  ) {
+    return "complete"
+  }
+
   const local = findCompletedLocalProfileForUser({
     userId: input.userId,
     username: input.username,
+    candidateUserIds: candidates,
   })
-  if (local) return "complete"
+  if (local && isStrongCompletedProfileShape(local)) return "complete"
+  // Existing Pi identity + any completed local profile → do not re-register
+  if (input.identityExisted && local) return "complete"
+
   if (input.needsOnboarding) return "required"
   return "unknown"
 }
@@ -184,18 +297,20 @@ export function resolveUiOnboardingGate(input: {
   serverVerified: boolean
   userId?: string | null
   username?: string | null
+  candidateUserIds?: Array<string | null | undefined>
 }): ClientOnboardingStatus {
   const pi = input.piOnboardingStatus
 
-  // Explicit unavailable / failed persistence — never treat as new user
   if (pi === "unavailable") return "unavailable"
-
-  // Authoritative server complete wins immediately
   if (pi === "complete") return "complete"
 
-  // Completed profile in session state (after validated completeOnboarding)
-  const profileComplete = isCompletedProfileShape(input.profile)
-  if (profileComplete) return "complete"
+  // Explicit onboarded flag on in-memory profile
+  if (input.profile && (input.profile as { onboarded?: boolean }).onboarded === true) {
+    return "complete"
+  }
+
+  const profileStrong = isStrongCompletedProfileShape(input.profile)
+  if (profileStrong) return "complete"
 
   const uid =
     input.userId || (input.profile as { id?: string } | undefined)?.id || null
@@ -204,20 +319,33 @@ export function resolveUiOnboardingGate(input: {
     (input.profile as { username?: string } | undefined)?.username ||
     (input.profile as { displayName?: string } | undefined)?.displayName ||
     null
+  const candidates = [
+    uid,
+    ...(input.candidateUserIds || []),
+    (input.profile as { id?: string } | undefined)?.id,
+  ]
 
-  // Device stamp from a previous successful finish on this phone (PIN unlock / remount safe)
-  if (hasLocalOnboardingStampForUser({ userId: uid, username: un })) {
+  // Device stamp from a previous successful finish on this phone
+  if (
+    hasLocalOnboardingStampForUser({
+      userId: uid,
+      username: un,
+      candidateUserIds: candidates,
+    })
+  ) {
     return "complete"
   }
 
-  // Device-local completed profile for this same user — recovery when server
-  // still says required (legacy rows / failed onboarding-complete write).
+  // Device-local completed profile for this same user
   if (pi === "required" || input.serverVerified) {
     const local = findCompletedLocalProfileForUser({
       userId: uid,
       username: un,
+      candidateUserIds: candidates,
     })
-    if (local) return "complete"
+    if (local && (isStrongCompletedProfileShape(local) || isCompletedProfileShape(local))) {
+      return "complete"
+    }
   }
 
   if (pi === "required") return "required"

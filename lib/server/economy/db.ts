@@ -480,6 +480,142 @@ export async function rpcStagePending(
 }
 
 /** Server-authoritative claim of pending GHC */
+
+/**
+ * Atomic activity emission grant + pending stage (ghc_activity_stage_reward).
+ * On limit/cooldown/cap failure: zero net emission consumption (single transaction).
+ */
+export async function rpcActivityStageReward(
+  input: {
+    userId: string
+    baseAmount: number
+    dayKey: string
+    weekKey: string
+    dailyCap: number
+    weeklyCap: number
+    referenceId: string
+    reason?: string
+    sourceEvent?: string
+    ruleId?: string
+    dailyLimit?: number | null
+    cooldownMs?: number | null
+    maxPerTarget?: number | null
+    targetId?: string | null
+    /** Optional post m×g amount; clamped to grant inside RPC */
+    stageAmount?: number | null
+  },
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<{
+  ok: boolean
+  idempotent?: boolean
+  alreadyPosted?: boolean
+  holdId?: string
+  transactionId?: string
+  amount?: number
+  status?: string
+  granted?: number
+  emissionConsumed?: number
+  dayRemaining?: number
+  weekRemaining?: number
+  m?: number
+  g?: number
+  tx?: Record<string, unknown>
+  error?: string
+}> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_activity_stage_reward`
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      body: JSON.stringify({
+        p_user_id: input.userId,
+        p_base_amount: input.baseAmount,
+        p_day_key: input.dayKey,
+        p_week_key: input.weekKey,
+        p_daily_cap: input.dailyCap,
+        p_weekly_cap: input.weeklyCap,
+        p_reference_id: input.referenceId,
+        p_reason: input.reason || "Reward",
+        p_source_event: input.sourceEvent || "SYSTEM",
+        p_rule_id: input.ruleId || null,
+        p_daily_limit:
+          input.dailyLimit != null && Number.isFinite(input.dailyLimit)
+            ? Math.floor(Number(input.dailyLimit))
+            : null,
+        p_cooldown_ms:
+          input.cooldownMs != null &&
+          Number.isFinite(input.cooldownMs) &&
+          input.cooldownMs > 0
+            ? Math.floor(Number(input.cooldownMs))
+            : null,
+        p_max_per_target:
+          input.maxPerTarget != null && Number.isFinite(input.maxPerTarget)
+            ? Math.floor(Number(input.maxPerTarget))
+            : null,
+        p_target_id: input.targetId
+          ? String(input.targetId).trim() || null
+          : null,
+        p_stage_amount:
+          input.stageAmount != null && Number.isFinite(input.stageAmount)
+            ? Number(input.stageAmount)
+            : null,
+      }),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      const msg =
+        body && typeof body === "object" && "message" in body
+          ? String((body as { message: string }).message)
+          : "SERVER_UNAVAILABLE"
+      return { ok: false, error: msg }
+    }
+    const data = (await res.json()) as Record<string, unknown>
+    if (!data || data.ok === false) {
+      return {
+        ok: false,
+        error: String((data && data.error) || "STAGE_FAILED"),
+        emissionConsumed: Number(data?.emissionConsumed ?? 0) || 0,
+      }
+    }
+    return {
+      ok: true,
+      idempotent: Boolean(data.idempotent),
+      alreadyPosted: Boolean(data.alreadyPosted),
+      holdId: data.holdId != null ? String(data.holdId) : undefined,
+      transactionId:
+        data.transactionId != null ? String(data.transactionId) : undefined,
+      amount: data.amount != null ? Number(data.amount) : undefined,
+      status: data.status != null ? String(data.status) : undefined,
+      granted: data.granted != null ? Number(data.granted) : undefined,
+      emissionConsumed:
+        data.emissionConsumed != null ? Number(data.emissionConsumed) : undefined,
+      dayRemaining:
+        data.dayRemaining != null ? Number(data.dayRemaining) : undefined,
+      weekRemaining:
+        data.weekRemaining != null ? Number(data.weekRemaining) : undefined,
+      tx:
+        data.tx && typeof data.tx === "object"
+          ? (data.tx as Record<string, unknown>)
+          : undefined,
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "STAGE_FAILED",
+      emissionConsumed: 0,
+    }
+  }
+}
+
+
 export async function rpcClaimPending(
   userId: string,
   holdId: string,

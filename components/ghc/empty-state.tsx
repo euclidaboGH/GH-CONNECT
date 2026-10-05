@@ -137,14 +137,14 @@ export function EmptyState({
       role="status"
     >
       <div
-        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-gradient-to-br ${preset.gradient} text-white shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-500/10 dark:shadow-none`}
+        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white shadow-md shadow-emerald-600/15 ring-4 ring-emerald-600/10 dark:shadow-none`}
       >
-        <Icon size={30} strokeWidth={2} aria-hidden />
+        <Icon size={28} strokeWidth={2} aria-hidden />
       </div>
-      <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+      <h3 className="gh-type-title text-[17px] tracking-tight">
         {title || preset.title}
       </h3>
-      <p className="mt-2 max-w-[17rem] text-[13px] leading-relaxed text-muted-foreground">
+      <p className="gh-type-body mt-2 max-w-[17rem] text-muted-foreground">
         {description || preset.description}
       </p>
       {(action || secondaryAction) && (
@@ -153,7 +153,7 @@ export function EmptyState({
             <button
               type="button"
               onClick={action.onClick}
-              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.97]"
+              className="gh-btn gh-btn-primary min-h-11 px-6"
             >
               {action.label}
             </button>
@@ -162,7 +162,7 @@ export function EmptyState({
             <button
               type="button"
               onClick={secondaryAction.onClick}
-              className="rounded-full border border-border bg-card px-6 py-2.5 text-sm font-bold text-foreground transition hover:bg-muted active:scale-[0.97]"
+              className="gh-btn gh-btn-secondary min-h-11 px-6"
             >
               {secondaryAction.label}
             </button>

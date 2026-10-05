@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   listMessages,
   appendMessage,
@@ -34,13 +35,17 @@ export async function GET(request: Request, ctx: Ctx) {
     }
     const { conversationId } = await ctx.params
     const url = new URL(request.url)
-    const limit = Number(url.searchParams.get("limit") || "50")
+    const rawLimit = Number(url.searchParams.get("limit") || "50")
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100)
     const before = url.searchParams.get("before")
+    // Ignore client identity query params
+    void url.searchParams.get("userId")
+    void url.searchParams.get("senderId")
 
     const result = await listMessages({
       conversationId,
       ghUserId: auth.userId,
-      limit: Number.isFinite(limit) ? limit : 50,
+      limit,
       before,
     })
     if (!result.ok) {
@@ -80,12 +85,29 @@ export async function POST(request: Request, ctx: Ctx) {
       )
     }
     const { conversationId } = await ctx.params
+    const rl = checkRateLimit(`msg-send:${auth.userId}`, 60, 60_000)
+    if (!rl.ok) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED" },
+        { status: 429, headers: { "Cache-Control": "no-store" } }
+      )
+    }
     const body = await request.json().catch(() => ({}))
-    const text = typeof body?.body === "string" ? body.body : ""
+    // Actor is session only — never trust client identity fields
+    void body.senderId
+    void body.userId
+    void body.authorId
+    void body.actorId
+    const text = typeof body?.body === "string" ? body.body.trim() : ""
+    if (text.length > 8000) {
+      return NextResponse.json(
+        { ok: false, error: "TOO_LONG" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
     const clientMessageId =
       typeof body?.clientMessageId === "string" ? body.clientMessageId : null
 
-    // Never trust body.senderId
     const result = await appendMessage({
       conversationId,
       senderId: auth.userId,

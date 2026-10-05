@@ -590,6 +590,11 @@ export function GHConnectApp() {
       (profile as { username?: string } | null | undefined)?.username ||
       (profile as { displayName?: string } | null | undefined)?.displayName ||
       null,
+    candidateUserIds: [
+      (profile as { id?: string } | null | undefined)?.id,
+      authLifecycle?.ghUserId,
+      authLifecycle?.piUid,
+    ],
   })
   // Authoritative gate only — never timeout-force registration for returning users
   const effectiveOnboarding = effectiveOnboardingRaw

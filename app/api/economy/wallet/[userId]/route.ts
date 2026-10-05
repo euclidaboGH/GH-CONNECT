@@ -140,8 +140,13 @@ export async function GET(
     }
   }
 
+  const url = new URL(request.url)
+  const limitParam = Number(url.searchParams.get("limit") || 100)
+  const limitTx = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : 100, 1), 200)
+  const boundedTx = Array.isArray(transactions) ? transactions.slice(0, limitTx) : []
+
   return jsonOk({
-    transactions,
+    transactions: boundedTx,
     rewards: [],
     premium: null,
     transferRequests,

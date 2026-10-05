@@ -1236,21 +1236,28 @@ export function CommunitiesScreen() {
               <button
                 type="button"
                 onClick={() => setJoinGate(null)}
-                className="min-h-11 flex-1 rounded-2xl border border-border font-semibold text-foreground"
+                disabled={joinBusy}
+                className="gh-btn gh-btn-secondary min-h-11 flex-1 disabled:opacity-60"
               >
                 Not now
               </button>
               <button
                 type="button"
+                disabled={joinBusy}
                 onClick={() => {
                   const row = joinGate
                   setJoinGate(null)
                   if (!row) return
                   beginJoin(row)
                 }}
-                className="min-h-11 flex-1 rounded-2xl bg-emerald-600 font-bold text-white"
+                className="gh-btn gh-btn-primary min-h-11 flex-1 disabled:pointer-events-none disabled:opacity-60"
+                aria-busy={joinBusy}
               >
-                {joinGate.privacy === "invite-only" ? "Request to join" : "Join community"}
+                {joinBusy
+                  ? "Working…"
+                  : joinGate.privacy === "invite-only"
+                    ? "Request to join"
+                    : "Join community"}
               </button>
             </div>
           </div>

@@ -25,6 +25,8 @@ import {
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { Users, MessagesSquare, Compass, ArrowRight, Sparkles } from "lucide-react"
 import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
+import { buildHomeActivationChecklist } from "@/lib/domains/adapters/home-activation-checklist"
+import { HomeActivationChecklist } from "@/components/ghc/home-activation-checklist"
 import { navigateTo, openCommunity } from "@/lib/navigation/navigate"
 
 function timeGreeting(now = new Date()): string {
@@ -184,6 +186,39 @@ export function HomeCommandCentre({
     summary.ok
       ? (summary.data.friendsCount || 0) + (summary.data.followingCount || 0)
       : 0
+  const meIds = useMemo(() => {
+    const ids = new Set<string>()
+    const a = (meId || "").trim()
+    if (a) ids.add(a)
+    const pid = (profile?.id || "").trim()
+    if (pid) ids.add(pid)
+    return ids
+  }, [meId, profile?.id])
+
+  const hasOwnPost = useMemo(() => {
+    const posts = feedCtx?.posts
+    if (!Array.isArray(posts) || meIds.size === 0) return false
+    for (const raw of posts) {
+      if (!raw || typeof raw !== "object") continue
+      const p = raw as { authorId?: string; userId?: string }
+      const aid = String(p.authorId || p.userId || "").trim()
+      if (aid && meIds.has(aid)) return true
+    }
+    return false
+  }, [feedCtx?.posts, meIds])
+
+  const activationChecklist = useMemo(
+    () =>
+      buildHomeActivationChecklist({
+        hasPhoto: Boolean(avatar),
+        hasBio: Boolean(profile?.bio && String(profile.bio).trim().length > 0),
+        interestsCount: Array.isArray(profile?.interests) ? profile!.interests!.length : 0,
+        myCommunitiesCount: myCommunities.length,
+        hasOwnPost,
+      }),
+    [avatar, profile?.bio, profile?.interests, myCommunities.length, hasOwnPost]
+  )
+
   const nextAction = resolveHomeNextAction({
     profileCompletionPercent: completion,
     messagesNeedingAttention: attentionCount,
@@ -193,10 +228,12 @@ export function HomeCommandCentre({
     hasPhoto: Boolean(avatar),
   })
 
-  // Feed-first: only high-signal chrome. Discover/Ecosystem/People live in their destinations.
+  // One primary activation surface: checklist when incomplete; otherwise high-urgency next step only.
+  // Avoid stacking "Discover" + checklist + profile CTAs.
   const showNextStep =
-    nextAction.urgency === "high" ||
-    (completion !== null && completion < 100)
+    activationChecklist.complete &&
+    (nextAction.urgency === "high" ||
+      (nextAction.id === "open_messages" && attentionCount > 0))
 
   return (
     <section className="space-y-2" aria-label="Home command centre">
@@ -221,6 +258,10 @@ export function HomeCommandCentre({
           ) : null}
         </div>
       </header>
+
+      {!activationChecklist.complete ? (
+        <HomeActivationChecklist checklist={activationChecklist} />
+      ) : null}
 
       {showNextStep ? (
         <button
@@ -341,7 +382,7 @@ export function HomeCommandCentre({
               {"You haven't joined a community yet"}
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Discover groups that match your interests
+              Browse communities that match your interests
             </p>
           </button>
         )}

@@ -15,10 +15,17 @@ import {
   executeAuthoritativeClaimPending,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
+import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  pruneRateLimitBuckets()
+  const rl = checkRateLimit(`pending_claim:${auth.userId}`, 30, 60_000)
+  if (!rl.ok) {
+    return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
+  }
 
   let body: Record<string, unknown>
   try {
@@ -26,6 +33,10 @@ export async function POST(request: Request) {
   } catch {
     return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
   }
+  // Claim amount and user are server-derived from hold ownership
+  void body.amount
+  void body.userId
+  void body.balance
   const holdId = String(body.holdId || body.rewardId || "").trim()
   if (!holdId) return jsonErr("INVALID_INPUT", "holdId required", 400)
 

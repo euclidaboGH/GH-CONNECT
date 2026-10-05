@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Check,
   Crown,
-  Info,
   Loader2,
   Sparkles,
   X,
@@ -467,18 +466,18 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
+      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
+          className="gh-icon-btn flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"
           aria-label="Back"
         >
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold text-foreground">Membership</h1>
-          <p className="text-[11px] text-muted-foreground">
+          <h1 className="gh-type-title text-sm">Membership</h1>
+          <p className="gh-type-meta text-muted-foreground">
             Current:{" "}
             <span className="font-semibold text-emerald-700">
               {MEMBERSHIP_PLANS[currentTier].label}
@@ -498,8 +497,9 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           type="button"
           onClick={() => void handleRefreshMembership()}
           disabled={refreshing}
-          className="inline-flex min-h-8 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+          className="inline-flex min-h-9 items-center gap-1 rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
           aria-label="Refresh membership status from server"
+          aria-busy={refreshing}
         >
           {refreshing ? (
             <>
@@ -516,12 +516,40 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={{ paddingBottom: "var(--gh-screen-bottom-inset)" }}
       >
-        <div className="mb-3 flex items-start gap-2 rounded-2xl border border-border bg-card px-3 py-2.5">
-          <Info size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Membership is separate from <strong className="text-foreground">verification</strong>, reputation
-            and GHC balance. <strong className="text-foreground">Verification ≠ VIP</strong>. Benefits come
-            from entitlements — no urgency timers or “only 2 left” claims. Review what you get before confirming.
+        {/* STATUS zone — presentation of existing status only */}
+        <div className="mb-3 gh-card px-3 py-3">
+          <p className="gh-type-meta font-bold uppercase tracking-wide text-muted-foreground">Status</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex min-h-8 items-center rounded-full px-3 py-1 text-[12px] font-bold ${
+                refreshing
+                  ? "bg-muted text-muted-foreground"
+                  : status?.active
+                    ? "bg-emerald-600 text-white"
+                    : busy
+                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+                      : "bg-muted text-foreground"
+              }`}
+            >
+              {refreshing
+                ? "Loading…"
+                : busy
+                  ? "Purchase in progress"
+                  : status?.active
+                    ? `${MEMBERSHIP_PLANS[currentTier].label} active`
+                    : `${MEMBERSHIP_PLANS[currentTier].label}`}
+            </span>
+            {status?.source === "trial" || (status as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
+              <span className="text-[11px] text-muted-foreground">
+                Welcome trial{status?.expiresAt ? ` · ends ${formatUntil(status.expiresAt)}` : ""}
+              </span>
+            ) : status?.expiresAt ? (
+              <span className="text-[11px] text-muted-foreground">{formatUntil(status.expiresAt)}</span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            Membership is separate from verification and GHC balance.{" "}
+            <strong className="text-foreground">Verification ≠ VIP</strong>. Benefits come from entitlements.
           </p>
         </div>
 
@@ -1005,7 +1033,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   type="button"
                   disabled={busy?.tier === confirmTier && busy?.method === "pi"}
                   onClick={() => void purchase(confirmTier, "pi")}
-                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                  className="gh-btn gh-btn-primary flex min-h-11 w-full items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60"
                 >
                   {busy?.tier === confirmTier && busy?.method === "pi" ? (
                     <Loader2 size={16} className="animate-spin" aria-hidden />
@@ -1021,7 +1049,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 type="button"
                 disabled={busy?.tier === confirmTier && busy?.method === "ghc"}
                 onClick={() => void purchase(confirmTier, "ghc")}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/40 bg-card py-2.5 text-sm font-bold text-emerald-800 dark:text-emerald-300 disabled:opacity-60"
+                className="gh-btn gh-btn-secondary flex min-h-11 w-full items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60"
               >
                 {busy?.tier === confirmTier && busy?.method === "ghc" ? (
                   <Loader2 size={16} className="animate-spin" aria-hidden />
@@ -1031,7 +1059,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               <button
                 type="button"
                 onClick={() => setConfirmTier(null)}
-                className="w-full rounded-2xl border border-border py-2.5 text-sm font-bold text-foreground"
+                className="gh-btn gh-btn-secondary w-full"
               >
                 Cancel
               </button>
@@ -1067,15 +1095,17 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   id="membership-success-title"
                   className="text-base font-bold text-foreground"
                 >
-                  {MEMBERSHIP_PLANS[successStatus.tier].label} is active
+                  {successStatus.tier === "vvip" ? "VVIP is active" : "VIP is active"}
                 </h3>
                 <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-300">
-                  Payment verified · {formatUntil(successStatus.expiresAt)}
+                  {successStatus.expiresAt
+                    ? `Your membership is active until ${formatUntil(successStatus.expiresAt)}.`
+                    : "Your membership is active."}
                 </p>
               </div>
             </div>
             <p className="relative mt-3 text-[12px] text-muted-foreground">
-              Your plan is live. Entitlements below are available now.
+              Payment verified. Benefits for your plan are available now.
             </p>
             <ul className="relative mt-3 max-h-48 space-y-1 overflow-y-auto">
               {MEMBERSHIP_PLANS[successStatus.tier].entitlements.map((key) => {
@@ -1098,13 +1128,22 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 )
               })}
             </ul>
-            <button
-              type="button"
-              onClick={() => setSuccessStatus(null)}
-              className="relative mt-4 w-full rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white transition active:scale-[0.99]"
-            >
-              Done
-            </button>
+            <div className="relative mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setSuccessStatus(null)}
+                className="gh-btn gh-btn-primary w-full min-h-11"
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuccessStatus(null)}
+                className="gh-btn gh-btn-secondary w-full min-h-11"
+              >
+                View membership
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -46,10 +46,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMPTY_STORY" }, { status: 400 })
   }
 
-  const expiresAt =
-    typeof body.expiresAt === "number" && body.expiresAt > Date.now()
-      ? body.expiresAt
-      : Date.now() + 24 * 60 * 60 * 1000
+  // Authoritative expiry: max 24h from server clock — client cannot extend indefinitely
+  const MAX_STORY_MS = 24 * 60 * 60 * 1000
+  const now = Date.now()
+  const requested =
+    typeof body.expiresAt === "number" && body.expiresAt > now ? body.expiresAt : now + MAX_STORY_MS
+  const expiresAt = Math.min(requested, now + MAX_STORY_MS)
 
   const row = {
     id: String(body.id || "").trim() || genId(),

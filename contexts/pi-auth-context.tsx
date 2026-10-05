@@ -391,6 +391,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         let serverVerified = false
         let needsOnboarding = true
         let isReturning = false
+        let identityExisted = false
         let ghUserId = identity.uid
         let verifiedUsername = identity.username
         let onboardingStatus: OnboardingStatus = "unknown"
@@ -418,6 +419,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               detail?: string
               needsOnboarding?: boolean
               isReturning?: boolean
+              identityExisted?: boolean
               durable?: boolean
               sessionDurable?: boolean
               durabilityWarning?: string
@@ -498,6 +500,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               const completed = bridgeIdentity.onboardingCompleted === true
               needsOnboarding = completed ? false : Boolean(bridge.needsOnboarding)
               isReturning = Boolean(bridge.isReturning) || completed
+              identityExisted =
+                bridge.identityExisted === true ||
+                bridge.isReturning === true ||
+                completed ||
+                Boolean(bridgeIdentity.ghUserId)
               if (bridge.durabilityWarning) {
                 console.warn(
                   "[PiAuth] identity/session not durable on this deployment:",
@@ -524,12 +531,15 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         // Returning-user fix: if server identity is non-durable / lost onboardingCompleted
         // but this device already has a completed GreenHaven profile, do not force registration.
         if (serverVerified && onboardingStatus === "required") {
+          const piUid = identity.uid
           const resolved = resolveClientOnboardingStatus({
             serverVerified,
             needsOnboarding,
             isReturning,
+            identityExisted,
             userId: ghUserId,
             username: verifiedUsername,
+            candidateUserIds: [ghUserId, piUid, identity.uid],
           })
           if (resolved === "complete") {
             onboardingStatus = "complete"
@@ -542,7 +552,19 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               stampLocalOnboardingComplete({
                 userId: ghUserId,
                 username: verifiedUsername,
+                altUserIds: [ghUserId, piUid, identity.uid],
               })
+            } catch {
+              /* */
+            }
+            // Heal durable flag so the next device/session does not re-prompt registration
+            try {
+              void fetch("/api/auth/onboarding-complete", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: "{}",
+              }).catch(() => {})
             } catch {
               /* */
             }

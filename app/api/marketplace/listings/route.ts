@@ -20,6 +20,7 @@ import {
   calculateMarketplaceListingFee,
   listingFeeRequiresSettlement,
 } from "@/lib/server/marketplace/listing-fee"
+import { verifyListingFeePayment } from "@/lib/server/marketplace/verify-listing-fee-payment"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -108,17 +109,39 @@ export async function POST(request: Request) {
     kind,
   })
 
-  // If an approved non-zero fee is configured, do not allow client to force "active"
-  // without settlement — keep/force draft until a future fee-settlement flow marks paid.
-  // When rates are not configured (fee 0), preserve seller-chosen status (incl. active).
+  // Non-zero approved listing fee: activation requires verified durable payment intent.
+  // Client may supply listingFeePaymentId / feePaymentId; ownership, amount, status,
+  // purpose, and listing binding come only from server intent records.
+  // Zero-fee / rates not configured: leave status as seller requested (incl. active).
+  void body.feePaid
+  void body.feeAmount
+  void body.listingFee
   if (listingFeeRequiresSettlement(listingFee) && status === "active") {
-    // Without a verified fee payment reference, refuse silent activation.
     const feePaymentRef = String(body.listingFeePaymentId || body.feePaymentId || "").trim()
-    if (!feePaymentRef) {
-      status = "draft"
+    const verified = await verifyListingFeePayment({
+      sellerId: auth.userId,
+      listingId: id,
+      fee: listingFee,
+      paymentRef: feePaymentRef || null,
+    })
+    if (!verified.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: verified.error,
+          message:
+            "Listing fee payment must be a completed intent owned by you, matching the server fee amount/currency, and bound to this listing (referenceId marketplace_listing_fee_{listingId} or metadata.listingId).",
+          listingFee: {
+            amount: listingFee.feeAmount,
+            currency: listingFee.feeCurrency,
+            ratesApproved: listingFee.ratesApproved,
+            code: listingFee.code,
+          },
+          expectedReferenceId: `marketplace_listing_fee_${id}`,
+        },
+        { status: verified.error === "LISTING_FEE_PAYMENT_REQUIRED" ? 402 : 403 }
+      )
     }
-    // Note: verifying feePaymentRef against durable Pi intents is a follow-up when
-    // rates are approved; until then activation stays draft when fee is required.
   }
 
   const saved = await upsertListing({

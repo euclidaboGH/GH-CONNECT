@@ -21,10 +21,18 @@ export async function POST(request: Request, ctx: Ctx) {
   const { id } = await ctx.params
   const communityId = String(id || "").trim()
   const body = await request.json().catch(() => ({}))
-  const targetUserId = String(body.targetUserId || "").trim()
-  const role = String(body.role || "").trim()
+  const targetUserId = String(body.targetUserId || body.userId || "").trim()
+  const role = String(body.role || "").trim().toLowerCase()
+  // Ownership transfer is not available via this endpoint — prevents client owner injection
+  const ALLOWED = new Set(["member", "moderator", "admin"])
   if (!communityId || !targetUserId || !role) {
     return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
+  }
+  if (!ALLOWED.has(role)) {
+    return NextResponse.json({ ok: false, error: "INVALID_ROLE" }, { status: 400 })
+  }
+  if (targetUserId === auth.userId) {
+    return NextResponse.json({ ok: false, error: "SELF_ROLE" }, { status: 403 })
   }
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community role", { extra: { role } })

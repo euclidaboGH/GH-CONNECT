@@ -35,11 +35,10 @@ export async function POST(request: Request, ctx: Ctx) {
   const approve = body.approve !== false && body.approve !== "false"
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      status: approve ? "active" : "rejected",
+    const nd = nonDurableWriteResponse("Community join decide", {
+      extra: { status: "unavailable" },
     })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_community_join_decide", {
