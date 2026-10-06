@@ -2,9 +2,12 @@
 
 ## Implementation status
 
-- **Phases 1–13:** source-implemented (social economy through engagement). See `docs/PHASE_IMPLEMENTATION_STATUS.md`.
-- **Phases 14–15:** not started.
-- **Testnet / production:** not claimed until `docs/TESTNET_VERIFICATION_GATE.md` exit criteria pass.
+- Social, messaging, communities, wallet, Pi payments, and GHC ledger are implemented in source.
+- GHPV (curation, active weights, settlement, calibration, soft-delete cleanup) is implemented in source. Migrations `20261013`–`20261020` are repository-only until Testnet.
+- Settlement is system-only (`GH_SETTLEMENT_INTERNAL_KEY`). Votes do not mint GHC.
+- Post restoration after soft-delete is not implemented.
+- CQI feed ranking, vote-to-GHC, and creator quality payouts are deferred.
+- Typecheck, lint, and production build were blocked in the last packaging environment because `node_modules` was incomplete. Do not treat static tests as a production claim.
 
 
 Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.

@@ -93,6 +93,27 @@ function EnhancedPostCardInner({
   const [upvoteCount, setUpvoteCount] = useState(0)
   const [downvoteCount, setDownvoteCount] = useState(0)
   const [curationBusy, setCurationBusy] = useState(false)
+  const [judgmentLabel, setJudgmentLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch(`/api/social/posts/${encodeURIComponent(post.id)}/ghpv`)
+      .then((r) => r.json())
+      .then((data: { status?: string }) => {
+        if (cancelled) return
+        const s = String(data?.status || "open")
+        if (s === "settled") setJudgmentLabel("Community review complete")
+        else if (s === "unresolved") setJudgmentLabel("Community review unresolved")
+        else if (s === "pending") setJudgmentLabel("Community review in progress")
+        else setJudgmentLabel("Community review open")
+      })
+      .catch(() => {
+        if (!cancelled) setJudgmentLabel(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [post.id])
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return
@@ -587,10 +608,10 @@ function EnhancedPostCardInner({
           onClick={() => onShare(post.id)}
         />
       </div>
-      {/* Quality ranking — upvote / downvote (feeds ranking engine) */}
+      {/* Quality ranking — curator signal only; not objective truth */}
       <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-muted/20 px-3 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Quality
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Community curator judgment — not a verified fact">
+          Quality{judgmentLabel ? ` · ${judgmentLabel}` : ""}
         </p>
         <div className="flex items-center gap-1" role="group" aria-label="Content quality ranking">
           <button

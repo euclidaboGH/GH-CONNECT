@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   listSocialNotifications,
   markSocialNotificationsRead,
@@ -65,6 +66,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
+  const rl = checkRateLimit(`notifications:${auth.userId}`, 60, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+    )
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     action?: string
     ids?: string[]
@@ -77,10 +86,17 @@ export async function POST(request: Request) {
       all: body.markAll === true || body.action === "mark_all_read",
       ids: Array.isArray(body.ids) ? body.ids.map(String).slice(0, 100) : undefined,
     })
+    if (!result.ok) {
+      const status = result.error === "DB_UNAVAILABLE" ? 503 : 400
+      return NextResponse.json(
+        { ok: false, durable: false, updated: 0, error: result.error || "MARK_READ_FAILED" },
+        { status }
+      )
+    }
     return NextResponse.json({
-      ok: result.ok,
+      ok: true,
+      durable: true,
       updated: result.data?.updated ?? 0,
-      error: result.error,
     })
   }
 

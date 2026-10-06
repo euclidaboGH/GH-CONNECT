@@ -136,6 +136,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EVENT_NOT_CLIENT_AWARDABLE" }, { status: 403 })
   }
 
+  const before = await getReputationState(auth.userId)
+  const prevLevel = before.ok ? Number(before.level) || 1 : 1
+
   const result = await applyReputationEvent({
     userId: auth.userId,
     eventType,
@@ -148,6 +151,26 @@ export async function POST(request: Request) {
       { ok: false, error: result.error },
       { status: result.error === "DB_UNAVAILABLE" ? 503 : 400 }
     )
+  }
+
+  // Level-up only when server level actually increases (not client-forged)
+  if (!result.duplicate && result.level > prevLevel) {
+    void emitSocialNotification({
+      recipientUserId: auth.userId,
+      actorUserId: "",
+      type: "reputation_level_up",
+      entityType: "user",
+      entityId: auth.userId,
+      title: "Reputation level up",
+      body: `You reached reputation level ${result.level}${result.levelName ? ` (${result.levelName})` : ""}. Trust signal only — not currency.`,
+      dedupeKey: `rep_level:${auth.userId}:${result.level}`,
+      metadata: {
+        level: result.level,
+        levelName: result.levelName,
+        previousLevel: prevLevel,
+        publicOnly: true,
+      },
+    })
   }
 
   return NextResponse.json({

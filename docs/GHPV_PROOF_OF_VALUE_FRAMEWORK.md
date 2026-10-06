@@ -55,3 +55,36 @@ Public surface remains the **15-level** badge; internals may be richer.
 - `docs/GH_REPUTATION.md`
 - `docs/GH_ATTENTION.md`
 
+
+## Implementation status (repository, 2026-10-06)
+
+| Area | Status |
+|------|--------|
+| GHPV-0 doctrine | IMPLEMENTED IN CODE (docs) |
+| GHPV-1A active weights | IMPLEMENTED IN CODE / TESTED LOCALLY |
+| GHPV-1B settlement service | IMPLEMENTED IN CODE / TESTED LOCALLY (static) |
+| Live Testnet settlement | REQUIRES TESTNET VALIDATION |
+| Production worker/cron | REQUIRES PRODUCTION DEPLOYMENT — not deployed |
+| Feed ranking from CQI | Not built |
+| Vote → GHC | Forbidden / not implemented |
+
+### Economic firewall
+
+```text
+Social curation  →  GHPV quality/calibration
+GHC ledger       →  separate; settlement RPCs do not call ghc_execute_*
+```
+
+RAW CURATION POWER is the reviewer's stored unit weight.
+SETTLEMENT CONSENSUS SHARE is capped at 12% only inside consensus calculation.
+Majority is not ground truth: low confidence, close races, and creative/opinion modes can remain UNRESOLVED.
+
+JCS bounds: 0–100. Per-event delta capped at 2.5. Daily absolute delta capped at 6. Unresolved judgments do not apply adverse JCS deltas.
+
+## Settlement invocation
+
+Settlement is a system operation. `POST /api/social/posts/[id]/ghpv/settle` requires `GH_SETTLEMENT_INTERNAL_KEY` and header `x-gh-settlement-key`. If the key is unset the route returns 503. No production cron is configured.
+
+Calibration bounds are enforced in `20261018_ghpv_calibration_bounds.sql`: JCS 0–100, per-event delta ±2.5, unresolved/protected delta forced to 0.
+
+Quality status values in `gh_content_quality_state.settlement_status`: open, pending, settled, unresolved, quarantined.

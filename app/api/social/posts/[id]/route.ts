@@ -45,5 +45,11 @@ export async function DELETE(
   if (data?.error === "NOT_FOUND") {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
-  return NextResponse.json({ ok: true, durable: true, id: postId })
+  // GHPV cleanup runs inside gh_post_soft_delete (20261020). Do not expose a client cleanup RPC.
+  return NextResponse.json({
+    ok: true,
+    durable: true,
+    id: postId,
+    ghpvCleaned: Boolean((data as { ghpvCleaned?: boolean })?.ghpvCleaned),
+  })
 }

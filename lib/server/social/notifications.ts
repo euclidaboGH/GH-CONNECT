@@ -12,6 +12,8 @@ export type SocialNotificationType =
   | "curation"
   | "mention"
   | "share"
+  | "reputation_level_up"
+  | "system"
 
 async function rpc(name: string, body: Record<string, unknown>): Promise<{
   ok: boolean

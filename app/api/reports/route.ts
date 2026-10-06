@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const runtime = "nodejs"
@@ -13,6 +14,10 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const rl = checkRateLimit(`report:${auth.userId}`, 20, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
   const body = await request.json().catch(() => ({}))
   const targetType = String(body.targetType || body.type || "user").slice(0, 40)

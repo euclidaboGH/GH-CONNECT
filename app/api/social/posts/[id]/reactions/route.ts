@@ -40,14 +40,15 @@ export async function POST(
   const reaction = normalizeReactionType(body.reaction)
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({
-      ok: true,
-      durable: false, // may be best-effort analytics
-      reaction,
-      active: true,
-      liked: reaction === "like",
-      likeCount: null,
+    const nd = nonDurableWriteResponse("Post reaction", {
+      extra: {
+        reaction,
+        active: false,
+        liked: false,
+        likeCount: null,
+      },
     })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_reaction_toggle", {

@@ -159,8 +159,14 @@ export function NotificationBell({
             ? "follow"
             : n.type === "post_like"
               ? "like"
-              : n.type === "post_comment" || n.type === "comment_reply"
+              : n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention"
                 ? "comment"
+              : n.type === "curation"
+                ? "system"
+              : n.type === "reputation_level_up"
+                ? "system"
+              : n.type === "share"
+                ? "share"
                 : "system") as NotificationType,
           title: String(n.title || "Activity"),
           message: String(n.body || ""),
@@ -175,17 +181,30 @@ export function NotificationBell({
             socialType: n.type,
           },
         }))
+        // Durable server notifications are authoritative when available
         setItems((prev) => {
+          const localOnly = prev.filter((x) => !(x.data as { durable?: boolean } | undefined)?.durable)
           const byId = new Map<string, Notification>()
-          for (const x of [...mapped, ...prev]) {
+          for (const x of [...mapped, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
           return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         })
-        setUnread((prev) => {
-          const durableUnread = mapped.filter((m) => !m.read).length
-          return Math.max(prev, durableUnread)
+        const durableUnread = mapped.filter((m) => !m.read).length
+        // Prefer server unread count when durable list loaded
+        void fetch("/api/social/notifications?countOnly=1", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
         })
+          .then((r) => r.json())
+          .then((c: { ok?: boolean; unreadCount?: number }) => {
+            if (c && c.ok && typeof c.unreadCount === "number") {
+              setUnread(Math.max(0, Number(c.unreadCount) || 0))
+            } else {
+              setUnread(durableUnread)
+            }
+          })
+          .catch(() => setUnread(durableUnread))
       } catch {
         /* local-only remains */
       }

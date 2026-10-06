@@ -75,7 +75,12 @@ for (const f of routes) {
       r.includes('auth/logout') ||
       r.includes('validation-key') ||
       r.includes('health/')
-    if (!publicMutation && !/resolveAuthenticatedUser|authorize\(/.test(src)) {
+    // System ops: internal shared secret (not ordinary user session)
+    const systemMutation =
+      r.includes('ghpv/settle') &&
+      /GH_SETTLEMENT_INTERNAL_KEY/.test(src) &&
+      /timingSafeEqual/.test(src)
+    if (!publicMutation && !systemMutation && !/resolveAuthenticatedUser|authorize\(/.test(src)) {
       issues.push(`${r}: mutation without resolveAuthenticatedUser/authorize`)
       fail++
       continue
