@@ -80,18 +80,6 @@ export async function verifyPiAccessToken(
 ): Promise<{ uid: string; username?: string } | null> {
   const env = readGhcServerEnv()
   const url = `${env.piPlatformApiUrl}/v2/me`
-  // TEMP diagnostic (P1.5A.6 auth 401): no tokens/headers/secrets
-  console.error("[auth/pi][diag] verifyPiAccessToken: requesting Pi /v2/me", {
-    host: (() => {
-      try {
-        return new URL(url).host
-      } catch {
-        return "invalid_url"
-      }
-    })(),
-    tokenPresent: Boolean(accessToken && accessToken.length > 0),
-    tokenLen: accessToken ? accessToken.length : 0,
-  })
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -101,36 +89,16 @@ export async function verifyPiAccessToken(
       },
       signal: AbortSignal.timeout?.(12_000),
     })
-    if (!res.ok) {
-      console.error("[auth/pi][diag] verifyPiAccessToken: Pi /v2/me non-OK", {
-        httpStatus: res.status,
-        result: "rejected",
-      })
-      return null
-    }
+    if (!res.ok) return null
     const data = (await res.json()) as {
       uid?: string
       user?: { uid?: string; username?: string }
       username?: string
     }
     const uid = data.uid || data.user?.uid
-    if (typeof uid !== "string" || !uid) {
-      console.error("[auth/pi][diag] verifyPiAccessToken: Pi /v2/me OK but no uid", {
-        httpStatus: res.status,
-        result: "missing_uid",
-      })
-      return null
-    }
+    if (typeof uid !== "string" || !uid) return null
     return { uid, username: data.username || data.user?.username }
-  } catch (err) {
-    console.error("[auth/pi][diag] verifyPiAccessToken: Pi /v2/me network/error", {
-      result: "exception",
-      errName: err instanceof Error ? err.name : "unknown",
-      // message only if non-sensitive short system text
-      errKind: err instanceof Error && /timeout|abort|fetch|network/i.test(err.message)
-        ? "network_or_timeout"
-        : "other",
-    })
+  } catch {
     return null
   }
 }

@@ -43,13 +43,6 @@ export async function POST(request: Request) {
 
     const piUser = await verifyPiAccessToken(accessToken)
     if (!piUser?.uid) {
-      // TEMP diagnostic: 401 path after verifyPiAccessToken (no secrets)
-      console.error("[auth/pi][diag] returning 401 INVALID_PI_TOKEN", {
-        error: "INVALID_PI_TOKEN",
-        verifyResult: "null_or_no_uid",
-        vercelEnv: process.env.VERCEL_ENV || null,
-        nodeEnv: process.env.NODE_ENV || null,
-      })
       return NextResponse.json(
         {
           ok: false,
