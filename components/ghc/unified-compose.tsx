@@ -7,6 +7,7 @@ import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
@@ -181,47 +182,76 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handleImages = async (files: FileList | null) => {
     if (!files?.length) return
-    setUploadProgress("Preparing media…")
+    setUploadProgress(MEDIA_PROGRESS.preparingPhoto)
     try {
       if (mode === "story") {
         const file = files[0]
-        const sizeMb = (file.size / (1024 * 1024)).toFixed(1)
-        if (file.size > 12 * 1024 * 1024) {
-          addToast(`Large file (${sizeMb} MB) — compressing for smooth upload…`, "info")
+        setUploadProgress(MEDIA_PROGRESS.compressing)
+        const dataUrl = await compressImageFile(file, { purpose: "story", preferWebp: true }).catch(
+          () => compressImage(file)
+        )
+        setUploadProgress(MEDIA_PROGRESS.uploading)
+        try {
+          const blob = await (await fetch(dataUrl)).blob()
+          const up = await uploadDurableMedia(blob, {
+            fileName: file.name,
+            onProgress: (label) => setUploadProgress(label),
+          })
+          if (up.ok && up.url) {
+            setStoryMedia({ type: "image", url: up.url })
+          } else {
+            setStoryMedia({ type: "image", url: dataUrl })
+          }
+        } catch {
+          setStoryMedia({ type: "image", url: dataUrl })
         }
-        const url = await compressImage(file)
-        setStoryMedia({ type: "image", url })
         setSelectedImages([])
         setSelectedVideo(null)
-        addToast(`Photo ready (${sizeMb} MB → optimized)`, "success")
+        setUploadProgress(MEDIA_PROGRESS.ready)
+        addToast("✓ Photo ready", "success")
       } else {
         const validated = validateImageFiles(Array.from(files), 10)
-        const images = await Promise.all(
-          validated.map(async (file) => {
-            const sizeMb = (file.size / (1024 * 1024)).toFixed(1)
-            if (file.size > 2 * 1024 * 1024) {
-              addToast(`Optimizing photo (${sizeMb} MB)…`, "info")
+        const images: string[] = []
+        for (const file of validated) {
+          setUploadProgress(MEDIA_PROGRESS.compressing)
+          let dataUrl: string
+          try {
+            dataUrl = await compressImageFile(file, { purpose: "feed", preferWebp: true })
+          } catch {
+            addToast(mediaUserMessage("OPTIMIZE_FAILED"), "error")
+            continue
+          }
+          setUploadProgress(MEDIA_PROGRESS.uploading)
+          try {
+            const blob = await (await fetch(dataUrl)).blob()
+            const up = await uploadDurableMedia(blob, {
+              fileName: file.name,
+              onProgress: (label) => setUploadProgress(label),
+            })
+            if (up.ok && up.url) {
+              images.push(up.url)
+            } else if (!up.ok && (up.error === "FILE_TOO_LARGE" || up.error === "INLINE_TOO_LARGE")) {
+              addToast(mediaUserMessage(up.error), "error")
+            } else if (!up.ok) {
+              // Prefer durable; compact data URL only as last resort for small previews
+              if (dataUrl.length < 180_000) images.push(dataUrl)
+              else addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
             }
-            // Always compress for feed — prevents oversized post payloads
-            const dataUrl = await compressImageFile(file, { purpose: "feed", preferWebp: true })
-            // Prefer durable storage when configured; else keep data URL
-            try {
-              const blob = await (await fetch(dataUrl)).blob()
-              const up = await uploadDurableMedia(blob)
-              if (up.ok && up.url) return up.url
-            } catch {
-              /* keep data URL */
-            }
-            return dataUrl
-          }),
-        )
-        setSelectedImages((prev) => [...prev, ...images].slice(0, 10))
-        setSelectedVideo(null)
-        setStoryMedia(null)
-        addToast(images.length === 1 ? "Photo ready" : `${images.length} photos ready`, "success")
+          } catch {
+            if (dataUrl.length < 180_000) images.push(dataUrl)
+            else addToast(mediaUserMessage("NETWORK"), "error")
+          }
+        }
+        if (images.length) {
+          setSelectedImages((prev) => [...prev, ...images].slice(0, 10))
+          setSelectedVideo(null)
+          setStoryMedia(null)
+          setUploadProgress(MEDIA_PROGRESS.ready)
+          addToast(images.length === 1 ? "✓ Photo ready" : `✓ ${images.length} photos ready`, "success")
+        }
       }
     } catch {
-      addToast("Unable to add photo — try a smaller file", "error")
+      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add photo — try a smaller file"), "error")
     } finally {
       setUploadProgress(null)
     }
@@ -229,69 +259,97 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handleDoc = async (file: File | undefined) => {
     if (!file || mode !== "post") return
+    setUploadProgress(MEDIA_PROGRESS.preparingFile)
     try {
       if (file.size > 8 * 1024 * 1024) {
-        addToast("File must be under 8 MB", "error")
+        addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
         return
       }
-      const url = await readFileAsDataUrl(file, "file")
-      setSelectedDoc(url)
-      setSelectedDocName(file.name || "attachment")
-      addToast("File attached", "success")
+      setUploadProgress(MEDIA_PROGRESS.uploading)
+      const up = await uploadDurableMedia(file, {
+        fileName: file.name,
+        onProgress: (label) => setUploadProgress(label),
+      })
+      if (up.ok && up.url) {
+        setSelectedDoc(up.url)
+        setSelectedDocName(file.name || "attachment")
+        setUploadProgress(MEDIA_PROGRESS.ready)
+        addToast("✓ File ready", "success")
+        return
+      }
+      // Avoid large inline PDF payloads in post JSON
+      if (file.size <= 400_000) {
+        const url = await readFileAsDataUrl(file, "file")
+        setSelectedDoc(url)
+        setSelectedDocName(file.name || "attachment")
+        addToast("File attached", "success")
+      } else if (!up.ok) {
+        addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
+      } else {
+        addToast(mediaUserMessage("STORAGE_ERROR"), "error")
+      }
     } catch {
-      addToast("Unable to attach file", "error")
+      addToast(mediaUserMessage("NETWORK", "Unable to attach file"), "error")
+    } finally {
+      setUploadProgress(null)
     }
   }
 
   const handleVideo = async (file: File | undefined) => {
     if (!file) return
     const sizeMb = file.size / (1024 * 1024)
-    // Keep mobile uploads responsive — reject extreme sizes early
-    if (sizeMb > 40) {
-      addToast("Video must be under 40 MB. Compress or trim it, then try again.", "error")
+    if (sizeMb > 80) {
+      addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
       return
     }
-    setUploadProgress(sizeMb > 8 ? `Preparing video (${sizeMb.toFixed(0)} MB)…` : "Preparing video…")
+    setUploadProgress(
+      sizeMb > 8
+        ? `${MEDIA_PROGRESS.preparingVideo} (${sizeMb.toFixed(0)} MB)`
+        : MEDIA_PROGRESS.preparingVideo
+    )
     try {
+      setUploadProgress(MEDIA_PROGRESS.optimizingVideo)
+      setUploadProgress(MEDIA_PROGRESS.uploading)
+      const up = await uploadDurableMedia(file, {
+        fileName: file.name,
+        onProgress: (label) => setUploadProgress(label),
+      })
       if (mode === "story") {
-        try {
-          const up = await uploadDurableMedia(file)
-          if (up.ok && up.url) {
-            setStoryMedia({ type: "video", url: up.url })
-          } else {
-            setStoryMedia({ type: "video", url: URL.createObjectURL(file) })
-          }
-        } catch {
+        if (up.ok && up.url) {
+          setStoryMedia({ type: "video", url: up.url })
+        } else if (sizeMb <= 12) {
           setStoryMedia({ type: "video", url: URL.createObjectURL(file) })
+        } else if (!up.ok) {
+          addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
+          return
+        } else {
+          addToast(mediaUserMessage("STORAGE_ERROR"), "error")
+          return
         }
         setSelectedImages([])
         setSelectedVideo(null)
-        addToast("Video ready for story", "success")
-      } else {
-        // Prefer durable media URL when available (smaller payload, better feed performance)
-        try {
-          const up = await uploadDurableMedia(file)
-          if (up.ok && up.url) {
-            setSelectedVideo(up.url)
-            setStoryMedia(null)
-            addToast("Video attached", "success")
-            return
-          }
-        } catch {
-          /* fall through */
-        }
-        if (sizeMb > 12) {
-          addToast(
-            "Large video — attach may be slow offline. Prefer Wi‑Fi or a shorter clip.",
-            "info"
-          )
-        }
-        setSelectedVideo(await readFileAsDataUrl(file, "video"))
+        setUploadProgress(MEDIA_PROGRESS.ready)
+        addToast("✓ Video ready for story", "success")
+        return
+      }
+      if (up.ok && up.url) {
+        setSelectedVideo(up.url)
+        setStoryMedia(null)
+        setUploadProgress(MEDIA_PROGRESS.ready)
+        addToast("✓ Video ready", "success")
+        return
+      }
+      if (sizeMb <= 12) {
+        setSelectedVideo(URL.createObjectURL(file))
         setStoryMedia(null)
         addToast("Video attached", "success")
+      } else if (!up.ok) {
+        addToast(mediaUserMessage(up.error || "FILE_TOO_LARGE", up.userMessage), "error")
+      } else {
+        addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
       }
     } catch {
-      addToast("Unable to add video — try a shorter clip under 40 MB", "error")
+      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
     } finally {
       setUploadProgress(null)
     }

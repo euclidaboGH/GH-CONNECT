@@ -941,6 +941,17 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             setP2pError(null)
             setP2pSuccess(null)
           }}
+          onActivity={() => {
+            setSendEducate(null)
+            setTab("activity")
+            try {
+              document
+                .getElementById("ghc-wallet-activity")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            } catch {
+              /* */
+            }
+          }}
           onAdd={() => setShowAddGhc(true)}
         />
 
@@ -1141,10 +1152,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* ZONE: ACTIVITY */}
+        <div id="ghc-wallet-activity" className="scroll-mt-3">
         <p className="gh-type-meta mx-3 mt-4 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
           Activity
         </p>
-        <div className="gh-card mx-3 flex gap-1 p-1">
+        <div className="mx-3 flex gap-1 rounded-2xl border border-border/70 bg-card p-1 shadow-sm">
           {(
             [
               { id: "activity" as const, label: "Activity" },
@@ -1165,6 +1177,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               {t.label}
             </button>
           ))}
+        </div>
         </div>
 
         <div className="mx-3 mt-3 mb-8 space-y-2">

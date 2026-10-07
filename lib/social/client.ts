@@ -496,3 +496,22 @@ export async function socialRecordReputationEvent(
     return { ok: false, error: "NETWORK" }
   }
 }
+
+/** Public content reward — amounts only when server has funded/system-written state */
+export async function socialFetchContentReward(postId: string): Promise<{
+  ok: boolean
+  enabled?: boolean
+  status?: string
+  totalEarned?: number | null
+  authorReward?: number | null
+  curationReward?: number | null
+  upvoteCount?: number
+  downvoteCount?: number
+  error?: string
+}> {
+  try {
+    return await json(`/api/social/posts/${encodeURIComponent(postId)}/reward`)
+  } catch {
+    return { ok: false, error: "NETWORK" }
+  }
+}

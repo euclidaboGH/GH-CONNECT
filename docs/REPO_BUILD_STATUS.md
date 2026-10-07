@@ -49,6 +49,9 @@ Tips               → intent until settlement is implemented
 
 ## REPOSITORY IMPLEMENTATION COMPLETE
 
+- Content reward **public read API** + UI panel (amounts only when system-funded row exists; votes do not mint)
+- Migration `20261022_gh_content_rewards.sql` (repository-only until Testnet)
+
 - Session-bound social mutations (reactions, curation, follows, comments)
 - Production fail-closed social writes when durable DB missing
 - GHPV active weights, settlement (system-only), calibration bounds, soft-delete cleanup

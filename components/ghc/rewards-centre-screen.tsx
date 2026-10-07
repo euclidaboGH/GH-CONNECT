@@ -313,22 +313,22 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
+          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"
           aria-label="Back"
         >
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold text-foreground">Rewards Centre</h1>
+          <h1 className="text-sm font-bold tracking-tight text-foreground">Your GHC journey</h1>
           <p className="text-[11px] text-muted-foreground">
-            Engagement economy · daily · challenges · social · not pay-to-win
+            Daily · missions · achievements · not pay-to-win
           </p>
         </div>
         {onOpenWallet && (
           <button
             type="button"
             onClick={onOpenWallet}
-            className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800"
+            className="min-h-9 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -336,7 +336,7 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={refresh}
-          className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"
+          className="min-h-9 rounded-full bg-muted px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
         >
           Refresh
         </button>

@@ -8,7 +8,7 @@
 import { useMemo, useState, useCallback } from "react"
 import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
-import { IdentityLayersStrip } from "./identity-layers-strip"
+import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal } from "./profile-components"
@@ -374,14 +374,24 @@ export function ProfileScreen({
         ) : null}
 
         <div className="mt-4 w-full px-4">
-          <IdentityLayersStrip
+          <ProfileEcosystemHub
             userId={meId}
+            displayName={name}
             onOpenWallet={onOpenWallet}
+            onShareProfile={() => void shareProfile()}
             onOpenMembership={() => {
               try {
-                // Canonical path: Settings membership section (shell listens)
                 window.dispatchEvent(
                   new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })
+                )
+              } catch {
+                /* */
+              }
+            }}
+            onOpenRewards={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })
                 )
               } catch {
                 /* */

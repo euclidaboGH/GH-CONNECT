@@ -1,7 +1,9 @@
 /**
- * Client helper: upload compressed file to durable /api/media when available.
- * Falls back to data URL path on 501 MEDIA_STORAGE_UNAVAILABLE.
+ * Client helper: upload optimized file to durable /api/media.
+ * Prefer media references over inline data URLs in posts/stories/messages.
  */
+
+import { mediaUserMessage } from "@/lib/media/user-messages"
 
 export type DurableMediaResult =
   | {
@@ -9,48 +11,67 @@ export type DurableMediaResult =
       durable: true
       mediaId: string
       url: string
-      kind: "image" | "video"
+      kind: "image" | "video" | "file"
     }
   | {
       ok: false
       durable: false
       error: string
+      userMessage: string
       clientCompress?: boolean
     }
 
 export async function uploadDurableMedia(
   file: File | Blob,
-  meta?: { width?: number; height?: number; durationMs?: number }
+  meta?: {
+    width?: number
+    height?: number
+    durationMs?: number
+    fileName?: string
+    onProgress?: (label: string) => void
+  }
 ): Promise<DurableMediaResult> {
   const form = new FormData()
-  form.append("file", file)
+  const name =
+    meta?.fileName ||
+    (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
+  form.append("file", file, name)
   if (meta?.width != null) form.append("width", String(meta.width))
   if (meta?.height != null) form.append("height", String(meta.height))
   if (meta?.durationMs != null) form.append("durationMs", String(meta.durationMs))
 
   try {
+    meta?.onProgress?.("Uploading…")
     const res = await fetch("/api/media", {
       method: "POST",
       credentials: "include",
       body: form,
     })
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-    if (res.ok && data.ok === true && data.mediaId && data.url) {
+    if (res.ok && data.ok === true && data.url) {
       return {
         ok: true,
         durable: true,
-        mediaId: String(data.mediaId),
+        mediaId: String(data.mediaId || data.path || data.url),
         url: String(data.url),
-        kind: data.kind === "video" ? "video" : "image",
+        kind:
+          data.kind === "video" ? "video" : data.kind === "file" ? "file" : "image",
       }
     }
+    const code = String(data.error || `HTTP_${res.status}`)
     return {
       ok: false,
       durable: false,
-      error: String(data.error || `HTTP_${res.status}`),
+      error: code,
+      userMessage: mediaUserMessage(code, String(data.message || "") || undefined),
       clientCompress: Boolean(data.clientCompress),
     }
   } catch {
-    return { ok: false, durable: false, error: "NETWORK" }
+    return {
+      ok: false,
+      durable: false,
+      error: "NETWORK",
+      userMessage: mediaUserMessage("NETWORK"),
+    }
   }
 }

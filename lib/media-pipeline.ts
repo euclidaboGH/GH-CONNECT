@@ -231,7 +231,7 @@ export async function processMediaFile(
         return {
           ok: false,
           stage: "failed",
-          error: "Media too large for inline storage — configure upload endpoint",
+          error: "INLINE_TOO_LARGE",
         }
       }
 
@@ -354,7 +354,7 @@ export function revokeMediaReferences(refs: MediaReference[]) {
 export function assertSafeMediaRefsForStorage(urls: string[]): string | null {
   for (const u of urls) {
     if (isDataUrl(u) && u.length > INLINE_WARN_BYTES) {
-      return "Inline media too large — use media pipeline upload references"
+      return "This file is too large to attach offline. Connect and try again, or choose a smaller file."
     }
   }
   return null

@@ -19,8 +19,32 @@ export const dynamic = "force-dynamic"
 
 const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
 const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
+const ALLOWED_FILE = new Set(["application/pdf", "application/x-pdf"])
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_FILE_BYTES = 8 * 1024 * 1024
+
+function sniffKind(buf: Buffer): "image" | "video" | "file" | "unknown" {
+  if (buf.length < 12) return "unknown"
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image"
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image"
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image"
+  if (
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x45 &&
+    buf[10] === 0x42 &&
+    buf[11] === 0x50
+  )
+    return "image"
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return "file"
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "video"
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video"
+  return "unknown"
+}
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -95,13 +119,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "FILE_REQUIRED" }, { status: 400 })
   }
 
-  const mime = (file.type || "").toLowerCase()
-  const isImage = ALLOWED_IMAGE.has(mime)
-  const isVideo = ALLOWED_VIDEO.has(mime)
-  if (!isImage && !isVideo) {
-    return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+  let mime = (file.type || "").toLowerCase()
+  let isImage = ALLOWED_IMAGE.has(mime)
+  let isVideo = ALLOWED_VIDEO.has(mime)
+  let isFile = ALLOWED_FILE.has(mime)
+  // Peek signature before trusting client MIME alone
+  const head = Buffer.from(await file.slice(0, 16).arrayBuffer())
+  const sniffed = sniffKind(head)
+  if (!isImage && !isVideo && !isFile) {
+    if (sniffed === "image") {
+      isImage = true
+      mime = mime || "image/jpeg"
+    } else if (sniffed === "video") {
+      isVideo = true
+      mime = mime || "video/mp4"
+    } else if (sniffed === "file") {
+      isFile = true
+      mime = "application/pdf"
+    } else {
+      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+    }
+  } else if (sniffed !== "unknown") {
+    // Reject MIME/signature mismatch for safety
+    if (isImage && sniffed !== "image") {
+      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+    }
+    if (isVideo && sniffed !== "video") {
+      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+    }
+    if (isFile && sniffed !== "file") {
+      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+    }
   }
-  const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES
+  const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES
   if (file.size > maxBytes) {
     return NextResponse.json({ ok: false, error: "FILE_TOO_LARGE" }, { status: 400 })
   }
@@ -125,19 +175,21 @@ export async function POST(request: Request) {
       ? Math.max(0, Math.floor(Number(durationRaw)))
       : null
 
-  const ext = isVideo
-    ? mime === "video/webm"
-      ? "webm"
-      : mime === "video/quicktime"
-        ? "mov"
-        : "mp4"
-    : mime === "image/png"
-      ? "png"
-      : mime === "image/webp"
-        ? "webp"
-        : mime === "image/gif"
-          ? "gif"
-          : "jpg"
+  const ext = isFile
+    ? "pdf"
+    : isVideo
+      ? mime === "video/webm"
+        ? "webm"
+        : mime === "video/quicktime"
+          ? "mov"
+          : "mp4"
+      : mime === "image/png"
+        ? "png"
+        : mime === "image/webp"
+          ? "webp"
+          : mime === "image/gif"
+            ? "gif"
+            : "jpg"
 
   const objectName = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`
   const objectPath = `${auth.userId}/${objectName}`
@@ -177,7 +229,7 @@ export async function POST(request: Request) {
       ownerId: auth.userId,
       bucket: storageBucket,
       storagePath: objectPath,
-      mediaKind: isVideo ? "video" : "image",
+      mediaKind: isFile ? "file" : isVideo ? "video" : "image",
       mimeType: mime,
       byteSize: file.size,
       width,
@@ -206,7 +258,7 @@ export async function POST(request: Request) {
       mediaId: record.id,
       path: objectPath,
       url: publicUrl,
-      kind: isVideo ? "video" : "image",
+      kind: isFile ? "file" : isVideo ? "video" : "image",
       mime,
       ownerUserId: auth.userId,
       width,

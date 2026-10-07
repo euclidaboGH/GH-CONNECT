@@ -1,11 +1,27 @@
 "use client"
 
 import { memo, useState, useRef, useEffect } from "react"
-import { Heart, MessageCircle, Share2, ChevronUp, ChevronDown, MoreVertical, Bookmark, Link as LinkIcon, Eye, X, ShieldCheck, Pencil, Trash2, Pin, Archive, Copy } from "lucide-react"
+import {
+  Heart,
+  MessageCircle,
+  Share2,
+  ThumbsUp,
+  ThumbsDown,
+  MoreVertical,
+  Bookmark,
+  Link as LinkIcon,
+  Eye,
+  X,
+  ShieldCheck,
+  Pencil,
+  Trash2,
+  Pin,
+  Archive,
+  Copy,
+} from "lucide-react"
 import type { Post, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
-import { ActionIconButton } from "./action-controls"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
 import { SpecialPostBody, detectSpecialPost } from "./feed-special-blocks"
 import { resolveAvatarUrl } from "@/lib/avatar"
@@ -14,6 +30,7 @@ import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
 import { socialRecordAttention, socialSetCuration } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
+import { PostRewardPanel } from "@/components/ghc/post-reward/post-reward-panel"
 
 const REACTIONS: PostReaction[] = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -90,10 +107,23 @@ function EnhancedPostCardInner({
   const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
-  const [upvoteCount, setUpvoteCount] = useState(0)
-  const [downvoteCount, setDownvoteCount] = useState(0)
+  const seedUp = Number(
+    (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ??
+      (post as { upvote_count?: number }).upvote_count ??
+      0
+  )
+  const seedDown = Number(
+    (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ??
+      (post as { downvote_count?: number }).downvote_count ??
+      0
+  )
+  const [upvoteCount, setUpvoteCount] = useState(() => (Number.isFinite(seedUp) ? Math.max(0, seedUp) : 0))
+  const [downvoteCount, setDownvoteCount] = useState(() =>
+    Number.isFinite(seedDown) ? Math.max(0, seedDown) : 0
+  )
   const [curationBusy, setCurationBusy] = useState(false)
   const [judgmentLabel, setJudgmentLabel] = useState<string | null>(null)
+  const netJudgment = upvoteCount - downvoteCount
 
   useEffect(() => {
     let cancelled = false
@@ -579,72 +609,129 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — equal weight, 44px targets, clear active states */}
-      <div className="grid grid-cols-4 items-center border-t border-border/60 bg-card/95 px-0.5 py-1.5" role="toolbar" aria-label="Post actions">
-        <ActionIconButton
-          label={isLiked ? "Unlike" : "Like"}
-          tone="rose"
-          active={isLiked}
-          count={Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) + (isLiked ? 1 : 0))}
-          icon={<Heart size={20} fill={isLiked ? "currentColor" : "none"} aria-hidden />}
-          onClick={() => onLike(post.id)}
-        />
-        <ActionIconButton
-          label="Comment"
-          count={Array.isArray(post.comments) ? post.comments.length : 0}
-          icon={<MessageCircle size={20} aria-hidden />}
+      {/* Primary actions — premium layout: curation · comments · save · share */}
+      <div
+        className="flex items-center gap-1.5 border-t border-border/60 bg-card/95 px-2.5 py-2"
+        role="toolbar"
+        aria-label="Post actions"
+      >
+        <button
+          type="button"
+          disabled={curationBusy}
+          aria-label="Upvote — improve quality ranking"
+          aria-pressed={curationChoice === "upvote"}
+          onClick={() => void handleCuration("upvote")}
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
+            curationChoice === "upvote"
+              ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
+              : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
+          }`}
+        >
+          <ThumbsUp size={18} strokeWidth={2.25} aria-hidden />
+          <span className="tabular-nums">{upvoteCount}</span>
+        </button>
+        <button
+          type="button"
+          disabled={curationBusy}
+          aria-label="Downvote — lower quality ranking"
+          aria-pressed={curationChoice === "downvote"}
+          onClick={() => void handleCuration("downvote")}
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
+            curationChoice === "downvote"
+              ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
+              : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
+          }`}
+        >
+          <ThumbsDown size={18} strokeWidth={2.25} aria-hidden />
+          <span className="tabular-nums">{downvoteCount}</span>
+        </button>
+        <div className="mx-0.5 h-6 w-px shrink-0 bg-border/70" aria-hidden />
+        <button
+          type="button"
+          aria-label="Comment"
           onClick={() => onComment(post.id)}
-        />
-        <ActionIconButton
-          label={isSaved ? "Unsave" : "Save"}
-          tone="amber"
-          active={isSaved}
-          icon={<Bookmark size={20} fill={isSaved ? "currentColor" : "none"} aria-hidden />}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+        >
+          <MessageCircle size={20} aria-hidden />
+          <span className="tabular-nums text-xs font-semibold">
+            {Array.isArray(post.comments)
+              ? post.comments.length
+              : Number(post.engagement?.comments ?? 0)}
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={isSaved ? "Unsave" : "Save"}
+          aria-pressed={isSaved}
           onClick={() => onSave(post.id)}
-        />
-        <ActionIconButton
-          label="Share"
-          icon={<Share2 size={20} aria-hidden />}
+          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full transition active:scale-95 ${
+            isSaved
+              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+              : "text-muted-foreground hover:bg-muted"
+          }`}
+        >
+          <Bookmark size={20} fill={isSaved ? "currentColor" : "none"} aria-hidden />
+        </button>
+        <button
+          type="button"
+          aria-label="Share"
           onClick={() => onShare(post.id)}
-        />
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+        >
+          <Share2 size={20} aria-hidden />
+        </button>
+        <button
+          type="button"
+          aria-label="More actions"
+          onClick={() => setShowMenu(true)}
+          className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+        >
+          <MoreVertical size={20} aria-hidden />
+        </button>
       </div>
-      {/* Quality ranking — curator signal only; not objective truth */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-muted/20 px-3 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Community curator judgment — not a verified fact">
-          Quality{judgmentLabel ? ` · ${judgmentLabel}` : ""}
-        </p>
-        <div className="flex items-center gap-1" role="group" aria-label="Content quality ranking">
-          <button
-            type="button"
-            disabled={curationBusy}
-            aria-label="Upvote — improve ranking"
-            aria-pressed={curationChoice === "upvote"}
-            onClick={() => void handleCuration("upvote")}
-            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
-              curationChoice === "upvote"
-                ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <ChevronUp size={18} strokeWidth={2.5} aria-hidden />
-            <span className="tabular-nums text-[11px]">{upvoteCount > 0 ? upvoteCount : ""}</span>
-          </button>
-          <button
-            type="button"
-            disabled={curationBusy}
-            aria-label="Downvote — lower ranking"
-            aria-pressed={curationChoice === "downvote"}
-            onClick={() => void handleCuration("downvote")}
-            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
-              curationChoice === "downvote"
-                ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-900/40 dark:text-rose-300"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <ChevronDown size={18} strokeWidth={2.5} aria-hidden />
-            <span className="tabular-nums text-[11px]">{downvoteCount > 0 ? downvoteCount : ""}</span>
-          </button>
-        </div>
+
+      {/* Public reward / quality strip — GHC amounts only when server-enabled */}
+      <PostRewardPanel
+        postId={post.id}
+        upvoteCount={upvoteCount}
+        downvoteCount={downvoteCount}
+      />
+
+      {/* Secondary: reactions + quality status (not currency) */}
+      <div className="flex items-center justify-between gap-2 border-t border-border/40 px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => onLike(post.id)}
+          className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition active:scale-95 ${
+            isLiked
+              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+              : "text-muted-foreground hover:bg-muted"
+          }`}
+          aria-label={isLiked ? "Unlike" : "Like"}
+          aria-pressed={isLiked}
+        >
+          <Heart size={15} fill={isLiked ? "currentColor" : "none"} aria-hidden />
+          <span className="tabular-nums">
+            {Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) + (isLiked ? 1 : 0))}
+          </span>
+        </button>
+        {judgmentLabel && (
+          <p className="truncate text-[10px] font-medium text-muted-foreground" title={judgmentLabel}>
+            {judgmentLabel}
+          </p>
+        )}
+        <span
+          className={`text-[10px] font-bold tabular-nums ${
+            netJudgment > 0
+              ? "text-emerald-700"
+              : netJudgment < 0
+                ? "text-rose-600"
+                : "text-muted-foreground"
+          }`}
+        >
+          Net {netJudgment > 0 ? "+" : ""}
+          {netJudgment}
+        </span>
       </div>
     </div>
   )
