@@ -118,3 +118,11 @@ No Production deployment from this gate.
 - Durable social notifications extended (curation, reputation_level_up, system)
 - Migration 20261021 repository-only
 - NotificationBell prefers durable API; tests 24/24
+
+## Build hardening (2026-10-07)
+
+- CurationChoice canonical values: `upvote` | `downvote` | `neutral` (type guard on API)
+- isomorphic-dompurify@3.20.0 retained (matches lockfile; requires Node ≥22.22.2 — project engines allow 20–24; Vercel Node 22+/24 satisfies). ACCEPTED deprecation warning — no forced major upgrade
+- engines: `>=20.18.0 <25`; `.nvmrc` = 20
+- Recharts 2.15.4 retained — no Recharts 3 migration in this pass (API changes required; charts non-critical)
+- ESLint: explicit `@next/eslint-plugin-next` + `next/core-web-vitals` via FlatCompat

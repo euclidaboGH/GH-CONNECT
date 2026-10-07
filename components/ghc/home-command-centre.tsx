@@ -207,16 +207,21 @@ export function HomeCommandCentre({
     return false
   }, [feedCtx?.posts, meIds])
 
+  const profileBio = profile?.bio
+  const profileInterests = profile?.interests
+  const hasBio = Boolean(profileBio && String(profileBio).trim().length > 0)
+  const interestsCount = Array.isArray(profileInterests) ? profileInterests.length : 0
+
   const activationChecklist = useMemo(
     () =>
       buildHomeActivationChecklist({
         hasPhoto: Boolean(avatar),
-        hasBio: Boolean(profile?.bio && String(profile.bio).trim().length > 0),
-        interestsCount: Array.isArray(profile?.interests) ? profile!.interests!.length : 0,
+        hasBio,
+        interestsCount,
         myCommunitiesCount: myCommunities.length,
         hasOwnPost,
       }),
-    [avatar, profile?.bio, profile?.interests, myCommunities.length, hasOwnPost]
+    [avatar, hasBio, interestsCount, myCommunities.length, hasOwnPost]
   )
 
   const nextAction = resolveHomeNextAction({

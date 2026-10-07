@@ -20,7 +20,9 @@ import type { CurationChoice } from "@/lib/server/ghpv/types"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const CHOICES = new Set(["upvote", "downvote", "neutral"])
+function isCurationChoice(v: string): v is CurationChoice {
+  return v === "upvote" || v === "downvote" || v === "neutral"
+}
 
 export async function POST(
   request: Request,
@@ -55,10 +57,11 @@ export async function POST(
   // GHPV-1A: never trust client identity or authority fields
   stripClientAuthority(body)
 
-  const choice = String(body.choice || "").toLowerCase().trim()
-  if (!CHOICES.has(choice)) {
+  const rawChoice = String(body.choice || "").toLowerCase().trim()
+  if (!isCurationChoice(rawChoice)) {
     return NextResponse.json({ ok: false, error: "INVALID_CHOICE" }, { status: 400 })
   }
+  const choice: CurationChoice = rawChoice
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Post curation", {
@@ -105,7 +108,8 @@ export async function POST(
     )
   }
 
-  const finalChoice = String(data.choice || choice) as CurationChoice
+  const rpcChoice = String(data.choice || choice).toLowerCase().trim()
+  const finalChoice: CurationChoice = isCurationChoice(rpcChoice) ? rpcChoice : choice
 
   // GHPV-1A: weighted judgment signal (not settlement, not GHC)
   let ghpv: Record<string, unknown> = { recorded: false }
@@ -137,7 +141,7 @@ export async function POST(
   }
 
   // Safe public curation notice — no JCS/weights/private calibration
-  if (finalChoice === "up" || finalChoice === "down") {
+  if (finalChoice === "upvote" || finalChoice === "downvote") {
     void (async () => {
       const authorId = await lookupPostAuthor(postId)
       if (!authorId || authorId === auth.userId) return
