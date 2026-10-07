@@ -19,6 +19,7 @@ import {
   verifyFirstPost,
   verifyProfileComplete,
 } from "@/lib/server/reputation/verify"
+import { emitSocialNotification } from "@/lib/server/social/notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
