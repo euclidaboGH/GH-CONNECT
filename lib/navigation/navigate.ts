@@ -82,13 +82,10 @@ export function navigateTo(raw: string, options: NavigateOptions = {}): boolean 
       emit("ghc:open-ecosystem", { focus: options.focus || undefined })
       return true
     case "marketplace":
-      // Commerce service lives in Ecosystem; focus is consumed by the screen
-      emit("ghc:open-ecosystem", { focus: "marketplace" })
-      if (options.listingId) {
-        window.setTimeout(() => {
-          emit("ghc:open-listing", { listingId: options.listingId })
-        }, 80)
-      }
+      // Dedicated marketplace product surface (listings from domain — no invented catalog)
+      emit("ghc:open-marketplace", {
+        listingId: options.listingId || undefined,
+      })
       return true
     case "create":
       emit("ghc:open-create-hub", {})

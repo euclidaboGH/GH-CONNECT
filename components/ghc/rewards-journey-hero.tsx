@@ -282,14 +282,14 @@ export function RewardsJourneyHero({
               const isToday = d === daily.displayCycleDay && daily.canClaimToday
               const ghcLabel = DAILY_STREAK_GHC[d]
               return (
-                <div key={d} className="flex flex-1 flex-col items-center gap-1" role="listitem">
+                <div key={d} className="flex flex-1 flex-col items-center gap-1.5" role="listitem">
                   <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                    className={`flex h-10 w-10 items-center justify-center rounded-full text-[12px] font-bold transition ${
                       done
-                        ? "bg-[var(--gh-green)] text-white shadow-sm"
+                        ? "bg-[var(--gh-green)] text-white shadow-sm shadow-emerald-700/20"
                         : isToday
-                          ? "bg-amber-50 text-amber-900 ring-2 ring-amber-400 dark:bg-amber-950/50 dark:text-amber-100"
-                          : "bg-muted text-muted-foreground"
+                          ? "bg-emerald-50 text-emerald-900 ring-2 ring-[var(--gh-green)] dark:bg-emerald-950/50 dark:text-emerald-100"
+                          : "bg-muted/80 text-muted-foreground"
                     }`}
                     aria-label={
                       done
@@ -312,7 +312,7 @@ export function RewardsJourneyHero({
             <button
               type="button"
               onClick={() => void claimDaily()}
-              className="gh-cta mt-3.5 flex w-full items-center justify-center gap-2 py-3 text-[13px] shadow-md shadow-emerald-700/20"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] py-3.5 text-[13px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.99]"
             >
               <GhcCoinIcon size={18} />
               Claim day {daily.displayCycleDay} · +{formatGhc(daily.todayGhc)} GHC
@@ -335,7 +335,7 @@ export function RewardsJourneyHero({
           {opportunities.map((op) => (
             <li
               key={op.id}
-              className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]"
+              className="flex items-center gap-3 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]"
             >
               <span className="gh-icon-tile flex h-10 w-10 shrink-0 items-center justify-center">
                 <GhcCoinIcon size={22} />

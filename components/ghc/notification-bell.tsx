@@ -288,8 +288,8 @@ export function NotificationBell({
       {open ? (
         <div className="fixed inset-0 z-[85]" role="dialog" aria-modal="true" aria-label="Notifications">
           <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={closePanel} />
-          <div className="absolute inset-x-0 top-0 mx-auto flex max-h-[min(88vh,640px)] w-full max-w-[var(--gh-content-max,28rem)] flex-col overflow-hidden rounded-b-3xl border border-border bg-card shadow-2xl sm:top-3 sm:rounded-3xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="absolute inset-x-0 top-0 mx-auto flex max-h-[min(88vh,640px)] w-full max-w-[var(--gh-content-max,28rem)] flex-col overflow-hidden rounded-b-[1.25rem] border border-border/50 bg-card shadow-2xl sm:top-3 sm:rounded-[1.25rem]">
+            <div className="flex items-center justify-between border-b border-border/50 px-4 py-3.5">
               <div>
                 <p className="text-[15px] font-bold text-foreground">Notifications</p>
                 <p className="text-[11px] text-muted-foreground">

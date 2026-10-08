@@ -570,24 +570,24 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               className="h-11 w-11 rounded-full object-cover ring-2 ring-emerald-100"
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-gray-900">{profile.displayName || "You"}</p>
+              <p className="truncate text-sm font-bold text-foreground">{profile.displayName || "You"}</p>
               {mode === "post" ? (
                 <button
                   type="button"
                   onClick={() => setShowAudience((v) => !v)}
-                  className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-700 transition hover:bg-gray-200"
+                  className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-bold text-foreground/90 transition hover:bg-muted/80"
                 >
                   <AudienceIcon size={12} />
                   {audienceLabel}
                 </button>
               ) : (
-                <p className="text-[11px] text-gray-500">Visible for 24 hours</p>
+                <p className="text-[11px] text-muted-foreground">Visible for 24 hours</p>
               )}
             </div>
           </div>
 
           {showAudience && mode === "post" && (
-            <div className="mb-3 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="mb-3 overflow-hidden rounded-2xl border border-border/70 bg-white shadow-sm">
               {(
                 [
                   { id: "public" as const, label: "Public", desc: "Anyone on GreenHaven", Icon: Globe },
@@ -609,8 +609,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 >
                   <opt.Icon size={18} className="mt-0.5 shrink-0 text-emerald-700" />
                   <span>
-                    <span className="block text-sm font-bold text-gray-900">{opt.label}</span>
-                    <span className="block text-[11px] text-gray-500">{opt.desc}</span>
+                    <span className="block text-sm font-bold text-foreground">{opt.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{opt.desc}</span>
                   </span>
                 </button>
               ))}
@@ -720,10 +720,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : 5000))}
             placeholder={mode === "post" ? "What's on your mind?" : "Share a moment…"}
-            className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-gray-900 placeholder-gray-400 focus:outline-none"
+            className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-foreground placeholder-gray-400 focus:outline-none"
             rows={5}
           />
-          <p className="text-right text-[11px] text-gray-400">
+          <p className="text-right text-[11px] text-muted-foreground">
             {text.length}/{mode === "story" ? 500 : 5000}
 
           {(hashSuggestions.length > 0 || mentionSuggestions.length > 0) && (
@@ -780,7 +780,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {mode === "post" && selectedImages.length > 0 && (
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {selectedImages.map((src, i) => (
-                <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
+                <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
                   <img src={src} alt="" className="h-full w-full object-cover" />
                   <button
                     type="button"
@@ -795,7 +795,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </div>
           )}
           {mode === "post" && selectedVideo && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-700">
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5 text-sm font-semibold text-foreground/90">
               <span>Video attached</span>
               <button type="button" onClick={() => setSelectedVideo(null)} className="text-emerald-700">
                 Remove
@@ -816,7 +816,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </div>
           )}
           {mode === "story" && storyMedia?.type === "video" && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-700">
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5 text-sm font-semibold text-foreground/90">
               <span>Video ready for story</span>
               <button type="button" onClick={() => setStoryMedia(null)} className="text-emerald-700">
                 Remove
@@ -827,7 +827,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       </div>
 
       {/* Bottom tools — always visible like Facebook */}
-      <footer className="shrink-0 border-t border-gray-200 bg-white px-3 py-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
+      <footer className="shrink-0 border-t border-border/70 bg-white px-3 py-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
         <input
           ref={imageInputRef}
           type="file"
@@ -887,7 +887,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             <button
               type="button"
               onClick={() => setShowAudience((v) => !v)}
-              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-gray-100 px-3 text-xs font-bold text-gray-700 transition hover:bg-gray-200"
+              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-muted px-3 text-xs font-bold text-foreground/90 transition hover:bg-muted/80"
               aria-label="Audience"
             >
               <AudienceIcon size={16} />
@@ -902,7 +902,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </button>
           </p>
         ) : null}
-        <p className="mt-2 text-center text-[10px] text-gray-400">
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
           {mode === "post"
             ? "One post · text, photos, video & files together"
             : "Stories disappear after 24 hours"}

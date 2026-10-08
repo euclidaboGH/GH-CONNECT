@@ -109,10 +109,10 @@ export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQ
           placeholder="Search name or message…"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {searchQuery && (
-          <button onClick={() => onSearchChange("")} className="absolute right-3 text-gray-500 hover:text-gray-700 active:scale-90 transition">
+          <button onClick={() => onSearchChange("")} className="absolute right-3 text-muted-foreground hover:text-foreground active:scale-90 transition">
             <X size={16} />
           </button>
         )}
@@ -187,7 +187,7 @@ function ConversationItemBase({
                   (conversation as { isCommunity?: boolean }).isCommunity ||
                   (conversation as { kind?: string }).kind === "community"
                     ? "h-12 w-12 rounded-xl bg-emerald-50 object-cover ring-1 ring-emerald-200/80"
-                    : "h-12 w-12 rounded-full bg-gray-100 object-cover ring-1 ring-black/5"
+                    : "h-12 w-12 rounded-full bg-muted object-cover ring-1 ring-border/50"
                 }
               />
             </button>
@@ -202,7 +202,7 @@ function ConversationItemBase({
               </span>
             ) : (
               <span
-                className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${conversation.online ? "bg-emerald-500" : "bg-gray-300"}`}
+                className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${conversation.online ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
                 aria-label={conversation.online ? "Online" : "Offline"}
               />
             )}
@@ -215,7 +215,7 @@ function ConversationItemBase({
             aria-label={`Open conversation with ${conversation.participantName}`}
           >
             <div className="flex items-center gap-2">
-              <p className={`min-w-0 flex-1 truncate text-[15px] text-gray-950 ${hasUnread ? "font-semibold" : "font-medium"}`}>
+              <p className={`min-w-0 flex-1 truncate text-[15px] text-foreground ${hasUnread ? "font-semibold" : "font-medium"}`}>
                 {(conversation.conversationType === "group" || (conversation as { isCommunity?: boolean }).isCommunity)
                   ? `Community · ${conversation.groupName || conversation.participantName}`
                   : conversation.participantName}
@@ -227,18 +227,18 @@ function ConversationItemBase({
                   <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">DM</span>
                 )}
               </p>
-              <time dateTime={conversation.lastMessageTime ? new Date(conversation.lastMessageTime).toISOString() : undefined} className={`shrink-0 text-[11px] ${hasUnread ? "font-bold text-emerald-600" : "text-gray-400"}`}>
+              <time dateTime={conversation.lastMessageTime ? new Date(conversation.lastMessageTime).toISOString() : undefined} className={`shrink-0 text-[11px] ${hasUnread ? "font-bold text-emerald-600" : "text-muted-foreground"}`}>
                 {timestamp}
               </time>
             </div>
             <div className="mt-0.5 flex items-center gap-2">
-              <p className={`min-w-0 flex-1 truncate text-[13px] ${conversation.isTyping ? "font-semibold text-emerald-600" : hasUnread ? "font-medium text-gray-800" : "text-gray-500"}`}>
+              <p className={`min-w-0 flex-1 truncate text-[13px] ${conversation.isTyping ? "font-semibold text-emerald-600" : hasUnread ? "font-medium text-foreground" : "text-muted-foreground"}`}>
                 {messagePreview}
               </p>
               <div className="flex shrink-0 items-center gap-1.5">
                 {conversation.isPinned && <Pin size={13} className="text-blue-500" aria-label="Pinned" />}
-                {conversation.isArchived && <Archive size={13} className="text-gray-400" aria-label="Archived" />}
-                {conversation.isMuted && <VolumeX size={13} className="text-gray-400" aria-label="Muted" />}
+                {conversation.isArchived && <Archive size={13} className="text-muted-foreground" aria-label="Archived" />}
+                {conversation.isMuted && <VolumeX size={13} className="text-muted-foreground" aria-label="Muted" />}
                 {hasUnread && (
                   unreadCount > 1 ? (
                     <span className="flex min-w-5 items-center justify-center rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -255,9 +255,9 @@ function ConversationItemBase({
       </div>
 
       <div className="hidden gap-2 border-t border-gray-50 px-3 py-1.5 transition group-hover:flex">
-        {onPin && <button onClick={(e) => { e.stopPropagation(); onPin(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
-        {onArchive && <button onClick={(e) => { e.stopPropagation(); onArchive(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
-        {onMute && <button onClick={(e) => { e.stopPropagation(); onMute(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
+        {onPin && <button onClick={(e) => { e.stopPropagation(); onPin(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
+        {onArchive && <button onClick={(e) => { e.stopPropagation(); onArchive(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
+        {onMute && <button onClick={(e) => { e.stopPropagation(); onMute(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
       </div>
     </div>
   )
@@ -268,12 +268,12 @@ function ConversationItemBase({
 const COMMON_EMOJIS = ["😀", "😂", "❤️", "👍", "🔥", "😍", "👏", "🎉", "💯", "🙏"]
 
 const EmojiPickerGrid = memo(({ onEmojiSelect }: { onEmojiSelect: (emoji: string) => void }) => (
-  <div className="mb-3 p-3 bg-gray-50 rounded-lg grid grid-cols-10 gap-2">
+  <div className="mb-3 p-3 bg-muted/40 rounded-lg grid grid-cols-10 gap-2">
     {COMMON_EMOJIS.map((emoji) => (
       <button
         key={emoji}
         onClick={() => onEmojiSelect(emoji)}
-        className="flex h-10 w-10 items-center justify-center rounded-xl text-xl transition hover:bg-white active:scale-110"
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-xl transition hover:bg-card active:scale-110"
       >
         {emoji}
       </button>
@@ -319,7 +319,7 @@ export function MessageInput({
   }, [])
 
   return (
-    <div className="relative z-40 min-w-0 shrink-0 border-t border-gray-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div className="relative z-40 min-w-0 shrink-0 border-t border-border/70 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       {/* Emoji picker - only renders when visible */}
       {showEmojiPicker && <EmojiPickerGrid onEmojiSelect={handleEmojiSelect} />}
 
@@ -451,7 +451,7 @@ function MessageBubbleBase({
         {/* Reply preview if replying to another message */}
         {message.replyTo && message.replyToPreview && (
           <div className={`text-xs px-3 py-1 mb-1 rounded border-l-2 ${
-            isSentByCurrentUser ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-gray-300 bg-gray-50 text-gray-600"
+            isSentByCurrentUser ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-border/80 bg-muted/40 text-muted-foreground"
           }`}>
             <p className="font-semibold">{message.replyToPreview.senderName}</p>
             <p className="truncate opacity-75">{message.replyToPreview.text}</p>
@@ -461,7 +461,7 @@ function MessageBubbleBase({
         {(message as any).isDeleted || (message as any).isDeletedForEveryone || (message as any).deletedForEveryone ? (
           <div
             className={`max-w-[min(82vw,24rem)] px-4 py-2.5 rounded-2xl text-sm italic shadow-sm ${
-              isSentByCurrentUser ? "bg-emerald-100 text-emerald-700 rounded-br-none" : "bg-gray-100 text-gray-500 rounded-bl-none"
+              isSentByCurrentUser ? "bg-emerald-100 text-emerald-700 rounded-br-none" : "bg-muted text-muted-foreground rounded-bl-none"
             }`}
           >
             This message was deleted
@@ -504,12 +504,12 @@ function MessageBubbleBase({
           ) : null}
           {message.text && <p className="break-words">{message.text}</p>}
           {(message as any).sharedPostId && (
-            <div className={`mt-2 rounded-xl border px-3 py-2 text-xs ${isSentByCurrentUser ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-50" : "border-gray-300 bg-white text-gray-700"}`}>
+            <div className={`mt-2 rounded-xl border px-3 py-2 text-xs ${isSentByCurrentUser ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-50" : "border-border/80 bg-card text-foreground/90"}`}>
               <p className="font-bold">Shared post</p>
               <p className="opacity-80">View original in feed · ref {(message as any).sharedPostId.slice(0, 8)}…</p>
             </div>
           )}
-          <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-100" : "text-gray-600"}`}>
+          <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-100" : "text-muted-foreground"}`}>
             <span>{timestamp}</span>
             {message.isEdited ? <span>(edited)</span> : null}
             {isSentByCurrentUser && message.status && message.status !== "failed" ? (
@@ -573,7 +573,7 @@ function MessageBubbleBase({
                 className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
                   isSentByCurrentUser
                     ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-700"
+                    : "bg-muted text-foreground/90"
                 }`}
               >
                 <span>{emoji}</span>
@@ -593,7 +593,7 @@ function MessageBubbleBase({
             <button
               type="button"
               onClick={() => onReply(message.id)}
-              className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 transition hover:bg-gray-200"
+              className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
             >
               Reply
             </button>
@@ -601,7 +601,7 @@ function MessageBubbleBase({
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 transition hover:bg-gray-200"
+            className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
           >
             More
           </button>
@@ -616,10 +616,10 @@ function MessageBubbleBase({
             onClick={() => setMenuOpen(false)}
           >
             <div
-              className="w-full max-w-sm rounded-t-2xl bg-white p-2 shadow-2xl sm:rounded-2xl"
+              className="w-full max-w-sm rounded-t-2xl bg-card p-2 shadow-2xl sm:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <p className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <p className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Message actions
               </p>
               {onReact && (
@@ -632,7 +632,7 @@ function MessageBubbleBase({
                         onReact(message.id, emoji)
                         setMenuOpen(false)
                       }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-lg hover:bg-gray-100"
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-lg hover:bg-muted"
                     >
                       {emoji}
                     </button>
@@ -642,7 +642,7 @@ function MessageBubbleBase({
               {onReply && (
                 <button
                   type="button"
-                  className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                  className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-foreground hover:bg-muted/40"
                   onClick={() => {
                     onReply(message.id)
                     setMenuOpen(false)
@@ -653,7 +653,7 @@ function MessageBubbleBase({
               )}
               <button
                 type="button"
-                className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-foreground hover:bg-muted/40"
                 onClick={copyText}
               >
                 Copy
@@ -661,7 +661,7 @@ function MessageBubbleBase({
               {onForward && (
                 <button
                   type="button"
-                  className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                  className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-foreground hover:bg-muted/40"
                   onClick={() => {
                     onForward(message.id)
                     setMenuOpen(false)
@@ -674,7 +674,7 @@ function MessageBubbleBase({
                 <>
                   <button
                     type="button"
-                    className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                    className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-foreground hover:bg-muted/40"
                     onClick={() => {
                       onDelete(message.id, false)
                       setMenuOpen(false)
@@ -710,7 +710,7 @@ function MessageBubbleBase({
               )}
               <button
                 type="button"
-                className="mt-1 w-full rounded-xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-800"
+                className="mt-1 w-full rounded-xl bg-muted px-4 py-3 text-sm font-bold text-foreground"
                 onClick={() => setMenuOpen(false)}
               >
                 Cancel

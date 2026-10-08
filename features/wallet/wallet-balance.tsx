@@ -55,8 +55,8 @@ export function WalletBalanceCard({
 
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
-              <GhcCoinIcon size={36} className="drop-shadow-sm" title="GreenHaven Coin" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
+              <GhcCoinIcon size={40} className="drop-shadow-sm" title="GreenHaven Coin" />
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold tracking-wide text-white/80">
@@ -77,7 +77,7 @@ export function WalletBalanceCard({
           </button>
         </div>
 
-        <p className="relative mt-5 flex flex-wrap items-baseline gap-2 text-[2.5rem] font-semibold leading-none tracking-tight tabular-nums sm:text-[2.75rem]">
+        <p className="relative mt-4 flex flex-wrap items-baseline gap-2.5 text-[2.6rem] font-bold leading-none tracking-tight tabular-nums sm:text-[2.85rem]">
           {refreshing && balance === 0 ? (
             <span
               className="inline-block h-11 w-44 animate-pulse rounded-xl bg-white/20"

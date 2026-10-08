@@ -456,7 +456,7 @@ function EnhancedPostCardInner({
         )}
       </ActionSheet>
 
-      {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"><h2 className="text-lg font-bold text-gray-900">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-gray-200 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
+      {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl"><h2 className="text-lg font-bold text-foreground">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
 
       {/* Content with rich formatting */}
       <div className="p-4">
@@ -517,9 +517,9 @@ function EnhancedPostCardInner({
             href={post.linkPreview.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block mb-2 border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition"
+            className="mb-2 block overflow-hidden rounded-xl border border-border/60 transition hover:border-border"
           >
-            <div className="flex gap-2 p-2 bg-gray-50 hover:bg-gray-100">
+            <div className="flex gap-2 bg-muted/40 p-2 hover:bg-muted/60">
               {post.linkPreview.image && (
                 <LazyImage
                   src={post.linkPreview.image}
@@ -528,8 +528,8 @@ function EnhancedPostCardInner({
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-900 truncate">{post.linkPreview.title}</p>
-                <p className="text-xs text-gray-500 truncate">{post.linkPreview.domain}</p>
+                <p className="truncate text-xs font-semibold text-foreground">{post.linkPreview.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{post.linkPreview.domain}</p>
               </div>
             </div>
           </a>
@@ -592,16 +592,16 @@ function EnhancedPostCardInner({
 
         {/* Quote repost */}
         {post.quoteOf && (
-          <div className="mb-2 p-2 border border-gray-300 rounded-lg bg-gray-50 text-xs text-gray-600">
+          <div className="mb-2 p-2 border border-border/80 rounded-lg bg-muted/40 text-xs text-muted-foreground">
             <p className="font-semibold mb-1">Quoted post</p>
-            <p className="text-gray-600">Original post content preview...</p>
+            <p className="text-muted-foreground">Original post content preview...</p>
           </div>
         )}
       </div>
 
       {/* Engagement stats */}
       {post.engagement && (
-        <div className="px-3 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-500 space-y-1">
+        <div className="px-3 py-2 bg-muted/40 border-t border-border/50 text-xs text-muted-foreground space-y-1">
           <div className="flex justify-between">
             <span>{post.engagement.views} views</span>
             <span>{post.engagement.saves} saved</span>
@@ -767,16 +767,16 @@ export function VisibilityReasonTooltip({
     <div className="fixed inset-0 bg-black/50 flex items-end z-50">
       <div className="w-full bg-white rounded-t-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-gray-900">Why am I seeing this?</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <h3 className="font-bold text-foreground">Why am I seeing this?</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground/90">
             <X size={20} />
           </button>
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-gray-700">{reason.reason}</p>
+          <p className="text-sm text-foreground/90">{reason.reason}</p>
           <div className="flex gap-2">
-            <button className="flex-1 py-2 px-3 bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-200">
+            <button className="flex-1 rounded-xl bg-muted px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted/80">
               See less like this
             </button>
             <button className="flex-1 py-2 px-3 bg-blue-100 rounded-lg text-sm font-semibold text-blue-700 hover:bg-blue-200">

@@ -147,7 +147,7 @@ export function ActionSheet({
       />
       <div
         ref={panelRef}
-        className="relative z-[201] flex w-full max-w-md flex-col rounded-t-3xl border border-border bg-card shadow-2xl sm:mb-6 sm:rounded-3xl"
+        className="relative z-[201] flex w-full max-w-md flex-col rounded-t-[1.25rem] border border-border/50 bg-card shadow-2xl sm:mb-6 sm:rounded-[1.25rem]"
         style={{
           marginBottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
           maxHeight: "min(72vh, 32rem)",

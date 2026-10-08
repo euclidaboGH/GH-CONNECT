@@ -18,9 +18,9 @@ import { openListing, messageListingSeller } from "@/lib/marketplace/commerce-ac
 // Skeleton loader for posts
 export function PostSkeleton() {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm animate-pulse">
+    <div className="bg-card border border-border/70 rounded-lg overflow-hidden shadow-sm animate-pulse">
       {/* Header skeleton */}
-      <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+      <div className="p-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-gray-300"></div>
           <div className="space-y-1">
@@ -39,7 +39,7 @@ export function PostSkeleton() {
       </div>
 
       {/* Actions skeleton */}
-      <div className="px-3 py-2 bg-gray-50 border-t border-gray-100 flex justify-around">
+      <div className="px-3 py-2 bg-muted/40 border-t border-border/50 flex justify-around">
         <div className="h-6 w-12 bg-gray-300 rounded"></div>
         <div className="h-6 w-12 bg-gray-300 rounded"></div>
         <div className="h-6 w-12 bg-gray-300 rounded"></div>
@@ -119,7 +119,7 @@ export const PostCard = memo(function PostCard({
   return (
     <article className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
       {/* Post header — avatar + name open public profile when provided */}
-      <header className="px-4 py-3 border-b border-gray-100/80 flex items-center justify-between">
+      <header className="px-4 py-3 border-b border-border/40 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -138,7 +138,7 @@ export const PostCard = memo(function PostCard({
             <button
               type="button"
               onClick={() => onOpenProfile?.(post.authorId)}
-              className="block max-w-full truncate text-left font-bold text-sm text-gray-900 hover:text-emerald-700 focus-visible:outline-none focus-visible:underline"
+              className="block max-w-full truncate text-left font-bold text-sm text-foreground hover:text-emerald-700 focus-visible:outline-none focus-visible:underline"
               disabled={!onOpenProfile}
             >
               {post.authorName}
@@ -161,7 +161,7 @@ export const PostCard = memo(function PostCard({
         {(isOwnPost || onHidePost || onReportPost) && (
           <button
             onClick={handleMenuOpen}
-            className="text-gray-500 hover:text-gray-700 active:scale-90 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full p-1"
+            className="text-muted-foreground hover:text-foreground/90 active:scale-90 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full p-1"
           >
             <MoreVertical size={16} />
           </button>
@@ -179,7 +179,7 @@ export const PostCard = memo(function PostCard({
 
       {/* Post content with mentions and hashtags */}
       <div className="px-4 py-4 space-y-3">
-        <div className="text-[15px] leading-7 text-gray-800 break-words">
+        <div className="text-[15px] leading-7 text-foreground break-words">
         <EnhancedPostContent
           content={post.content}
           onMentionClick={(userId) => onFollowFromPost?.(userId)}
@@ -248,7 +248,7 @@ export const PostCard = memo(function PostCard({
 
         {/* Images gallery */}
         {post.images.length > 0 && (
-          <div className={`grid gap-1.5 rounded-xl overflow-hidden bg-gray-100 ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+          <div className={`grid gap-1.5 rounded-xl overflow-hidden bg-muted ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
             {post.images.slice(0, 4).map((image, idx) => (
               <div
                 key={idx}
@@ -286,7 +286,7 @@ export const PostCard = memo(function PostCard({
 
       {/* Post stats */}
       {post.engagement && (
-        <div className="px-4 py-2.5 bg-gray-50/70 border-t border-b border-gray-100 text-xs text-gray-500">
+        <div className="px-4 py-2.5 bg-muted/40/70 border-t border-b border-border/50 text-xs text-muted-foreground">
           <div className="flex justify-between">
             <span>{post.likes} {post.likes === 1 ? "like" : "likes"}</span>
             <span>{post.comments.length} {post.comments.length === 1 ? "comment" : "comments"}</span>
@@ -296,13 +296,13 @@ export const PostCard = memo(function PostCard({
       )}
 
       {/* Engagement buttons */}
-      <div className="px-3 py-2 bg-white border-t border-gray-100 flex items-center justify-around text-xs">
+      <div className="px-3 py-2 bg-card border-t border-border/50 flex items-center justify-around text-xs">
         <button
           onClick={() => onLike(post.id)}
           className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 ${
             isLiked
-              ? "text-pink-500 bg-pink-50"
-              : "text-gray-600 hover:bg-pink-50 hover:text-pink-500"
+              ? "text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40"
+              : "text-muted-foreground hover:bg-pink-50 hover:text-pink-500"
           }`}
         >
           <Heart size={14} fill={isLiked ? "currentColor" : "none"} />
@@ -311,8 +311,8 @@ export const PostCard = memo(function PostCard({
 
         <button
           onClick={() => onComment(post.id)}
-          className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 text-gray-600 ${
-            isCommentingPostId ? "bg-blue-50 text-blue-500" : "hover:bg-blue-50 hover:text-blue-500"
+          className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 text-muted-foreground ${
+            isCommentingPostId ? "bg-sky-50 text-sky-600" : "hover:bg-sky-50 hover:text-sky-600"
           }`}
         >
           <MessageCircle size={14} />
@@ -322,7 +322,7 @@ export const PostCard = memo(function PostCard({
         <div className="relative">
           <button
             onClick={() => setShowShareMenu(!showShareMenu)}
-            className="flex items-center gap-1 py-2 px-3 rounded-lg font-semibold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all active:scale-95"
+            className="flex items-center gap-1 py-2 px-3 rounded-lg font-semibold text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 transition-all active:scale-95"
           >
             <Share2 size={14} />
             Share
@@ -342,7 +342,7 @@ export const PostCard = memo(function PostCard({
           className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 ${
             isBookmarked
               ? "text-blue-600 bg-blue-50"
-              : "text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+              : "text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
           }`}
         >
           <Bookmark size={14} fill={isBookmarked ? "currentColor" : "none"} />
@@ -351,7 +351,7 @@ export const PostCard = memo(function PostCard({
 
       {/* Comments section */}
       {post.comments && post.comments.length > 0 && (
-        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/70 max-h-52 overflow-y-auto space-y-2.5">
+        <div className="px-4 py-3 border-t border-border/50 bg-muted/40/70 max-h-52 overflow-y-auto space-y-2.5">
           {post.comments.slice(0, 3).map((comment) => (
             <EnhancedComment
               key={comment.id}
@@ -448,7 +448,7 @@ export function ModeFilter({ currentMode, selectedFilter, onFilterChange }: Mode
           className={`flex items-center gap-1 whitespace-nowrap py-1.5 px-3 rounded-full font-semibold text-xs transition-all active:scale-95 ${
             selectedFilter === mode.id
               ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              : "bg-muted text-foreground/90 hover:bg-muted/80"
           }`}
         >
           <span>{mode.emoji}</span>
@@ -469,7 +469,7 @@ export function FloatingCreateButton({ onClick, isVisible }: FloatingCreateButto
   return (
     <button
       onClick={onClick}
-      className={`fixed bottom-24 right-4 w-14 h-14 rounded-full bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg hover:shadow-xl active:scale-90 transition-all flex items-center justify-center z-40 ${
+      className={`fixed bottom-24 right-4 w-14 h-14 rounded-full gh-create-fab text-white shadow-lg hover:shadow-xl active:scale-90 transition-all flex items-center justify-center z-40 ${
         isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0 pointer-events-none"
       }`}
       title="Create Post"
@@ -509,7 +509,7 @@ export function PeopleRecommendation({ people, onFollow }: PeopleRecommendationP
                 }}
               />
             </div>
-            <p className="text-xs font-bold text-gray-900 truncate w-14">{person.name}</p>
+            <p className="text-xs font-bold text-foreground truncate w-14">{person.name}</p>
             <button
               onClick={() => onFollow(person.id)}
               className="text-xs text-pink-600 font-semibold mt-1 hover:text-pink-700 active:scale-90 transition-all"

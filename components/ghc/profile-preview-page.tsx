@@ -308,7 +308,7 @@ export function ProfilePreviewPage({
             }}
             className={`flex h-16 w-16 items-center justify-center rounded-full shadow-xl transition active:scale-95 ${
               liked || isMatched
-                ? "bg-gradient-to-br from-rose-500 to-pink-600 text-white"
+                ? "bg-[var(--gh-green)] text-white"
                 : "bg-gradient-to-br from-emerald-400 to-teal-600 text-white"
             }`}
             aria-label="Like / Match interest"
@@ -346,7 +346,7 @@ export function ProfilePreviewPage({
             </span>
           )}
         </div>
-        <div className="mb-4 rounded-2xl bg-gradient-to-r from-violet-50 to-fuchsia-50 p-3 dark:from-violet-950/40 dark:to-fuchsia-950/30">
+        <div className="mb-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 p-3 dark:from-emerald-950/40 dark:to-teal-950/30">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
               Compatibility
@@ -355,7 +355,7 @@ export function ProfilePreviewPage({
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-violet-200/80">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
               style={{ width: `${match}%` }}
             />
           </div>

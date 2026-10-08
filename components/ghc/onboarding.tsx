@@ -717,7 +717,7 @@ export function Onboarding() {
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { value: "friendship", label: "Friendship", icon: Users, accent: "from-violet-500 to-purple-500" },
+                  { value: "friendship", label: "Friendship", icon: Users, accent: "from-emerald-500 to-teal-500" },
                   { value: "dating", label: "Dating", icon: Heart, accent: "from-rose-500 to-pink-500" },
                   { value: "networking", label: "Networking", icon: Briefcase, accent: "from-sky-500 to-blue-600" },
                   { value: "business", label: "Business", icon: Building2, accent: "from-emerald-500 to-teal-600" },

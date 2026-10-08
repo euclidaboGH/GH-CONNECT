@@ -81,17 +81,17 @@ export function CommunitiesSection({
           </h2>
         </div>
         {status === "loading" ? (
-          <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label="Loading communities" />
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading communities" />
         ) : null}
       </div>
 
       {status === "loading" ? (
-        <p className="text-sm text-gray-500">Loading communities…</p>
+        <p className="text-sm text-muted-foreground">Loading communities…</p>
       ) : null}
 
       {status === "error" ? (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">Could not load communities right now.</p>
+          <p className="text-sm text-muted-foreground">Could not load communities right now.</p>
           <button
             type="button"
             onClick={() => void load()}
@@ -103,7 +103,7 @@ export function CommunitiesSection({
       ) : null}
 
       {status === "empty" ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           {durable
             ? "No public communities yet. Create one from Community."
             : "Communities will appear here when the server directory is available."}
@@ -117,12 +117,12 @@ export function CommunitiesSection({
               <button
                 type="button"
                 onClick={() => onViewCommunity(c.name)}
-                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-800 transition hover:border-emerald-300 hover:bg-emerald-50"
+                className="rounded-full border border-border/70 bg-muted/40 px-3 py-1.5 text-sm font-medium text-foreground transition hover:border-emerald-300 hover:bg-emerald-50"
                 title={c.purpose || c.description || c.name}
               >
                 {c.name}
                 {typeof c.memberCount === "number" && c.memberCount > 0 ? (
-                  <span className="ml-1 text-xs text-gray-500">{c.memberCount}</span>
+                  <span className="ml-1 text-xs text-muted-foreground">{c.memberCount}</span>
                 ) : null}
               </button>
             </li>

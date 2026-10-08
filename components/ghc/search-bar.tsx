@@ -55,14 +55,14 @@ export function SearchBar({
     <div className="space-y-2 px-4 py-3">
       <div className="flex items-center gap-2">
         <div
-          className={`relative min-w-0 flex-1 rounded-2xl border bg-gray-50 transition-colors ${
+          className={`relative min-w-0 flex-1 rounded-[1.25rem] border bg-muted/40 transition-colors ${
             isFocused
-              ? "border-emerald-300 bg-white ring-2 ring-emerald-100"
-              : "border-gray-200"
+              ? "border-primary/40 bg-card ring-2 ring-primary/20"
+              : "border-border/70"
           }`}
         >
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <input
@@ -84,7 +84,7 @@ export function SearchBar({
                 submitSearch(searchQuery)
               }
             }}
-            className="h-11 w-full bg-transparent pl-10 pr-9 text-sm text-gray-900 outline-none placeholder:text-gray-400"
+            className="h-11 w-full bg-transparent pl-10 pr-9 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             aria-label="Search people, interests, or cities"
             autoComplete="off"
           />
@@ -92,7 +92,7 @@ export function SearchBar({
             <button
               type="button"
               onClick={() => submitSearch("")}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground/90"
               aria-label="Clear search"
             >
               <X size={15} />
@@ -126,11 +126,11 @@ export function SearchBar({
       )}
       {isFocused && visibleSearches.length > 0 && (
         <div
-          className="rounded-2xl border border-gray-100 bg-white p-2 shadow-lg"
+          className="rounded-2xl border border-border/50 bg-white p-2 shadow-lg"
           role="listbox"
           aria-label="Search suggestions"
         >
-          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">
+          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
             {normalizedRecent.length
               ? "Recent searches & suggestions"
               : "Suggested searches"}
@@ -142,7 +142,7 @@ export function SearchBar({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => submitSearch(search)}
-                className="rounded-full bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-emerald-50 hover:text-emerald-700"
+                className="rounded-full bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground/90 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 {search}
               </button>

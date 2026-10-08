@@ -76,8 +76,8 @@ export function ReportChooser({
         onClick={() => setOpen(true)}
         className={
           compact
-            ? "inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-red-600"
-            : "inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-red-600"
+            ? "inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-red-600"
+            : "inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-red-600"
         }
       >
         <Flag size={14} aria-hidden="true" />
@@ -96,16 +96,16 @@ export function ReportChooser({
               <>
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-base font-bold text-gray-900">
+                    <h2 className="text-base font-bold text-foreground">
                       Report this {TARGET_LABELS[targetType]}
                     </h2>
-                    <p className="mt-1 text-xs text-gray-500">Help keep GreenHaven safe for everyone.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Help keep GreenHaven safe for everyone.</p>
                   </div>
                   <button
                     type="button"
                     onClick={close}
                     aria-label="Close"
-                    className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+                    className="rounded-full p-2 text-muted-foreground hover:bg-muted"
                   >
                     <X size={18} />
                   </button>
@@ -119,7 +119,7 @@ export function ReportChooser({
                       className={`w-full rounded-xl border px-3 py-3 text-left text-sm font-medium transition ${
                         reason === item
                           ? "border-red-500 bg-red-50 text-red-700"
-                          : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                          : "border-border/70 text-foreground/90 hover:bg-muted/40"
                       }`}
                     >
                       {item}
@@ -128,7 +128,7 @@ export function ReportChooser({
                 </div>
                 {reason && (
                   <div className="mt-3">
-                    <label className="mb-1 block text-xs font-semibold text-gray-600">
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">
                       Additional details (optional)
                     </label>
                     <textarea
@@ -136,7 +136,7 @@ export function ReportChooser({
                       onChange={(e) => setDetails(e.target.value.slice(0, 500))}
                       rows={2}
                       placeholder="Help us understand the issue…"
-                      className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                      className="w-full resize-none rounded-xl border border-border/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
                     />
                   </div>
                 )}
@@ -152,12 +152,12 @@ export function ReportChooser({
             ) : (
               <>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-base font-bold text-gray-900">Report submitted</h2>
-                  <button type="button" onClick={close} aria-label="Close" className="rounded-full p-2 text-gray-500 hover:bg-gray-100">
+                  <h2 className="text-base font-bold text-foreground">Report submitted</h2>
+                  <button type="button" onClick={close} aria-label="Close" className="rounded-full p-2 text-muted-foreground hover:bg-muted">
                     <X size={18} />
                   </button>
                 </div>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   Thank you. Our team will review this {TARGET_LABELS[targetType]}.
                 </p>
                 {targetType === "user" && onBlockAfterReport && (
@@ -176,7 +176,7 @@ export function ReportChooser({
                 <button
                   type="button"
                   onClick={close}
-                  className="mt-2 w-full rounded-xl bg-gray-100 py-3 text-sm font-bold text-gray-800"
+                  className="mt-2 w-full rounded-xl bg-muted py-3 text-sm font-bold text-foreground"
                 >
                   Done
                 </button>

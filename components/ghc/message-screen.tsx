@@ -410,7 +410,7 @@ export function MessageScreen() {
               <button
                 type="button"
                 onClick={() => setFilter("all")}
-                className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                className="mt-3 rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white shadow-sm"
               >
                 View all chats
               </button>
@@ -424,7 +424,7 @@ export function MessageScreen() {
               <button
                 type="button"
                 onClick={() => navigateTo("discover")}
-                className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                className="mt-3 rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white shadow-sm"
               >
                 Discover people
               </button>
@@ -438,7 +438,7 @@ export function MessageScreen() {
               <button
                 type="button"
                 onClick={() => navigateTo("communities")}
-                className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                className="mt-3 rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white shadow-sm"
               >
                 Browse communities
               </button>

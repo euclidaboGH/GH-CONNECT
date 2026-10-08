@@ -194,9 +194,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
           ))}
         </div>
         {composerOpen && (
-          <div className="mt-2 rounded-xl border border-purple-100 bg-purple-50/50 p-2.5">
+          <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-gray-900">New story</p>
+              <p className="text-xs font-bold text-foreground">New story</p>
               <button type="button" onClick={() => setComposerOpen(false)} aria-label="Close">
                 <X size={16} />
               </button>
@@ -213,26 +213,26 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                     type="button"
                     onClick={() => setStoryAudience(a.id)}
                     className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                      storyAudience === a.id ? "bg-teal-600 text-white" : "bg-gray-100 text-gray-600"
+                      storyAudience === a.id ? "bg-teal-600 text-white" : "bg-muted text-muted-foreground"
                     }`}
                   >
                     {a.label}
                   </button>
                 ))}
               </div>
-              <p className="mb-2 text-[10px] text-gray-500">Visible for 24 hours · Replies become private messages</p>
+              <p className="mb-2 text-[10px] text-muted-foreground">Visible for 24 hours · Replies become private messages</p>
 <textarea
               value={text}
               onChange={(e) => setText(e.target.value.slice(0, 500))}
               placeholder="Share a status…"
-              className="mt-2 min-h-16 w-full resize-none rounded-lg border border-gray-200 bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+              className="mt-2 min-h-16 w-full resize-none rounded-lg border border-border/70 bg-card p-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <div className="mt-2 flex gap-2">
               <input ref={imageRef} type="file" accept="image/*" className="sr-only" onChange={(e) => { void readMedia(e.target.files?.[0], "image"); e.currentTarget.value = "" }} />
               <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={(e) => { void readMedia(e.target.files?.[0], "video"); e.currentTarget.value = "" }} />
-              <button type="button" onClick={() => imageRef.current?.click()} className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold">Photo</button>
-              <button type="button" onClick={() => videoRef.current?.click()} className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold">Video</button>
-              <button type="button" onClick={() => void publish()} disabled={publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-bold text-white disabled:bg-gray-300">
+              <button type="button" onClick={() => imageRef.current?.click()} className="rounded-lg border border-border/70 bg-card px-2.5 py-1.5 text-[11px] font-semibold">Photo</button>
+              <button type="button" onClick={() => videoRef.current?.click()} className="rounded-lg border border-border/70 bg-card px-2.5 py-1.5 text-[11px] font-semibold">Video</button>
+              <button type="button" onClick={() => void publish()} disabled={publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white disabled:bg-muted disabled:text-muted-foreground">
                 {publishing ? "…" : "Share"}
               </button>
             </div>
@@ -240,9 +240,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         )}
         {viewing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={() => setViewing(null)}>
-            <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-sm rounded-[1.25rem] bg-card p-5 shadow-2xl border border-border/50" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <p className="font-bold text-gray-950">{viewing.name}&apos;s story</p>
+                <p className="font-bold text-foreground">{viewing.name}&apos;s story</p>
                 <button type="button" onClick={() => setViewing(null)} aria-label="Close story"><X size={20} /></button>
               </div>
               {viewing.media?.type === "image" && <LazyImage src={viewing.media.url} alt="Story" className="mt-4 max-h-[45vh] w-full rounded-2xl object-cover" />}
@@ -263,9 +263,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                 )}
               </p>
               {viewing.media?.type === "video" && <video src={viewing.media.url} controls className="mt-4 max-h-[45vh] w-full rounded-2xl" />}
-              {viewing.text && <p className="mt-4 whitespace-pre-wrap text-sm text-gray-700">{viewing.text}</p>}
+              {viewing.text && <p className="mt-4 whitespace-pre-wrap text-sm text-foreground/90">{viewing.text}</p>}
               {viewing.ownerId && viewing.ownerId !== "current-user" && (
-                <div className="mt-4 border-t border-gray-100 pt-3">
+                <div className="mt-4 border-t border-border/50 pt-3">
                   <div className="mb-3 flex gap-2">
                     {["👏", "🔥", "💚", "🙌"].map((emoji) => (
                       <button
@@ -276,7 +276,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                           addToast(`Reacted ${emoji}`, "success")
                         }}
                         className={`flex h-10 w-10 items-center justify-center rounded-full text-lg transition ${
-                          storyReaction === emoji ? "bg-emerald-100 ring-2 ring-emerald-500" : "bg-gray-100"
+                          storyReaction === emoji ? "bg-emerald-100 ring-2 ring-emerald-500" : "bg-muted"
                         }`}
                         aria-label={`React ${emoji}`}
                       >
@@ -284,16 +284,16 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                       </button>
                     ))}
                   </div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Reply as private message</p>
-                  <div className="mb-2 flex items-center gap-2 rounded-xl bg-purple-50 px-2.5 py-2">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reply as private message</p>
+                  <div className="mb-2 flex items-center gap-2 rounded-xl bg-emerald-50 px-2.5 py-2">
                     <LazyImage
                       src={viewing.photo || viewing.media?.url || "/placeholder.svg?width=40&height=40"}
                       alt=""
                       className="h-9 w-9 rounded-lg object-cover"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-bold text-purple-800">Story from {viewing.name}</p>
-                      <p className="truncate text-[10px] text-purple-600">
+                      <p className="truncate text-[11px] font-bold text-emerald-900">Story from {viewing.name}</p>
+                      <p className="truncate text-[10px] text-emerald-700">
                         {viewing.text?.slice(0, 60) || "Photo/video story"}
                       </p>
                     </div>
@@ -303,13 +303,13 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value.slice(0, 300))}
                       placeholder="Reply to this story…"
-                      className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-purple-400"
+                      className="min-w-0 flex-1 rounded-xl border border-border/70 px-3 py-2 text-sm outline-none focus:border-emerald-400"
                       aria-label="Story reply"
                     />
                     <button
                       type="button"
                       disabled={!replyText.trim() || replying}
-                      className="rounded-xl bg-purple-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+                      className="rounded-xl bg-[var(--gh-green)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
                       onClick={async () => {
                         const text = replyText.trim()
                         if (!text || !viewing.ownerId) return
@@ -356,22 +356,22 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
   }
 
   return (
-    <section className="border-t border-gray-100 bg-white px-4 py-4 sm:px-6" aria-label="Your stories">
+    <section className="border-t border-border/50 bg-card px-4 py-4 sm:px-6" aria-label="Your stories">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-purple-600">Your stories</p>
-          <h3 className="mt-0.5 text-base font-bold text-gray-950">Share a moment</h3>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Your stories</p>
+          <h3 className="mt-0.5 text-base font-bold text-foreground">Share a moment</h3>
         </div>
-        <button type="button" onClick={() => setComposerOpen(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-purple-600 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-purple-700 active:scale-95">
+        <button type="button" onClick={() => setComposerOpen(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95">
           <Plus size={15} /> Add
         </button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         <button type="button" onClick={() => ownStory && setViewing(ownStory)} disabled={!ownStory} className="w-20 shrink-0 text-center disabled:opacity-70">
-          <div className="mx-auto h-[4.5rem] w-16 rounded-full border-4 border-dashed border-purple-300 bg-purple-50 p-0.5 shadow-sm">
+          <div className="mx-auto h-[4.5rem] w-16 rounded-full border-4 border-dashed border-emerald-300 bg-emerald-50 p-0.5 shadow-sm">
             <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="Your story" className="h-full w-full rounded-full border-2 border-white object-cover" />
           </div>
-          <span className="relative mx-auto mt-1 block w-fit truncate text-[11px] font-semibold text-gray-700">
+          <span className="relative mx-auto mt-1 block w-fit truncate text-[11px] font-semibold text-foreground/90">
             Your story
             <span className="absolute -right-4 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[11px] font-bold text-white">
               <Plus size={10} />
@@ -380,9 +380,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         </button>
       </div>
       {composerOpen && (
-        <div className="mt-4 rounded-2xl border border-purple-100 bg-purple-50/60 p-3">
+        <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900">Create a story</p>
+            <p className="text-sm font-bold text-foreground">Create a story</p>
             <button type="button" onClick={() => setComposerOpen(false)} aria-label="Close story composer"><X size={18} /></button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -397,30 +397,30 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                 type="button"
                 onClick={() => setStoryAudience(a.id)}
                 className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                  storyAudience === a.id ? "bg-teal-600 text-white" : "bg-gray-100 text-gray-600"
+                  storyAudience === a.id ? "bg-teal-600 text-white" : "bg-muted text-muted-foreground"
                 }`}
               >
                 {a.label}
               </button>
             ))}
           </div>
-          <p className="mb-2 text-[10px] text-gray-500">Visible for 24 hours · Replies become private messages</p>
+          <p className="mb-2 text-[10px] text-muted-foreground">Visible for 24 hours · Replies become private messages</p>
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value.slice(0, 500))}
             placeholder="Share a status update"
-            className="mt-3 min-h-20 w-full resize-none rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500"
+            className="mt-3 min-h-20 w-full resize-none rounded-xl border border-border/70 bg-card p-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-emerald-500"
           />
           <div className="mt-3 flex gap-2">
             <input ref={imageRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void readMedia(event.target.files?.[0], "image"); event.currentTarget.value = "" }} />
             <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={(event) => { void readMedia(event.target.files?.[0], "video"); event.currentTarget.value = "" }} />
-            <button type="button" onClick={() => imageRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => imageRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-foreground/90 disabled:cursor-wait disabled:opacity-60">
               <ImageIcon size={15} aria-hidden /> {uploading === "image" ? "Loading…" : "Photo"}
             </button>
-            <button type="button" onClick={() => videoRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => videoRef.current?.click()} disabled={uploading !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-foreground/90 disabled:cursor-wait disabled:opacity-60">
               <Video size={15} aria-hidden /> {uploading === "video" ? "Loading…" : "Video"}
             </button>
-            <button type="button" onClick={() => void publish()} disabled={uploading !== null || publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:bg-gray-300">
+            <button type="button" onClick={() => void publish()} disabled={uploading !== null || publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white disabled:bg-muted disabled:text-muted-foreground">
               {publishing ? "Sharing…" : "Share"}
             </button>
           </div>
@@ -428,9 +428,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
       )}
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={() => setViewing(null)}>
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-[1.25rem] bg-card p-5 shadow-2xl border border-border/50" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-bold text-gray-950">{viewing.name}&apos;s story</p>
+              <p className="font-bold text-foreground">{viewing.name}&apos;s story</p>
               <button type="button" onClick={() => setViewing(null)} aria-label="Close story"><X size={20} /></button>
             </div>
             {viewing.media?.type === "image" && <LazyImage src={viewing.media.url} alt="Story" className="mt-4 max-h-[45vh] w-full rounded-2xl object-cover" />}
@@ -451,22 +451,22 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                 )}
               </p>
             {viewing.media?.type === "video" && <video src={viewing.media.url} controls className="mt-4 max-h-[45vh] w-full rounded-2xl" />}
-            {viewing.text && <p className="mt-4 whitespace-pre-wrap text-sm text-gray-700">{viewing.text}</p>}
+            {viewing.text && <p className="mt-4 whitespace-pre-wrap text-sm text-foreground/90">{viewing.text}</p>}
             {viewing.ownerId && viewing.ownerId !== "current-user" && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Reply as message</p>
+              <div className="mt-4 border-t border-border/50 pt-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reply as message</p>
                 <div className="flex gap-2">
                   <input
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value.slice(0, 300))}
                     placeholder="Reply to this story…"
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-purple-400"
+                    className="min-w-0 flex-1 rounded-xl border border-border/70 px-3 py-2 text-sm outline-none focus:border-emerald-400"
                     aria-label="Story reply"
                   />
                   <button
                     type="button"
                     disabled={!replyText.trim() || replying}
-                    className="rounded-xl bg-purple-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+                    className="rounded-xl bg-[var(--gh-green)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
                     onClick={async () => {
                       const text = replyText.trim()
                       if (!text || !viewing.ownerId) return

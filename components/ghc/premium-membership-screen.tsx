@@ -797,7 +797,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   key={tier}
                   id={`membership-plan-${tier}`}
                   aria-current={isCurrent ? "true" : undefined}
-                  className={`w-full rounded-[1.25rem] border bg-card p-4 shadow-[var(--gh-card-shadow)] ${accent} ${ring}`}
+                  className={`w-full rounded-[1.25rem] border bg-card p-4 sm:p-5 shadow-[var(--gh-card-shadow)] ${accent} ${ring}`}
                 >
                   <div className="mb-1">
                     <div className="flex items-start justify-between gap-2">
@@ -933,7 +933,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                     <button
                       type="button"
                       onClick={() => setConfirmTier(tier)}
-                      className="mt-4 w-full rounded-2xl bg-emerald-600 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 active:scale-[0.99]"
+                      className="mt-4 w-full rounded-full bg-[var(--gh-green)] py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
                     >
                       Review {plan.label}
                     </button>
@@ -1000,7 +1000,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       {/* Honest confirm — no countdown / fake scarcity */}
       {confirmTier && (
         <div className="absolute inset-0 z-40 flex items-end bg-black/40 sm:items-center sm:justify-center">
-          <div className="w-full max-w-md rounded-t-3xl bg-card p-5 shadow-xl sm:rounded-3xl">
+          <div className="w-full max-w-md rounded-t-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl sm:rounded-[1.25rem]">
             <h3 className="text-base font-bold text-foreground">
               Confirm {MEMBERSHIP_PLANS[confirmTier].label}
             </h3>
@@ -1080,7 +1080,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           aria-modal="true"
           aria-labelledby="membership-success-title"
         >
-          <div className="relative w-full max-w-md overflow-hidden rounded-t-3xl border border-emerald-200/80 bg-card p-5 shadow-xl dark:border-emerald-800 sm:mb-8 sm:rounded-3xl">
+          <div className="relative w-full max-w-md overflow-hidden rounded-t-[1.25rem] border border-emerald-200/80 bg-card p-5 shadow-2xl dark:border-emerald-800 sm:mb-8 sm:rounded-[1.25rem]">
             {/* Brief celebratory accent — respects reduced motion */}
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-400/25 via-teal-300/10 to-transparent motion-safe:animate-pulse"

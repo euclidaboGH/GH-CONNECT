@@ -55,7 +55,7 @@ export function DiscoveryObjectCard({
 
   if (isCommunityCandidate(candidate)) {
     return (
-      <article className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm" aria-label={`Community ${candidate.displayName}`}>
+      <article className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]" aria-label={`Community ${candidate.displayName}`}>
         <h3 className="text-sm font-semibold text-foreground">{candidate.displayName}</h3>
         {candidate.purpose || candidate.subtitle ? (
           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{candidate.purpose || candidate.subtitle}</p>
@@ -76,7 +76,7 @@ export function DiscoveryObjectCard({
   if (isEventCandidate(candidate)) {
     const when = candidate.startsAt ? new Date(candidate.startsAt).toLocaleString() : "Date TBA"
     return (
-      <article className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm" aria-label={`Event ${candidate.displayName}`}>
+      <article className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]" aria-label={`Event ${candidate.displayName}`}>
         <h3 className="text-sm font-semibold text-foreground">{candidate.displayName}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">{when}</p>
         <p className="text-[11px] text-muted-foreground">
@@ -93,7 +93,7 @@ export function DiscoveryObjectCard({
 
   if (isActivityCandidate(candidate)) {
     return (
-      <article className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm" aria-label={`Activity ${candidate.displayName}`}>
+      <article className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]" aria-label={`Activity ${candidate.displayName}`}>
         <h3 className="text-sm font-semibold text-foreground line-clamp-2">{candidate.displayName}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {candidate.activityType || "Activity"}
@@ -110,7 +110,7 @@ export function DiscoveryObjectCard({
 
   if (isServiceCandidate(candidate)) {
     return (
-      <article className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm" aria-label={`Service ${candidate.displayName}`}>
+      <article className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]" aria-label={`Service ${candidate.displayName}`}>
         <h3 className="text-sm font-semibold text-foreground">{candidate.displayName}</h3>
         {candidate.subtitle ? <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{candidate.subtitle}</p> : null}
         <p className="mt-1 text-[11px] text-muted-foreground">

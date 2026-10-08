@@ -410,12 +410,12 @@ export function ProfilePreviewModal({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
       <div className="bg-white w-full rounded-t-3xl overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Sticky Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <div className="sticky top-0 bg-white border-b border-border/70 px-4 py-3 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{safeName}&apos;s Profile</h2>
-            <p className="text-xs text-gray-600">{safeLocation}</p>
+            <h2 className="text-lg font-bold text-foreground">{safeName}&apos;s Profile</h2>
+            <p className="text-xs text-muted-foreground">{safeLocation}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition">
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center transition">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -433,8 +433,8 @@ export function ProfilePreviewModal({
             <div className="bg-gradient-to-r from-emerald-50 to-pink-50 border-2 border-emerald-200 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 uppercase">Match Score</p>
-                  <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-pink-600">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Match Score</p>
+                  <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
                     {score}%
                   </p>
                 </div>
@@ -442,18 +442,18 @@ export function ProfilePreviewModal({
                   {score >= 75 ? "💯" : score >= 50 ? "🎯" : "⭐"}
                 </div>
               </div>
-              <p className="text-xs text-gray-700 mt-2">Based on shared interests & profile compatibility</p>
+              <p className="text-xs text-foreground/90 mt-2">Based on shared interests & profile compatibility</p>
             </div>
           )}
 
           {/* Basic Info */}
           <div className="space-y-3">
             <div>
-              <h3 className="text-2xl font-bold text-gray-900">
+              <h3 className="text-2xl font-bold text-foreground">
                 {safeName}{safeAge !== null ? `, ${safeAge}` : ""}
               </h3>
               <div className="flex items-center gap-2 mt-2">
-                <div className="flex items-center gap-1 text-gray-600">
+                <div className="flex items-center gap-1 text-muted-foreground">
                   <MapPin size={16} />
                   <span className="text-sm">{safeLocation}</span>
                 </div>
@@ -477,15 +477,15 @@ export function ProfilePreviewModal({
 
           {/* Bio */}
           {candidate.bio && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-sm text-gray-800 leading-relaxed">{candidate.bio}</p>
+            <div className="bg-muted/40 rounded-xl p-4">
+              <p className="text-sm text-foreground leading-relaxed">{candidate.bio}</p>
             </div>
           )}
 
           {/* Interests */}
           {Array.isArray(candidate?.interests) && (Array.isArray(candidate.interests) ? candidate.interests.length : 0) > 0 && (
             <div>
-              <h4 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2">
+              <h4 className="font-bold text-sm text-foreground mb-3 flex items-center gap-2">
                 <Zap size={16} className="text-yellow-500" />
                 Interests
               </h4>
@@ -493,7 +493,7 @@ export function ProfilePreviewModal({
                 {(candidate.interests || []).map((interest) => (
                   <span
                     key={interest}
-                    className="bg-gradient-to-r from-emerald-100 to-pink-100 text-emerald-700 px-3 py-2 rounded-full text-sm font-semibold border border-emerald-200"
+                    className="bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 px-3 py-2 rounded-full text-sm font-semibold border border-emerald-200"
                   >
                     {interest}
                   </span>
@@ -527,7 +527,7 @@ export function ProfilePreviewModal({
         </div>
 
         {/* Sticky Action Buttons */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3 max-w-md mx-auto">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border/70 p-4 flex gap-3 max-w-md mx-auto">
           <button
             onClick={() => {
               onMessage(candidate.id)
@@ -543,7 +543,7 @@ export function ProfilePreviewModal({
               onLike(candidate.id)
               onClose()
             }}
-            className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white py-3 rounded-lg font-bold text-sm transition active:scale-95 flex items-center justify-center gap-2 shadow-md"
+            className="flex-1 bg-[var(--gh-green)] hover:brightness-105 text-white py-3 rounded-lg font-bold text-sm transition active:scale-95 flex items-center justify-center gap-2 shadow-md"
           >
             <Heart size={18} fill="currentColor" />
             Like
@@ -569,11 +569,11 @@ export function DiscoverySection({
   onAction?: () => void
 }) {
   return (
-    <div className="border-b border-gray-200 bg-white">
+    <div className="border-b border-border/70 bg-white">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {Icon}
-          <h3 className="font-bold text-sm text-gray-900">{title}</h3>
+          <h3 className="font-bold text-sm text-foreground">{title}</h3>
         </div>
         {actionLabel && (
           <button
@@ -601,8 +601,8 @@ export function TrendingSection({ candidates, onViewProfile, onLike, onMessage }
               {c.online && <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>}
             </div>
             <div className="p-2">
-              <h4 className="font-bold text-xs text-gray-900">{c.name}, {c.age}</h4>
-              <p className="text-[10px] text-gray-600 truncate">{c.location}</p>
+              <h4 className="font-bold text-xs text-foreground">{c.name}, {c.age}</h4>
+              <p className="text-[10px] text-muted-foreground truncate">{c.location}</p>
             </div>
           </div>
         ))}
@@ -617,11 +617,11 @@ export function NearbySection({ candidates, onViewProfile, onLike, onMessage }: 
     <DiscoverySection title="Nearby" icon={<MapPin className="w-4 h-4 text-blue-500" />} actionLabel="Map view">
       <div className="space-y-2">
         {candidates.slice(0, 3).map((c) => (
-          <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition">
+          <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-muted/40 rounded-lg cursor-pointer transition">
             <img loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-12 h-12 rounded-full object-cover" />
             <div className="flex-1 min-w-0">
-              <h4 className="font-bold text-sm text-gray-900">{c.name}, {c.age}</h4>
-              <p className="text-xs text-gray-600 truncate flex items-center gap-1">
+              <h4 className="font-bold text-sm text-foreground">{c.name}, {c.age}</h4>
+              <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                 <MapPin className="w-3 h-3" /> {c.location}
               </p>
             </div>
@@ -643,13 +643,13 @@ export function SuggestedCreatorsSection({ candidates, onViewProfile, onFollow }
     <DiscoverySection title="Suggested Creators" icon={<Video className="w-4 h-4 text-indigo-500" />} actionLabel="Browse">
       <div className="space-y-2">
         {candidates.slice(0, 4).map((c) => (
-          <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition">
+          <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-muted/40 rounded-lg cursor-pointer transition">
             <img loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-200" />
             <div className="flex-1 min-w-0">
-              <h4 className="font-bold text-sm text-gray-900 flex items-center gap-1">{c.name} {c.verified && <span className="text-blue-500 text-xs">✓</span>}</h4>
-              <p className="text-xs text-gray-600">Creator</p>
+              <h4 className="font-bold text-sm text-foreground flex items-center gap-1">{c.name} {c.verified && <span className="text-blue-500 text-xs">✓</span>}</h4>
+              <p className="text-xs text-muted-foreground">Creator</p>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); onFollow(c.id); }} className="px-3 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-full text-xs font-bold transition active:scale-90">
+            <button onClick={(e) => { e.stopPropagation(); onFollow(c.id); }} className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 rounded-full text-xs font-bold transition active:scale-90">
               Follow
             </button>
           </div>
@@ -673,8 +673,8 @@ export function BusinessesSection({ onViewBusiness }: { onViewBusiness: (name: s
               <Briefcase className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h4 className="font-bold text-sm text-gray-900">{b}</h4>
-              <p className="text-xs text-gray-600">Local business</p>
+              <h4 className="font-bold text-sm text-foreground">{b}</h4>
+              <p className="text-xs text-muted-foreground">Local business</p>
             </div>
           </button>
         ))}
@@ -685,40 +685,44 @@ export function BusinessesSection({ onViewBusiness }: { onViewBusiness: (name: s
 
 // Marketplace Section
 export function MarketplaceSection({ onViewProduct }: { onViewProduct: (name: string) => void }) {
-  const products = ["Handmade Jewelry", "Vintage Books", "Photography Prints", "Art Supplies"]
+  // No fabricated catalog — open the real Marketplace surface (domain-backed listings only).
   return (
-    <DiscoverySection title="Marketplace" icon={<ShoppingBag className="w-4 h-4 text-rose-500" />} actionLabel="Shop">
-      <div className="grid grid-cols-2 gap-3">
-        {products.map((p) => (
-          <button key={p} onClick={() => onViewProduct(p)} className="p-2 border border-rose-200 hover:border-rose-400 rounded-lg transition active:scale-95 text-center">
-            <div className="w-full h-16 bg-rose-50 rounded mb-1 flex items-center justify-center">
-              <ShoppingBag className="w-6 h-6 text-rose-400" />
-            </div>
-            <h4 className="font-bold text-xs text-gray-900 line-clamp-2">{p}</h4>
-          </button>
-        ))}
-      </div>
+    <DiscoverySection title="Marketplace" icon={<ShoppingBag className="w-4 h-4 text-emerald-600" />} actionLabel="Open">
+      <button
+        type="button"
+        onClick={() => {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: {} }))
+          } catch {
+            onViewProduct("marketplace")
+          }
+        }}
+        className="flex w-full flex-col items-center gap-2 rounded-[1.25rem] border border-border/50 bg-card p-4 text-center shadow-[var(--gh-card-shadow)] transition hover:border-border active:scale-[0.99]"
+      >
+        <span className="gh-icon-tile flex h-12 w-12 items-center justify-center rounded-2xl">
+          <ShoppingBag className="h-6 w-6" aria-hidden />
+        </span>
+        <span className="text-sm font-bold text-foreground">Browse Marketplace</span>
+        <span className="text-[11px] leading-snug text-muted-foreground">
+          Real listings from members · Pay with π or GHC · No placeholder products
+        </span>
+      </button>
     </DiscoverySection>
   )
 }
 
-// Events Section
-export function EventsSection({ onViewEvent }: { onViewEvent: (name: string) => void }) {
-  const events = ["Tech Meetup", "Art Exhibition", "Speed Dating", "Book Club", "Networking Event"]
+// Events Section — truthful roadmap state (no fabricated event catalog)
+export function EventsSection({ onViewEvent }: { onViewProduct?: (name: string) => void; onViewEvent: (name: string) => void }) {
   return (
-    <DiscoverySection title="Events" icon={<Calendar className="w-4 h-4 text-emerald-500" />} actionLabel="Calendar">
-      <div className="space-y-2">
-        {events.map((e) => (
-          <button key={e} onClick={() => onViewEvent(e)} className="w-full text-left flex items-start gap-3 p-2 hover:bg-emerald-50 rounded-lg transition active:scale-95">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Calendar className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div className="min-w-0">
-              <h4 className="font-bold text-sm text-gray-900">{e}</h4>
-              <p className="text-xs text-gray-600">Coming soon</p>
-            </div>
-          </button>
-        ))}
+    <DiscoverySection title="Events" icon={<Calendar className="w-4 h-4 text-emerald-600" />} actionLabel="Soon">
+      <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 text-center shadow-[var(--gh-card-shadow)]">
+        <span className="gh-icon-tile mx-auto flex h-11 w-11 items-center justify-center rounded-2xl">
+          <Calendar className="h-5 w-5" aria-hidden />
+        </span>
+        <p className="mt-2.5 text-sm font-bold text-foreground">Local events coming soon</p>
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+          RSVP and community events are on the roadmap. No placeholder events are shown.
+        </p>
       </div>
     </DiscoverySection>
   )
@@ -733,9 +737,9 @@ export function PopularPostsSection({ posts, onViewPost }: { posts: any[]; onVie
           <button key={p.id} onClick={() => onViewPost(p.id)} className="w-full text-left flex gap-3 p-2 hover:bg-red-50 rounded-lg transition active:scale-95">
             {p.images?.[0] && <img loading="lazy" decoding="async" src={p.images[0]} alt="" className="w-12 h-12 rounded object-cover flex-shrink-0" />}
             <div className="min-w-0">
-              <h4 className="font-bold text-xs text-gray-900 truncate">{p.authorName}</h4>
-              <p className="text-xs text-gray-600 line-clamp-2">{p.content}</p>
-              <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1"><Heart className="w-3 h-3" /> {p.likes} likes</p>
+              <h4 className="font-bold text-xs text-foreground truncate">{p.authorName}</h4>
+              <p className="text-xs text-muted-foreground line-clamp-2">{p.content}</p>
+              <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><Heart className="w-3 h-3" /> {p.likes} likes</p>
             </div>
           </button>
         ))}
@@ -763,8 +767,8 @@ export function LiveSection({ onViewLive }: { onViewLive: (streamId: string) => 
               <Video className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <h4 className="font-bold text-sm text-gray-900">{s.name}</h4>
-              <p className="text-xs text-gray-600">{s.creator}</p>
+              <h4 className="font-bold text-sm text-foreground">{s.name}</h4>
+              <p className="text-xs text-muted-foreground">{s.creator}</p>
             </div>
             <div className="flex-shrink-0 flex items-center">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse mr-1"></div>
@@ -780,12 +784,12 @@ export function LiveSection({ onViewLive }: { onViewLive: (streamId: string) => 
 export function RecentSearchesSection({ searches, onSearch, onClear, onRemove }: { searches: string[]; onSearch: (query: string) => void; onClear: () => void; onRemove?: (query: string) => void }) {
   if (!searches.length) return null
   return (
-    <DiscoverySection title="Recent Searches" icon={<Clock className="w-4 h-4 text-gray-500" />} actionLabel="Clear" onAction={onClear}>
+    <DiscoverySection title="Recent Searches" icon={<Clock className="w-4 h-4 text-muted-foreground" />} actionLabel="Clear" onAction={onClear}>
   <div className="flex flex-wrap gap-2">
   {searches.map((s) => (
-  <div key={s} className="flex items-center gap-1 rounded-full bg-gray-100 pl-3 pr-1.5 py-1.5 text-xs font-semibold text-gray-700">
+  <div key={s} className="flex items-center gap-1 rounded-full bg-muted pl-3 pr-1.5 py-1.5 text-xs font-semibold text-foreground/90">
   <button type="button" onClick={() => onSearch(s)} className="max-w-[9rem] truncate hover:text-emerald-700">{s}</button>
-  {onRemove && <button type="button" onClick={() => onRemove(s)} className="rounded-full p-0.5 text-gray-400 hover:bg-white hover:text-gray-700" aria-label={`Remove ${s} from recent searches`}><X size={12} /></button>}
+  {onRemove && <button type="button" onClick={() => onRemove(s)} className="rounded-full p-0.5 text-muted-foreground hover:bg-white hover:text-foreground/90" aria-label={`Remove ${s} from recent searches`}><X size={12} /></button>}
   </div>
   ))}
   </div>
@@ -797,14 +801,14 @@ export function RecentSearchesSection({ searches, onSearch, onClear, onRemove }:
 export function QuickActionsBar({ selectedCandidate, onFollow, onMessage, onInvite, onViewProfile }: { selectedCandidate: Candidate | null; onFollow: (id: string) => void; onMessage: (id: string) => void; onInvite: (id: string) => void; onViewProfile: (c: Candidate) => void }) {
   if (!selectedCandidate) return null
   return (
-    <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-2">
+    <div className="sticky bottom-0 bg-white border-t border-border/70 px-4 py-3 flex gap-2">
       <button onClick={() => onFollow(selectedCandidate.id)} className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-2 rounded-lg font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1">
         <UserPlus className="w-4 h-4" /> Follow
       </button>
       <button onClick={() => onMessage(selectedCandidate.id)} className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-2 rounded-lg font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1">
         <MessageCircle className="w-4 h-4" /> Message
       </button>
-      <button onClick={() => onInvite(selectedCandidate.id)} className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-700 py-2 rounded-lg font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1">
+      <button onClick={() => onInvite(selectedCandidate.id)} className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 py-2 rounded-lg font-bold text-xs transition active:scale-95 flex items-center justify-center gap-1">
         <Heart className="w-4 h-4" /> Invite
       </button>
     </div>

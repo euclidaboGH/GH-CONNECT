@@ -1,6 +1,12 @@
 "use client"
 
-import { ArrowUpRight, ArrowDownLeft, HandCoins, ListOrdered } from "lucide-react"
+/**
+ * Wallet primary actions — layout aligned to reference arrangement:
+ * soft white card, icon tiles, Send / Request / Receive / History.
+ * Presentation only; handlers are parent-owned.
+ */
+
+import { ArrowUpRight, ArrowDownLeft, HandCoins, Clock3 } from "lucide-react"
 
 export function WalletPrimaryActions({
   onSend,
@@ -13,62 +19,60 @@ export function WalletPrimaryActions({
   onSend: () => void
   onRequest: () => void
   onReceive: () => void
-  /** Primary fourth action — Activity (fintech pattern) */
   onActivity?: () => void
   onAdd?: () => void
-  /** Presentation-only lock while a parent flow is busy */
   disabled?: boolean
 }) {
   const items = [
     {
       id: "send",
       label: "Send",
-      icon: <ArrowUpRight size={20} strokeWidth={2.25} />,
+      icon: <ArrowUpRight size={18} strokeWidth={2.25} />,
       onClick: onSend,
-      tile: "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900/50",
+      tile: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
     },
     {
       id: "request",
       label: "Request",
-      icon: <HandCoins size={20} strokeWidth={2.25} />,
+      icon: <HandCoins size={18} strokeWidth={2.25} />,
       onClick: onRequest,
-      tile: "bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900/50",
+      tile: "bg-emerald-50/80 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
     },
     {
       id: "receive",
       label: "Receive",
-      icon: <ArrowDownLeft size={20} strokeWidth={2.25} />,
+      icon: <ArrowDownLeft size={18} strokeWidth={2.25} />,
       onClick: onReceive,
-      tile: "bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/50",
+      tile: "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300",
     },
     {
       id: "activity",
       label: "History",
-      icon: <ListOrdered size={20} strokeWidth={2.25} />,
+      icon: <Clock3 size={18} strokeWidth={2.25} />,
       onClick: onActivity || onAdd || (() => {}),
-      tile: "bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900/50",
+      tile: "bg-muted text-foreground dark:bg-muted/80",
     },
   ] as const
 
   return (
-    <div className="mx-3 mt-4" role="group" aria-label="Wallet actions">
-      <div className="grid grid-cols-4 gap-2.5">
-        {items.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={a.onClick}
-            disabled={disabled}
-            className="flex min-h-[5.25rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border/50 bg-card px-1 py-3 text-center shadow-[var(--gh-card-shadow)] transition hover:border-border hover:shadow-md active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
-          >
-            <span
-              className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${a.tile}`}
+    <div className="mx-3 mt-3" role="group" aria-label="Wallet actions">
+      <div className="rounded-[1.25rem] border border-border/50 bg-card p-3 shadow-[var(--gh-card-shadow)]">
+        <div className="grid grid-cols-4 gap-2">
+          {items.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={a.onClick}
+              disabled={disabled}
+              className="flex min-h-[4.75rem] flex-col items-center justify-center gap-2 rounded-2xl bg-muted/40 px-1 py-2.5 text-center transition hover:bg-muted/70 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
             >
-              {a.icon}
-            </span>
-            <span className="text-[11px] font-bold tracking-wide text-foreground">{a.label}</span>
-          </button>
-        ))}
+              <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${a.tile}`}>
+                {a.icon}
+              </span>
+              <span className="text-[11px] font-bold tracking-wide text-foreground">{a.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

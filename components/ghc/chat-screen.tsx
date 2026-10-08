@@ -162,15 +162,15 @@ export function ChatScreen() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       {/* Header - optimized sticky header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 pt-4 pb-3 shadow-sm">
+      <div className="sticky top-0 z-10 bg-white border-b border-border/50 px-4 pt-4 pb-3 shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold text-gray-900">Messages</h1>
+          <h1 className="text-lg font-bold text-foreground">Messages</h1>
           <button
             onClick={() => setShowCreateGroup(true)}
-            className="p-2 hover:bg-pink-50 rounded-lg transition active:bg-pink-100"
+            className="p-2 hover:bg-emerald-50/80 rounded-lg transition active:bg-emerald-100"
             aria-label="Create new group chat"
           >
-            <Plus size={20} className="text-pink-500" />
+            <Plus size={20} className="text-emerald-600" />
           </button>
         </div>
 
@@ -181,13 +181,13 @@ export function ChatScreen() {
             placeholder="Search groups & members..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 placeholder:text-gray-500"
+            className="w-full px-4 py-2.5 bg-muted rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 placeholder:text-muted-foreground"
             aria-label="Search groups"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
               aria-label="Clear search"
             >
               ✕
@@ -203,7 +203,7 @@ export function ChatScreen() {
           <div className="px-4 py-4">
             {filteredGroups.length > 0 ? (
               <>
-                <p className="text-xs font-medium text-gray-500 mb-3">
+                <p className="text-xs font-medium text-muted-foreground mb-3">
                   Found {filteredGroups.length} {filteredGroups.length === 1 ? "group" : "groups"}
                 </p>
                 <div className="space-y-2">
@@ -212,10 +212,10 @@ export function ChatScreen() {
               </>
             ) : (
               <div className="py-12 text-center">
-                <p className="text-gray-500 text-sm">No groups found for "{searchQuery}"</p>
+                <p className="text-muted-foreground text-sm">No groups found for "{searchQuery}"</p>
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="mt-3 text-pink-500 hover:text-pink-600 text-sm font-medium"
+                  className="mt-3 text-emerald-600 hover:text-emerald-700 text-sm font-medium"
                 >
                   Clear search
                 </button>
@@ -232,7 +232,7 @@ export function ChatScreen() {
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles size={17} className="text-amber-500 flex-shrink-0" />
-                  <h2 className="text-sm font-bold text-gray-900">{myGroups.length === 0 ? "Start with a group" : "Featured Groups"}</h2>
+                  <h2 className="text-sm font-bold text-foreground">{myGroups.length === 0 ? "Start with a group" : "Featured Groups"}</h2>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {organizedGroups.featured.map((group) => (
@@ -259,8 +259,8 @@ export function ChatScreen() {
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2 mb-3">
                   <Users size={17} className="text-blue-500 flex-shrink-0" />
-                  <h2 className="text-sm font-bold text-gray-900">My Groups</h2>
-                  <span className="text-xs text-gray-500 ml-auto">({organizedGroups.myGroupsList.length})</span>
+                  <h2 className="text-sm font-bold text-foreground">My Groups</h2>
+                  <span className="text-xs text-muted-foreground ml-auto">({organizedGroups.myGroupsList.length})</span>
                 </div>
                 <div className="space-y-1">
                   {organizedGroups.myGroupsList.map((group) => renderGroupCard(group, true))}
@@ -273,7 +273,7 @@ export function ChatScreen() {
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2 mb-3">
                   <Flame size={17} className="text-red-500 flex-shrink-0" />
-                  <h2 className="text-sm font-bold text-gray-900">Trending Now</h2>
+                  <h2 className="text-sm font-bold text-foreground">Trending Now</h2>
                 </div>
                 <div className="space-y-1">
                   {organizedGroups.suggested.map((group) => renderGroupCard(group, false))}
@@ -284,10 +284,10 @@ export function ChatScreen() {
             {/* Empty state */}
             {!organizedGroups.featured.length && !organizedGroups.myGroupsList.length && !organizedGroups.suggested.length && (
               <div className="px-4 py-12 text-center">
-                <p className="text-gray-500 text-sm">This legacy screen has no live group catalog. Use Communities or Messages from the main app.</p>
+                <p className="text-muted-foreground text-sm">This legacy screen has no live group catalog. Use Communities or Messages from the main app.</p>
                 <button
                   onClick={() => setShowCreateGroup(true)}
-                  className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg text-sm font-medium hover:bg-pink-600"
+                  className="mt-4 px-4 py-2 bg-[var(--gh-green)] text-white rounded-full text-sm font-medium hover:brightness-105"
                 >
                   Create a Group
                 </button>

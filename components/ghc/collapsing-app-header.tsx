@@ -64,10 +64,10 @@ export function CollapsingAppHeader({
           )}
           <div className="min-w-0 flex-1">
             {(compactTitle || title) ? (
-              <p className="truncate text-sm font-bold text-gray-900">{compactTitle || title}</p>
+              <p className="truncate text-sm font-bold text-foreground">{compactTitle || title}</p>
             ) : null}
             {subtitle ? (
-              <p className={`truncate text-[10px] font-medium text-gray-500 ${(compactTitle || title) ? "" : "text-xs font-semibold text-gray-700"}`}>
+              <p className={`truncate text-[10px] font-medium text-muted-foreground ${(compactTitle || title) ? "" : "text-xs font-semibold text-foreground/80"}`}>
                 {subtitle}
               </p>
             ) : null}
@@ -78,7 +78,7 @@ export function CollapsingAppHeader({
 
       {/* Expanded header — part of scroll stream conceptually; hides on scroll-down */}
       <div
-        className={`sticky top-0 z-20 shrink-0 border-b border-gray-100 bg-white/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
+        className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-white/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
           hidden && compact
             ? "pointer-events-none max-h-0 -translate-y-2 overflow-hidden opacity-0 border-transparent"
             : "translate-y-0 opacity-100"
@@ -90,12 +90,12 @@ export function CollapsingAppHeader({
               {leading}
               <div className="min-w-0">
                 {title ? (
-                  <h2 className="truncate text-base font-bold tracking-tight text-gray-900 sm:text-lg">
+                  <h2 className="truncate text-base font-bold tracking-tight text-foreground sm:text-lg">
                     {title}
                   </h2>
                 ) : null}
                 {subtitle ? (
-                  <p className={`truncate font-medium text-gray-500 ${title ? "text-[10px] leading-tight text-gray-400" : "text-xs font-semibold"}`}>
+                  <p className={`truncate font-medium text-muted-foreground ${title ? "text-[10px] leading-tight text-muted-foreground" : "text-xs font-semibold"}`}>
                     {subtitle}
                   </p>
                 ) : null}

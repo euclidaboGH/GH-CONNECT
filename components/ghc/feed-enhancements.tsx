@@ -74,15 +74,15 @@ export function PostMenu({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">Post Options</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <h3 className="font-bold text-foreground">Post Options</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground/90">
             <X size={20} />
           </button>
         </div>
 
         {/* Owner actions */}
         {onEdit && (
-          <button onClick={onEdit} className="w-full text-left px-4 py-2 hover:bg-gray-50 rounded-lg text-sm font-semibold text-gray-900">
+          <button onClick={onEdit} className="w-full text-left px-4 py-2 hover:bg-muted/40 rounded-lg text-sm font-semibold text-foreground">
             Edit post
           </button>
         )}
@@ -97,7 +97,7 @@ export function PostMenu({
         {onBookmark && (
           <button
             onClick={onBookmark}
-            className="w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-sm font-semibold text-foreground flex items-center gap-2"
           >
             <Bookmark size={16} fill={isBookmarked ? "currentColor" : "none"} />
             {isBookmarked ? "Remove from saved" : "Save post"}
@@ -107,7 +107,7 @@ export function PostMenu({
         {onCopyLink && (
           <button
             onClick={onCopyLink}
-            className="w-full text-left px-4 py-2 hover:bg-emerald-50 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-emerald-50 rounded-lg text-sm font-semibold text-foreground flex items-center gap-2"
           >
             <LinkIcon size={16} />
             Copy link
@@ -118,7 +118,7 @@ export function PostMenu({
         {onHide && (
           <button
             onClick={onHide}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-muted rounded-lg text-sm font-semibold text-foreground flex items-center gap-2"
           >
             <Eye size={16} />
             Hide post
@@ -128,7 +128,7 @@ export function PostMenu({
         {onNotInterested && (
           <button
             onClick={onNotInterested}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-muted rounded-lg text-sm font-semibold text-foreground flex items-center gap-2"
           >
             <ThumbsDown size={16} />
             Not interested
@@ -138,7 +138,7 @@ export function PostMenu({
         {onMute && (
           <button
             onClick={onMute}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-muted rounded-lg text-sm font-semibold text-foreground flex items-center gap-2"
           >
             <Volume2 size={16} />
             Mute
@@ -207,7 +207,7 @@ export function CommentReactions({
         <button
           key={emoji}
           onClick={() => onRemoveReaction?.(emoji)}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
+          className="px-2 py-1 bg-muted hover:bg-muted/80 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
         >
           {emoji} {users.length}
         </button>
@@ -218,7 +218,7 @@ export function CommentReactions({
             const emoji = commonEmojis[Math.floor(Math.random() * commonEmojis.length)]
             onAddReaction(emoji)
           }}
-          className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full text-xs transition-colors"
+          className="w-6 h-6 flex items-center justify-center bg-muted hover:bg-muted/80 rounded-full text-xs transition-colors"
           title="Add reaction"
         >
           <Smile size={14} />
@@ -280,8 +280,8 @@ export function EnhancedComment({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <p className="font-bold text-xs text-gray-900">{comment.authorName}</p>
-              <span className="text-[10px] text-gray-500">{timeAgo(comment.createdAt)}</span>
+              <p className="font-bold text-xs text-foreground">{comment.authorName}</p>
+              <span className="text-[10px] text-muted-foreground">{timeAgo(comment.createdAt)}</span>
             </div>
             {comment.isPinned && <span className="text-xs text-emerald-600 font-bold">📌 Pinned</span>}
           </div>
@@ -292,7 +292,7 @@ export function EnhancedComment({
               <textarea
                 value={localEditText}
                 onChange={(e) => setLocalEditText(e.target.value.slice(0, 1000))}
-                className="w-full resize-none rounded-xl border border-emerald-300 bg-white p-2 text-xs text-gray-900 outline-none focus:ring-2 focus:ring-emerald-100"
+                className="w-full resize-none rounded-xl border border-emerald-300 bg-card p-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-emerald-100"
                 rows={2}
                 autoFocus
               />
@@ -311,7 +311,7 @@ export function EnhancedComment({
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg bg-gray-200 px-3 py-1 text-[11px] font-bold text-gray-700"
+                  className="rounded-lg bg-gray-200 px-3 py-1 text-[11px] font-bold text-foreground/90"
                   onClick={() => {
                     setLocalEditText(comment.text || "")
                     setIsEditing(false)
@@ -322,7 +322,7 @@ export function EnhancedComment({
               </div>
             </div>
           ) : (
-            <p className="text-xs text-gray-700 leading-relaxed mt-1 whitespace-pre-wrap">{(comment.text ?? "").trim()}</p>
+            <p className="text-xs text-foreground/90 leading-relaxed mt-1 whitespace-pre-wrap">{(comment.text ?? "").trim()}</p>
           )}
 
           {/* Media attachments */}
@@ -331,7 +331,7 @@ export function EnhancedComment({
               {comment.mediaAttachments.map((media) => (
                 <div
                   key={media.id}
-                  className="w-16 h-16 rounded overflow-hidden bg-gray-100 flex items-center justify-center text-xs text-gray-500"
+                  className="w-16 h-16 rounded overflow-hidden bg-muted flex items-center justify-center text-xs text-muted-foreground"
                 >
                   {media.type === "image" && media.url ? (
                     <img src={media.url} alt="attachment" className="w-full h-full object-cover" />
@@ -357,7 +357,7 @@ export function EnhancedComment({
           )}
 
           {/* Comment actions — ownership gated */}
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
             <button
               type="button"
               onClick={() => onReply?.(comment.id)}
@@ -402,7 +402,7 @@ export function EnhancedComment({
             <button
               type="button"
               onClick={() => setShowActions(!showActions)}
-              className="hover:text-gray-700 transition-colors ml-auto"
+              className="hover:text-foreground/90 transition-colors ml-auto"
               aria-label="More actions"
             >
               <MoreVertical size={12} />
@@ -445,7 +445,7 @@ export function EnhancedComment({
               <button
                 type="button"
                 onClick={() => setExpandedReplies(false)}
-                className="ml-9 mt-1 text-[11px] font-semibold text-gray-500 hover:underline"
+                className="ml-9 mt-1 text-[11px] font-semibold text-muted-foreground hover:underline"
               >
                 Hide replies
               </button>
@@ -474,7 +474,7 @@ export function EnhancedPostContent({
   const parts = content.split(/(@\w+|#\w+|https?:\/\/\S+)/g)
 
   return (
-    <p className="text-[15px] leading-7 text-gray-800 whitespace-pre-wrap break-words">
+    <p className="text-[15px] leading-7 text-foreground whitespace-pre-wrap break-words">
       {parts.map((part, idx) => {
         if (part.startsWith("@")) {
           return (
@@ -537,7 +537,7 @@ export function LinkPreview({
     <button
       type="button"
       onClick={onClick}
-      className="mt-2 w-full overflow-hidden rounded-lg border border-gray-200 transition-colors hover:border-gray-300"
+      className="mt-2 w-full overflow-hidden rounded-lg border border-border/70 transition-colors hover:border-border/80"
     >
       <div className="flex gap-3 p-2">
         {image && (
@@ -549,12 +549,12 @@ export function LinkPreview({
         )}
         <div className="min-w-0 flex-1 text-left">
           {title && (
-            <p className="line-clamp-2 text-xs font-semibold text-gray-900">{title}</p>
+            <p className="line-clamp-2 text-xs font-semibold text-foreground">{title}</p>
           )}
           {description && (
-            <p className="line-clamp-2 text-xs text-gray-600">{description}</p>
+            <p className="line-clamp-2 text-xs text-muted-foreground">{description}</p>
           )}
-          <p className="mt-1 text-xs text-gray-500">{domain || url}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{domain || url}</p>
         </div>
       </div>
     </button>
@@ -574,12 +574,12 @@ export function QuoteRepost({
   onViewOriginal,
 }: QuoteRepostProps) {
   return (
-    <div className="mt-2 border border-gray-200 rounded-lg p-2 bg-gray-50">
-      <p className="text-xs text-gray-600 mb-2">Quoting {originalPost.authorName}</p>
-      <div className="border-l-2 border-gray-300 pl-2 mb-2">
-        <p className="text-xs text-gray-700 truncate">{originalPost.content}</p>
+    <div className="mt-2 border border-border/70 rounded-lg p-2 bg-muted/40">
+      <p className="text-xs text-muted-foreground mb-2">Quoting {originalPost.authorName}</p>
+      <div className="border-l-2 border-border/80 pl-2 mb-2">
+        <p className="text-xs text-foreground/90 truncate">{originalPost.content}</p>
       </div>
-      <p className="text-xs text-gray-800 font-semibold">{quoteText}</p>
+      <p className="text-xs text-foreground font-semibold">{quoteText}</p>
       {onViewOriginal && (
         <button
           onClick={onViewOriginal}
@@ -616,7 +616,7 @@ export function ShareMenu({
   ]
 
   return (
-    <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 space-y-1 z-50">
+    <div className="absolute bottom-full right-0 mb-2 bg-card border border-border/70 rounded-lg shadow-lg p-2 space-y-1 z-50">
       {platforms.map((platform) => (
         <button
           key={platform.id}
@@ -624,7 +624,7 @@ export function ShareMenu({
             onShare(platform.id as "twitter" | "facebook" | "linkedin" | "copy")
             onClose()
           }}
-          className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-xs font-semibold text-gray-900 flex items-center gap-2 transition-colors"
+          className="w-full text-left px-3 py-2 hover:bg-muted/40 rounded text-xs font-semibold text-foreground flex items-center gap-2 transition-colors"
         >
           <span className="text-sm">{platform.emoji}</span>
           {platform.label}
@@ -660,12 +660,12 @@ export function CommentInput({
   }
 
   return (
-    <div className="border-t border-gray-200 p-3 space-y-2">
+    <div className="border-t border-border/70 p-3 space-y-2">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full px-3 py-2 border border-border/70 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
         rows={2}
         onKeyDown={(e) => {
           if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
@@ -679,14 +679,14 @@ export function CommentInput({
             <>
               <button
                 onClick={onMediaClick}
-                className="p-2 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-700"
+                className="p-2 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground/90"
                 title="Add media"
               >
                 <ImageIcon size={14} />
               </button>
               <button
                 onClick={onMediaClick}
-                className="p-2 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-700"
+                className="p-2 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground/90"
                 title="Add voice"
               >
                 <Mic size={14} />
@@ -696,7 +696,7 @@ export function CommentInput({
           {onEmojiClick && (
             <button
               onClick={onEmojiClick}
-              className="p-2 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-700"
+              className="p-2 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground/90"
               title="Add emoji"
             >
               <Smile size={14} />
@@ -706,7 +706,7 @@ export function CommentInput({
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}
-          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded text-xs font-bold transition-colors"
+          className="px-3 py-1.5 bg-[var(--gh-green)] hover:brightness-105 disabled:bg-muted disabled:text-muted-foreground text-white rounded-full text-xs font-bold transition-colors"
         >
           Post
         </button>

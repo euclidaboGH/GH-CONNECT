@@ -13,7 +13,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.27 0.01 20);
   
-  /* Primary - Vibrant Pink */
+  /* Primary - GreenHaven emerald */
   --primary: #059669;
   --primary-foreground: #ffffff;
   --primary-light: #10B981;
@@ -52,6 +52,20 @@
   
   /* Radius & Spacing */
   --radius: 1rem;
+  /* GreenHaven product tokens (reference-aligned) */
+  --gh-green: oklch(0.55 0.15 155);
+  --gh-green-deep: oklch(0.42 0.12 155);
+  --gh-green-soft: oklch(0.95 0.04 155);
+  --gh-green-muted: oklch(0.92 0.03 155);
+  --gh-balance-from: oklch(0.58 0.16 155);
+  --gh-balance-to: oklch(0.42 0.12 160);
+  --gh-gold: oklch(0.78 0.14 85);
+  --gh-surface: #ffffff;
+  --gh-surface-elevated: #ffffff;
+  --gh-content-max: 28rem;
+  --gh-card-shadow: 0 1px 2px oklch(0.3 0.02 150 / 0.04), 0 4px 16px oklch(0.3 0.02 150 / 0.06);
+  --gh-card-shadow-lg: 0 4px 12px oklch(0.3 0.02 150 / 0.06), 0 12px 32px oklch(0.3 0.02 150 / 0.08);
+
   --gh-radius-sm: 0.75rem;   /* 12px */
   --gh-radius-md: 1rem;      /* 16px */
   --gh-radius-lg: 1.25rem;   /* 20px */
@@ -110,7 +124,16 @@
 /* Premium Dark Theme — true dark surfaces (was incorrectly light) */
 .dark {
   /* Backgrounds & Surfaces */
-  --background: #0a0f0d;
+  
+  --gh-green: oklch(0.72 0.14 155);
+  --gh-green-deep: oklch(0.55 0.12 155);
+  --gh-green-soft: oklch(0.28 0.04 155);
+  --gh-green-muted: oklch(0.26 0.03 155);
+  --gh-balance-from: oklch(0.5 0.14 155);
+  --gh-balance-to: oklch(0.35 0.1 160);
+  --gh-card-shadow: 0 1px 2px oklch(0 0 0 / 0.2), 0 4px 16px oklch(0 0 0 / 0.25);
+  --gh-card-shadow-lg: 0 4px 12px oklch(0 0 0 / 0.25), 0 12px 32px oklch(0 0 0 / 0.3);
+--background: #0a0f0d;
   --foreground: #f3f4f6;
   --card: #111827;
   --card-foreground: #f9fafb;
@@ -701,3 +724,36 @@ body {
   overflow-anchor: none;
   touch-action: pan-y;
 }
+
+/* GreenHaven surface primitives — reference-aligned (loaded app stylesheet) */
+.gh-balance-hero {
+  background: linear-gradient(135deg, var(--gh-balance-from) 0%, var(--gh-balance-to) 100%);
+  color: white;
+}
+.gh-cta {
+  background: var(--gh-green);
+  color: white;
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.gh-cta:hover { filter: brightness(1.05); }
+.gh-cta:active { transform: scale(0.98); }
+.gh-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.875rem;
+  background: var(--gh-green-soft);
+  color: var(--gh-green-deep);
+}
+.gh-create-fab {
+  background: linear-gradient(145deg, oklch(0.62 0.16 155), oklch(0.48 0.14 170));
+  box-shadow: 0 6px 20px oklch(0.45 0.14 155 / 0.45);
+}
+.gh-soft-panel {
+  background: var(--gh-green-soft);
+  border: 1px solid oklch(0.88 0.04 155);
+  border-radius: calc(var(--radius) + 2px);
+}
+

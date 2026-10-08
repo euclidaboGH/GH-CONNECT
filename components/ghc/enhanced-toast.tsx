@@ -12,31 +12,43 @@ interface EnhancedToastProps {
 
 export function EnhancedToast({ message, type, onClose, actionLabel, onAction }: EnhancedToastProps) {
   const icons = {
-    success: <CheckCircle size={20} className="text-green-500" />,
-    error: <AlertCircle size={20} className="text-destructive" />,
-    info: <Info size={20} className="text-blue-500" />,
+    success: <CheckCircle size={20} className="text-emerald-600" aria-hidden />,
+    error: <AlertCircle size={20} className="text-destructive" aria-hidden />,
+    info: <Info size={20} className="text-sky-600" aria-hidden />,
   }
 
   const bgClass = {
-    success: "bg-green-50 border-green-200",
-    error: "bg-destructive/10 border-destructive/20",
-    info: "bg-blue-50 border-blue-200",
+    success: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900",
+    error: "bg-destructive/10 border-destructive/25",
+    info: "bg-sky-50 border-sky-200 dark:bg-sky-950/40 dark:border-sky-900",
   }
 
   return (
-    <div className={`flex items-center justify-between gap-3 p-4 rounded-lg border ${bgClass[type]} shadow-sm`}>
-      <div className="flex items-center gap-3 flex-1">
+    <div
+      className={`flex items-center justify-between gap-3 rounded-[1rem] border p-3.5 shadow-[var(--gh-card-shadow)] ${bgClass[type]}`}
+      role="status"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {icons[type]}
-        <span className="text-sm font-medium text-gray-900">{message}</span>
+        <span className="text-sm font-medium text-foreground">{message}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {actionLabel && onAction && (
-          <button onClick={onAction} className="text-sm font-medium text-primary hover:underline whitespace-nowrap">
+          <button
+            type="button"
+            onClick={onAction}
+            className="whitespace-nowrap text-sm font-semibold text-primary hover:underline"
+          >
             {actionLabel}
           </button>
         )}
-        <button onClick={onClose} className="p-1 hover:bg-black/5 rounded transition">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full p-1.5 text-muted-foreground transition hover:bg-black/5"
+          aria-label="Dismiss"
+        >
           <X size={16} />
         </button>
       </div>

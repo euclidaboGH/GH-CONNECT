@@ -32,15 +32,15 @@ export function ConfirmationDialog({
       <div className="relative bg-white rounded-lg shadow-lg max-w-sm w-full p-6 space-y-4">
         <div className="flex items-center gap-3">
           {isDangerous && <AlertCircle size={24} className="text-destructive flex-shrink-0" />}
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
         </div>
 
-        <p className="text-gray-600 text-sm">{message}</p>
+        <p className="text-muted-foreground text-sm">{message}</p>
 
         <div className="flex gap-3 pt-4">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition"
+            className="flex-1 px-4 py-2 rounded-lg border border-border/80 text-foreground/90 font-medium hover:bg-muted/40 transition"
           >
             {cancelLabel}
           </button>

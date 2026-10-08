@@ -70,7 +70,7 @@ function safeCandidateLocation(c: Candidate): string {
 function MiniPersonCard({
   c,
   onViewProfile,
-  accent = "from-violet-50 to-fuchsia-50",
+  accent = "from-emerald-50 to-teal-50",
 }: {
   c: Candidate
   onViewProfile: (c: Candidate) => void

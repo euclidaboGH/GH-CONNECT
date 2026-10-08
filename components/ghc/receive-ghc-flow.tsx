@@ -329,7 +329,7 @@ export function ReceiveGhcFlow({
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Your QR code
                 </p>
-                <div className="mx-auto mt-3 flex max-w-[240px] items-center justify-center rounded-xl border border-border bg-white p-3">
+                <div className="mx-auto mt-3 flex max-w-[240px] items-center justify-center rounded-xl border border-border/60 bg-card p-3">
                   {qrSvg ? (
                     <div
                       className="mx-auto"

@@ -23,7 +23,7 @@ import {
   createFeedSeam,
 } from "@/lib/domains/adapters/ghc-context-seams"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
-import { Users, MessagesSquare, Compass, ArrowRight, Sparkles } from "lucide-react"
+import { Users, MessagesSquare, Compass, ArrowRight, Sparkles, Camera, Video, PenLine, MoreHorizontal } from "lucide-react"
 import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
 import { buildHomeActivationChecklist } from "@/lib/domains/adapters/home-activation-checklist"
 import { HomeActivationChecklist } from "@/components/ghc/home-activation-checklist"
@@ -263,6 +263,89 @@ export function HomeCommandCentre({
           ) : null}
         </div>
       </header>
+
+      {/* Create shortcuts — reference arrangement (Photo / Video / Post / More); real compose only */}
+      <div
+        className="grid grid-cols-4 gap-2 rounded-[1.25rem] border border-border/50 bg-card p-2.5 shadow-[var(--gh-card-shadow)]"
+        role="group"
+        aria-label="Create"
+      >
+        {(
+          [
+            {
+              id: "photo",
+              label: "Photo",
+              icon: Camera,
+              tile: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+              run: () => {
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("ghc:open-compose", { detail: { mode: "post", attach: "photo" } })
+                  )
+                } catch {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                }
+              },
+            },
+            {
+              id: "video",
+              label: "Video",
+              icon: Video,
+              tile: "bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300",
+              run: () => {
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("ghc:open-compose", { detail: { mode: "post", attach: "video" } })
+                  )
+                } catch {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                }
+              },
+            },
+            {
+              id: "post",
+              label: "Post",
+              icon: PenLine,
+              tile: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+              run: () => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } }))
+                } catch {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                }
+              },
+            },
+            {
+              id: "more",
+              label: "More",
+              icon: MoreHorizontal,
+              tile: "bg-muted text-foreground",
+              run: () => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                } catch {
+                  /* */
+                }
+              },
+            },
+          ] as const
+        ).map((a) => {
+          const Icon = a.icon
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={a.run}
+              className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-2xl bg-muted/30 px-1 py-2 transition hover:bg-muted/60 active:scale-[0.97]"
+            >
+              <span className={`flex h-9 w-9 items-center justify-center rounded-2xl ${a.tile}`}>
+                <Icon size={18} strokeWidth={2.25} aria-hidden />
+              </span>
+              <span className="text-[11px] font-bold text-foreground">{a.label}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {!activationChecklist.complete ? (
         <HomeActivationChecklist checklist={activationChecklist} />

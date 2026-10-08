@@ -186,7 +186,7 @@ export function ProfileScreen({
 
   return (
     <div className="gh-profile-shell flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
-      <header className="flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-2 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-md">
+      <header className="flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
         <div className="flex items-center gap-0.5">
           <button
@@ -216,7 +216,7 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="relative block h-[8rem] w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-40"
+          className="relative block h-[9rem] w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-44"
           aria-label="Change cover photo"
         >
           {cover ? (

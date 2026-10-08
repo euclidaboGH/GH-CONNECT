@@ -242,7 +242,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
       <div className="w-full bg-white rounded-t-lg max-h-screen overflow-hidden flex flex-col">
         {/* Header — always has a clear Back / Close control (Step 1 closes, later steps go previous) */}
-        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-gray-200 bg-white z-10">
+        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-border/70 bg-white z-10">
           <button
             type="button"
             onClick={() => {
@@ -252,7 +252,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 onClose()
               }
             }}
-            className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 transition active:scale-95 disabled:opacity-50"
+            className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold text-foreground hover:bg-muted transition active:scale-95 disabled:opacity-50"
             aria-label={step > 1 ? "Go back to previous step" : "Close create group"}
             disabled={isLoading}
           >
@@ -261,17 +261,17 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             </svg>
             <span className="hidden sm:inline">{step > 1 ? "Back" : "Close"}</span>
           </button>
-          <h2 id="create-group-title" className="flex-1 text-center font-bold text-gray-900 truncate">
+          <h2 id="create-group-title" className="flex-1 text-center font-bold text-foreground truncate">
             {step === 1 ? "Create community" : `Create community · ${step}/4`}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1 hover:bg-gray-100 transition"
+            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1 hover:bg-muted transition"
             aria-label="Close modal"
             disabled={isLoading}
           >
-            <X size={20} className="text-gray-600" />
+            <X size={20} className="text-muted-foreground" />
           </button>
         </div>
 
@@ -296,8 +296,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         )}
 
         {/* Step Guidance */}
-        <div className="mx-4 mb-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-          <p className="text-xs font-semibold text-gray-700">
+        <div className="mx-4 mb-3 px-3 py-2 bg-muted/40 border border-border/70 rounded-lg">
+          <p className="text-xs font-semibold text-foreground/90">
             {step === 1 && "Basic Info - Name, category, and description help members discover your group"}
             {step === 2 && "Visual & Privacy - Add a cover image and choose who can join"}
             {step === 3 && "Welcome & Culture - Set the tone for your group community"}
@@ -312,7 +312,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-3 pt-3">
               {/* Group Name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
                   Group Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -324,21 +324,21 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   }
                   maxLength={50}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition ${
-                    validationErrors.name ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.name ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                   autoFocus
                 />
                 {validationErrors.name && <p className="text-xs text-red-600 mt-1">{validationErrors.name}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.name.length}/50</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.name.length}/50</p>
               </div>
 
               {/* Category - Quick selection */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1">Category</label>
+                <label className="block text-sm font-semibold text-foreground mb-1">Category</label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
@@ -350,7 +350,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
                   Description <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -362,11 +362,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   maxLength={500}
                   rows={2}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition resize-none ${
-                    validationErrors.description ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.description ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                 />
                 {validationErrors.description && <p className="text-xs text-red-600 mt-1">{validationErrors.description}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.description.length}/500</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.description.length}/500</p>
               </div>
 
               {/* Quick info */}
@@ -383,8 +383,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-4 pt-3">
               {/* Cover Image - Visual preview */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1">
-                  Cover Image <span className="text-xs text-gray-500">(optional)</span>
+                <label className="block text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
+                  Cover Image <span className="text-xs text-muted-foreground">(optional)</span>
                 </label>
                 {formData.coverImage ? (
                   <div className="relative overflow-hidden rounded-lg bg-zinc-100">
@@ -406,11 +406,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 ) : (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:bg-emerald-50/30 transition flex flex-col items-center gap-2"
+                    className="w-full p-6 border-2 border-dashed border-border/80 rounded-lg hover:border-emerald-500 hover:bg-emerald-50/30 transition flex flex-col items-center gap-2"
                   >
-                    <Upload size={28} className="text-gray-400" />
-                    <span className="text-sm font-semibold text-gray-600">Click to upload image</span>
-                    <span className="text-xs text-gray-500">Any size · auto-compressed for performance</span>
+                    <Upload size={28} className="text-muted-foreground" />
+                    <span className="text-sm font-semibold text-muted-foreground">Click to upload image</span>
+                    <span className="text-xs text-muted-foreground">Any size · auto-compressed for performance</span>
                   </button>
                 )}
                 <input
@@ -426,7 +426,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               {/* Privacy Settings */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2.5">Privacy Setting <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-semibold text-foreground mb-2.5">Privacy Setting <span className="text-red-500">*</span></label>
                 <div className="space-y-2">
                   {PRIVACY_OPTIONS.map((option) => (
                     <button
@@ -435,18 +435,18 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       className={`w-full p-3 border rounded-lg text-left transition ${
                         formData.privacy === option.value
                           ? "border-emerald-500 bg-emerald-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          : "border-border/70 hover:border-border/80"
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          formData.privacy === option.value ? "border-emerald-500 bg-emerald-600" : "border-gray-300"
+                          formData.privacy === option.value ? "border-emerald-500 bg-emerald-600" : "border-border/80"
                         }`}>
                           {formData.privacy === option.value && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                         </div>
                         <div className="flex-1">
-                          <p className="font-semibold text-sm text-gray-900">{option.label}</p>
-                          <p className="text-xs text-gray-600">{option.desc}</p>
+                          <p className="font-semibold text-sm text-foreground">{option.label}</p>
+                          <p className="text-xs text-muted-foreground">{option.desc}</p>
                         </div>
                       </div>
                     </button>
@@ -461,8 +461,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-4 pt-3">
               {/* Welcome Message - Optional but helpful */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
-                  Welcome Message <span className="text-xs text-gray-500">(optional)</span>
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
+                  Welcome Message <span className="text-xs text-muted-foreground">(optional)</span>
                 </label>
                 <textarea
                   placeholder="Welcome to our group! Share what you'd like members to know..."
@@ -473,15 +473,15 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   maxLength={500}
                   rows={2}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition resize-none ${
-                    validationErrors.welcomeMessage ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.welcomeMessage ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                 />
                 {validationErrors.welcomeMessage && <p className="text-xs text-red-600 mt-1">{validationErrors.welcomeMessage}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.welcomeMessage.length}/500</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.welcomeMessage.length}/500</p>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Group Rules (Max 5)</label>
+                <label className="block text-sm font-semibold text-foreground mb-2">Group Rules (Max 5)</label>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {RULE_TEMPLATES.map((pack, i) => (
                     <button
@@ -501,9 +501,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 </div>
                 <div className="space-y-2">
                   {formData.rules.map((rule, idx) => (
-                    <div key={idx} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg">
-                      <span className="text-sm font-semibold text-gray-600 flex-shrink-0 mt-0.5">{idx + 1}.</span>
-                      <p className="text-sm text-gray-700 flex-1">{rule}</p>
+                    <div key={idx} className="flex items-start gap-2 p-2 bg-muted/40 rounded-lg">
+                      <span className="text-sm font-semibold text-muted-foreground flex-shrink-0 mt-0.5">{idx + 1}.</span>
+                      <p className="text-sm text-foreground/90 flex-1">{rule}</p>
                       <button
                         onClick={() => removeRule(idx)}
                         className="p-1 hover:bg-red-100 rounded text-red-600"
@@ -528,7 +528,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       }
                     }}
                     maxLength={100}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     onClick={addRule}
@@ -552,16 +552,16 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
                   <Users size={16} />
-                  Invite Members <span className="text-xs text-gray-500">(max 10, optional)</span>
+                  Invite Members <span className="text-xs text-muted-foreground">(max 10, optional)</span>
                 </label>
 
                 {formData.invitedMembers.length > 0 && (
                   <div className="mb-3 space-y-1 p-2 bg-blue-50 rounded-lg">
                     {formData.invitedMembers.map((member, idx) => (
                       <div key={idx} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-700">{member}</span>
+                        <span className="text-foreground/90">{member}</span>
                         <button
                           onClick={() => removeMember(idx)}
                           className="p-0.5 hover:bg-red-100 rounded text-red-600"
@@ -587,7 +587,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       }
                     }}
                     maxLength={50}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     onClick={addMember}
@@ -599,7 +599,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 </div>
                 {validationErrors.invitedMembers && <p className="text-xs text-red-600 mt-1">{validationErrors.invitedMembers}</p>}
 
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   {formData.invitedMembers.length > 0
                     ? `${formData.invitedMembers.length} member${formData.invitedMembers.length > 1 ? "s" : ""} invited`
                     : "Invite members to your group (optional)"}
@@ -616,7 +616,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         </div>
 
         {/* Footer with progress indicator and navigation buttons */}
-        <div className="sticky bottom-0 px-4 py-4 border-t border-gray-200 bg-white">
+        <div className="sticky bottom-0 px-4 py-4 border-t border-border/70 bg-white">
           {/* Progress indicator */}
           <div className="flex gap-1.5 mb-3">
             {[1, 2, 3, 4].map((s) => (
@@ -631,14 +631,14 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
           {/* Step counter and buttons */}
           <div className="flex items-center gap-2 justify-between">
-            <span className="text-xs font-semibold text-gray-600">Step {step} of 4</span>
+            <span className="text-xs font-semibold text-muted-foreground">Step {step} of 4</span>
             
             <div className="flex gap-2 flex-1 justify-end">
               {step > 1 && (
                 <button
                   onClick={handlePrevious}
                   disabled={isLoading}
-                  className="px-4 py-2 border border-gray-300 rounded-lg font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition"
+                  className="px-4 py-2 border border-border/80 rounded-lg font-semibold text-foreground hover:bg-muted/40 disabled:opacity-50 transition"
                   aria-label="Go to previous step"
                 >
                   Back

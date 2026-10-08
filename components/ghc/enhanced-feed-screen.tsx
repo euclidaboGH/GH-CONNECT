@@ -874,21 +874,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         return (
           <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center" role="dialog" aria-modal="true" aria-label={`${name}'s profile`}>
             <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={() => setViewingAuthorId(null)} />
-            <div className="relative z-10 max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
-                <h3 className="text-base font-bold text-gray-900">Profile</h3>
-                <button type="button" onClick={() => setViewingAuthorId(null)} className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-700">Close</button>
+            <div className="relative z-10 max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-card shadow-2xl sm:rounded-3xl">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-card px-4 py-3">
+                <h3 className="text-base font-bold text-foreground">Profile</h3>
+                <button type="button" onClick={() => setViewingAuthorId(null)} className="rounded-full bg-muted px-3 py-1.5 text-xs font-bold text-foreground">Close</button>
               </div>
               <div className="px-5 py-5">
                 <div className="flex items-center gap-4">
                   <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-100" loading="lazy" decoding="async" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-bold text-gray-900">{name}</p>
-                    <p className="text-xs text-gray-500">{candidate?.location || "GreenHaven member"}</p>
+                    <p className="truncate text-lg font-bold text-foreground">{name}</p>
+                    <p className="text-xs text-muted-foreground">{candidate?.location || "GreenHaven member"}</p>
                     {candidate?.verified && <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Verified</span>}
                   </div>
                 </div>
-                {candidate?.bio && <p className="mt-4 text-sm leading-relaxed text-gray-700">{candidate.bio}</p>}
+                {candidate?.bio && <p className="mt-4 text-sm leading-relaxed text-foreground/90">{candidate.bio}</p>}
                 {/* Peer-only actions — no Edit / Write / cover upload */}
                 <div className="mt-5">
                   <RelationshipActions

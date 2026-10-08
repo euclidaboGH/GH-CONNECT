@@ -655,7 +655,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       `Lifetime activity credit: ${formatGhc(earned)} · spent: ${formatGhc(spent)}`,
       `This month: +${formatGhc(monthInsight.monthEarned)} / −${formatGhc(monthInsight.monthSpent)}`,
       "",
-      "Recent activity:",
+      "Recent Transactions:",
     ]
     const recent = txs.slice(0, 15)
     if (recent.length === 0) {
@@ -952,6 +952,58 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           onAdd={() => setShowAddGhc(true)}
         />
 
+        {/* ZONE: YOUR ASSETS — reference arrangement; real GHC only, Pi is payment rail */}
+        <div className="mx-3 mt-4">
+          <h2 className="mb-2 px-0.5 text-[13px] font-bold text-foreground">Your Assets</h2>
+          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-[var(--gh-card-shadow)]">
+            <button
+              type="button"
+              onClick={() => {
+                setAssetRail("ghc")
+                setTab("activity")
+              }}
+              className="flex w-full items-center gap-3 border-b border-border/40 px-3.5 py-3.5 text-left transition hover:bg-muted/40 active:scale-[0.99]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:ring-emerald-900">
+                <GhcCoinIcon size={28} title="GHC" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-foreground">GHC (GreenHaven Coin)</p>
+                <p className="text-[11px] text-muted-foreground">Available on ledger</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[15px] font-bold tabular-nums text-foreground">
+                  {balanceVisible ? formatGhc(balance) : "••••"}
+                </p>
+              </div>
+              <span className="text-muted-foreground" aria-hidden>›</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssetRail("pi")
+                setTab("activity")
+                try {
+                  document.getElementById("ghc-wallet-activity")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                } catch { /* */ }
+              }}
+              className="flex w-full items-center gap-3 px-3.5 py-3.5 text-left transition hover:bg-muted/40 active:scale-[0.99]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-sm font-bold text-violet-700 ring-1 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-300 dark:ring-violet-900">
+                π
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-foreground">Pi</p>
+                <p className="text-[11px] text-muted-foreground">Payments via Pi Browser · separate rail</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[12px] font-semibold text-muted-foreground">Open rail</p>
+              </div>
+              <span className="text-muted-foreground" aria-hidden>›</span>
+            </button>
+          </div>
+        </div>
+
         {/* Pending GHC — explain why held, then claim */}
         {displayPending > 0 && (
           <button
@@ -1151,7 +1203,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         {/* ZONE: ACTIVITY */}
         <div id="ghc-wallet-activity" className="scroll-mt-3">
         <p className="mx-3 mt-5 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-          Recent activity
+          Recent Transactions
         </p>
         <div className="mx-3 flex gap-1 rounded-2xl border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]">
           {(

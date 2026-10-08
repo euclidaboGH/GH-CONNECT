@@ -37,10 +37,10 @@ export function SaveToCollectionSheet({
         aria-label="Save to collection"
       >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-base font-bold text-gray-900">
+          <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
             <Bookmark size={18} className="text-purple-600" /> Save to collection
           </h3>
-          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-gray-100" aria-label="Close">
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -56,8 +56,8 @@ export function SaveToCollectionSheet({
                 onClose()
               }}
             >
-              <span className="text-sm font-semibold text-gray-900">{c.name}</span>
-              <span className="text-xs text-gray-400">{c.postIds.length}</span>
+              <span className="text-sm font-semibold text-foreground">{c.name}</span>
+              <span className="text-xs text-muted-foreground">{c.postIds.length}</span>
             </button>
           ))}
         </ul>

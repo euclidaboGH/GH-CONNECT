@@ -41,7 +41,7 @@ const ACTIONS: {
     label: "Story",
     desc: "24h status for friends & followers",
     icon: CircleDot,
-    accent: "bg-violet-600/15 text-violet-700 dark:text-violet-300",
+    accent: "bg-emerald-600/15 text-emerald-700 dark:text-emerald-300",
   },
   {
     id: "poll",

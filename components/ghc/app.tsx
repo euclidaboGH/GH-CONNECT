@@ -63,6 +63,9 @@ const PremiumWalletScreen = lazy(() =>
 const GreenHavenEcosystemLazy = lazy(() =>
   import("./greenhaven-ecosystem-screen").then((m) => ({ default: m.GreenHavenEcosystemScreen }))
 )
+const MarketplaceScreenLazy = lazy(() =>
+  import("./marketplace-screen").then((m) => ({ default: m.MarketplaceScreen }))
+)
 const MatchCelebrationLazy = lazy(() =>
   import("./match-celebration").then((m) => ({ default: m.MatchCelebration }))
 )
@@ -166,10 +169,10 @@ function ScreenBoundary({ children, label, onReset, onDismiss }: { children: Rea
 const Toast = memo(({ message, type }: { message: string; type: string }) => {
   const bgClass =
     type === "success"
-      ? "bg-green-500"
+      ? "bg-[var(--gh-green)]"
       : type === "error"
         ? "bg-destructive"
-        : "bg-blue-500"
+        : "bg-sky-600"
 
   return (
     <div role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} className={`${bgClass} text-white px-4 py-2 rounded-full text-[14px] font-bold`}>
@@ -268,6 +271,8 @@ export function GHConnectApp() {
   const [ecosystemOpen, setEcosystemOpen] = useState(false)
   /** Service id to focus when Ecosystem opens (e.g. marketplace) */
   const [ecosystemFocus, setEcosystemFocus] = useState<string | null>(null)
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false)
+  const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
   const openSettings = useCallback((section: typeof settingsInitialSection = "main") => {
@@ -284,6 +289,7 @@ export function GHConnectApp() {
     setSettingsInitialSection("main")
   }, [])
   const openWallet = useCallback(() => {
+    setMarketplaceOpen(false)
     setWalletOpen(true)
     setShowCreateHub(false)
     setBottomNavHidden(false)
@@ -303,16 +309,33 @@ export function GHConnectApp() {
       setSettingsOpen(false)
       setSettingsInitialSection("main")
       setWalletOpen(false)
+      setMarketplaceOpen(false)
       setShowCreateHub(false)
       setBottomNavHidden(false)
       setEcosystemFocus(focus)
       setEcosystemOpen(true)
     }
     window.addEventListener("ghc:open-ecosystem", openEco)
+    const openMarketplace = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      let listingId: string | null = null
+      if (detail && typeof detail === "object" && typeof (detail as { listingId?: unknown }).listingId === "string") {
+        listingId = String((detail as { listingId: string }).listingId).trim() || null
+      }
+      setSettingsOpen(false)
+      setWalletOpen(false)
+      setEcosystemOpen(false)
+      setShowCreateHub(false)
+      setBottomNavHidden(false)
+      setMarketplaceListingId(listingId)
+      setMarketplaceOpen(true)
+    }
+    window.addEventListener("ghc:open-marketplace", openMarketplace)
     const openShort = () => setShowShortVideo(true)
     window.addEventListener("ghc:open-short-video", openShort)
     return () => {
       window.removeEventListener("ghc:open-ecosystem", openEco)
+      window.removeEventListener("ghc:open-marketplace", openMarketplace)
       window.removeEventListener("ghc:open-short-video", openShort)
     }
   }, [])
@@ -697,6 +720,37 @@ export function GHConnectApp() {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Suspense fallback={<TabScreenFallback label="Settings" />}>
                   <SettingsScreen key={`${screenResetKeys.settings || 0}-${settingsInitialSection}`} onBack={closeSettings} initialSection={settingsInitialSection} />
+                </Suspense>
+              </div>
+            </ScreenBoundary>
+          </div>
+        </ConsentGate>
+      </>
+    )
+  }
+
+  if (marketplaceOpen) {
+    return (
+      <>
+        {themeLayer}
+        <ConsentGate>
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+            <ScreenBoundary
+              label="Marketplace"
+              onDismiss={() => {
+                setMarketplaceOpen(false)
+                setMarketplaceListingId(null)
+              }}
+            >
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <Suspense fallback={<TabScreenFallback label="Marketplace" />}>
+                  <MarketplaceScreenLazy
+                    onBack={() => {
+                      setMarketplaceOpen(false)
+                      setMarketplaceListingId(null)
+                    }}
+                    initialListingId={marketplaceListingId}
+                  />
                 </Suspense>
               </div>
             </ScreenBoundary>

@@ -313,13 +313,13 @@ export function DiscoveryGridScreen() {
           <div className="min-w-0 flex-1">
             <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">Discover</h1>
           </div>
-          <div className="flex min-w-0 flex-[1.4] items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1.5">
-            <Search size={13} className="shrink-0 text-muted-foreground" aria-hidden />
+          <div className="flex min-h-9 min-w-0 flex-[1.4] items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5 shadow-sm">
+            <Search size={14} className="shrink-0 text-muted-foreground" aria-hidden />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search people"
-              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+              placeholder="Search people, interests…"
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
               aria-label="Search people"
             />
             {query ? (
@@ -372,8 +372,8 @@ export function DiscoveryGridScreen() {
             onClick={() => setCategory(cat.id)}
             className={
               category === cat.id
-                ? "shrink-0 rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground"
-                : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                ? "shrink-0 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground"
+                : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50"
             }
           >
             {cat.label}

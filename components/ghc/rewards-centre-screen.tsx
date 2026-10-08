@@ -354,7 +354,7 @@ export function RewardsCentreScreen({
         />
 
         {/* Weekly quality streak — real qualityDays only (not likes) */}
-        <div className="mx-3 mt-4 flex items-start gap-3 rounded-[1.25rem] border border-orange-100/90 bg-orange-50/90 px-3.5 py-3.5 shadow-sm dark:border-orange-900 dark:bg-orange-950/30">
+        <div className="mx-3 mt-3 flex items-start gap-3 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 ring-1 ring-orange-200/80 dark:bg-orange-950/60 dark:ring-orange-900/50">
             <Flame size={18} aria-hidden />
           </div>

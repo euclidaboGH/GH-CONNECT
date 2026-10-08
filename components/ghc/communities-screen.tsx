@@ -938,7 +938,7 @@ export function CommunitiesScreen() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name, city, topic…"
                 aria-label="Search communities"
-                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
                 <button
@@ -952,14 +952,14 @@ export function CommunitiesScreen() {
               ) : null}
             </div>
 
-            <div className="mt-2 flex gap-1 rounded-xl bg-muted/60 p-1">
+            <div className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1">
               <button
                 type="button"
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Users size={14} aria-hidden />
@@ -968,10 +968,10 @@ export function CommunitiesScreen() {
               <button
                 type="button"
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Compass size={14} aria-hidden />

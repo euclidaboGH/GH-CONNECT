@@ -59,7 +59,7 @@ export function ConnectionCard({
 
   return (
     <article
-      className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm"
+      className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]"
       aria-label={`${candidate.displayName}, ${stateLabel}`}
       data-connection-state={connectionState}
     >

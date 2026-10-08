@@ -398,7 +398,7 @@ export function SettingsScreen({
             Protects this device after idle or when you leave the app. Your real account identity is
             still Pi Network — the PIN never replaces Pi sign-in or Pi Wallet approval for payments.
           </p>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 space-y-3 shadow-[var(--gh-card-shadow)]">
             <p className="text-[14px] font-bold">
               Status:{" "}
               <span className={hasPin ? "text-emerald-600" : "text-amber-600"}>
@@ -697,7 +697,7 @@ export function SettingsScreen({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-5">
           {/* Language */}
-          <section className="rounded-2xl border border-border bg-card p-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Language</p>
             <select
               value={settings.language || "English"}
@@ -715,7 +715,7 @@ export function SettingsScreen({
           </section>
 
           {/* Discovery */}
-          <section className="rounded-2xl border border-border bg-card p-4 space-y-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 space-y-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Discovery defaults</p>
             <div>
               <div className="mb-1.5 flex items-center justify-between">
@@ -786,7 +786,7 @@ export function SettingsScreen({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border bg-card p-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[13px] font-bold text-foreground">Need finer alert control?</p>
             <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
               Choose which events can notify you under{" "}
@@ -868,7 +868,7 @@ export function SettingsScreen({
               These control in-app and push categories. Your device must still allow notifications for GreenHaven. Delivery is best-effort when offline.
             </p>
           </section>
-          <section className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card divide-y divide-border/50 overflow-hidden shadow-[var(--gh-card-shadow)]">
             {toggles.map((t) => {
               const raw = settings[t.key]
               const on = typeof raw === "boolean" ? raw : t.defaultOn
@@ -992,7 +992,7 @@ export function SettingsScreen({
           {/* Custom wallpaper */}
           <div>
             <p className="text-[13px] font-bold text-muted-foreground mb-2">Custom background</p>
-            <div className="rounded-2xl border border-border bg-card p-3 space-y-3">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 space-y-3 shadow-[var(--gh-card-shadow)]">
               {settings.themeCustomImage ? (
                 <div
                   className="h-28 w-full rounded-xl bg-cover bg-center border border-border"
@@ -1283,7 +1283,7 @@ export function SettingsScreen({
               <button
                 type="button"
                 onClick={() => setLogoutConfirm(true)}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-[15px] font-bold text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[1.25rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-[15px] font-bold text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
               >
                 <LogOut size={18} strokeWidth={2} />
                 Log out

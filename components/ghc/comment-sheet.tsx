@@ -202,14 +202,14 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           <div className="min-w-0 flex-1">
             <div className="rounded-2xl bg-stone-50 px-3 py-2 ring-1 ring-stone-100">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-gray-900">{c.authorName}</span>
+                <span className="text-xs font-bold text-foreground">{c.authorName}</span>
                 {isCommentOwner(c) && (
                   <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
                     You
                   </span>
                 )}
-                <span className="text-[10px] text-gray-400">{timeAgo(c.createdAt)}</span>
-                {c.isEdited && <span className="text-[10px] text-gray-400">(edited)</span>}
+                <span className="text-[10px] text-muted-foreground">{timeAgo(c.createdAt)}</span>
+                {c.isEdited && <span className="text-[10px] text-muted-foreground">(edited)</span>}
                 {c.isPinned && (
                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
                     Pinned
@@ -221,7 +221,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                   <textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value.slice(0, 1000))}
-                    className="w-full resize-none rounded-lg border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full resize-none rounded-lg border border-border/70 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     rows={2}
                     autoFocus
                   />
@@ -239,18 +239,18 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                         setEditingId(null)
                         setEditText("")
                       }}
-                      className="rounded-lg bg-gray-200 px-3 py-1 text-xs font-bold text-gray-700"
+                      className="rounded-lg bg-gray-200 px-3 py-1 text-xs font-bold text-foreground/90"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800">{c.text}</p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}</p>
               )}
             </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-gray-500">
+            <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-muted-foreground">
               <button
                 type="button"
                 className={`inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition ${liked ? "bg-rose-50 text-rose-600" : "hover:bg-muted hover:text-foreground"}`}
@@ -372,11 +372,11 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       >
         <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
           <div>
-            <h3 id="comment-sheet-title" className="flex items-center gap-1.5 text-base font-bold text-gray-900">
+            <h3 id="comment-sheet-title" className="flex items-center gap-1.5 text-base font-bold text-foreground">
               <MessageCircle size={16} className="text-emerald-600" />
               Comments
             </h3>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-muted-foreground">
               {totalCount} · {post.authorName}&apos;s post
               {isPostOwner ? " · You own this post" : ""}
             </p>
@@ -393,7 +393,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+              className="rounded-full p-2 text-muted-foreground hover:bg-muted"
               aria-label="Close comments"
             >
               <X size={20} />
@@ -435,10 +435,10 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                 <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                   Replying to
                 </p>
-                <p className="truncate text-xs font-semibold text-gray-800">
+                <p className="truncate text-xs font-semibold text-foreground">
                   {replyParent.authorName}
                   {replyParent.text ? (
-                    <span className="font-normal text-gray-500">
+                    <span className="font-normal text-muted-foreground">
                       {" "}
                       · {replyParent.text.slice(0, 48)}
                       {replyParent.text.length > 48 ? "…" : ""}
@@ -457,9 +457,9 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
             </div>
           )}
           <div className="mb-1.5 flex items-center justify-between">
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-muted-foreground">
               Comment as{" "}
-              <span className="font-bold text-gray-800">{profile.displayName || "You"}</span>
+              <span className="font-bold text-foreground">{profile.displayName || "You"}</span>
             </p>
             {text.length > 0 && (
               <span
