@@ -30,11 +30,11 @@ const MATCH_TYPE_CONFIG = {
   },
   nearby: {
     label: "Near You",
-    bgColor: "bg-purple-50 border-purple-200",
-    badgeBg: "bg-purple-100 text-purple-700",
-    buttonColor: "bg-purple-500 hover:bg-purple-600 text-white",
+    bgColor: "bg-emerald-50 border-emerald-200",
+    badgeBg: "bg-emerald-100 text-emerald-800",
+    buttonColor: "bg-emerald-600 hover:bg-emerald-700 text-white",
     icon: MapPin,
-    pillColor: "bg-purple-100",
+    pillColor: "bg-emerald-100",
   },
 }
 

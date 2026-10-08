@@ -164,13 +164,13 @@ export function ProfileEcosystemHub({
   const expiry = formatExpiry(membership.expiresAt)
 
   return (
-    <div className="space-y-2.5" aria-label="GreenHaven ecosystem">
+    <div className="space-y-3" aria-label="GreenHaven ecosystem">
       {/* Identity */}
-      <section className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-sm">
+      <section className="rounded-[1.25rem] border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
           Identity
         </p>
-        <div className="mt-2 flex items-start justify-between gap-2">
+        <div className="mt-2.5 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">
               <BadgeCheck size={16} className="shrink-0 text-sky-600" aria-hidden />
@@ -187,7 +187,7 @@ export function ProfileEcosystemHub({
             <button
               type="button"
               onClick={onShareProfile}
-              className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-3 text-xs font-bold text-foreground"
+              className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card px-3 text-xs font-bold text-foreground shadow-sm transition hover:bg-muted"
             >
               <Share2 size={14} aria-hidden />
               Share
@@ -196,18 +196,20 @@ export function ProfileEcosystemHub({
         </div>
       </section>
 
-      {/* Membership · Wallet · Rewards */}
+      {/* Membership · Wallet · Rewards — real data only */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <button
           type="button"
           onClick={onOpenMembership}
-          className="flex min-h-[96px] flex-col rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50 to-white p-3.5 text-left transition active:scale-[0.99] dark:border-violet-900/50 dark:from-violet-950/40 dark:to-card"
+          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-violet-200 hover:shadow-md active:scale-[0.99] dark:hover:border-violet-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-            <Crown size={14} aria-hidden />
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-50 ring-1 ring-violet-100 dark:bg-violet-950/40 dark:ring-violet-900/40">
+              <Crown size={14} aria-hidden />
+            </span>
             Membership
           </span>
-          <span className="mt-1.5 text-lg font-black text-foreground">{tierLabel}</span>
+          <span className="mt-2 text-lg font-bold text-foreground">{tierLabel}</span>
           <span className="mt-0.5 text-[11px] text-muted-foreground">
             {membership.tier === "free"
               ? "Free plan"
@@ -226,13 +228,15 @@ export function ProfileEcosystemHub({
         <button
           type="button"
           onClick={onOpenWallet}
-          className="flex min-h-[96px] flex-col rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white p-3.5 text-left transition active:scale-[0.99] dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-card"
+          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md active:scale-[0.99] dark:hover:border-emerald-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-            <Wallet size={14} aria-hidden />
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+              <Wallet size={14} aria-hidden />
+            </span>
             GHC Wallet
           </span>
-          <span className="mt-1.5 text-lg font-black tabular-nums text-foreground">
+          <span className="mt-2 text-lg font-bold tabular-nums text-foreground">
             {formatGhc(wallet.balance)}{" "}
             <span className="text-sm font-semibold text-muted-foreground">GHC</span>
           </span>
@@ -248,13 +252,15 @@ export function ProfileEcosystemHub({
         <button
           type="button"
           onClick={onOpenRewards}
-          className="flex min-h-[96px] flex-col rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 to-white p-3.5 text-left transition active:scale-[0.99] dark:border-amber-900/50 dark:from-amber-950/40 dark:to-card"
+          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-amber-200 hover:shadow-md active:scale-[0.99] dark:hover:border-amber-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-            <Gift size={14} aria-hidden />
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">
+              <Gift size={14} aria-hidden />
+            </span>
             Rewards
           </span>
-          <span className="mt-1.5 text-lg font-black text-foreground">
+          <span className="mt-2 text-lg font-bold text-foreground">
             {xp.levelName || "Bronze"}
           </span>
           <span className="mt-0.5 text-[11px] text-muted-foreground">

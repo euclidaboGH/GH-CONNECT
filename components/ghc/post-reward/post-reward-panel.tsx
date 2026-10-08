@@ -79,15 +79,15 @@ export function PostRewardPanel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-stretch gap-0 border-t border-violet-100/90 bg-gradient-to-r from-violet-50/95 via-white to-emerald-50/50 px-3 py-2.5 text-left transition hover:from-violet-50 dark:border-violet-900/40 dark:from-violet-950/40 dark:via-card dark:to-emerald-950/20"
+        className="flex w-full items-stretch gap-0 border-t border-border/40 bg-card px-3 py-2.5 text-left transition hover:bg-muted/30 dark:hover:bg-muted/20"
         aria-label={showMoney ? "View post reward details" : "View community quality details"}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${
               showMoney
-                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-                : "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900/40"
+                : "bg-muted text-muted-foreground ring-border/50"
             }`}
           >
             <Coins size={20} strokeWidth={2} aria-hidden />
@@ -147,14 +147,14 @@ export function PostRewardPanel({
           onClick={() => setOpen(false)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-card p-4 shadow-xl sm:rounded-2xl"
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-[1.25rem] border border-border/50 bg-card p-4 shadow-2xl sm:rounded-[1.25rem]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-bold text-foreground">Post reward</h2>
               <button
                 type="button"
-                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
                 aria-label="Close"
                 onClick={() => setOpen(false)}
               >
@@ -164,15 +164,15 @@ export function PostRewardPanel({
 
             {showMoney ? (
               <div className="space-y-3">
-                <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-white p-4 ring-1 ring-emerald-100 dark:from-emerald-950/40 dark:to-card dark:ring-emerald-900/40">
+                <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                     Total earned
                   </p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                  <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-300">
                     {formatGhc(reward!.totalEarned)}{" "}
-                    <span className="text-lg">GHC</span>
+                    <span className="text-lg font-semibold text-muted-foreground">GHC</span>
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-emerald-700/80">
+                  <p className="mt-1 text-xs font-semibold text-emerald-700/80 dark:text-emerald-400/80">
                     Status · {reward!.statusLabel}
                   </p>
                 </div>

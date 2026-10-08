@@ -838,8 +838,8 @@ export function GHConnectApp() {
           Auto-hides on scroll-down (translate off-screen); tap or scroll-up reveals.
           Hairline border only — no heavy shadow overlay. */}
       <nav
-        className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/60 bg-background px-1 pb-[max(0.2rem,env(safe-area-inset-bottom,0px))] pt-0.5 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
-          bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.5rem] opacity-100"
+        className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/50 bg-card/95 backdrop-blur-md px-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] pt-1 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
+          bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.75rem] opacity-100"
         }`}
         aria-label="Main navigation"
         role="navigation"
@@ -890,7 +890,7 @@ export function GHConnectApp() {
                 <span
                   className={
                     id === "create"
-                      ? "flex h-11 w-11 -translate-y-1 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+                      ? "gh-create-fab flex h-12 w-12 -translate-y-2 items-center justify-center rounded-full text-white"
                       : `flex h-8 w-10 items-center justify-center rounded-lg transition-colors ${
                           isActive ? "bg-primary/10" : "bg-transparent"
                         }`

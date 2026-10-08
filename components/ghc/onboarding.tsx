@@ -181,7 +181,7 @@ function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 px-6 text-[15px] font-bold text-white shadow-[0_8px_28px_rgba(16,185,129,0.35)] transition active:scale-[0.98] disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600 disabled:shadow-none disabled:opacity-50"
+      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--gh-green)] px-6 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.98] disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-50"
     >
       {children}
     </button>

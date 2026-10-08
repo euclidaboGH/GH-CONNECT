@@ -26,11 +26,11 @@ export function EmptyMessagesState({
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-background px-4 py-12 text-center">
       <div className="relative mb-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40" aria-hidden="true">
+        <div className="gh-icon-tile flex h-20 w-20 items-center justify-center rounded-[1.25rem] bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40" aria-hidden="true">
           <MessageCircle size={40} className="text-emerald-600" />
         </div>
       </div>
-      <h3 className="mb-2 text-lg font-bold text-foreground">No messages yet</h3>
+      <h3 className="mb-2 text-lg font-bold tracking-tight text-foreground">No messages yet</h3>
       <p className="mb-4 max-w-xs text-sm text-muted-foreground">
         {canIcebreak
           ? "Say hello to someone you’ve matched or connected with."
@@ -150,10 +150,10 @@ function ConversationItemBase({
 
   return (
     <div
-      className={`group border-b border-border/40 transition-colors ${isSelected ? "bg-emerald-50/60 dark:bg-emerald-950/30" : "bg-card hover:bg-muted/40"}`}
+      className={`group border-b border-border/30 transition-colors ${isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/35" : "bg-card hover:bg-muted/35"}`}
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}
     >
-      <div className="flex min-h-[68px] w-full items-center px-3.5 py-2.5 text-left transition active:bg-emerald-50/50 sm:px-4">
+      <div className="flex min-h-[72px] w-full items-center px-3.5 py-3 text-left transition active:bg-emerald-50/50 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="relative shrink-0">
             <button
@@ -162,7 +162,7 @@ function ConversationItemBase({
                 event.stopPropagation()
                 onOpenProfile?.()
               }}
-              className="block min-h-[44px] min-w-[44px] rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="block min-h-[44px] min-w-[44px] rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label={
                 conversation.conversationType === "group" ||
                 (conversation as { isCommunity?: boolean }).isCommunity ||

@@ -58,7 +58,7 @@ export function CollapsingAppHeader({
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-pink-500 text-[11px] font-bold text-white">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">
               {(compactTitle || title).slice(0, 1)}
             </div>
           )}

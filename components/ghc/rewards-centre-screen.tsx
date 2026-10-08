@@ -73,12 +73,12 @@ function formatWhen(ts: number) {
 }
 
 const STATUS_STYLE: Record<ChallengeStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800",
-  in_progress: "bg-sky-50 text-sky-800",
-  pending_validation: "bg-amber-50 text-amber-900",
-  completed: "bg-stone-100 text-stone-600",
-  expired: "bg-stone-100 text-stone-400",
-  locked: "bg-stone-100 text-stone-400",
+  available: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/40",
+  in_progress: "bg-sky-50 text-sky-800 ring-1 ring-sky-100 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-900/40",
+  pending_validation: "bg-amber-50 text-amber-900 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/40",
+  completed: "bg-stone-100 text-stone-600 ring-1 ring-stone-200 dark:bg-stone-800 dark:text-stone-300",
+  expired: "bg-stone-100 text-stone-400 ring-1 ring-stone-200",
+  locked: "bg-stone-100 text-stone-400 ring-1 ring-stone-200",
 }
 
 const STATUS_LABEL: Record<ChallengeStatus, string> = {
@@ -309,17 +309,17 @@ export function RewardsCentreScreen({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-border/60 bg-card/95 px-3 py-3 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
           aria-label="Back"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={18} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold tracking-tight text-foreground">Your GHC journey</h1>
+          <h1 className="text-[15px] font-bold tracking-tight text-foreground">Your GHC journey</h1>
           <p className="text-[11px] text-muted-foreground">
             Daily · missions · achievements · not pay-to-win
           </p>
@@ -328,7 +328,7 @@ export function RewardsCentreScreen({
           <button
             type="button"
             onClick={onOpenWallet}
-            className="min-h-9 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+            className="min-h-9 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -336,7 +336,7 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={refresh}
-          className="min-h-9 rounded-full bg-muted px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+          className="min-h-9 rounded-full border border-border/70 bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:bg-muted"
         >
           Refresh
         </button>
@@ -353,26 +353,35 @@ export function RewardsCentreScreen({
           onOpenWallet={onOpenWallet}
         />
 
-        {/* Weekly quality streak (careful — not likes) */}
-        <div className="mx-3 mt-3 flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/80 px-3 py-3 dark:border-orange-900 dark:bg-orange-950/30">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700">
-            <Flame size={18} />
+        {/* Weekly quality streak — real qualityDays only (not likes) */}
+        <div className="mx-3 mt-4 flex items-start gap-3 rounded-[1.25rem] border border-orange-100/90 bg-orange-50/90 px-3.5 py-3.5 shadow-sm dark:border-orange-900 dark:bg-orange-950/30">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 ring-1 ring-orange-200/80 dark:bg-orange-950/60 dark:ring-orange-900/50">
+            <Flame size={18} aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-foreground">
+            <p className="text-[13px] font-bold text-foreground">
               Weekly quality streak · {snapshot.streak.qualityDays}/7 days
             </p>
-            <div className="mt-1.5 flex gap-1">
+            <div
+              className="mt-2 flex gap-1"
+              role="progressbar"
+              aria-valuenow={snapshot.streak.qualityDays}
+              aria-valuemin={0}
+              aria-valuemax={7}
+              aria-label="Weekly quality streak days"
+            >
               {Array.from({ length: 7 }).map((_, i) => (
                 <span
                   key={i}
                   className={`h-2 flex-1 rounded-full ${
-                    i < snapshot.streak.qualityDays ? "bg-orange-500" : "bg-orange-200/80 dark:bg-orange-900"
+                    i < snapshot.streak.qualityDays
+                      ? "bg-orange-500"
+                      : "bg-orange-200/80 dark:bg-orange-900"
                   }`}
                 />
               ))}
             </div>
-            <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
               Counts days with verified quality contributions (posts, helpful comments, community
               activity). Never likes, self-interaction, or spam.
             </p>
@@ -426,7 +435,7 @@ export function RewardsCentreScreen({
           </div>
         )}
 
-        <div className="mx-4 mt-3 flex gap-1 rounded-2xl border border-border bg-card p-1 shadow-sm">
+        <div className="mx-3 mt-4 flex gap-1 rounded-2xl border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]">
           {(
             [
               { id: "challenges" as const, label: "Missions" },
@@ -439,8 +448,10 @@ export function RewardsCentreScreen({
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`shrink-0 flex-1 rounded-xl px-2 py-2 text-[11px] font-bold ${
-                tab === t.id ? "bg-emerald-600 text-white" : "text-muted-foreground"
+              className={`shrink-0 flex-1 rounded-xl px-2 py-2.5 text-[11px] font-bold transition ${
+                tab === t.id
+                  ? "bg-[var(--gh-green)] text-white shadow-sm"
+                  : "text-muted-foreground hover:bg-muted/70"
               }`}
             >
               {t.label}
@@ -452,32 +463,32 @@ export function RewardsCentreScreen({
           {tab === "opportunities" && (
           <>
 
-            <div className="mb-3 rounded-2xl border border-border bg-card px-3 py-3" aria-label="Engagement paths">
+            <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]" aria-label="Engagement paths">
               <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Engagement paths
               </h2>
-              <ul className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+              <ul className="mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Daily reward</p>
                   <p className="text-[10px] text-muted-foreground">On Home every 24h</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Profile completion</p>
                   <p className="text-[10px] text-muted-foreground">Finish profile fields</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Community activity</p>
                   <p className="text-[10px] text-muted-foreground">Posts & groups</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Social milestones</p>
                   <p className="text-[10px] text-muted-foreground">Friends & messages</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Referrals</p>
                   <p className="text-[10px] text-muted-foreground">Invite pioneers</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
                   <p className="font-bold text-foreground">Campaigns</p>
                   <p className="text-[10px] text-muted-foreground">Limited-time events</p>
                 </li>
@@ -643,15 +654,19 @@ export function RewardsCentreScreen({
                 snapshot.achievements.map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3"
+                    className="flex items-center gap-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                   >
-                    <Award size={18} className="text-amber-600" />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">
+                      <Award size={18} className="text-amber-600" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold text-foreground">
                         {a.title || a.id}
                       </p>
                       {a.description ? (
-                        <p className="text-[11px] text-muted-foreground">{a.description}</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                          {a.description}
+                        </p>
                       ) : null}
                     </div>
                   </div>
@@ -681,27 +696,31 @@ function ChallengeCardView({
 
   return (
     <div
-      className={`rounded-2xl border bg-card px-3 py-3 ${
+      className={`rounded-[1.25rem] border bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)] ${
         card.recommended && status !== "completed"
-          ? "border-emerald-200 shadow-sm shadow-emerald-600/5"
-          : "border-border"
+          ? "border-emerald-200/90 dark:border-emerald-800/60"
+          : "border-border/60"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <Target size={16} className="mt-0.5 shrink-0 text-teal-600" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <span className="gh-icon-tile mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center">
+            <Target size={16} aria-hidden />
+          </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-sm font-semibold text-foreground">{challenge.title}</p>
+              <p className="text-[14px] font-semibold text-foreground">{challenge.title}</p>
               {card.recommended && status !== "completed" && (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-800">
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/40">
                   For you
                 </span>
               )}
             </div>
             {!compact && (
               <>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{challenge.description}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {challenge.description}
+                </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   <span className="font-semibold text-foreground/80">Why: </span>
                   {challenge.why}
@@ -709,10 +728,9 @@ function ChallengeCardView({
               </>
             )}
 
-            {/* Always show progress bar */}
-            <div className="mt-2">
-              <div className="mb-0.5 flex justify-between text-[10px] text-muted-foreground">
-                <span>Progress</span>
+            <div className="mt-2.5">
+              <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+                <span className="font-semibold">Progress</span>
                 <span className="font-semibold text-foreground">
                   {targetLabel}
                   {challenge.rewardAmount ? ` · +${challenge.rewardAmount} GHC` : ""}
@@ -732,23 +750,22 @@ function ChallengeCardView({
                       ? "bg-stone-400"
                       : status === "pending_validation"
                         ? "bg-amber-500"
-                        : "bg-emerald-500"
+                        : "bg-[var(--gh-green)]"
                   }`}
                   style={{ width: `${Math.min(100, percent)}%` }}
                 />
               </div>
             </div>
 
-            {/* Claim / track next step */}
             <p className="mt-2 text-[11px] font-medium text-foreground/90">{nextStep}</p>
             {(status === "available" || status === "in_progress") && challenge.ctaHint && (
               <button
                 type="button"
                 onClick={() => runCta(challenge.ctaHint)}
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white"
+                className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-[var(--gh-green)] px-3.5 py-1.5 text-[11px] font-bold text-white shadow-sm"
               >
                 {status === "in_progress" ? "Continue" : "Start"}
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
             {status === "pending_validation" && (
@@ -765,10 +782,10 @@ function ChallengeCardView({
                     /* */
                   }
                 }}
-                className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-900"
+                className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-[11px] font-bold text-amber-900"
               >
                 View pending in Wallet
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
             {status === "completed" && (
@@ -785,10 +802,10 @@ function ChallengeCardView({
                     /* */
                   }
                 }}
-                className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3 py-1.5 text-[11px] font-bold text-foreground"
+                className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3.5 py-1.5 text-[11px] font-bold text-foreground"
               >
                 Open Wallet
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
           </div>
@@ -799,10 +816,12 @@ function ChallengeCardView({
           >
             {STATUS_LABEL[status]}
           </span>
-          <p className="mt-1 inline-flex items-center gap-0.5 text-sm font-bold text-emerald-700">
-            <GhcCoinIcon size={16} />
-            +{challenge.rewardAmount}
-          </p>
+          {challenge.rewardAmount != null && Number(challenge.rewardAmount) > 0 && (
+            <p className="mt-1.5 inline-flex items-center justify-end gap-0.5 text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              <GhcCoinIcon size={16} />
+              +{challenge.rewardAmount}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -811,10 +830,14 @@ function ChallengeCardView({
 
 function Empty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-10 text-center">
-      <Sparkles size={20} className="mx-auto text-muted-foreground/40" />
-      <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{body}</p>
+    <div className="rounded-[1.25rem] border border-dashed border-border/80 bg-card px-5 py-12 text-center shadow-[var(--gh-card-shadow)]">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+        <GhcCoinIcon size={28} />
+      </div>
+      <p className="text-[15px] font-bold text-foreground">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-[16rem] text-[13px] leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </div>
   )
 }

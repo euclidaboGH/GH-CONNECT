@@ -124,7 +124,7 @@ export const PostCard = memo(function PostCard({
           <button
             type="button"
             onClick={() => onOpenProfile?.(post.authorId)}
-            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={`View ${post.authorName}'s profile`}
             disabled={!onOpenProfile}
           >
@@ -138,7 +138,7 @@ export const PostCard = memo(function PostCard({
             <button
               type="button"
               onClick={() => onOpenProfile?.(post.authorId)}
-              className="block max-w-full truncate text-left font-bold text-sm text-gray-900 hover:text-purple-700 focus-visible:outline-none focus-visible:underline"
+              className="block max-w-full truncate text-left font-bold text-sm text-gray-900 hover:text-emerald-700 focus-visible:outline-none focus-visible:underline"
               disabled={!onOpenProfile}
             >
               {post.authorName}
@@ -161,7 +161,7 @@ export const PostCard = memo(function PostCard({
         {(isOwnPost || onHidePost || onReportPost) && (
           <button
             onClick={handleMenuOpen}
-            className="text-gray-500 hover:text-gray-700 active:scale-90 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 rounded-full p-1"
+            className="text-gray-500 hover:text-gray-700 active:scale-90 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full p-1"
           >
             <MoreVertical size={16} />
           </button>
@@ -322,7 +322,7 @@ export const PostCard = memo(function PostCard({
         <div className="relative">
           <button
             onClick={() => setShowShareMenu(!showShareMenu)}
-            className="flex items-center gap-1 py-2 px-3 rounded-lg font-semibold text-gray-600 hover:bg-purple-50 hover:text-purple-500 transition-all active:scale-95"
+            className="flex items-center gap-1 py-2 px-3 rounded-lg font-semibold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all active:scale-95"
           >
             <Share2 size={14} />
             Share
@@ -447,7 +447,7 @@ export function ModeFilter({ currentMode, selectedFilter, onFilterChange }: Mode
           onClick={() => onFilterChange(mode.id)}
           className={`flex items-center gap-1 whitespace-nowrap py-1.5 px-3 rounded-full font-semibold text-xs transition-all active:scale-95 ${
             selectedFilter === mode.id
-              ? "bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-md"
+              ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
@@ -489,8 +489,8 @@ export function PeopleRecommendation({ people, onFollow }: PeopleRecommendationP
   if (people.length === 0) return null
 
   return (
-    <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-      <p className="text-xs font-bold text-purple-900 mb-3 uppercase tracking-wide">
+    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
+      <p className="text-xs font-bold text-emerald-900 mb-3 uppercase tracking-wide">
         People You May Know
       </p>
       <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
@@ -500,7 +500,7 @@ export function PeopleRecommendation({ people, onFollow }: PeopleRecommendationP
               <img
                 src={person.photo || "/placeholder.svg"}
                 alt={person.name}
-                className="w-14 h-14 rounded-full object-cover border-2 border-purple-300 mx-auto"
+                className="w-14 h-14 rounded-full object-cover border-2 border-emerald-300 mx-auto"
                 loading="lazy"
                 decoding="async"
                 onError={(event) => {

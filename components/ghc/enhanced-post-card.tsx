@@ -319,16 +319,16 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md"
+      className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)]"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-        <div className="flex items-center gap-2 flex-1">
-          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Open ${post.authorName}'s profile`}>
+      <div className="flex items-center justify-between px-4 pb-2.5 pt-3.5">
+        <div className="flex flex-1 items-center gap-2.5">
+          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${post.authorName}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
               alt={post.authorName}
-              className="h-11 w-11 rounded-full object-cover bg-muted"
+              className="h-11 w-11 rounded-full object-cover bg-muted ring-1 ring-border/40"
             />
             {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" title="Online now" aria-label="Online now" />}
             {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-blue-600 shadow-sm" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
@@ -609,9 +609,9 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — premium layout: curation · comments · save · share */}
+      {/* Primary actions — curation · comments · save · share */}
       <div
-        className="flex items-center gap-1.5 border-t border-border/60 bg-card/95 px-2.5 py-2"
+        className="flex items-center gap-1 border-t border-border/40 px-2.5 py-2"
         role="toolbar"
         aria-label="Post actions"
       >

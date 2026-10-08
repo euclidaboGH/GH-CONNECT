@@ -354,36 +354,36 @@ export function MessageScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
-      <header className="shrink-0 border-b border-border/60 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-base font-bold tracking-tight">Messages</h1>
+            <h1 className="text-[15px] font-bold tracking-tight text-foreground">Messages</h1>
             <p className="text-[11px] text-muted-foreground">
               DMs · community chat · board lives under Communities
             </p>
           </div>
           {unreadCount > 0 ? (
-            <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums">
+            <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums shadow-sm">
               {unreadCount} new
             </span>
           ) : null}
         </div>
-        <div className="mt-2">
+        <div className="mt-2.5">
           <ConversationSearchBar searchQuery={query} onSearchChange={setQuery} />
         </div>
         <p className="mt-1.5 text-[10px] text-muted-foreground">
           Private messages stay separate from community boards.
         </p>
-        <div className="mt-2 flex gap-1 rounded-xl bg-muted/60 p-1" role="tablist" aria-label="Inbox filters">
+        <div className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1" role="tablist" aria-label="Inbox filters">
           {filters.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
-              className={`flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-bold transition ${
+              className={`flex flex-1 items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-bold transition ${
                 filter === f.id
                   ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {f.id === "communities" ? <Users size={12} aria-hidden /> : null}

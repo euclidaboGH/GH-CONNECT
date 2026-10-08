@@ -322,10 +322,10 @@ export function DailyRewardFeedCard({
   if (!daily.canClaimToday) return null
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-card to-amber-50/40 shadow-sm dark:border-emerald-900 dark:from-emerald-950/40 dark:to-card">
-      <div className="flex items-stretch gap-3 p-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
-          <Gift size={22} strokeWidth={2.25} />
+    <div className="overflow-hidden rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
+      <div className="flex items-stretch gap-3 p-3.5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--gh-green)] text-white shadow-md shadow-emerald-700/25">
+          <Gift size={22} strokeWidth={2.25} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
@@ -343,12 +343,12 @@ export function DailyRewardFeedCard({
           type="button"
           disabled={claiming}
           onClick={() => void handleClaim()}
-          className="shrink-0 self-center rounded-full bg-emerald-700 px-3.5 py-2.5 text-[12px] font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-60"
+          className="gh-cta shrink-0 self-center px-4 py-2.5 text-[12px] shadow-sm disabled:opacity-60"
         >
           {claiming ? "…" : "Claim"}
         </button>
       </div>
-      <div className="border-t border-emerald-100/80 px-3 py-2 dark:border-emerald-900/50">
+      <div className="border-t border-border/50 px-3 py-2.5">
         <StreakProgressStrip
           cycleDay={daily.displayCycleDay}
           claimedToday={false}
@@ -359,7 +359,7 @@ export function DailyRewardFeedCard({
         <button
           type="button"
           onClick={onOpenFull}
-          className="w-full border-t border-emerald-100/80 py-1.5 text-center text-[10px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:text-emerald-300"
+          className="w-full border-t border-border/50 py-2 text-center text-[11px] font-semibold text-emerald-800 transition hover:bg-muted/40 dark:text-emerald-300"
         >
           Open full reward
         </button>

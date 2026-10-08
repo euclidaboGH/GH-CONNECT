@@ -466,7 +466,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
+      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-3 py-3 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
@@ -476,10 +476,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="gh-type-title text-sm">Membership</h1>
-          <p className="gh-type-meta text-muted-foreground">
+          <h1 className="text-[15px] font-bold tracking-tight text-foreground">Membership</h1>
+          <p className="text-[11px] text-muted-foreground">
             Current:{" "}
-            <span className="font-semibold text-emerald-700">
+            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
               {MEMBERSHIP_PLANS[currentTier].label}
             </span>
             {status?.source === "trial" || (status as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
@@ -797,7 +797,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   key={tier}
                   id={`membership-plan-${tier}`}
                   aria-current={isCurrent ? "true" : undefined}
-                  className={`w-full rounded-3xl border bg-gradient-to-b p-4 shadow-sm ${accent} ${ring}`}
+                  className={`w-full rounded-[1.25rem] border bg-card p-4 shadow-[var(--gh-card-shadow)] ${accent} ${ring}`}
                 >
                   <div className="mb-1">
                     <div className="flex items-start justify-between gap-2">

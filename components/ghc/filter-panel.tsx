@@ -92,7 +92,7 @@ export function FilterPanel({
                     if (preset.interests) onInterestsChange(preset.interests)
                     setShowPresets(false)
                   }}
-                  className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 p-2 text-left text-xs font-semibold text-gray-800 transition hover:from-purple-100 hover:to-pink-100"
+                  className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-2 text-left text-xs font-semibold text-gray-800 transition hover:from-emerald-100 hover:to-teal-100"
                 >
                   {preset.name}
                 </button>
@@ -112,7 +112,7 @@ export function FilterPanel({
                 onClick={() => onModeChange(mode.toLowerCase())}
                 className={`rounded-full px-3 py-2 text-xs font-medium transition active:scale-95 ${
                   selectedMode.toLowerCase() === mode.toLowerCase()
-                    ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
@@ -126,7 +126,7 @@ export function FilterPanel({
         <div className="mb-4">
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-bold text-gray-900">Age Range</label>
-            <span className="text-sm font-bold text-purple-600">
+            <span className="text-sm font-bold text-emerald-700">
               {ageRange[0]} – {ageRange[1]}
             </span>
           </div>
@@ -140,7 +140,7 @@ export function FilterPanel({
                 const next = parseInt(e.target.value, 10)
                 onAgeRangeChange([Math.min(next, ageRange[1]), ageRange[1]])
               }}
-              className="w-full accent-purple-600"
+              className="w-full accent-emerald-600"
             />
             <input
               type="range"
@@ -151,7 +151,7 @@ export function FilterPanel({
                 const next = parseInt(e.target.value, 10)
                 onAgeRangeChange([ageRange[0], Math.max(next, ageRange[0])])
               }}
-              className="w-full accent-purple-600"
+              className="w-full accent-emerald-600"
             />
           </div>
         </div>
@@ -164,7 +164,7 @@ export function FilterPanel({
             value={location}
             onChange={(e) => onLocationChange(e.target.value)}
             placeholder="City or country"
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition focus:border-purple-300 focus:bg-white focus:ring-2 focus:ring-purple-100"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
           />
         </div>
 
@@ -172,7 +172,7 @@ export function FilterPanel({
         <div className="mb-4">
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-bold text-gray-900">Distance Radius</label>
-            <span className="text-sm font-bold text-purple-600">{distance} km</span>
+            <span className="text-sm font-bold text-emerald-700">{distance} km</span>
           </div>
           <input
             type="range"
@@ -180,7 +180,7 @@ export function FilterPanel({
             max={100}
             value={distance}
             onChange={(e) => onDistanceChange(parseInt(e.target.value, 10))}
-            className="w-full accent-purple-600"
+            className="w-full accent-emerald-600"
           />
           <div className="mt-2 flex justify-between text-xs text-gray-500">
             <span>1 km</span>
@@ -205,7 +205,7 @@ export function FilterPanel({
                 onClick={() => onActivityLevelChange(value)}
                 className={`rounded-full px-3 py-2 text-xs font-medium transition active:scale-95 ${
                   activityLevel === value
-                    ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
@@ -223,7 +223,7 @@ export function FilterPanel({
               <button
                 type="button"
                 onClick={() => onInterestsChange([])}
-                className="text-xs font-medium text-purple-600 hover:text-purple-700"
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-700"
               >
                 Clear all
               </button>
@@ -243,7 +243,7 @@ export function FilterPanel({
                 }}
                 className={`rounded-full px-3 py-2 text-xs font-medium transition active:scale-95 ${
                   selectedInterests.includes(interest)
-                    ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
@@ -272,7 +272,7 @@ export function FilterPanel({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 py-2.5 text-sm font-bold text-white shadow-md transition hover:from-purple-700 hover:to-pink-600 active:scale-95"
+            className="flex-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 py-2.5 text-sm font-bold text-white shadow-md transition hover:brightness-105 active:scale-95"
           >
             Apply Filters
           </button>

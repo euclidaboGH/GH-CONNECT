@@ -396,9 +396,9 @@ export function PremiumCommunityHub({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Cover + identity kit */}
-      <header className="shrink-0 border-b border-border bg-card">
+      <header className="shrink-0 border-b border-border/50 bg-card">
         <div
-          className="relative h-36 bg-gradient-to-br from-emerald-700 via-teal-600 to-cyan-700 sm:h-40"
+          className="relative h-36 bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-40"
           style={
             community.cover || community.photo
               ? {

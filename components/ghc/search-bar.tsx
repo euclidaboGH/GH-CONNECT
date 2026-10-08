@@ -102,7 +102,7 @@ export function SearchBar({
         <button
           type="button"
           onClick={onFiltersClick}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 text-white shadow-sm transition hover:shadow-md active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--gh-green)] text-white shadow-sm transition hover:brightness-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Open filters"
         >
           <Sliders className="h-4 w-4" aria-hidden="true" />
@@ -142,7 +142,7 @@ export function SearchBar({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => submitSearch(search)}
-                className="rounded-full bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-purple-50 hover:text-purple-700"
+                className="rounded-full bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 {search}
               </button>

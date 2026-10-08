@@ -1209,19 +1209,19 @@ export function SettingsScreen({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card p-4">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Back to profile"
         >
           <ChevronLeft size={24} strokeWidth={2} />
         </button>
-        <h2 className="text-[20px] font-bold">Settings</h2>
+        <h2 className="text-[18px] font-bold tracking-tight text-foreground">Settings</h2>
       </div>
 
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
+      <div className="shrink-0 border-b border-border/50 px-4 py-2.5">
         <div className="relative">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
@@ -1229,7 +1229,7 @@ export function SettingsScreen({
             value={settingsQuery}
             onChange={(e) => setSettingsQuery(e.target.value)}
             placeholder="Search settings…"
-            className="min-h-11 w-full rounded-2xl border border-border bg-muted/50 py-2.5 pl-10 pr-3 text-[15px] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-3 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
             aria-label="Search settings"
           />
         </div>
@@ -1244,21 +1244,21 @@ export function SettingsScreen({
               <section key={group.heading} aria-labelledby={`settings-${group.heading}`}>
                 <h3
                   id={`settings-${group.heading}`}
-                  className="mb-2 px-1 text-[12px] font-bold uppercase tracking-wide text-muted-foreground"
+                  className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"
                 >
                   {group.heading}
                 </h3>
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="overflow-hidden rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
                   {group.items.map((item, idx) => (
                     <button
                       key={item.title}
                       type="button"
                       onClick={item.action}
-                      className={`flex min-h-12 w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
-                        idx > 0 ? "border-t border-border" : ""
+                      className={`flex min-h-12 w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                        idx > 0 ? "border-t border-border/50" : ""
                       }`}
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+                      <span className="gh-icon-tile flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground">
                         {item.icon}
                       </span>
                       <span className="min-w-0 flex-1">

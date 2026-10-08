@@ -107,7 +107,7 @@ export function PostMenu({
         {onCopyLink && (
           <button
             onClick={onCopyLink}
-            className="w-full text-left px-4 py-2 hover:bg-purple-50 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-emerald-50 rounded-lg text-sm font-semibold text-gray-900 flex items-center gap-2"
           >
             <LinkIcon size={16} />
             Copy link

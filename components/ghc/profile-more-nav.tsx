@@ -24,15 +24,15 @@ type NavItem = {
 
 function NavGrid({ items }: { items: NavItem[] }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2.5">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
           onClick={item.onClick}
-          className="flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-[var(--gh-radius-sm)] bg-background/80 px-1 py-2.5 text-center transition hover:bg-emerald-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-emerald-950/30"
+          className="flex min-h-[52px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/50 bg-card px-1.5 py-3 text-center shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98] dark:hover:border-emerald-800"
         >
-          <span className="text-emerald-700 dark:text-emerald-300" aria-hidden>
+          <span className="gh-icon-tile flex h-9 w-9 items-center justify-center text-emerald-700 dark:text-emerald-300" aria-hidden>
             {item.icon}
           </span>
           <span className="text-[10px] font-bold leading-tight text-foreground">{item.label}</span>

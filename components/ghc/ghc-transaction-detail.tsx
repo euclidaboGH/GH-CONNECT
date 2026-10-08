@@ -120,12 +120,12 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-          <div className="rounded-2xl border border-border bg-muted/20 px-4 py-5 text-center">
-            <div className="mx-auto mb-2 flex justify-center">
-              <GhcCoinIcon size={28} />
+          <div className="rounded-[1.25rem] border border-border/60 bg-card px-4 py-6 text-center shadow-[var(--gh-card-shadow)]">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+              <GhcCoinIcon size={32} />
             </div>
             <p
-              className={`text-3xl font-semibold tabular-nums ${
+              className={`text-3xl font-semibold tabular-nums tracking-tight ${
                 tx.status === "pending"
                   ? "text-amber-700"
                   : positive
@@ -134,12 +134,13 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
               }`}
             >
               {positive ? "+" : ""}
-              {formatGhc(tx.amount)} <span className="text-base font-bold text-muted-foreground">GHC</span>
+              {formatGhc(tx.amount)}{" "}
+              <span className="text-base font-bold text-muted-foreground">GHC</span>
             </p>
             <p className="mt-2 text-sm font-semibold text-foreground">
               {tx.reason || kindLabel}
             </p>
-            <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {tx.status}
             </p>
           </div>

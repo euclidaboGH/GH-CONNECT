@@ -452,7 +452,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       {pullDistance > 0 && (
         <div className="absolute top-0 left-0 right-0 h-20 flex items-center justify-center z-30">
           <div
-            className={`w-8 h-8 rounded-full border-3 border-purple-300 border-t-purple-600 transition-all ${
+            className={`h-8 w-8 rounded-full border-[3px] border-emerald-200 border-t-[var(--gh-green)] transition-all ${
               isRefreshing ? "animate-spin" : ""
             }`}
             style={{ opacity: Math.min(pullDistance / 80, 1), transform: `rotate(${(pullDistance / 120) * 360}deg)` }}
@@ -483,9 +483,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               onClick={() => setIsSearchOpen(true)}
               aria-label="Search"
               aria-expanded={isSearchOpen}
-              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-emerald-50 active:scale-90"
+              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-muted active:scale-90"
             >
-              <Search size={18} className="text-gray-700" />
+              <Search size={18} className="text-foreground/80" />
             </button>
           </>
         }
@@ -498,7 +498,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   placeholder="Search posts, people, hashtags..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 rounded-full border border-gray-100 bg-stone-50 px-4 py-2 text-sm outline-none transition focus:border-emerald-200 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                  className="flex-1 rounded-full border border-border/70 bg-muted/40 px-4 py-2 text-sm outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
                   autoFocus
                 />
                 <button
@@ -507,7 +507,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     setIsSearchOpen(false)
                     setSearchQuery("")
                   }}
-                  className="rounded-full px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                  className="rounded-full px-3 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-muted"
                 >
                   Cancel
                 </button>
@@ -538,7 +538,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     }`}
                   >
-                    <span className={selected ? "text-emerald-100" : "text-stone-400"} aria-hidden>
+                    <span className={selected ? "text-primary-foreground/90" : "text-muted-foreground"} aria-hidden>
                       {filter.icon}
                     </span>
                     {filter.shortLabel}
@@ -553,11 +553,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
       {/* Error state */}
       {feedError && (
-        <div className="mx-3 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+        <div className="mx-3 mt-4 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="text-red-600 mt-0.5" aria-hidden="true">⚠️</div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-red-900">Couldn&apos;t load your feed</h3>
+            <div className="mt-0.5 text-destructive" aria-hidden="true">⚠️</div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-destructive">Couldn&apos;t load your feed</h3>
               <p className="text-xs text-red-700 mt-1">{feedError.message || "Check your connection and try again."}</p>
               <button
                 type="button"

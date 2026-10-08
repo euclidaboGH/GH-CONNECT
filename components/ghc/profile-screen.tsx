@@ -186,13 +186,13 @@ export function ProfileScreen({
 
   return (
     <div className="gh-profile-shell flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
-      <header className="flex w-full shrink-0 items-center justify-between border-b border-border/40 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))]">
-        <h1 className="text-base font-bold tracking-tight">Profile</h1>
+      <header className="flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-2 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-md">
+        <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={() => onOpenWallet?.()}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300"
             aria-label="Wallet"
           >
             <Wallet size={18} />
@@ -200,7 +200,7 @@ export function ProfileScreen({
           <button
             type="button"
             onClick={onSettings}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
             aria-label="Settings"
           >
             <SettingsIcon size={18} />
@@ -216,14 +216,14 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="relative block h-[7.5rem] w-full overflow-hidden bg-gradient-to-br from-emerald-700 via-teal-700 to-emerald-900 sm:h-36"
+          className="relative block h-[8rem] w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-40"
           aria-label="Change cover photo"
         >
           {cover ? (
             <img src={cover} alt="" className="h-full w-full object-cover" />
           ) : null}
-          <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-            <Camera size={12} />
+          <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+            <Camera size={12} aria-hidden />
             Cover
           </span>
         </button>
@@ -260,17 +260,17 @@ export function ProfileScreen({
               <button
                 type="button"
                 onClick={openEdit}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 text-[12px] font-bold text-white shadow-sm"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3.5 text-[12px] font-bold text-white shadow-sm shadow-emerald-700/20 transition hover:brightness-105 active:scale-[0.98]"
               >
-                <Pencil size={13} />
+                <Pencil size={13} aria-hidden />
                 Edit Profile
               </button>
               <button
                 type="button"
                 onClick={() => void shareProfile()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[12px] font-bold text-foreground"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border/70 bg-card px-3.5 text-[12px] font-bold text-foreground shadow-sm transition hover:bg-muted active:scale-[0.98]"
               >
-                <Share2 size={13} />
+                <Share2 size={13} aria-hidden />
                 Share
               </button>
             </div>
@@ -311,15 +311,15 @@ export function ProfileScreen({
               </p>
             ) : null}
 
-            {/* Stats */}
-            <div className="mt-3 flex gap-4">
+            {/* Stats — real counts only */}
+            <div className="mt-3.5 flex gap-1 rounded-2xl border border-border/50 bg-card p-1 shadow-[var(--gh-card-shadow)]">
               {[
                 { label: "Posts", value: posts.length },
                 { label: "Friends", value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
                 { label: "Following", value: Array.isArray(ghc.following) ? ghc.following.length : 0 },
               ].map((s) => (
-                <div key={s.label} className="text-center">
-                  <p className="text-[15px] font-black tabular-nums text-foreground">{s.value}</p>
+                <div key={s.label} className="flex min-w-0 flex-1 flex-col items-center py-2.5 text-center">
+                  <p className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</p>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {s.label}
                   </p>

@@ -285,8 +285,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         addToast("File attached", "success")
       } else if (!up.ok) {
         addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
-      } else {
-        addToast(mediaUserMessage("STORAGE_ERROR"), "error")
       }
     } catch {
       addToast(mediaUserMessage("NETWORK", "Unable to attach file"), "error")
@@ -486,16 +484,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       aria-labelledby="unified-compose-title"
     >
       {/* Top bar — full-screen New post */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-card/95 px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <button
           type="button"
           onClick={close}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
           aria-label="Close"
         >
           <X size={22} />
         </button>
-        <h1 id="unified-compose-title" className="flex-1 text-center text-base font-bold text-gray-900">
+        <h1 id="unified-compose-title" className="flex-1 text-center text-base font-bold text-foreground">
           {mode === "post" ? "New post" : "New story"}
         </h1>
         <button
@@ -503,14 +501,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           onClick={() => void handlePublish()}
           disabled={!canPublish || isPublishing}
           aria-busy={isPublishing}
-          className="min-h-9 rounded-full bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+          className="min-h-9 rounded-full bg-[var(--gh-green)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
         >
           {isPublishing ? (mode === "post" ? "Posting…" : "Sharing…") : mode === "post" ? "Post" : "Share"}
         </button>
       </header>
 
       {/* Mode tabs */}
-      <div className="flex shrink-0 border-b border-gray-100 px-3" role="tablist" aria-label="Compose type">
+      <div className="flex shrink-0 border-b border-border/50 bg-card px-3" role="tablist" aria-label="Compose type">
         {(["post", "story"] as const).map((tab) => (
           <button
             key={tab}
@@ -525,8 +523,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             }}
             className={`min-h-11 flex-1 text-sm font-bold transition ${
               mode === tab
-                ? "border-b-2 border-purple-600 text-purple-700"
-                : "text-gray-500 hover:text-gray-800"
+                ? "border-b-2 border-[var(--gh-green)] text-[var(--gh-green-deep)]"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab === "post" ? "Post" : "Story"}
@@ -569,7 +567,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             <img
               src={profile.photos?.[0] || "/placeholder.svg?width=48&height=48"}
               alt=""
-              className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-100"
+              className="h-11 w-11 rounded-full object-cover ring-2 ring-emerald-100"
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-gray-900">{profile.displayName || "You"}</p>
@@ -605,11 +603,11 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                     setAudience(opt.id)
                     setShowAudience(false)
                   }}
-                  className={`flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-purple-50 ${
-                    audience === opt.id ? "bg-purple-50/80" : ""
+                  className={`flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-emerald-50 ${
+                    audience === opt.id ? "bg-emerald-50/80 dark:bg-emerald-950/30" : ""
                   }`}
                 >
-                  <opt.Icon size={18} className="mt-0.5 shrink-0 text-purple-600" />
+                  <opt.Icon size={18} className="mt-0.5 shrink-0 text-emerald-700" />
                   <span>
                     <span className="block text-sm font-bold text-gray-900">{opt.label}</span>
                     <span className="block text-[11px] text-gray-500">{opt.desc}</span>
@@ -799,7 +797,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {mode === "post" && selectedVideo && (
             <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-700">
               <span>Video attached</span>
-              <button type="button" onClick={() => setSelectedVideo(null)} className="text-purple-600">
+              <button type="button" onClick={() => setSelectedVideo(null)} className="text-emerald-700">
                 Remove
               </button>
             </div>
@@ -820,7 +818,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {mode === "story" && storyMedia?.type === "video" && (
             <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-700">
               <span>Video ready for story</span>
-              <button type="button" onClick={() => setStoryMedia(null)} className="text-purple-600">
+              <button type="button" onClick={() => setStoryMedia(null)} className="text-emerald-700">
                 Remove
               </button>
             </div>

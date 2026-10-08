@@ -895,11 +895,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {/* ZONE: BALANCE */}
-        <div className="mt-1">
-          <p className="gh-type-meta mx-3 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
-            Balance
-          </p>
+        {/* ZONE: BALANCE — hero carries title; no redundant label */}
+        <div className="mt-2">
           <WalletBalanceCard
             balance={balance}
             balanceVisible={balanceVisible}
@@ -962,9 +959,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             onClick={() => {
               setShowPendingSheet(true)
             }}
-            className="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-left transition hover:bg-amber-100/80 active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/40"
+            className="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-3.5 text-left shadow-sm transition hover:bg-amber-100/80 active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/40"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-200">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-200/80 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/50">
               <Clock size={18} aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
@@ -1061,13 +1058,13 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           />
         </div>
 
-        {/* Month insight + daily cap — restrained */}
-        <div className="mx-3 mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-border bg-card px-3 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {/* Month insight + daily cap — restrained cards */}
+        <div className="mx-3 mt-4 grid grid-cols-2 gap-2.5">
+          <div className="rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
               This month
             </p>
-            <p className="mt-1 text-xs text-foreground">
+            <p className="mt-1.5 text-[13px] text-foreground">
               <span className="font-bold text-emerald-700 dark:text-emerald-400">
                 +{formatGhc(monthInsight.monthEarned)}
               </span>
@@ -1077,13 +1074,13 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </span>
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-card px-3 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Daily activity credit cap
+          <div className="rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              Daily activity credit
             </p>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-emerald-600 transition-all"
+                className="h-full rounded-full bg-[var(--gh-green)] transition-all"
                 style={{ width: `${dailyEarnProgress.pct}%` }}
                 role="progressbar"
                 aria-valuenow={dailyEarnProgress.pct}
@@ -1092,7 +1089,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 aria-label="Daily activity credit progress"
               />
             </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
               {formatGhc(dailyEarnProgress.today)} / {formatGhc(dailyEarnProgress.cap)} GHC
             </p>
           </div>
@@ -1153,10 +1150,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
         {/* ZONE: ACTIVITY */}
         <div id="ghc-wallet-activity" className="scroll-mt-3">
-        <p className="gh-type-meta mx-3 mt-4 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
-          Activity
+        <p className="mx-3 mt-5 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          Recent activity
         </p>
-        <div className="mx-3 flex gap-1 rounded-2xl border border-border/70 bg-card p-1 shadow-sm">
+        <div className="mx-3 flex gap-1 rounded-2xl border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]">
           {(
             [
               { id: "activity" as const, label: "Activity" },
@@ -1168,10 +1165,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`flex-1 rounded-[var(--gh-radius-sm)] py-2.5 text-xs font-bold transition ${
+              className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
                 tab === t.id
-                  ? "bg-emerald-600 text-white"
-                  : "text-muted-foreground hover:bg-muted"
+                  ? "bg-[var(--gh-green)] text-white shadow-sm"
+                  : "text-muted-foreground hover:bg-muted/70"
               }`}
             >
               {t.label}
