@@ -56,7 +56,7 @@ assert(econ.includes("VVIP_PRICE_GHC = 300") || econ.includes("300"), "economy f
 assert(existsSync(join(root, "docs/architecture/EIGHT_STEP_PRODUCTION_HARDENING.md")), "docs")
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-assert(pkg.engines?.node === "24.x", "node 24.x")
+assert(typeof pkg.engines?.node === "string" && pkg.engines.node.includes("20.18.0") && pkg.engines.node.includes("24.x"), "supported Node.js engine range declared")
 
 console.log("\n=== RESULTS ===")
 console.log("Passed:", passed)
