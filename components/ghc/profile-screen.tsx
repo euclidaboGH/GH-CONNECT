@@ -80,6 +80,9 @@ export function ProfileScreen({
     }
   }, [])
 
+  const [editOpen, setEditOpen] = useState(false)
+  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
+
   useEffect(() => {
     if (!photoSheet && !editOpen) return
     const onKey = (e: KeyboardEvent) => {
@@ -97,8 +100,6 @@ export function ProfileScreen({
     }
   }, [profileActivityTab, showMediaTab])
 
-  const [editOpen, setEditOpen] = useState(false)
-  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
