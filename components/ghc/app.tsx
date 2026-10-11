@@ -258,6 +258,20 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:open-connection-inbox", refresh)
     }
   }, [])
+  // Deep link: /?tab=messages|discover|profile|... (PWA shortcuts, /share redirect)
+  useEffect(() => {
+    if (!ready || typeof window === "undefined") return
+    try {
+      const url = new URL(window.location.href)
+      const requested = url.searchParams.get("tab")
+      if (!requested) return
+      if (isPrimaryTab(requested)) startTransition(() => setTab(requested))
+      url.searchParams.delete("tab")
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+    } catch {
+      /* ignore malformed URLs */
+    }
+  }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
     "main" | "wallet" | "rewards" | "membership" | "help"

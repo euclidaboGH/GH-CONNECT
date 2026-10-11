@@ -151,6 +151,21 @@ export function ConsentGate({ children }: { children: React.ReactNode }) {
           </ul>
         </section>
 
+        <p className="-mt-2 text-center text-[12px] text-white/50">
+          Read the{" "}
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-400 underline underline-offset-2">
+            Terms
+          </a>
+          ,{" "}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-400 underline underline-offset-2">
+            Privacy Policy
+          </a>{" "}
+          and{" "}
+          <a href="/support" target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-400 underline underline-offset-2">
+            Support
+          </a>
+        </p>
+
         {/* Optional — collapsed */}
         <section className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
           <button

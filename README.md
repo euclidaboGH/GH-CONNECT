@@ -19,7 +19,7 @@ Human Connection OS — social connection, communities, messaging, discovery, an
 |------|--------|
 | Migration inventory | **70** files — `docs/MIGRATION_CHECKLIST.md` |
 | Static security suites | `npm run verify:static` |
-| Design tokens runtime | **`app/globals.css`** (canonical). `styles/globals.css` is non-canonical |
+| Design tokens runtime | **`app/globals.css`** (only stylesheet; the unused `styles/globals.css` copy was removed) |
 | Typecheck / production build | Operator machine — sandbox may OOM on `npm ci` |
 
 ```bash
