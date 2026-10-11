@@ -180,7 +180,7 @@ export async function resolveAuthenticatedUser(
       const mapping = await getByPiAppUid(piUser.uid)
       if (mapping?.ghUserId) ghUserId = mapping.ghUserId
     } catch {
-      /* mapping unavailable: production identity bridge fails closed when durable storage is unavailable */
+      /* mapping unavailable: pi uid matches create scheme (ghUserId === piAppUid) */
     }
     return {
       userId: ghUserId,

@@ -95,8 +95,24 @@ export function RewardsJourneyHero({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        ghc.addToast?.(data.error || data.message || "Claim failed", "error")
-        setTick((t) => t + 1)
+        const errText = String(data.error || data.message || "Claim failed")
+        const already =
+          data.alreadyClaimed === true ||
+          data.idempotent === true ||
+          /already claimed/i.test(errText)
+        if (already) {
+          try {
+            claimDailyStreak(userId, membershipTier)
+          } catch {
+            /* */
+          }
+          ghc.addToast?.("Already claimed today", "info")
+          setTick((n) => n + 1)
+          onClaimed?.()
+          return
+        }
+        ghc.addToast?.(errText, "error")
+        setTick((n) => n + 1)
         return
       }
       const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
@@ -117,10 +133,16 @@ export function RewardsJourneyHero({
       }
       ghc.addToast?.(
         data.alreadyClaimed || data.idempotent
-          ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`
+          ? `Already claimed today${amt ? ` · ${amt} GHC` : ""}`
           : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
         "success"
       )
+      // Sync local streak UI with server authority so the claim CTA is not green again today
+      try {
+        claimDailyStreak(userId, membershipTier)
+      } catch {
+        /* local mark is best-effort; server already recorded the claim */
+      }
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:daily-reward-claimed", { detail: { ...data, server: true } })
@@ -136,7 +158,7 @@ export function RewardsJourneyHero({
     } finally {
       setClaimingDaily(false)
     }
-  }, [userId, ghc, onClaimed, claimingDaily])
+  }, [userId, ghc, onClaimed, claimingDaily, membershipTier])
 
   const opportunities = [
     {
@@ -345,9 +367,14 @@ export function RewardsJourneyHero({
                   : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)} GHC`}
             </button>
           ) : (
-            <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">
-              Today claimed · next reward after midnight (Africa/Lagos)
-            </p>
+            <div
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-muted/50 py-3.5 text-[13px] font-bold text-muted-foreground"
+              role="status"
+              aria-label="Daily reward already claimed today"
+            >
+              <Check size={16} className="text-[var(--gh-green)]" aria-hidden />
+              Claimed today · next after midnight (Africa/Lagos)
+            </div>
           )}
         </div>
       </section>

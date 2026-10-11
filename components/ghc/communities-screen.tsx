@@ -303,6 +303,8 @@ export function CommunitiesScreen() {
   const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
+  /** Single entry — all Create CTAs call this (no parallel create flows) */
+  const openCreateCommunity = useCallback(() => setShowCreate(true), [])
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
   /** Snapshot so hub opens immediately after create (before conversations state catches up) */
   const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
@@ -964,7 +966,7 @@ export function CommunitiesScreen() {
         actions={
           <button
             type="button"
-            onClick={() => setShowCreate(true)}
+            onClick={openCreateCommunity}
             className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
             aria-label="Create community"
           >
@@ -1166,7 +1168,7 @@ export function CommunitiesScreen() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCreate(true)}
+                  onClick={openCreateCommunity}
                   className="min-h-10 rounded-full border border-border px-4 text-[12px] font-bold text-foreground"
                 >
                   Create one
@@ -1208,34 +1210,27 @@ export function CommunitiesScreen() {
             </p>
           ) : null}
 
-          {visibleGroups.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
+          {!directoryLoading &&
+          visibleGroups.length === 0 &&
+          !(directory === "my" && myCommunities.length === 0) ? (
+            <div className="rounded-[1.25rem] border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
               <p className="text-[14px] font-bold text-foreground">
-                {directory === "my" ? "No communities yet" : "No communities match"}
+                {searchQuery.trim() ? "No communities match" : "No communities here"}
               </p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                {directory === "my"
-                  ? "Join a space from Discover, or create one for your city or interest."
-                  : "Try another search or category."}
+                {searchQuery.trim()
+                  ? "Try another keyword — or start a new community with Create in the header."
+                  : "Adjust filters, or use Create in the header to start a space."}
               </p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                {directory === "my" ? (
-                  <button
-                    type="button"
-                    onClick={() => setDirectory("discover")}
-                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
-                  >
-                    Discover communities
-                  </button>
-                ) : null}
+              {searchQuery.trim() ? (
                 <button
                   type="button"
-                  onClick={() => setShowCreate(true)}
-                  className="rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
+                  onClick={openCreateCommunity}
+                  className="mt-3 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
                 >
                   Create community
                 </button>
-              </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -1285,24 +1280,6 @@ export function CommunitiesScreen() {
               )
             })}
             </>
-          ) : directory === "discover" ? (
-            <EmptyState
-              variant="communities"
-              title={searchQuery ? "No communities match" : "Find or start a community"}
-              description={
-                searchQuery
-                  ? `No results for “${searchQuery}”. Try another keyword — or create a community.`
-                  : "Board = posts & events · Chat = member conversation."
-              }
-              action={
-                searchQuery
-                  ? {
-                      label: "Create community",
-                      onClick: () => setShowCreate(true),
-                    }
-                  : { label: "Create community", onClick: () => setShowCreate(true) }
-              }
-            />
           ) : null}
         </div>
       </div>
