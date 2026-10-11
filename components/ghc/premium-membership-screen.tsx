@@ -259,6 +259,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const [faqOpen, setFaqOpen] = useState<string | null>(null)
   const [view, setView] = useState<"cards" | "compare">("cards")
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const status = useMemo(() => {
     void tick
@@ -368,11 +370,17 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       }
     } finally {
       setRefreshing(false)
+      setStatusMsg("Status refreshed")
+      window.setTimeout(() => setStatusMsg(null), 1500)
     }
   }
 
   const purchaseWithPiCoin = async (tier: MembershipTierId) => {
     if (tier === "free" || tier === currentTier) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      addToast("You are offline. Membership activation needs a connection.", "info")
+      return
+    }
     setBusy({ tier, method: "pi" })
     try {
       const ok = await runGhPayMembership(tier as "vip" | "vvip", period, (msg, type) => {
@@ -405,6 +413,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }
 
   const purchaseWithGhcCoin = async (tier: MembershipTierId) => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      addToast("You are offline. Membership activation needs a connection.", "info")
+      return
+    }
     if (tier === "free" || tier === currentTier) return
     setBusy({ tier, method: "ghc" })
     try {
@@ -451,7 +463,12 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }
 
   const purchase = async (tier: MembershipTierId, method: "pi" | "ghc" = "ghc") => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      addToast("You are offline. Membership activation needs a connection.", "info")
+      return
+    }
     if (tier === "free" || tier === currentTier) return
+    setStatusMsg(method === "pi" ? "Opening Pi payment…" : "Processing GHC membership…")
     if (method === "pi") {
       await purchaseWithPiCoin(tier)
       return
@@ -464,13 +481,36 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     return () => setSuccessStatus(null)
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!confirmTier && !successStatus) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (confirmTier) setConfirmTier(null)
+      else if (successStatus) setSuccessStatus(null)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [confirmTier, successStatus])
+
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-3 py-3 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="gh-icon-btn flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"
+          className="gh-icon-btn flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
           aria-label="Back"
         >
           <ArrowLeft size={18} />
@@ -497,7 +537,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           type="button"
           onClick={() => void handleRefreshMembership()}
           disabled={refreshing}
-          className="inline-flex min-h-9 items-center gap-1 rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+          className="inline-flex min-h-10 items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:bg-muted/80 disabled:opacity-60"
           aria-label="Refresh membership status from server"
           aria-busy={refreshing}
         >
@@ -511,6 +551,18 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           )}
         </button>
       </header>
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (refreshing ? "Refreshing membership status" : "")}
+      </div>
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          Offline — plan details stay visible. Activation and payment need a connection.
+        </div>
+      ) : null}
 
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
@@ -555,7 +607,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
         {/* What you have now / next upgrades (Free-focused) */}
         {currentTier === "free" && (
-          <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div className="mb-3 rounded-[1.25rem] border border-emerald-100/90 bg-emerald-50/80 px-3.5 py-3.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30">
             <p className="text-sm font-bold text-foreground">What matters next</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               On Free you already have full social access. These are the upgrades people use most —
@@ -586,7 +638,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         {/* Current plan — product-tier presentation */}
         {status?.active && (
           <div
-            className={`mb-3 overflow-hidden rounded-2xl border shadow-sm ${
+            className={`mb-3 overflow-hidden rounded-[1.25rem] border shadow-[var(--gh-card-shadow)] ${
               currentTier === "vvip"
                 ? "border-amber-300/80 bg-gradient-to-br from-amber-50 via-card to-violet-50 dark:border-amber-800 dark:from-amber-950/40"
                 : currentTier === "vip"
@@ -621,19 +673,37 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 ) : (
                   <p className="mt-1 text-[12px] text-muted-foreground">Standard access · upgrade anytime</p>
                 )}
+                {(status?.billingPeriod || (status as { source?: string } | null)?.source) && currentTier !== "free" ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {status?.billingPeriod === "yearly"
+                      ? "Billed yearly"
+                      : status?.billingPeriod === "monthly"
+                        ? "Billed monthly"
+                        : null}
+                    {status?.billingPeriod && (status as { source?: string }).source ? " · " : null}
+                    {(status as { source?: string } | null)?.source === "pi" ||
+                    (status as { source?: string } | null)?.source === "external"
+                      ? "Paid with π"
+                      : (status as { source?: string } | null)?.source === "ghc"
+                        ? "Paid with GHC"
+                        : (status as { source?: string } | null)?.source === "admin"
+                          ? "Granted by admin"
+                          : (status as { source?: string } | null)?.source === "trial"
+                            ? "Trial access"
+                            : null}
+                  </p>
+                ) : null}
               </div>
-              {currentTier !== "free" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById(`membership-plan-${currentTier}`)
-                    el?.scrollIntoView({ behavior: "smooth", block: "center" })
-                  }}
-                  className="shrink-0 rounded-full bg-foreground px-3.5 py-2 text-[12px] font-bold text-background"
-                >
-                  Renew
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(`membership-plan-${currentTier}`)
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                }}
+                className="shrink-0 rounded-full bg-foreground px-3.5 py-2 text-[12px] font-bold text-background"
+              >
+                {currentTier === "free" ? "Your plan" : "Renew"}
+              </button>
             </div>
             <div className="px-4 pb-4 pt-3">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -683,21 +753,35 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </p>
 
         {/* Period — calm, no pressure */}
-        <div className="mb-2 flex gap-1 rounded-2xl border border-border bg-card p-1">
+        <div
+          className="mb-2 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm"
+          role="tablist"
+          aria-label="Billing period"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault()
+              setPeriod((p) => (p === "monthly" ? "yearly" : "monthly"))
+            }
+          }}
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={period === "monthly"}
             onClick={() => setPeriod("monthly")}
-            className={`flex-1 rounded-xl py-2 text-xs font-bold ${
-              period === "monthly" ? "bg-emerald-700 text-white" : "text-muted-foreground"
+            className={`flex-1 rounded-xl py-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              period === "monthly" ? "bg-[var(--gh-green)] text-white" : "text-muted-foreground"
             }`}
           >
             Monthly
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={period === "yearly"}
             onClick={() => setPeriod("yearly")}
-            className={`flex-1 rounded-xl py-2 text-xs font-bold ${
-              period === "yearly" ? "bg-emerald-700 text-white" : "text-muted-foreground"
+            className={`flex-1 rounded-xl py-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              period === "yearly" ? "bg-[var(--gh-green)] text-white" : "text-muted-foreground"
             }`}
           >
             Yearly
@@ -708,7 +792,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </p>
 
         {/* View toggle */}
-        <div className="mb-3 flex gap-1 rounded-2xl border border-border bg-card p-1">
+        <div className="mb-3 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm" role="tablist" aria-label="Plan layout">
           <button
             type="button"
             onClick={() => setView("cards")}
@@ -730,7 +814,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {view === "compare" ? (
-          <div className="mb-8 overflow-x-auto rounded-2xl border border-border bg-card">
+          <div className="mb-8 overflow-x-auto rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
             <table className="w-full min-w-[320px] border-collapse text-left text-[11px]">
               <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-b border-border">
@@ -903,7 +987,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                         </li>
                       )
                     })}
-                    {tier === "free" && !expandedPlanBenefits[tier] && (
+                    {plan.entitlements.length > 5 && (
                       <li className="flex items-start gap-2 text-[14px] text-muted-foreground">
                         <X size={14} className="mt-0.5 shrink-0 text-muted-foreground/40" />
                         No paid boosts or priority placement
@@ -950,7 +1034,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {/* FAQ */}
-        <div className="mt-4 rounded-2xl border border-border bg-card p-3 shadow-sm">
+        <div className="mt-4 rounded-[1.25rem] border border-border/60 bg-card p-3.5 shadow-[var(--gh-card-shadow)]">
           <p className="text-[12px] font-bold text-foreground">Membership FAQ</p>
           {(
             [
@@ -999,11 +1083,14 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
       {/* Honest confirm — no countdown / fake scarcity */}
       {confirmTier && (
-        <div className="absolute inset-0 z-40 flex items-end bg-black/40 sm:items-center sm:justify-center">
+        <div className="absolute inset-0 z-40 flex items-end bg-black/40 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-label="Confirm membership">
           <div className="w-full max-w-md rounded-t-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl sm:rounded-[1.25rem]">
             <h3 className="text-base font-bold text-foreground">
               Confirm {MEMBERSHIP_PLANS[confirmTier].label}
             </h3>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {period === "yearly" ? "Yearly billing" : "Monthly billing"}
+            </p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               You will spend{" "}
               <strong className="text-foreground">
@@ -1031,7 +1118,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               {isPiPaymentsAvailable() ? (
                 <button
                   type="button"
-                  disabled={busy?.tier === confirmTier && busy?.method === "pi"}
+                  disabled={isOffline || (busy?.tier === confirmTier && busy?.method === "pi")}
                   onClick={() => void purchase(confirmTier, "pi")}
                   className="gh-btn gh-btn-primary flex min-h-11 w-full items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60"
                 >
@@ -1047,7 +1134,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               )}
               <button
                 type="button"
-                disabled={busy?.tier === confirmTier && busy?.method === "ghc"}
+                disabled={isOffline || (busy?.tier === confirmTier && busy?.method === "ghc")}
                 onClick={() => void purchase(confirmTier, "ghc")}
                 className="gh-btn gh-btn-secondary flex min-h-11 w-full items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60"
               >
@@ -1083,11 +1170,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           <div className="relative w-full max-w-md overflow-hidden rounded-t-[1.25rem] border border-emerald-200/80 bg-card p-5 shadow-2xl dark:border-emerald-800 sm:mb-8 sm:rounded-[1.25rem]">
             {/* Brief celebratory accent — respects reduced motion */}
             <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-400/25 via-teal-300/10 to-transparent motion-safe:animate-pulse"
+              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-400/20 via-emerald-300/10 to-transparent"
               aria-hidden
             />
             <div className="relative flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 motion-safe:scale-100">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--gh-green)] text-white shadow-lg shadow-emerald-700/25 motion-safe:scale-100">
                 <Sparkles size={22} aria-hidden />
               </span>
               <div>

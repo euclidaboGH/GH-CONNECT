@@ -22,14 +22,16 @@ Static/automated green **does not** imply Testnet verified or production ready.
 
 | Location | Count |
 |----------|------:|
-| `supabase/migrations/*.sql` (canonical files on disk) | **54** |
-| Latest sequencing id | `20261006_gh_notif_share_type.sql` |
+| `supabase/migrations/*.sql` (canonical files on disk) | **70** |
+| Latest sequencing id | `20261022_gh_content_rewards.sql` |
 
 Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations.
 
-Migration filenames (`20260928` … `20261005b`) are **sequence identifiers**, not claims about calendar deployment dates.
+Migration filenames are **sequence identifiers**, not claims about calendar deployment dates.
 
-See **docs/MIGRATION_CHECKLIST.md** for REQUIRED vs PROPOSAL classification. Do not apply all 54 blindly.
+Phase 14A reconciled inventory: **70** files (67 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL). See `docs/MIGRATION_CHECKLIST.md`, `docs/MIGRATION_GAP_REPORT.md`, `VERIFIED_MANIFEST.txt`.
+
+See **docs/MIGRATION_CHECKLIST.md** for REQUIRED vs PROPOSAL classification. Do not apply all 70 blindly.
 
 ---
 
@@ -150,4 +152,10 @@ See **docs/TESTNET_VERIFICATION_GATE.md**.
 
 - Literal `TODO:` / `FIXME:` markers in application TypeScript: **none found** (last scan).
 - Intentional deferred/fail-closed surfaces: **`docs/DEFERRED_AND_GATED.md`**.
-- Full migration inventory (54): **`docs/MIGRATION_CHECKLIST.md`**.
+- Full migration inventory (70): **`docs/MIGRATION_CHECKLIST.md`**.
+
+### Phase 14B — Static security (2026-10-10)
+
+- Social authz test policy fixed (3 false positives on public/system routes)
+- Static suites re-run: social-authz, IDOR, messaging, safety, GHPV, content-reward, Pi payment — pass
+- Detail: `docs/PHASE_14B_STATIC_SECURITY.md`

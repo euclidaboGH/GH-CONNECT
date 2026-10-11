@@ -1,28 +1,94 @@
 GH-CONNECT VERIFIED MANIFEST
-generated=2026-09-26T20:45:33Z
-canonical_migrations=54
+generated=2026-10-09T20:54:04Z
+canonical_migrations=70
+required=67
+requires_approval=1
+proposal=2
+source=on-disk supabase/migrations/*.sql
+note=Inventory only. Does NOT claim migrations are applied to any database.
 
-PHASE_13_REQUIRED:
-PRESENT size=2913 path=supabase/migrations/20261005_gh_post_shares.sql
-PRESENT size=2818 path=supabase/migrations/20261005b_gh_notif_share_type.sql
-PRESENT size=2731 path=app/api/social/posts/[id]/share/route.ts
-PRESENT size=4217 path=lib/server/social/notifications.ts
-PRESENT size=972 path=docs/GH_SOCIAL_ENGAGEMENT.md
-PRESENT size=3600 path=docs/PHASE_IMPLEMENTATION_STATUS.md
+CLASSIFICATION_POLICY:
+  REQUIRED            = apply oldest→newest on Testnet after operator review of order
+  REQUIRES_APPROVAL   = product/security review before apply
+  PROPOSAL            = do NOT apply without explicit written approval
 
-LATEST_MIGRATIONS:
-supabase/migrations/20260926_gh_reaction_multi_type.sql
-supabase/migrations/20260926_ghc_withdrawal_requests.sql
-supabase/migrations/20260927_gh_content_attention_read.sql
-supabase/migrations/20260927_gh_content_event_access_guard.sql
-supabase/migrations/20260927_gh_content_events.sql
-supabase/migrations/20260928_gh_post_curation.sql
-supabase/migrations/20260929_gh_reputation.sql
-supabase/migrations/20260930_gh_ad_verification.sql
-supabase/migrations/20260930_gh_creator_studio.sql
-supabase/migrations/20261001_gh_media_assets.sql
-supabase/migrations/20261002_gh_follow_status.sql
-supabase/migrations/20261003_gh_social_notifications.sql
-supabase/migrations/20261004_gh_search.sql
-supabase/migrations/20261005_gh_post_shares.sql
-supabase/migrations/20261005b_gh_notif_share_type.sql
+ALL_MIGRATIONS_OLDEST_FIRST:
+[REQUIRED] size=13456 path=supabase/migrations/20260821_ghc_economy_ledger.sql
+[REQUIRED] size=1261 path=supabase/migrations/202608220001_ghc_economy_events_rls.sql
+[REQUIRED] size=3366 path=supabase/migrations/202608220002_ghc_notification_events.sql
+[REQUIRED] size=4973 path=supabase/migrations/202608220003_ghc_public_identities.sql
+[REQUIRED] size=618 path=supabase/migrations/202608220004_ghc_rls_tighten_events.sql
+[REQUIRED] size=16231 path=supabase/migrations/202608220005_ghc_transfer_request_rpcs.sql
+[REQUIRED] size=5346 path=supabase/migrations/20260822_ghc_account_and_claim.sql
+[REQUIRED] size=10705 path=supabase/migrations/202609030001_economy_v12_claim_streak_and_population.sql
+[REQUIRED] size=8970 path=supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql
+[REQUIRED] size=1132 path=supabase/migrations/202609030003_economy_v12_telemetry_note.sql
+[REQUIRED] size=2832 path=supabase/migrations/202609040001_ghc_ledger_spend_rpc.sql
+[REQUIRED] size=2095 path=supabase/migrations/202609040002_membership_entitlements_and_activity_caps.sql
+[REQUIRED] size=7573 path=supabase/migrations/202609040003_pi_payment_intents_durable.sql
+[REQUIRED] size=5801 path=supabase/migrations/202609050001_p0_activity_governor_durable.sql
+[REQUIRES_APPROVAL] size=6665 path=supabase/migrations/20260905_connection_request_intents.sql
+[PROPOSAL] size=842 path=supabase/migrations/20260906_community_join_reasons_proposal.sql
+[PROPOSAL] size=1651 path=supabase/migrations/20260907_community_governance_log_proposal.sql
+[REQUIRED] size=4748 path=supabase/migrations/202609080001_ghc_spend_sign_and_idempotency.sql
+[REQUIRED] size=1771 path=supabase/migrations/202609080002_gh_pi_identities.sql
+[REQUIRED] size=1589 path=supabase/migrations/202609080003_gh_sessions.sql
+[REQUIRED] size=1403 path=supabase/migrations/202609080004_gh_step_ups.sql
+[REQUIRED] size=2413 path=supabase/migrations/202609080005_gh_webauthn_credentials.sql
+[REQUIRED] size=2123 path=supabase/migrations/20260911_ghc_wallet_snapshot.sql
+[REQUIRED] size=5862 path=supabase/migrations/202609120001_marketplace_listings_and_list_rpc.sql
+[REQUIRED] size=6336 path=supabase/migrations/202609120002_marketplace_orders_durable.sql
+[REQUIRED] size=1542 path=supabase/migrations/20260914_verification_requests_durable.sql
+[REQUIRED] size=3937 path=supabase/migrations/202609190001_gh_messaging_durable.sql
+[REQUIRED] size=4390 path=supabase/migrations/202609190002_gh_user_profiles_and_progress.sql
+[REQUIRED] size=5985 path=supabase/migrations/202609220001_ghc_stage_pending.sql
+[REQUIRED] size=8753 path=supabase/migrations/202609220002_ghc_stage_pending_limits.sql
+[REQUIRED] size=1781 path=supabase/migrations/202609230001_ghc_ledger_rpc_acl.sql
+[REQUIRED] size=858 path=supabase/migrations/202609230002_ghc_user_accounts_rls_lockdown.sql
+[REQUIRED] size=9517 path=supabase/migrations/202609230003_gh_communities_core.sql
+[REQUIRED] size=6794 path=supabase/migrations/202609230004_gh_pass5_soft_limits_polls.sql
+[REQUIRED] size=1281 path=supabase/migrations/202609230005_gh_poll_vote_validate.sql
+[REQUIRED] size=27388 path=supabase/migrations/202609230006_gh_social_core.sql
+[REQUIRED] size=1565 path=supabase/migrations/202609250001_gh_poll_vote_authoritative.sql
+[REQUIRED] size=2314 path=supabase/migrations/202609250002_gh_post_list_feed_order_fix.sql
+[REQUIRED] size=21826 path=supabase/migrations/202609250003_rpc_acl_lockdown.sql
+[REQUIRED] size=8095 path=supabase/migrations/202609260001_ghc_withdrawal_requests.sql
+[REQUIRED] size=2342 path=supabase/migrations/202609260002_gh_reaction_multi_type.sql
+[REQUIRED] size=2870 path=supabase/migrations/202609270001_gh_content_attention_read.sql
+[REQUIRED] size=6030 path=supabase/migrations/202609270002_gh_content_events.sql
+[REQUIRED] size=4037 path=supabase/migrations/202609270003_gh_content_event_access_guard.sql
+[REQUIRED] size=5119 path=supabase/migrations/20260928_gh_post_curation.sql
+[REQUIRED] size=9192 path=supabase/migrations/20260929_gh_reputation.sql
+[REQUIRED] size=8853 path=supabase/migrations/202609300001_gh_creator_studio.sql
+[REQUIRED] size=5499 path=supabase/migrations/20260930_gh_ad_verification.sql
+[REQUIRED] size=5856 path=supabase/migrations/20261001_gh_media_assets.sql
+[REQUIRED] size=1775 path=supabase/migrations/20261002_gh_follow_status.sql
+[REQUIRED] size=8386 path=supabase/migrations/20261003_gh_social_notifications.sql
+[REQUIRED] size=7387 path=supabase/migrations/20261004_gh_search.sql
+[REQUIRED] size=2913 path=supabase/migrations/20261005_gh_post_shares.sql
+[REQUIRED] size=2818 path=supabase/migrations/20261006_gh_notif_share_type.sql
+[REQUIRED] size=7182 path=supabase/migrations/20261007_gh_messaging_edit_pin_prefs.sql
+[REQUIRED] size=3394 path=supabase/migrations/20261008_gh_post_archive_quote.sql
+[REQUIRED] size=15948 path=supabase/migrations/20261009_ghc_balance_lock_and_spendable.sql
+[REQUIRED] size=6293 path=supabase/migrations/20261010_ghc_withdrawal_settle_atomic.sql
+[REQUIRED] size=9818 path=supabase/migrations/20261011_ghc_activity_stage_atomic.sql
+[REQUIRED] size=9911 path=supabase/migrations/20261012_ghc_activity_stage_lock_align.sql
+[REQUIRED] size=5933 path=supabase/migrations/20261013_ghpv_judgment_infrastructure.sql
+[REQUIRED] size=6227 path=supabase/migrations/20261014_ghpv_curation_weight_and_settle.sql
+[REQUIRED] size=3106 path=supabase/migrations/20261015_ghpv_curator_calibration_apply.sql
+[REQUIRED] size=6885 path=supabase/migrations/20261016_ghpv_active_weight_set_semantics.sql
+[REQUIRED] size=8903 path=supabase/migrations/20261017_ghpv_settlement_engine.sql
+[REQUIRED] size=6996 path=supabase/migrations/20261018_ghpv_calibration_bounds.sql
+[REQUIRED] size=2438 path=supabase/migrations/20261019_ghpv_soft_delete_quality_cleanup.sql
+[REQUIRED] size=2725 path=supabase/migrations/20261020_ghpv_soft_delete_atomic.sql
+[REQUIRED] size=3555 path=supabase/migrations/20261021_gh_social_notifications_types_extend.sql
+[REQUIRED] size=9096 path=supabase/migrations/20261022_gh_content_rewards.sql
+
+LATEST_GROUPS:
+  economy_balance_lock: 20261009–20261012
+  ghpv: 20261013–20261020 (judgment/weight/settlement infrastructure; settlement is system-only)
+  social_notif_extend: 20261021
+  content_rewards: 20261022 (no vote→mint; ledger distribution is separate path)
+
+DESIGN_TRANSFORM_PACKAGE: GH-CONNECT-DESIGN-TRANSFORM-2026-10-08.zip
+PHASE_14A: migration inventory reconciliation (docs only, no DB writes)

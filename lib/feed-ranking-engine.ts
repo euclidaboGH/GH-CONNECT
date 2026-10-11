@@ -76,8 +76,10 @@ export function calculateContributionScore(post: Post): number {
   const comments = post.engagement?.comments ?? post.comments?.length ?? 0
   const saves = post.engagement?.saves ?? 0
   const shares = post.engagement?.shares ?? 0
-  // Helpful discussion and saves outweigh passive likes
-  return comments * 3 + saves * 2.5 + shares * 2 + likes * 0.35
+  const up = Number((post as Post & { upvoteCount?: number }).upvoteCount ?? (post as any).upvote_count ?? 0)
+  const down = Number((post as Post & { downvoteCount?: number }).downvoteCount ?? (post as any).downvote_count ?? 0)
+  // Discussion & saves dominate; content upvotes beat passive likes; downvotes soft-penalize
+  return comments * 3 + saves * 2.5 + shares * 2 + up * 1.2 + likes * 0.2 - down * 0.8
 }
 
 // Calculate engagement score for ranking

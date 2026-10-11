@@ -241,9 +241,9 @@ export function HomeCommandCentre({
       (nextAction.id === "open_messages" && attentionCount > 0))
 
   return (
-    <section className="space-y-2" aria-label="Home command centre">
+    <section className="space-y-3" aria-label="Home command centre">
       <header className="flex items-center gap-2.5 px-0.5 pb-0.5">
-        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-1 ring-emerald-200/60 dark:bg-emerald-950 dark:ring-emerald-800">
+        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-background shadow-sm dark:bg-emerald-950">
           {avatar ? (
             <img src={avatar} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -253,7 +253,7 @@ export function HomeCommandCentre({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold tracking-tight text-foreground">
+          <p className="truncate text-[15px] font-bold tracking-tight text-foreground">
             {greet}, {name}
           </p>
           {completion !== null && completion < 100 ? (
@@ -266,7 +266,7 @@ export function HomeCommandCentre({
 
       {/* Create shortcuts — reference arrangement (Photo / Video / Post / More); real compose only */}
       <div
-        className="grid grid-cols-4 gap-2 rounded-[1.25rem] border border-border/50 bg-card p-2.5 shadow-[var(--gh-card-shadow)]"
+        className="grid grid-cols-4 gap-2 rounded-[1.25rem] border border-border/50 bg-card p-3 shadow-[var(--gh-card-shadow)]"
         role="group"
         aria-label="Create"
       >
@@ -336,7 +336,16 @@ export function HomeCommandCentre({
               key={a.id}
               type="button"
               onClick={a.run}
-              className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-2xl bg-muted/30 px-1 py-2 transition hover:bg-muted/60 active:scale-[0.97]"
+              aria-label={
+                a.id === "more"
+                  ? "More create options"
+                  : a.id === "photo"
+                    ? "Create post with photo"
+                    : a.id === "video"
+                      ? "Create post with video"
+                      : "Create post"
+              }
+              className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-2xl bg-muted/30 px-1 py-2 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]"
             >
               <span className={`flex h-9 w-9 items-center justify-center rounded-2xl ${a.tile}`}>
                 <Icon size={18} strokeWidth={2.25} aria-hidden />

@@ -340,6 +340,20 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!showPendingSheet && !showUtilityHelp && !claimReceipt && !showPaymentMethods) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (showPendingSheet) setShowPendingSheet(false)
+      else if (showUtilityHelp) setShowUtilityHelp(false)
+      else if (claimReceipt) setClaimReceipt(null)
+      else if (showPaymentMethods) setShowPaymentMethods(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showPendingSheet, showUtilityHelp, claimReceipt, showPaymentMethods])
+
+
   const data = useMemo(() => {
     void tick
     try {
@@ -426,6 +440,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   const claimPendingHold = async (holdId: string) => {
     if (claimingHoldId) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setClaimFeedback("You are offline. Claims need a connection so the ledger can confirm.")
+      return
+    }
     setClaimingHoldId(holdId)
     setClaimFeedback(null)
     try {
@@ -1205,28 +1223,54 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         <p className="mx-3 mt-5 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
           Recent Transactions
         </p>
-        <div className="mx-3 flex gap-1 rounded-2xl border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]">
+        <div
+          className="mx-3 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]"
+          role="tablist"
+          aria-label="Wallet sections"
+          onKeyDown={(e) => {
+            const order: Tab[] = ["activity", "rewards", "about"]
+            const idx = order.indexOf(tab)
+            if (idx < 0) return
+            if (e.key === "ArrowRight") {
+              e.preventDefault()
+              setTab(order[(idx + 1) % order.length])
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault()
+              setTab(order[(idx - 1 + order.length) % order.length])
+            }
+          }}
+        >
           {(
             [
               { id: "activity" as const, label: "Activity" },
               { id: "rewards" as const, label: "Rewards" },
               { id: "about" as const, label: "About" },
             ] as const
-          ).map((t) => (
+          ).map((item) => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition ${
-                tab === t.id
+              role="tab"
+              aria-selected={tab === item.id}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setTab(item.id)}
+              className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                tab === item.id
                   ? "bg-[var(--gh-green)] text-white shadow-sm"
                   : "text-muted-foreground hover:bg-muted/70"
               }`}
             >
-              {t.label}
+              {item.label}
             </button>
           ))}
         </div>
+                {tab === "activity" ? (
+          <p className="mx-3 mt-1.5 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+            {filteredTxs.length} transaction{filteredTxs.length === 1 ? "" : "s"}
+            {txFilter !== "all" ? ` · ${txFilter}` : ""}
+          </p>
+        ) : null}
+
         </div>
 
         <div className="mx-3 mt-3 mb-8 space-y-2">
@@ -1274,7 +1318,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                   onClick={() => setAssetRail("ghc")}
                   className={`flex-1 rounded-xl py-2 text-xs font-bold transition ${
                     assetRail === "ghc"
-                      ? "bg-emerald-600 text-white shadow-sm"
+                      ? "bg-[var(--gh-green)] text-white shadow-sm"
                       : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
@@ -1665,6 +1709,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         </div>
       )}
       {showPendingSheet && (
+        /* pending sheet */
         <div
           className="fixed inset-0 z-[180] flex items-end justify-center bg-black/45 sm:items-center"
           role="dialog"
@@ -1678,7 +1723,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             onClick={() => setShowPendingSheet(false)}
           />
           <div
-            className="relative z-[181] flex max-h-[75vh] w-full max-w-md flex-col rounded-t-3xl border border-border bg-card shadow-2xl sm:mb-8 sm:rounded-3xl"
+            className="relative z-[181] flex max-h-[75vh] w-full max-w-md flex-col rounded-t-[1.25rem] border border-border/50 bg-card shadow-2xl sm:mb-8 sm:rounded-[1.25rem]"
             style={{
               marginBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
             }}
@@ -1765,7 +1810,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                       </div>
                       <button
                         type="button"
-                        disabled={claimingHoldId === h.id || h.claimState === "review"}
+                        disabled={offline || claimingHoldId === h.id || h.claimState === "review"}
                         onClick={() => void claimPendingHold(h.id)}
                         className="gh-btn gh-btn-primary mt-2.5 w-full text-[12px] disabled:pointer-events-none disabled:opacity-60"
                       >
@@ -1784,7 +1829,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               {pendingHolds.length > 0 ? (
                 <button
                   type="button"
-                  disabled={!!claimingHoldId}
+                  disabled={offline || !!claimingHoldId}
                   onClick={() => {
                     void (async () => {
                       for (const h of pendingHolds) {
@@ -1792,7 +1837,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                       }
                     })()
                   }}
-                  className="mt-3 w-full rounded-xl border border-emerald-600 bg-emerald-50 px-3 py-2.5 text-[12px] font-bold text-emerald-800 disabled:opacity-60"
+                  className="mt-3 w-full rounded-[1.25rem] border border-[var(--gh-green)] bg-emerald-50 px-3 py-2.5 text-[12px] font-bold text-emerald-800 disabled:opacity-60"
                 >
                   Claim all pending
                 </button>

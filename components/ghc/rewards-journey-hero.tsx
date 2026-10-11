@@ -5,7 +5,7 @@
  * XP path + streak + today's opportunities.
  */
 
-import { useMemo, useState, useCallback } from "react"
+import { useMemo, useState, useCallback, useEffect } from "react"
 import { Award, Flame, Sparkles, Check, Lock } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import {
@@ -34,6 +34,8 @@ export function RewardsJourneyHero({
 }) {
   const ghc = useGHC()
   const [tick, setTick] = useState<number>(0)
+  const [claimingDaily, setClaimingDaily] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
 
   const membershipTier = useMemo(() => {
     // Re-read membership status when tick advances after claim/refresh
@@ -65,8 +67,26 @@ export function RewardsJourneyHero({
     }
   }, [tick])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
   const claimDaily = useCallback(async () => {
     // Server-authoritative daily claim only — no local GHC mint
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ghc.addToast?.("You are offline. Daily claim needs a connection so the ledger can confirm.", "info")
+      return
+    }
+    if (claimingDaily) return
+    setClaimingDaily(true)
     try {
       const res = await fetch("/api/economy/rewards/daily", {
         method: "POST",
@@ -113,8 +133,10 @@ export function RewardsJourneyHero({
     } catch {
       ghc.addToast?.("Claim failed", "error")
       setTick((t) => t + 1)
+    } finally {
+      setClaimingDaily(false)
     }
-  }, [userId, ghc, onClaimed])
+  }, [userId, ghc, onClaimed, claimingDaily])
 
   const opportunities = [
     {
@@ -203,14 +225,14 @@ export function RewardsJourneyHero({
 
           {/* Level · Balance · XP — real values only */}
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <div className="rounded-2xl border border-border/50 bg-card/80 px-2.5 py-3 text-center shadow-sm">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card/90 px-2.5 py-3 text-center shadow-sm">
               <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">
                 <Award size={16} className="text-amber-600" aria-hidden />
               </div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Level</p>
               <p className="mt-0.5 truncate text-[13px] font-bold text-foreground">{prog.level.label}</p>
             </div>
-            <div className="rounded-2xl border border-border/50 bg-card/80 px-2.5 py-3 text-center shadow-sm">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card/90 px-2.5 py-3 text-center shadow-sm">
               <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center">
                 <GhcCoinIcon size={28} title="GreenHaven Coin" />
               </div>
@@ -219,7 +241,7 @@ export function RewardsJourneyHero({
                 {formatGhc(walletBal)} <span className="text-[10px] font-semibold text-muted-foreground">GHC</span>
               </p>
             </div>
-            <div className="rounded-2xl border border-border/50 bg-card/80 px-2.5 py-3 text-center shadow-sm">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card/90 px-2.5 py-3 text-center shadow-sm">
               <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
                 <Sparkles size={16} className="text-emerald-700" aria-hidden />
               </div>
@@ -312,10 +334,15 @@ export function RewardsJourneyHero({
             <button
               type="button"
               onClick={() => void claimDaily()}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] py-3.5 text-[13px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.99]"
+              disabled={claimingDaily || isOffline}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] py-3.5 text-[13px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
             >
               <GhcCoinIcon size={18} />
-              Claim day {daily.displayCycleDay} · +{formatGhc(daily.todayGhc)} GHC
+              {claimingDaily
+                ? "Claiming…"
+                : isOffline
+                  ? "Offline — reconnect to claim"
+                  : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)} GHC`}
             </button>
           ) : (
             <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">

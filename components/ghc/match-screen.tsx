@@ -5,109 +5,50 @@
  * Like/Interest ≠ Connection. Use Connect → intent picker → unified request.
  */
 
-import { useDeferredValue, useMemo, useState, useRef, useEffect, useCallback, type ChangeEvent } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { useGHC } from "@/contexts/ghc-context"
-import { sendUnifiedConnectionRequest, getUnifiedConnectionState } from "@/lib/domains/adapters/unified-connection-request"
+import { getUnifiedConnectionState } from "@/lib/domains/adapters/unified-connection-request"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { ConnectionRequestInbox } from "./connection-request-inbox"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
 import {
   submitConnectionFromPicker,
   userFacingConnectError,
-  primaryConnectionCta,
 } from "@/lib/domains/adapters/connection-connect-flow"
 import type { ConnectionIntentId } from "@/lib/connection-intents"
-import { getBoundDomainServices } from "@/lib/domains/compat"
-import { getOrCreateGreenHavenId } from "@/lib/domains/greenhaven-id"
 import { onCloseTransientUI } from "@/lib/transient-ui"
-import { asArray, asInterests, safeLocation, uniqueIds } from "@/lib/safe-data"
-import { resolveUserIntents, scoreIntentMatch } from "@/lib/connection-intents"
+import { asArray } from "@/lib/safe-data"
+import { resolveUserIntents } from "@/lib/connection-intents"
 import { filterValidMatches } from "@/lib/regression-guards"
-import { rankDiscoveryCandidates, nextDiscoveryCandidate } from "@/lib/discovery-ranking"
-import { MOBILE_PAGE_SIZES } from "@/lib/mobile-performance"
-import { RelationshipActions, RelationshipLegend } from "./relationship-actions"
-import { PremiumCommunityHub } from "./premium-community-hub"
-import { EcosystemHubCard } from "./ecosystem-hub-card"
-import { ProfileTrustStrip, ProfileInterestChips, ProfileIdentityBlock } from "./premium-profile-identity"
-import { ProfileMoreNav } from "./profile-more-nav"
-import { GreenHavenIdentityCard } from "./greenhaven-identity-card"
-import { ProfileHeroMeta } from "./profile-hero"
-import { IdentityLayersStrip } from "./identity-layers-strip"
-import { usePermissions } from "@/hooks/usePermissions"
-import { timeAgo } from "@/lib/ghc-data"
-import { rankForYouFeed, rankFollowingFeed } from "@/lib/feed-ranking-engine"
-import { getConversationListState, isMessageFromCurrentUser } from "@/lib/unified-messaging-engine"
-import { Heart, MessageCircle, Share2, ChevronLeft, ChevronRight, Send, Settings as SettingsIcon, Wallet, LogOut, Zap, ThumbsDown, UserPlus, Flag, Ban, RefreshCw, X, Search, Filter, MessageSquare, Phone, Video, MoreVertical, Check, Clock, Plus, AlertCircle, Globe, Users, Briefcase, Pin, Archive, Newspaper } from "lucide-react"
-import type { PrimaryMode, Candidate, Profile, Like } from "@/lib/ghc-types"
-import { PostSkeleton, PostCard } from "./feed-components"
-import { SearchBar } from "./search-bar"
-import { UserCard } from "./user-card"
+import { Heart } from "lucide-react"
+import type { MatchEntry, Like, Candidate, MatchIntention } from "@/lib/ghc-types"
 import {
-  TrendingSection,
-  NearbySection,
-  SuggestedFriendsSection,
-  PopularPostsSection,
-  RecentSearchesSection,
-} from "./discovery-sections"
-import { FilterPanel } from "./filter-panel"
-import {
-  DiscoverListRow,
-  ConnectionModeBar,
-  candidateMatchesIntent,
-  SuggestionsCarousel,
-  type ConnectionMode,
-} from "./discovery-components"
-import { CONTINENT_LABELS, candidateInContinent, type ContinentId } from "@/lib/discovery-continents"
-import { ProfilePreviewPage } from "./profile-preview-page"
-import { EmptyMatchesState, MatchCard, MatchCardSkeleton, MatchTabs, MatchIntentionFilters, resolveMatchIntention } from "./matches-components"
-import type { MatchIntention } from "@/lib/ghc-types"
-import { EmptyMessagesState, ConversationSearchBar, ConversationItem, MessageInput, MessageBubble, ChatHeader } from "./message-components"
-import { RecommendedGroupsSection } from "./recommended-groups-section"
-import { CommentSheet } from "./comment-sheet"
-import ProfileStorySection from "./profile-story-section"
-import { LazyImage } from "./lazy-image"
-import { GroupCard } from "./group-card"
-import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
+  EmptyMatchesState,
+  MatchCard,
+  MatchCardSkeleton,
+  MatchTabs,
+  MatchIntentionFilters,
+  resolveMatchIntention,
+} from "./matches-components"
 import { EmptyState } from "./empty-state"
-import { SetupChecklist } from "./setup-checklist"
-import { filterOwnPosts, extractMediaFromPosts, nextProfileActions, BIO_PROMPTS } from "@/lib/feed-profile-experience"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
-import {
-  ProfileCompletionRing,
-  ProfileCompletionCard,
-  calculateProfileCompletion,
-  ProfileHeaderActions,
-  MoreOptionsMenu,
-  ModeButtons,
-  InterestsPills,
-  PreviewPublicProfileToggle,
-  OwnPostCard,
-  EditProfileModal,
-  AchievementsSection,
-  SocialLinksSection,
-  ActivityHistorySection,
-  PrivacyControlsSection,
-  SavedPostsSection,
-  ProfileQRCode,
-  ExpandableBio,
-} from "./profile-components"
-// Profile enhancement UI components - analytics, achievements, social links, etc.
-import {
-  ProfileAnalyticsCard,
-  FollowerInsightsCard,
-  EnhancedAchievementsGrid,
-  SkillsSection,
-  EnhancedSocialLinksSection,
-  PinnedPostsSection,
-  EnhancedQRProfileShare,
-  ProfileVisibilityStatus,
-} from "./profile-enhancements-ui"
-// Note: ResponsiveButton is available but not currently used in ProfileScreen
 
-// HOME SCREEN — legacy stub (app uses EnhancedFeedScreen). Kept so this module parses.
 export function MatchScreen() {
-  const { matches, likes, profile, candidates, startConversation, sendMessage, conversations, addToast, setTab, friends = [], blockedUsers = [] } = useGHC() as any
+  const {
+    matches,
+    likes,
+    profile,
+    candidates,
+    startConversation,
+    sendMessage,
+    conversations,
+    addToast,
+    setTab,
+    friends = [],
+    blockedUsers = [],
+    rejectMatch,
+  } = useGHC() as any
   const [activeTab, setActiveTab] = useState<"new" | "all">("new")
   const [intentionFilter, setIntentionFilter] = useState<MatchIntention | "all">("all")
   const [removedMatches, setRemovedMatches] = useState<string[]>([])
@@ -116,6 +57,8 @@ export function MatchScreen() {
   const [pickerTarget, setPickerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [connectBusy, setConnectBusy] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const meId = IdentityService.getCurrentUserId()
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } = useScrollHeader({ threshold: 36 })
 
@@ -124,6 +67,34 @@ export function MatchScreen() {
     window.addEventListener("ghc:open-connection-inbox", open as EventListener)
     return () => window.removeEventListener("ghc:open-connection-inbox", open as EventListener)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showRequestInbox && !pickerTarget) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (connectBusy) return
+      if (pickerTarget) {
+        setPickerTarget(null)
+        setConnectError(null)
+        return
+      }
+      if (showRequestInbox) setShowRequestInbox(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showRequestInbox, pickerTarget, connectBusy])
 
   const handleConnectMatch = (match: { userId: string; userName: string }) => {
     setConnectError(null)
@@ -151,6 +122,8 @@ export function MatchScreen() {
         return
       }
       setPickerTarget(null)
+      setStatusMsg("Connection request sent")
+      window.setTimeout(() => setStatusMsg(null), 2000)
       addToast(`Connection request sent to ${pickerTarget.userName}`, "success")
     } catch {
       setConnectError(userFacingConnectError("REQUEST_FAILED"))
@@ -165,13 +138,21 @@ export function MatchScreen() {
   const safeCandidates = asArray<Candidate>(candidates)
 
   // Prefer mutual likes when present; otherwise show graph matches (intentional matches domain)
+  const viewerIds = new Set(
+    [meId, "current-user"].filter((id): id is string => Boolean(id && String(id).trim()))
+  )
+  const blockedSet = new Set((blockedUsers || []).map(String))
   const mutualMatches = safeMatches.filter((match) => {
+    if (blockedSet.has(String(match.userId))) return false
     const hasLikeData = safeLikes.length > 0
     if (!hasLikeData) return true
-    return (
-      safeLikes.some((like) => like.fromUserId === "current-user" && like.toUserId === match.userId) &&
-      safeLikes.some((like) => like.fromUserId === match.userId && like.toUserId === "current-user")
+    const iLiked = safeLikes.some(
+      (like) => viewerIds.has(String(like.fromUserId)) && String(like.toUserId) === String(match.userId)
     )
+    const theyLiked = safeLikes.some(
+      (like) => String(like.fromUserId) === String(match.userId) && viewerIds.has(String(like.toUserId))
+    )
+    return iLiked && theyLiked
   })
 
   useEffect(() => {
@@ -222,10 +203,6 @@ export function MatchScreen() {
 
   const getCandidateData = (userId: string) => safeCandidates.find((c) => c.id === userId)
 
-  const mutualConnectionCount = (userId: string) => {
-    // Approximate: shared friends not fully available — use interest overlap as soft signal only
-    return 0
-  }
 
   const handleMessage = async (match: (typeof matches)[0]) => {
     const cand = getCandidateData(match.userId)
@@ -249,19 +226,36 @@ export function MatchScreen() {
         c.participantId === match.userId && c.conversationType === "private"
     )
     const convId = await startConversation(match.userId, match.userName, match.userPhoto)
-    if (convId && !existing && typeof sendMessage === "function") {
+    if (convId && !existing && typeof sendMessage === "function" && !isOffline) {
       try {
         await sendMessage(convId, `You matched on ${metaLabel}. Looking forward to connecting.`)
       } catch {
-        /* offline / non-blocking */
+        /* non-blocking */
       }
     }
+    setStatusMsg("Chat opened")
+    window.setTimeout(() => setStatusMsg(null), 1500)
     addToast(`Chat opened · You matched on ${metaLabel}`, "success")
   }
 
-  const handleRemoveMatch = (matchId: string) => {
-    setRemovedMatches([...removedMatches, matchId])
-    addToast("Match removed", "info")
+  const handleRemoveMatch = async (match: { id: string; userId: string; userName?: string }) => {
+    setRemovedMatches((prev) => (prev.includes(match.id) ? prev : [...prev, match.id]))
+    setStatusMsg("Updating match list…")
+    try {
+      if (typeof rejectMatch === "function") {
+        await rejectMatch(match.userId)
+        setStatusMsg("Match removed")
+        window.setTimeout(() => setStatusMsg(null), 2000)
+        return
+      }
+      setStatusMsg("Hidden on this device")
+      window.setTimeout(() => setStatusMsg(null), 2000)
+      addToast("Match hidden on this device — server unmatch unavailable", "info")
+    } catch {
+      setStatusMsg("Could not remove match")
+      window.setTimeout(() => setStatusMsg(null), 2500)
+      addToast("Could not remove match. Try again.", "error")
+    }
   }
 
   const handleStartSwiping = () => {
@@ -278,7 +272,7 @@ export function MatchScreen() {
           compact={false}
           hidden={false}
           compactLeading={
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-emerald-600 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gh-green)] text-white">
               <Heart size={14} />
             </div>
           }
@@ -298,12 +292,12 @@ export function MatchScreen() {
         compact={headerCompact}
         hidden={headerHidden}
         compactLeading={
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-emerald-600 text-white">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gh-green)] text-white">
             <Heart size={14} />
           </div>
         }
         actions={
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800">
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
             {baseAll.length}
           </span>
         }
@@ -326,13 +320,25 @@ export function MatchScreen() {
             <button
               type="button"
               onClick={() => setShowRequestInbox(true)}
-              className="w-full rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-left text-[12px] font-semibold text-teal-900 transition hover:bg-teal-100 dark:border-teal-900/40 dark:bg-teal-950/40 dark:text-teal-100"
+              className="w-full rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-left text-[12px] font-semibold text-emerald-900 transition hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
             >
               Connection requests inbox
             </button>
           </div>
         }
       />
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (isLoading ? "Loading matches" : "")}
+      </div>
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          You are offline. Matches already on this device stay visible; new mutual interest and connection requests sync when you reconnect.
+        </div>
+      ) : null}
 
       {/* Content */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide" onScroll={onHeaderScroll}>
@@ -362,15 +368,20 @@ export function MatchScreen() {
             action={{ label: "Express interest on Find", onClick: handleStartSwiping }}
           />
         ) : (
-          <div className="flex flex-col gap-3 px-4 pb-6 pt-4">
+          <div className="flex flex-col gap-3 px-4 pb-6 pt-4" role="list" aria-label="Matches">
+            <p className="text-[11px] font-medium text-muted-foreground" aria-live="polite">
+              {displayMatches.length} match{displayMatches.length === 1 ? "" : "es"}
+              {activeTab === "new" ? " · new" : ""}
+              {intentionFilter !== "all" ? " · filtered" : ""}
+            </p>
             {displayMatches.map((match, index) => (
+              <div key={match.id} role="listitem">
               <MatchCard
-                key={match.id}
                 match={match}
                 userInterests={Array.isArray(profile?.interests) ? profile.interests : []}
                 candidateData={getCandidateData(match.userId)}
                 onMessage={() => void handleMessage(match)}
-                onRemove={() => handleRemoveMatch(match.id)}
+                onRemove={() => void handleRemoveMatch(match)}
                 onConnect={() => void handleConnectMatch(match)}
                 connectionState={getUnifiedConnectionState(meId, match.userId, {
                   friends: friends as string[],
@@ -385,6 +396,7 @@ export function MatchScreen() {
                 }}
                 animationDelay={Math.min(index, 5) * 70}
               />
+              </div>
             ))}
           </div>
         )}
@@ -413,5 +425,3 @@ export function MatchScreen() {
     </div>
   )
 }
-
-// MESSAGES SCREEN - Chat with search and enhanced features

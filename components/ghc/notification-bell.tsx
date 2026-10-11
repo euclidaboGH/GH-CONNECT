@@ -8,6 +8,7 @@
 
 import { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useGHC } from "@/contexts/ghc-context"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
 import {
   Bell,
@@ -110,12 +111,27 @@ export function NotificationBell({
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
+  const [isOffline, setIsOffline] = useState(false)
+  const [listLoading, setListLoading] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [durableOk, setDurableOk] = useState<boolean | null>(null)
+  const ghc = useGHC() as { blockedUsers?: string[]; mutedUsers?: string[] }
+  const blockedKey = Array.isArray(ghc.blockedUsers) ? ghc.blockedUsers.join("|") : ""
+  const mutedKey = Array.isArray(ghc.mutedUsers) ? ghc.mutedUsers.join("|") : ""
+  const blockedUsers = useMemo(
+    () => (blockedKey ? blockedKey.split("|").filter(Boolean) : []),
+    [blockedKey]
+  )
+  const mutedUsers = useMemo(
+    () => (mutedKey ? mutedKey.split("|").filter(Boolean) : []),
+    [mutedKey]
+  )
 
   const refresh = useCallback(() => {
     try {
       const visible =
         typeof notificationSystem.getVisibleNotifications === "function"
-          ? notificationSystem.getVisibleNotifications()
+          ? notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers)
           : notificationSystem.getNotifications()
       const all = (visible || []).slice().reverse()
       const seen = new Set<string>()
@@ -133,6 +149,7 @@ export function NotificationBell({
     }
     // Merge durable social notifications (server-authoritative)
     void (async () => {
+      setListLoading(true)
       try {
         const res = await fetch("/api/social/notifications?limit=40", {
           credentials: "include",
@@ -152,7 +169,11 @@ export function NotificationBell({
             entityType?: string
           }>
         }
-        if (!res.ok || !data.ok || !Array.isArray(data.notifications)) return
+        if (!res.ok || !data.ok || !Array.isArray(data.notifications)) {
+          setDurableOk(false)
+          return
+        }
+        setDurableOk(true)
         const mapped: Notification[] = data.notifications.map((n) => ({
           id: String(n.id || ""),
           type: (n.type === "follow"
@@ -182,10 +203,18 @@ export function NotificationBell({
           },
         }))
         // Durable server notifications are authoritative when available
+        const suppress = new Set([...blockedUsers, ...mutedUsers].map(String))
+        const durableVisible = mapped.filter((n) => {
+          const actor = String(
+            (n.data as { actorUserId?: string } | undefined)?.actorUserId || ""
+          )
+          if (actor && suppress.has(actor)) return false
+          return true
+        })
         setItems((prev) => {
           const localOnly = prev.filter((x) => !(x.data as { durable?: boolean } | undefined)?.durable)
           const byId = new Map<string, Notification>()
-          for (const x of [...mapped, ...localOnly]) {
+          for (const x of [...durableVisible, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
           return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -206,10 +235,13 @@ export function NotificationBell({
           })
           .catch(() => setUnread(durableUnread))
       } catch {
+        setDurableOk(false)
         /* local-only remains */
+      } finally {
+        setListLoading(false)
       }
     })()
-  }, [])
+  }, [blockedUsers, mutedUsers])
 
   useEffect(() => {
     refresh()
@@ -220,6 +252,35 @@ export function NotificationBell({
   useEffect(() => {
     return onCloseTransientUI(() => setOpen(false))
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setOpen(false)
+        try {
+          dispatchCloseTransientUI({ reason: "notification-escape" })
+        } catch {
+          /* */
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open])
 
   const filtered = useMemo(() => filterByBucket(items, bucket), [items, bucket])
 
@@ -239,6 +300,9 @@ export function NotificationBell({
     } catch {
       /* */
     }
+    // Optimistic UI — durable rows only update after server merge otherwise
+    setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
+    setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
     if (n.data && (n.data as { durable?: boolean }).durable && n.id) {
       void fetch("/api/social/notifications", {
         method: "POST",
@@ -250,8 +314,9 @@ export function NotificationBell({
     const link = resolveNotificationDeepLink(n)
     navigateNotificationDeepLink(link)
     onOpenTarget?.(n)
-    refresh()
     closePanel()
+    // Background reconcile — do not block navigation
+    window.setTimeout(() => refresh(), 400)
   }
 
   const markAll = () => {
@@ -266,7 +331,11 @@ export function NotificationBell({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markAll: true }),
     }).catch(() => null)
-    refresh()
+    setItems((prev) => prev.map((x) => ({ ...x, read: true })))
+    setUnread(0)
+    setStatusMsg("Marked all as read")
+    window.setTimeout(() => setStatusMsg(null), 2000)
+    window.setTimeout(() => refresh(), 400)
   }
 
   return (
@@ -276,6 +345,8 @@ export function NotificationBell({
         onClick={openPanel}
         className="relative flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted"
         aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
+        aria-expanded={open}
+        aria-haspopup="dialog"
       >
         <Bell size={20} strokeWidth={2.1} />
         {unread > 0 ? (
@@ -317,17 +388,55 @@ export function NotificationBell({
               </div>
             </div>
 
-            <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-hide">
+            <div className="sr-only" role="status" aria-live="polite">
+              {statusMsg || (listLoading ? "Refreshing notifications" : "")}
+            </div>
+            {isOffline ? (
+              <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+                Offline — showing notifications already on this device. New activity syncs when you reconnect.
+              </div>
+            ) : null}
+            {durableOk === false && !isOffline ? (
+              <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground" role="status">
+                Server notifications unavailable — local notifications only.
+              </div>
+            ) : null}
+            <div
+              className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-hide"
+              role="tablist"
+              aria-label="Notification categories"
+              onKeyDown={(e) => {
+                const ids = NOTIFICATION_CENTER_BUCKETS.map((b) => b.id as NotificationCenterBucket)
+                const idx = ids.indexOf(bucket)
+                if (idx < 0) return
+                if (e.key === "ArrowRight") {
+                  e.preventDefault()
+                  setBucket(ids[(idx + 1) % ids.length])
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault()
+                  setBucket(ids[(idx - 1 + ids.length) % ids.length])
+                } else if (e.key === "Home") {
+                  e.preventDefault()
+                  setBucket(ids[0])
+                } else if (e.key === "End") {
+                  e.preventDefault()
+                  setBucket(ids[ids.length - 1])
+                }
+              }}
+            >
               {NOTIFICATION_CENTER_BUCKETS.map((b) => {
                 const active = bucket === b.id
                 return (
                   <button
                     key={b.id}
                     type="button"
+                    role="tab"
+                    aria-selected={active}
+                    tabIndex={active ? 0 : -1}
                     onClick={() => setBucket(b.id)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                       active
-                        ? "bg-emerald-600 text-white"
+                        ? "bg-[var(--gh-green)] text-white"
                         : "bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -338,6 +447,13 @@ export function NotificationBell({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {filtered.length > 0 ? (
+                <p className="px-4 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+                  {filtered.length} notification{filtered.length === 1 ? "" : "s"}
+                  {bucket !== "all" ? " in this category" : ""}
+                  {listLoading ? " · refreshing…" : ""}
+                </p>
+              ) : null}
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center px-6 py-14 text-center">
                   <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
@@ -349,7 +465,7 @@ export function NotificationBell({
                   </p>
                 </div>
               ) : (
-                <ul className="divide-y divide-border">
+                <ul className="divide-y divide-border" role="list" aria-label="Notification list">
                   {filtered.map((n) => (
                     <li key={n.id}>
                       <button
@@ -370,7 +486,7 @@ export function NotificationBell({
                             </span>
                           </span>
                           {isCommunityNotification(n) ? (
-                            <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                            <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                               {communityNotificationLabel(n)}
                             </span>
                           ) : null}
@@ -379,7 +495,7 @@ export function NotificationBell({
                           </span>
                         </span>
                         {!n.read ? (
-                          <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-label="Unread" />
+                          <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--gh-green)]" aria-label="Unread" />
                         ) : null}
                       </button>
                     </li>

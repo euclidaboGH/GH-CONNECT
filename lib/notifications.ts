@@ -124,8 +124,13 @@ export const notificationSystem = {
     const set = new Set([...blockedUserIds, ...mutedUserIds])
     if (!set.size) return all
     return all.filter((n) => {
-      const from = (n.data?.fromUserId || n.data?.userId || n.data?.actorId) as string | undefined
-      if (from && set.has(from)) return false
+      const from = (
+        n.data?.fromUserId ||
+        n.data?.userId ||
+        n.data?.actorId ||
+        n.data?.actorUserId
+      ) as string | undefined
+      if (from && set.has(String(from))) return false
       return true
     })
   },

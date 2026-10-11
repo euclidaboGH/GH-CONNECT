@@ -490,7 +490,7 @@ export function PremiumCommunityHub({
                 setTab("chat")
                 onOpenChat?.()
               }}
-              className="rounded-full bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white"
+              className="rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white"
             >
               Open chat
             </button>
@@ -518,7 +518,7 @@ export function PremiumCommunityHub({
               </span>
             )}
             {(community.chatUnread || 0) > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-800 dark:bg-teal-950/40 dark:text-teal-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-teal-950/40 dark:text-teal-200">
                 Chat · {community.chatUnread} unread
               </span>
             )}
@@ -526,7 +526,29 @@ export function PremiumCommunityHub({
         ) : null}
 
         {/* Board (content) vs Chat — structured spaces */}
-        <div className="flex gap-1 overflow-x-auto px-3 pb-2 scrollbar-hide" role="tablist" aria-label="Community spaces">
+        <div
+          className="flex gap-1 overflow-x-auto px-3 pb-2 scrollbar-hide"
+          role="tablist"
+          aria-label="Community spaces"
+          onKeyDown={(e) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
+            e.preventDefault()
+            const idx = HUB_TABS.findIndex((x) => x.id === tab)
+            if (idx < 0) return
+            let next = idx
+            if (e.key === "ArrowRight") next = (idx + 1) % HUB_TABS.length
+            if (e.key === "ArrowLeft") next = (idx - 1 + HUB_TABS.length) % HUB_TABS.length
+            if (e.key === "Home") next = 0
+            if (e.key === "End") next = HUB_TABS.length - 1
+            const target = HUB_TABS[next]
+            if (target.id === "chat") {
+              if (community.isJoined && onOpenChat) onOpenChat()
+              setTab("chat")
+              return
+            }
+            setTab(target.id)
+          }}
+        >
           {HUB_TABS.map((t) => {
             const selected = tab === t.id
             const isChat = t.id === "chat"
@@ -536,6 +558,7 @@ export function PremiumCommunityHub({
                 type="button"
                 role="tab"
                 aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
                 onClick={() => {
                   if (isChat) {
                     if (community.isJoined && onOpenChat) onOpenChat()
@@ -544,13 +567,13 @@ export function PremiumCommunityHub({
                   }
                   setTab(t.id)
                 }}
-                className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   selected
                     ? isChat
-                      ? "bg-teal-600 text-white"
+                      ? "bg-[var(--gh-green)] text-white"
                       : "bg-primary text-primary-foreground"
                     : isChat
-                      ? "bg-teal-50 text-teal-800 ring-1 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-200"
+                      ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
                       : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -713,7 +736,7 @@ export function PremiumCommunityHub({
                       onPost(composeBody.trim(), "text")
                       setComposeBody("")
                     }}
-                    className="ml-auto min-h-9 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white disabled:opacity-40"
+                    className="ml-auto min-h-9 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-40"
                   >
                     Post
                   </button>
@@ -732,7 +755,7 @@ export function PremiumCommunityHub({
                         type="button"
                         onClick={() => setBoardSort(s)}
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${
-                          boardSort === s ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"
+                          boardSort === s ? "bg-[var(--gh-green)] text-white" : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {s}
@@ -924,7 +947,7 @@ export function PremiumCommunityHub({
                         setAnnounceBody("")
                         setAnnounceOpen(false)
                       }}
-                      className="min-h-10 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white disabled:opacity-50"
+                      className="min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-50"
                     >
                       Publish
                     </button>
@@ -969,7 +992,7 @@ export function PremiumCommunityHub({
                     onPost(composeBody.trim(), "text")
                     setComposeBody("")
                   }}
-                  className="mt-2 min-h-10 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  className="mt-2 min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                   Post discussion
                 </button>
@@ -1086,7 +1109,7 @@ export function PremiumCommunityHub({
                                   onReplyToPost(p.id, body)
                                   setReplyDrafts((s) => ({ ...s, [p.id]: "" }))
                                 }}
-                                className="min-h-10 rounded-xl bg-emerald-600 px-3 text-[11px] font-bold text-white disabled:opacity-50"
+                                className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white disabled:opacity-50"
                               >
                                 Reply
                               </button>
@@ -1138,27 +1161,27 @@ export function PremiumCommunityHub({
                   <button
                     type="button"
                     onClick={() => onJoin()}
-                    className="mt-3 min-h-10 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
+                    className="mt-3 min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white"
                   >
                     Join to chat
                   </button>
                 )}
               </div>
             ) : null}
-            <div className={`rounded-2xl border border-teal-200/70 bg-teal-50/50 p-3 dark:border-teal-900/50 dark:bg-teal-950/30 ${!effectiveCanChat ? "opacity-50 pointer-events-none" : ""}`}>
+            <div className={`rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/30 ${!effectiveCanChat ? "opacity-50 pointer-events-none" : ""}`}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-teal-900 dark:text-teal-100">Community chat</p>
+                <p className="text-xs font-bold text-emerald-900 dark:text-emerald-100">Community chat</p>
                 {community.role && community.role !== "guest" && (
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${ROLE_BADGE[community.role] || ROLE_BADGE.member}`}>
                     {community.role}
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[11px] text-teal-800/90 dark:text-teal-200/80">
+              <p className="mt-1 text-[11px] text-emerald-800/90 dark:text-emerald-200/80">
                 Realtime conversation for members. Muting chat does <strong>not</strong> leave the community or hide the board.
               </p>
               {(community.chatUnread || 0) > 0 && (
-                <p className="mt-1.5 text-[10px] font-bold text-teal-800">
+                <p className="mt-1.5 text-[10px] font-bold text-emerald-800">
                   {community.chatUnread} unread in chat · Board activity is separate
                 </p>
               )}
@@ -1166,9 +1189,17 @@ export function PremiumCommunityHub({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setChatMuted((v) => !v)}
+                onClick={() => {
+                  setChatMuted((v) => !v)
+                  // Prefer durable mute when parent provided it
+                  try {
+                    onMute?.()
+                  } catch {
+                    /* local-only mute still applies */
+                  }
+                }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold ${
-                  chatMuted ? "bg-stone-700 text-white" : "bg-muted text-muted-foreground"
+                  chatMuted ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
                 }`}
               >
                 <VolumeX size={13} /> {chatMuted ? "Chat muted" : "Mute chat only"}
@@ -1187,14 +1218,29 @@ export function PremiumCommunityHub({
               <button
                 type="button"
                 onClick={() => onOpenChat?.()}
-                className="inline-flex items-center gap-1.5 rounded-full bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white"
               >
                 <MessageCircle size={13} /> Open full chat
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Tools: reply in thread, pin important messages (mods), mute chat only, slow mode for busy rooms.
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Full message history opens in Messages (group conversation). Board posts stay here — chat does not replace the board.
             </p>
+            {effectiveCanChat ? (
+              <div className="rounded-[1.25rem] border border-dashed border-border/70 bg-card p-4 text-center shadow-sm">
+                <p className="text-sm font-bold text-foreground">Member chat</p>
+                <p className="mx-auto mt-1 max-w-xs text-[11px] leading-snug text-muted-foreground">
+                  Open the full thread to read and send. Messages use your real membership — nothing is fabricated here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onOpenChat?.()}
+                  className="mt-3 min-h-10 rounded-full bg-[var(--gh-green)] px-5 text-xs font-bold text-white shadow-sm"
+                >
+                  Open group chat
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -1255,7 +1301,7 @@ export function PremiumCommunityHub({
                 <button
                   type="button"
                   onClick={() => setInviteOpen((v) => !v)}
-                  className="min-h-10 rounded-full border border-teal-200 bg-teal-50 px-3 text-[11px] font-bold text-teal-900 dark:border-teal-900/40 dark:bg-teal-950/40 dark:text-teal-100"
+                  className="min-h-10 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
                 >
                   {inviteOpen ? "Close invite" : "Invite member"}
                 </button>
@@ -1276,7 +1322,7 @@ export function PremiumCommunityHub({
                     <button
                       type="button"
                       onClick={() => onApproveRequest?.(uid)}
-                      className="min-h-10 rounded-xl bg-teal-600 px-3 text-[11px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       Accept
                     </button>
@@ -1316,7 +1362,7 @@ export function PremiumCommunityHub({
                             setInviteBusy(null)
                           }
                         }}
-                        className="min-h-10 rounded-xl bg-teal-600 px-3 text-[11px] font-bold text-white disabled:opacity-50"
+                        className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white disabled:opacity-50"
                       >
                         {inviteBusy === c.id ? "…" : "Invite"}
                       </button>
@@ -1435,7 +1481,7 @@ export function PremiumCommunityHub({
                 <p className="text-[11px] text-muted-foreground">Share for private / invite-only joins</p>
                 <button
                   type="button"
-                  className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white"
+                  className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
                   onClick={() => {
                     void shareText({
                       title: community.name || "GreenHaven community",
@@ -1629,7 +1675,7 @@ export function PremiumCommunityHub({
                           </button>
                           <button
                             type="button"
-                            className="min-h-9 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white"
+                            className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
                             onClick={() => {
                               resolveCommunityReport(
                                 community.id,

@@ -1,5 +1,7 @@
 "use client"
 
+/** @deprecated Prefer Messages tab group conversation + PremiumCommunityHub chat entry. Kept for parse compatibility. */
+
 import { useState, useMemo, memo } from "react"
 import { Heart, MessageCircle, Pin, MoreVertical, Download, Copy, Reply } from "lucide-react"
 import type { Message } from "@/lib/ghc-types"

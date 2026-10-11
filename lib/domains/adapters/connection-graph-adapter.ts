@@ -94,6 +94,8 @@ export type ConnectionCardAction =
   | "view_profile"
   | "invite"
   | "save"
+  | "like"
+  | "pass"
 
 export function eligibleConnectionActions(state: ConnectionUiState): ConnectionCardAction[] {
   switch (state) {
@@ -107,11 +109,12 @@ export function eligibleConnectionActions(state: ConnectionUiState): ConnectionC
     case "outgoing_pending":
       return ["view_profile"]
     case "matched_opportunity":
-      return ["connect", "view_profile", "message"]
+      return ["like", "connect", "view_profile", "message"]
     case "suggested":
     case "none":
     case "declined":
-      return ["connect", "view_profile", "save"]
+      // like/pass = matching interest; connect = relationship request
+      return ["like", "pass", "connect", "view_profile"]
     default:
       return ["view_profile"]
   }

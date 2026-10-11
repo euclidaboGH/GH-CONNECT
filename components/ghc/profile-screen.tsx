@@ -5,13 +5,13 @@
  * Tap cover or avatar → action sheet (Change photo / Remove).
  * Full-width layout: no left gutter shift.
  */
-import { useMemo, useState, useCallback } from "react"
+import { useMemo, useState, useCallback, useEffect } from "react"
 import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
-import { EditProfileModal } from "./profile-components"
+import { EditProfileModal, calculateProfileCompletion } from "./profile-components"
 import { SignatureGhIdCard } from "./signature-gh-id"
 import {
   Settings as SettingsIcon,
@@ -67,8 +67,40 @@ export function ProfileScreen({
     (post) => Array.isArray(post.images) && post.images.length > 0
   )
   const showMediaTab = mediaPosts.length > 0
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!photoSheet && !editOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (photoSheet) setPhotoSheet(null)
+      else if (editOpen) setEditOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [photoSheet, editOpen])
+
+  useEffect(() => {
+    if (profileActivityTab === "media" && !showMediaTab) {
+      setProfileActivityTab("posts")
+    }
+  }, [profileActivityTab, showMediaTab])
+
   const [editOpen, setEditOpen] = useState(false)
   const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const initials = useMemo(() => {
     const parts = String(name).trim().split(/\s+/).filter(Boolean)
@@ -94,6 +126,8 @@ export function ProfileScreen({
   )
 
   const locationLine = [p.city, p.country].filter(Boolean).join(", ")
+  const profileCompletion = useMemo(() => calculateProfileCompletion(p), [p])
+  const extraPhotos = useMemo(() => photos.slice(1, 6), [photos])
 
   const openEdit = useCallback(() => setEditOpen(true), [])
 
@@ -101,8 +135,12 @@ export function ProfileScreen({
     (updates: Partial<Profile>) => {
       try {
         ghc.updateProfile?.(updates)
+        setStatusMsg("Profile updated")
+        window.setTimeout(() => setStatusMsg(null), 2000)
         ghc.addToast?.("Profile updated", "success")
       } catch {
+        setStatusMsg("Could not save profile")
+        window.setTimeout(() => setStatusMsg(null), 2500)
         ghc.addToast?.("Could not save profile", "error")
       }
     },
@@ -112,6 +150,9 @@ export function ProfileScreen({
   const pickImage = useCallback(
     (kind: "photo" | "cover") => {
       setPhotoSheet(null)
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        ghc.addToast?.("You are offline. Choose a photo now — it saves on this device and may sync when you reconnect.", "info")
+      }
       try {
         const input = document.createElement("input")
         input.type = "file"
@@ -130,9 +171,13 @@ export function ProfileScreen({
             if (kind === "photo") {
               const next = [dataUrl, ...photos.filter((x) => x !== dataUrl)].slice(0, 6)
               ghc.updateProfile?.({ photos: next })
+              setStatusMsg("Profile photo updated")
+              window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Profile photo updated", "success")
             } else {
               ghc.updateProfile?.({ coverPhoto: dataUrl })
+              setStatusMsg("Cover photo updated")
+              window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Cover photo updated", "success")
             }
           }
@@ -192,7 +237,7 @@ export function ProfileScreen({
           <button
             type="button"
             onClick={() => onOpenWallet?.()}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300"
             aria-label="Wallet"
           >
             <Wallet size={18} />
@@ -200,13 +245,25 @@ export function ProfileScreen({
           <button
             type="button"
             onClick={onSettings}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
             aria-label="Settings"
           >
             <SettingsIcon size={18} />
           </button>
         </div>
       </header>
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || ""}
+      </div>
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          You are offline. Profile edits may save on this device and sync when you reconnect.
+        </div>
+      ) : null}
 
       <div
         className="gh-scroll-root gh-scroll-stable min-h-0 w-full flex-1 overflow-y-auto overscroll-contain"
@@ -216,7 +273,7 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="relative block h-[9rem] w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-44"
+          className="relative block h-40 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-48"
           aria-label="Change cover photo"
         >
           {cover ? (
@@ -251,7 +308,7 @@ export function ProfileScreen({
                   {initials}
                 </div>
               )}
-              <span className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-emerald-600 text-white shadow-md">
+              <span className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-[var(--gh-green)] text-white shadow-md">
                 <Camera size={14} />
               </span>
             </button>
@@ -260,7 +317,7 @@ export function ProfileScreen({
               <button
                 type="button"
                 onClick={openEdit}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3.5 text-[12px] font-bold text-white shadow-sm shadow-emerald-700/20 transition hover:brightness-105 active:scale-[0.98]"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-4 text-[12px] font-bold text-white shadow-sm shadow-emerald-700/20 transition hover:brightness-105 active:scale-[0.98]"
               >
                 <Pencil size={13} aria-hidden />
                 Edit Profile
@@ -268,7 +325,7 @@ export function ProfileScreen({
               <button
                 type="button"
                 onClick={() => void shareProfile()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border/70 bg-card px-3.5 text-[12px] font-bold text-foreground shadow-sm transition hover:bg-muted active:scale-[0.98]"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border/70 bg-card px-4 text-[12px] font-bold text-foreground shadow-sm transition hover:bg-muted active:scale-[0.98]"
               >
                 <Share2 size={13} aria-hidden />
                 Share
@@ -277,7 +334,7 @@ export function ProfileScreen({
           </div>
 
           {/* Name block — full width under avatar (not side-shifted) */}
-          <div className="mt-3 w-full">
+          <div className="mt-3.5 w-full">
             <h2 className="flex flex-wrap items-center gap-1.5 text-[1.35rem] font-black tracking-tight text-foreground">
               <span>{name}</span>
               {p.verified ? (
@@ -287,11 +344,36 @@ export function ProfileScreen({
               <TrustBadge userId={p.id || meId} showWhenNew />
             </h2>
             <p className="mt-0.5 text-[13px] font-semibold text-muted-foreground">{handle}</p>
-            <p className="mt-0.5 font-mono text-[12px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">
-              {ghDisplay}
-            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <p className="font-mono text-[12px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">
+                {ghDisplay}
+              </p>
+              <button
+                type="button"
+                className="rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={() => {
+                  try {
+                    void navigator.clipboard?.writeText(ghDisplay)
+                    setStatusMsg("GH ID copied")
+                    window.setTimeout(() => setStatusMsg(null), 1500)
+                    ghc.addToast?.("GH ID copied", "success")
+                  } catch {
+                    ghc.addToast?.("Could not copy GH ID", "error")
+                  }
+                }}
+                aria-label="Copy GreenHaven ID"
+              >
+                Copy ID
+              </button>
+            </div>
             {locationLine ? (
               <p className="mt-1 text-[12px] text-muted-foreground">📍 {locationLine}</p>
+            ) : null}
+            {p.hometown ? (
+              <p className="mt-0.5 text-[12px] text-muted-foreground">Home · {p.hometown}</p>
+            ) : null}
+            {p.education ? (
+              <p className="mt-0.5 text-[12px] text-muted-foreground">🎓 {p.education}</p>
             ) : null}
             {p.bio ? (
               <p className="mt-2 text-[13px] leading-snug text-foreground/90">{p.bio}</p>
@@ -312,7 +394,7 @@ export function ProfileScreen({
             ) : null}
 
             {/* Stats — real counts only */}
-            <div className="mt-3.5 flex gap-1 rounded-2xl border border-border/50 bg-card p-1 shadow-[var(--gh-card-shadow)]">
+            <div className="mt-4 flex gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
               {[
                 { label: "Posts", value: posts.length },
                 { label: "Friends", value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
@@ -326,8 +408,41 @@ export function ProfileScreen({
                 </div>
               ))}
             </div>
+            {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
+              <button
+                type="button"
+                onClick={openEdit}
+                className="mt-2 w-full rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-emerald-50/50 px-3.5 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+              >
+                <p className="text-[12px] font-bold text-foreground">
+                  Profile {profileCompletion.percentage}% complete
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Add {profileCompletion.missing.slice(0, 2).join(" · ")}
+                  {profileCompletion.missing.length > 2 ? "…" : ""} to improve discovery.
+                </p>
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {extraPhotos.length > 0 ? (
+          <section className="mt-3 w-full px-4" aria-label="More photos">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {extraPhotos.map((src, i) => (
+                <button
+                  key={`${i}-${src.slice(0, 24)}`}
+                  type="button"
+                  onClick={() => setPhotoSheet("photo")}
+                  className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-border/50 bg-muted shadow-sm"
+                  aria-label={`Photo ${i + 2}`}
+                >
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* GH ID card */}
         <div className="mt-4 w-full px-4">
@@ -357,10 +472,11 @@ export function ProfileScreen({
 
         {intents.length > 0 ? (
           <section className="mt-4 w-full px-4">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
               Looking for
             </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {intents.map((i) => (
                 <span
                   key={i}
@@ -369,6 +485,7 @@ export function ProfileScreen({
                   {i}
                 </span>
               ))}
+            </div>
             </div>
           </section>
         ) : null}
@@ -401,15 +518,16 @@ export function ProfileScreen({
         </div>
 
         <section className="mt-4 w-full px-4">
+          <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-sm">
           <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
             Interests
           </p>
           {interests.length > 0 ? (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {interests.map((i) => (
                 <span
                   key={i}
-                  className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-foreground"
+                  className="rounded-full bg-muted/80 px-2.5 py-1 text-[11px] font-semibold text-foreground ring-1 ring-border/40"
                 >
                   {i}
                 </span>
@@ -419,16 +537,36 @@ export function ProfileScreen({
             <button
               type="button"
               onClick={openEdit}
-              className="mt-1.5 w-full rounded-xl border border-dashed border-border bg-muted/30 px-3 py-3 text-left text-[12px] text-muted-foreground"
+              className="mt-2 w-full rounded-xl border border-dashed border-border bg-muted/30 px-3 py-3 text-left text-[12px] text-muted-foreground transition hover:bg-muted/50"
             >
               Add interests so Discover can recommend better matches.
             </button>
           )}
+          </div>
         </section>
 
         
         <section className="mt-4 w-full px-4" aria-label="Personal activity">
-          <div className="flex items-center gap-1 border-b border-border/60">
+          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
+          <div
+            className="flex items-center gap-1 border-b border-border/60 px-1"
+            role="tablist"
+            aria-label="Profile activity"
+            onKeyDown={(e) => {
+              const tabs: ("posts" | "media" | "activity")[] = showMediaTab
+                ? ["posts", "media", "activity"]
+                : ["posts", "activity"]
+              const idx = tabs.indexOf(profileActivityTab)
+              if (idx < 0) return
+              if (e.key === "ArrowRight") {
+                e.preventDefault()
+                setProfileActivityTab(tabs[(idx + 1) % tabs.length])
+              } else if (e.key === "ArrowLeft") {
+                e.preventDefault()
+                setProfileActivityTab(tabs[(idx - 1 + tabs.length) % tabs.length])
+              }
+            }}
+          >
             {(
               [
                 { id: "posts" as const, label: "Posts" as const },
@@ -441,10 +579,13 @@ export function ProfileScreen({
               <button
                 key={tab.id}
                 type="button"
+                role="tab"
+                aria-selected={profileActivityTab === tab.id}
+                tabIndex={profileActivityTab === tab.id ? 0 : -1}
                 onClick={() => setProfileActivityTab(tab.id)}
-                className={`min-h-10 flex-1 px-2 text-[13px] font-semibold transition ${
+                className={`min-h-11 flex-1 px-2 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   profileActivityTab === tab.id
-                    ? "border-b-2 border-emerald-600 text-foreground"
+                    ? "border-b-2 border-[var(--gh-green)] text-foreground"
                     : "text-muted-foreground"
                 }`}
               >
@@ -465,7 +606,7 @@ export function ProfileScreen({
                       /* */
                     }
                   }}
-                  className="mt-3 w-full rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
+                  className="m-3 w-[calc(100%-1.5rem)] rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
                 >
                   <p className="text-[13px] font-semibold text-foreground">No posts yet</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -473,7 +614,12 @@ export function ProfileScreen({
                   </p>
                 </button>
               ) : (
-                <ul className="mt-2 space-y-1.5">
+                <>
+                <p className="px-3 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+                  {Math.min(posts.length, profileActivityTab === "activity" ? 12 : 8)} of {posts.length}{" "}
+                  post{posts.length === 1 ? "" : "s"}
+                </p>
+                <ul className="space-y-2 p-3" role="list" aria-label="Your posts">
                   {posts.slice(0, profileActivityTab === "activity" ? 12 : 8).map((post, idx) => {
                     const body = String(post.content || post.text || "").trim()
                     const preview =
@@ -484,8 +630,25 @@ export function ProfileScreen({
                     return (
                       <li
                         key={post.id || idx}
-                        className="rounded-xl border border-border/50 bg-card/80 px-3 py-2.5"
+                        className="rounded-[1rem] border border-border/40 bg-background/80 px-3.5 py-3 shadow-sm"
                       >
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => {
+                            if (!post.id) return
+                            try {
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:navigate-tab", { detail: "home" })
+                              )
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:open-post", { detail: { postId: post.id } })
+                              )
+                            } catch {
+                              /* */
+                            }
+                          }}
+                        >
                         <p className="line-clamp-2 text-[12px] leading-snug text-foreground">{preview}</p>
                         {post.createdAt ? (
                           <p className="mt-1 text-[10px] text-muted-foreground">
@@ -495,16 +658,23 @@ export function ProfileScreen({
                             })}
                           </p>
                         ) : null}
+                        </button>
                       </li>
                     )
                   })}
                 </ul>
+                </>
               )}
             </>
           )}
 
           {profileActivityTab === "media" && showMediaTab && (
-            <ul className="mt-2 grid grid-cols-3 gap-1">
+            mediaPosts.length === 0 ? (
+              <p className="mt-3 px-1 text-center text-[12px] text-muted-foreground">
+                No media posts yet. Photos you share on Feed appear here.
+              </p>
+            ) : (
+            <ul className="grid grid-cols-3 gap-1.5 p-3" role="list" aria-label="Media posts">
               {mediaPosts.slice(0, 12).map((post, idx) => {
                 const src = post.images?.[0]
                 return (
@@ -519,7 +689,9 @@ export function ProfileScreen({
                 )
               })}
             </ul>
+            )
           )}
+          </div>
         </section>
 
 
@@ -547,7 +719,7 @@ export function ProfileScreen({
           onClick={() => setPhotoSheet(null)}
         >
           <div
-            className="w-full max-w-sm overflow-hidden rounded-2xl bg-card shadow-2xl"
+            className="w-full max-w-sm overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-3">

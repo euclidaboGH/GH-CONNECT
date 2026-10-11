@@ -86,3 +86,27 @@ npm run check:jsx
 ## Preserved architecture
 
 Pi SDK, domain validation (`DOMAIN_VALIDATION_KEY` path), Supabase, auth, GHC economy, routes, and UI — unchanged by this documentation file.
+
+---
+
+## Phase 14A (2026-10-09)
+
+Migration inventory reconciled to **70** on-disk SQL files. See `docs/MIGRATION_GAP_REPORT.md`.  
+Still **not** Testnet-verified or production-approved.
+
+## Phase 14B (2026-10-10)
+
+Social authz static scan corrected (public-read + system-key allowlists).  
+Suites: social-authz, idor-static, messaging-authz, safety, GHPV economic, content-reward, Pi payment — **pass** when run.  
+Still not Testnet/runtime verified. See `docs/PHASE_14B_STATIC_SECURITY.md`.
+
+## Phase 14C (2026-10-10)
+
+`npm ci` **OOM (exit 137)** in sandbox — typecheck/build **unverified** here.  
+Economy suite **173/173** still passes. Operator must complete install+build.  
+See `docs/PHASE_14C_BUILD_STATUS.md`.
+
+## Maintenance modernization (2026-10-10)
+
+Surgical upgrades documented in `docs/MAINTENANCE_MODERNIZATION_2026-10-11.md`.  
+Run `npm run verify:static` after install. Still not Testnet/Production certified.

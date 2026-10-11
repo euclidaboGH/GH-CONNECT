@@ -326,9 +326,28 @@ export function CommunitiesScreen() {
 
   /** Server public directory from GET /api/communities — no fabricated rows */
   const [remoteDirectory, setRemoteDirectory] = useState<CommunityRow[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [directoryDurable, setDirectoryDurable] = useState<boolean | null>(null)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
+    setDirectoryLoading(true)
+    setDirectoryError(null)
     void import("@/lib/social/client")
       .then(({ socialListCommunities }) => socialListCommunities(50))
       .then((res) => {
@@ -365,9 +384,16 @@ export function CommunitiesScreen() {
           })
         }
         setRemoteDirectory(rows)
+        setDirectoryDurable(Boolean(res.durable))
+        setDirectoryLoading(false)
       })
       .catch(() => {
-        if (!cancelled) setRemoteDirectory([])
+        if (!cancelled) {
+          setRemoteDirectory([])
+          setDirectoryDurable(false)
+          setDirectoryError("Could not load the community directory")
+          setDirectoryLoading(false)
+        }
       })
     return () => {
       cancelled = true
@@ -552,13 +578,25 @@ export function CommunitiesScreen() {
         // (Joined vs Request sent vs device-only) — never blanket "Joined" for pending.
         if (communityLocalCacheAllowed()) {
           const meId = IdentityService.getCurrentUserId()
-          const after = resolveMembershipState(row, meId)
+          const after = resolveMembershipState(
+            {
+              ...row,
+              members: Array.from(new Set([...(row.members || []), meId].filter(Boolean))),
+            },
+            meId
+          )
           if (after === "member" || after === "owner" || after === "admin" || after === "moderator") {
             setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
           }
         }
         setHubKey((k) => k + 1)
         setJoinPickerRow(null)
+        setJoinGate(null)
+        // Open hub so Board/Chat are one step away after membership
+        setSelectedCommunityId(row.id)
+        setDirectory("my")
+        setStatusMsg("Membership updated")
+        window.setTimeout(() => setStatusMsg(null), 2500)
         return true
       }
       setJoinError(userFacingJoinError("join_failed"))
@@ -791,21 +829,30 @@ export function CommunitiesScreen() {
               return
             }
             const communityId = selected.id
+            const title = selected.groupName || selected.participantName || "Community"
             // Unmount heavy hub before switching tabs — reduces freeze risk
             setSelectedCommunityId(null)
             setCreatedSnapshot(null)
+            const openThread = () => {
+              window.dispatchEvent(
+                new CustomEvent("ghc:open-conversation", {
+                  detail: {
+                    conversationId: communityId,
+                    kind: "community",
+                    title,
+                  },
+                })
+              )
+            }
             try {
               window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
-              // Open the community conversation thread (not a DM-looking blank inbox)
-              window.setTimeout(() => {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:open-conversation", {
-                    detail: { conversationId: communityId },
-                  })
-                )
-              }, 80)
+              // Retry open — Messages may mount after tab switch
+              window.setTimeout(openThread, 60)
+              window.setTimeout(openThread, 220)
+              window.setTimeout(openThread, 500)
             } catch {
               setTab?.("messages")
+              window.setTimeout(openThread, 100)
             }
             addToast("Opening community chat in Messages", "info")
           }}
@@ -918,7 +965,7 @@ export function CommunitiesScreen() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-emerald-600 px-3 text-[12px] font-bold text-white"
+            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
             aria-label="Create community"
           >
             <Plus size={16} strokeWidth={2.5} />
@@ -952,11 +999,17 @@ export function CommunitiesScreen() {
               ) : null}
             </div>
 
-            <div className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1">
+            <div
+              className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+              role="tablist"
+              aria-label="Community directory"
+            >
               <button
                 type="button"
+                role="tab"
+                aria-selected={directory === "my"}
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -967,8 +1020,10 @@ export function CommunitiesScreen() {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={directory === "discover"}
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -987,7 +1042,7 @@ export function CommunitiesScreen() {
                   onClick={() => setCategoryFilter(cat)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                     categoryFilter === cat
-                      ? "bg-emerald-600 text-white"
+                      ? "bg-[var(--gh-green)] text-white"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
@@ -1011,11 +1066,62 @@ export function CommunitiesScreen() {
         }
       />
 
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (directoryLoading ? "Loading communities" : "")}
+      </div>
+      {directoryDurable === false && !directoryLoading ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground" role="status">
+          Directory loaded without a durability signal — join/leave still call the live membership API.
+        </div>
+      ) : null}
+      {isOffline ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+          <p className="font-semibold">You&apos;re offline</p>
+          <p className="mt-0.5 text-[11px] leading-snug opacity-90">Showing communities already on this device. Directory updates when you reconnect.</p>
+        </div>
+      ) : null}
+      {directoryError && !directoryLoading ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 px-3.5 py-2.5 text-[12px]" role="alert">
+          <p className="font-semibold text-destructive">{directoryError}</p>
+          <button type="button" className="mt-1 text-[11px] font-bold text-destructive underline" onClick={() => {
+            setDirectoryLoading(true)
+            setDirectoryError(null)
+            void import("@/lib/social/client").then(({ socialListCommunities }) => socialListCommunities(50)).then((res) => {
+              const rows: CommunityRow[] = []
+              for (const raw of res.communities || []) {
+                if (!raw || typeof raw !== "object") continue
+                const r = raw as Record<string, unknown>
+                const id = String(r.id || "").trim()
+                const name = String(r.name || "").trim()
+                if (!id || !name) continue
+                rows.push({
+                  id,
+                  conversationType: "group",
+                  groupName: name,
+                  participantName: name,
+                  participantId: String(r.createdBy || r.created_by || "").trim(),
+                  lastMessage: String(r.purpose || r.description || "").slice(0, 120),
+                  lastMessageTime: 0,
+                  members: [],
+                  createdBy: String(r.createdBy || r.created_by || "").trim(),
+                  kind: "community",
+                  communityId: id,
+                } as CommunityRow)
+              }
+              setRemoteDirectory(rows)
+              setDirectoryLoading(false)
+            }).catch(() => {
+              setDirectoryError("Could not load the community directory")
+              setDirectoryLoading(false)
+            })
+          }}>Try again</button>
+        </div>
+      ) : null}
       <div
         className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
         onScroll={onHeaderScroll}
       >
-        <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5">
+        <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5" role="region" aria-label="Community directory">
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-teal-950/20">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-900 dark:text-emerald-100">
               <Sparkles size={14} aria-hidden />
@@ -1028,7 +1134,23 @@ export function CommunitiesScreen() {
             </p>
           </div>
 
-          {directory === "my" && myCommunities.length === 0 ? (
+          {directoryLoading ? (
+            <div className="space-y-3" aria-busy="true" aria-label="Loading communities">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse rounded-[1.25rem] border border-border/40 bg-card p-3.5 shadow-sm">
+                  <div className="flex gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-36 rounded bg-muted" />
+                      <div className="h-2.5 w-48 rounded bg-muted/70" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {!directoryLoading && directory === "my" && myCommunities.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center">
               <p className="text-sm font-semibold text-foreground">No communities joined yet</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
@@ -1038,7 +1160,7 @@ export function CommunitiesScreen() {
                 <button
                   type="button"
                   onClick={() => setDirectory("discover")}
-                  className="min-h-10 rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white"
+                  className="min-h-10 rounded-full bg-[var(--gh-green)] px-4 text-[12px] font-bold text-white"
                 >
                   Discover communities
                 </button>
@@ -1061,7 +1183,7 @@ export function CommunitiesScreen() {
                     onClick={() => setJoinGate(c)}
                     className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-2.5 text-left hover:border-emerald-300"
                   >
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--gh-green)] text-sm font-bold text-white">
                       {(c.groupName || "?")[0]}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1101,7 +1223,7 @@ export function CommunitiesScreen() {
                   <button
                     type="button"
                     onClick={() => setDirectory("discover")}
-                    className="rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Discover communities
                   </button>
@@ -1118,7 +1240,13 @@ export function CommunitiesScreen() {
           ) : null}
 
           {visibleGroups.length > 0 ? (
-            visibleGroups.map((community) => {
+            <>
+            <p className="px-0.5 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+              {visibleGroups.length}{" "}
+              {directory === "my" ? "in My communities" : "to discover"}
+              {searchQuery.trim() ? " matching search" : ""}
+            </p>
+            {visibleGroups.map((community) => {
               const joined = isJoined(community)
               const isSample = String(community.id).startsWith("demo-community-")
               const role =
@@ -1155,7 +1283,8 @@ export function CommunitiesScreen() {
                   onJoin={!joined ? () => setJoinGate(community) : undefined}
                 />
               )
-            })
+            })}
+            </>
           ) : directory === "discover" ? (
             <EmptyState
               variant="communities"

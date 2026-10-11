@@ -27,7 +27,7 @@ export default function NotFound() {
       </p>
       <Link
         href="/"
-        className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-bold text-white"
+        className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white"
       >
         Open GreenHaven
       </Link>

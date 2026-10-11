@@ -34,9 +34,12 @@ Static/automated green ≠ Testnet verified ≠ production ready.
 
 ## 1. Migrations (Testnet only)
 
-Canonical on-disk count: **54** under `supabase/migrations/`.
+Canonical on-disk count: **70** under `supabase/migrations/` (see `docs/MIGRATION_CHECKLIST.md`).
 
-**Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md`.
+**Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md` and `docs/MIGRATION_GAP_REPORT.md`.
+
+Classification counts: **67 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL**.
+Later groups include balance-lock (20261009–12), GHPV (20261013–20), content rewards (20261022).
 
 | Class | Action |
 |-------|--------|

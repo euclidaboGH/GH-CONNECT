@@ -590,6 +590,7 @@ export function DiscoverySection({
 }
 
 // Trending Section
+/** Secondary/legacy — primary Discover uses DiscoveryGridScreen list */
 export function TrendingSection({ candidates, onViewProfile, onLike, onMessage }: { candidates: Candidate[]; onViewProfile: (c: Candidate) => void; onLike: (id: string) => void; onMessage: (id: string) => void }) {
   return (
     <DiscoverySection title="Trending" icon={<Flame className="w-4 h-4 text-orange-500" />} actionLabel="See all">
@@ -662,22 +663,22 @@ export function SuggestedCreatorsSection({ candidates, onViewProfile, onFollow }
 
 
 // Businesses Section
+/** @deprecated Not mounted by DiscoveryGridScreen — no fabricated business catalog */
 export function BusinessesSection({ onViewBusiness }: { onViewBusiness: (name: string) => void }) {
-  const businesses = ["Coffee Shop", "Gym", "Bookstore", "Art Studio", "Restaurant"]
   return (
-    <DiscoverySection title="Businesses" icon={<Briefcase className="w-4 h-4 text-amber-600" />} actionLabel="More">
-      <div className="space-y-2">
-        {businesses.map((b) => (
-          <button key={b} onClick={() => onViewBusiness(b)} className="w-full text-left flex items-center gap-3 p-2 hover:bg-amber-50 rounded-lg transition active:scale-95">
-            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-              <Briefcase className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm text-foreground">{b}</h4>
-              <p className="text-xs text-muted-foreground">Local business</p>
-            </div>
-          </button>
-        ))}
+    <DiscoverySection title="Businesses" icon={<Briefcase className="w-4 h-4 text-amber-600" />} actionLabel="Soon">
+      <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 text-center shadow-[var(--gh-card-shadow)]">
+        <p className="text-sm font-semibold text-foreground">Local businesses</p>
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+          Real business listings are not enabled in this build. Nothing here is placeholder data.
+        </p>
+        <button
+          type="button"
+          onClick={() => onViewBusiness("businesses")}
+          className="mt-3 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
+        >
+          Notify me later
+        </button>
       </div>
     </DiscoverySection>
   )

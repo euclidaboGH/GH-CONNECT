@@ -1,178 +1,159 @@
-# Supabase migration checklist (operator)
+# GreenHaven — Migration Checklist (authoritative inventory)
 
-**Never** drop production tables to “fix” identity or ledger data.  
-**Never** disable RLS in Production for debugging.
+**Generated:** 2026-10-09T20:54:04Z  
+**Canonical path:** `supabase/migrations/*.sql`  
+**On-disk count:** **70**  
+**Classification:** REQUIRED **67** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
 
-| Item | Value |
-|------|------:|
-| Canonical directory | `supabase/migrations/` |
-| On-disk count | **54** |
-| Latest sequence id | `20261006_gh_notif_share_type.sql` |
+This document is the **source inventory**. It does **not** mean migrations are applied to Testnet or Production.
 
-Copies under `staging-required-migrations/` / `staging-gap-package/` are **not** additional canonical migrations.
-
-Filenames are **sequence ids** (ordering), not necessarily calendar deployment dates.
-
-Machine listing: `node scripts/print-migration-checklist.mjs`
+Do **not** drop tables, disable RLS, or run all files blindly.
 
 ---
 
-## Classification legend
+## Apply policy
 
-| Class | Operator action |
-|-------|-----------------|
-| **REQUIRED** | Apply on Testnet (then Production when ready), oldest → newest |
-| **REQUIRES_APPROVAL** | Apply only after product/security review |
-| **PROPOSAL** | Do **not** apply unless explicitly approved |
-
-There are **no Phase 14 or Phase 15** migrations in this repository.
+| Class | Action |
+|-------|--------|
+| **REQUIRED** | Apply **oldest → newest** on Testnet after operator confirms prerequisites |
+| **REQUIRES_APPROVAL** | Product + security review, then explicit approve |
+| **PROPOSAL** | **Do not apply** without written approval |
 
 ---
 
-## Full inventory (54)
+## Staging order (REQUIRED groups, oldest first)
 
-| # | File | Class | Purpose (from migration header) |
-|--:|------|-------|----------------------------------|
-| 1 | `20260821_ghc_economy_ledger.sql` | REQUIRED | GHC authoritative ledger |
-| 2 | `20260822_ghc_account_and_claim.sql` | REQUIRED | Account created_at + claim pending GHC |
-| 3 | `202608220001_ghc_economy_events_rls.sql` | REQUIRED | RLS on economy notification events |
-| 4 | `202608220002_ghc_notification_events.sql` | REQUIRED | Economy event notification fields + dedupe |
-| 5 | `202608220003_ghc_public_identities.sql` | REQUIRED | Server-authoritative public GH IDs |
-| 6 | `202608220004_ghc_rls_tighten_events.sql` | REQUIRED | Tighten economy events SELECT RLS |
-| 7 | `202608220005_ghc_transfer_request_rpcs.sql` | REQUIRED | Transfer-request RPCs (atomic accept) |
-| 8 | `202609030002_economy_v12_atomic_daily_claim.sql` | REQUIRED | Atomic daily claim (streak + ledger) |
-| 9 | `202609030001_economy_v12_claim_streak_and_population.sql` | REQUIRED | Claim/streak authoritative state |
-| 10 | `202609030003_economy_v12_telemetry_note.sql` | REQUIRED | Economy v1.2 support notes (non-destructive) |
-| 11 | `202609040001_ghc_ledger_spend_rpc.sql` | REQUIRED | Authoritative GHC spend (debit-only) |
-| 12 | `202609040002_membership_entitlements_and_activity_caps.sql` | REQUIRED | Membership entitlements + activity caps |
-| 13 | `202609040003_pi_payment_intents_durable.sql` | REQUIRED | Durable Pi payment intents |
-| 14 | `20260905_connection_request_intents.sql` | **REQUIRES_APPROVAL** | Connection request intent durability |
-| 15 | `202609050001_p0_activity_governor_durable.sql` | REQUIRED | Multi-instance activity caps + demand |
-| 16 | `20260906_community_join_reasons_proposal.sql` | **PROPOSAL** | Join-reason storage (not auto-apply) |
-| 17 | `20260907_community_governance_log_proposal.sql` | **PROPOSAL** | Moderation log + safety reports proposal |
-| 18 | `202609080002_gh_pi_identities.sql` | REQUIRED | Durable Pi ↔ GH identity mapping |
-| 19 | `202609080003_gh_sessions.sql` | REQUIRED | Server sessions |
-| 20 | `202609080004_gh_step_ups.sql` | REQUIRED | Step-up authentication records |
-| 21 | `202609080005_gh_webauthn_credentials.sql` | REQUIRED | WebAuthn credential storage |
-| 22 | `202609080001_ghc_spend_sign_and_idempotency.sql` | REQUIRED | Spend signing + idempotency |
-| 23 | `20260911_ghc_wallet_snapshot.sql` | REQUIRED | Wallet snapshot support |
-| 24 | `202609120001_marketplace_listings_and_list_rpc.sql` | REQUIRED | Marketplace listings + list RPC |
-| 25 | `202609120002_marketplace_orders_durable.sql` | REQUIRED | Durable marketplace orders |
-| 26 | `20260914_verification_requests_durable.sql` | REQUIRED | Verification requests durability |
-| 27 | `202609190001_gh_messaging_durable.sql` | REQUIRED | Conversations + messages |
-| 28 | `202609190002_gh_user_profiles_and_progress.sql` | REQUIRED | Profiles, progress, achievements |
-| 29 | `202609220001_ghc_stage_pending.sql` | REQUIRED | Stage pending GHC |
-| 30 | `202609220002_ghc_stage_pending_limits.sql` | REQUIRED | Stage pending limits |
-| 31 | `202609230003_gh_communities_core.sql` | REQUIRED | Communities core |
-| 32 | `202609230004_gh_pass5_soft_limits_polls.sql` | REQUIRED | Soft limits + polls foundation |
-| 33 | `202609230005_gh_poll_vote_validate.sql` | REQUIRED | Poll vote validation |
-| 34 | `202609230006_gh_social_core.sql` | REQUIRED | Social core (posts, reactions, follows, …) |
-| 35 | `202609230001_ghc_ledger_rpc_acl.sql` | REQUIRED | Ledger RPC ACL |
-| 36 | `202609230002_ghc_user_accounts_rls_lockdown.sql` | REQUIRED | `ghc_user_accounts` RLS lockdown |
-| 37 | `202609250001_gh_poll_vote_authoritative.sql` | REQUIRED | Authoritative poll vote RPC |
-| 38 | `202609250002_gh_post_list_feed_order_fix.sql` | REQUIRED | Feed ORDER BY alias fix (`createdAt`) |
-| 39 | `202609250003_rpc_acl_lockdown.sql` | REQUIRED | Global RPC ACL lockdown (service_role) |
-| 40 | `202609260002_gh_reaction_multi_type.sql` | REQUIRED | Multi-type durable reactions (Phase 1) |
-| 41 | `202609260001_ghc_withdrawal_requests.sql` | REQUIRED | GHC → π withdrawal requests |
-| 42 | `202609270001_gh_content_attention_read.sql` | REQUIRED | Attention read model (Phase 2.5) |
-| 43 | `202609270003_gh_content_event_access_guard.sql` | REQUIRED | Attention access/visibility guard |
-| 44 | `202609270002_gh_content_events.sql` | REQUIRED | Content attention events (Phase 2.2) |
-| 45 | `20260928_gh_post_curation.sql` | REQUIRED | Post curation upvote/downvote (Phase 3) |
-| 46 | `20260929_gh_reputation.sql` | REQUIRED | Reputation foundation (Phase 4) |
-| 47 | `20260930_gh_ad_verification.sql` | REQUIRED | Pi Ads verification events (Phase 6; no rewards) |
-| 48 | `202609300001_gh_creator_studio.sql` | REQUIRED | Creator Studio + tip intents (Phase 5; no settlement) |
-| 49 | `20261001_gh_media_assets.sql` | REQUIRED | Durable media assets (Phase 8) |
-| 50 | `20261002_gh_follow_status.sql` | REQUIRED | Follow status + counts (Phase 10) |
-| 51 | `20261003_gh_social_notifications.sql` | REQUIRED | Social notifications (Phase 11) |
-| 52 | `20261004_gh_search.sql` | REQUIRED | Server search/discovery (Phase 12) |
-| 53 | `20261005_gh_post_shares.sql` | REQUIRED | Durable shares (Phase 13) |
-| 54 | `20261006_gh_notif_share_type.sql` | REQUIRED | Share notification type constraint |
+1. **Foundation economy / ledger / claims / membership / Pi intents** (20260821 → 20260905 activity governor)
+2. **Auth / Pi identities / sessions / WebAuthn** (20260908*)
+3. **Wallet snapshot + marketplace** (20260911 → 20260912)
+4. **Verification + messaging + profiles** (20260914 → 20260919)
+5. **Stage pending + ledger ACL + communities + social core + polls** (20260922 → 20260925)
+6. **Withdrawal + reactions + attention + curation + reputation + ads + creator** (20260926 → 20260930)
+7. **Media / follow / notifications / search / shares / messaging prefs / archive** (20261001 → 20261008)
+8. **Balance lock / spendable / withdrawal settle / activity stage** (20261009 → 20261012)
+9. **GHPV judgment → weight → calibration → settlement infra → soft-delete** (20261013 → 20261020)
+10. **Notification types extend + content rewards tables** (20261021 → 20261022)
 
-**Counts:** REQUIRED **51** · REQUIRES_APPROVAL **1** · PROPOSAL **2** · Total **54**
+**Notes on groups 8–10:**
+
+- `20261009`–`20261012` harden balance concurrency; apply only after core ledger RPCs exist.
+- GHPV (`20261013`–`20261020`) is **judgment / weight / settlement infrastructure**. Votes must **not** mint GHC. Settlement is **system-only** (not a client action).
+- `20261022` content rewards creates accrual tables; distribution to ledger is a **separate** economy path.
 
 ---
 
-## Recommended apply order (Testnet)
+## Full inventory
 
-1. REQUIRED rows **1–13** (economy / payments / membership)  
-2. Skip or review **14** (`connection_request_intents`)  
-3. REQUIRED **15**  
-4. **Do not apply 16–17** (PROPOSAL) unless approved  
-5. REQUIRED **18–54** (identity → social Phases 1–13)
-
-Always apply **oldest sequence id first** within the set you choose to run.
+| # | File | Class | Notes |
+|--:|------|-------|-------|
+| 1 | `20260821_ghc_economy_ledger.sql` | REQUIRED |  |
+| 2 | `202608220001_ghc_economy_events_rls.sql` | REQUIRED |  |
+| 3 | `202608220002_ghc_notification_events.sql` | REQUIRED |  |
+| 4 | `202608220003_ghc_public_identities.sql` | REQUIRED |  |
+| 5 | `202608220004_ghc_rls_tighten_events.sql` | REQUIRED |  |
+| 6 | `202608220005_ghc_transfer_request_rpcs.sql` | REQUIRED |  |
+| 7 | `20260822_ghc_account_and_claim.sql` | REQUIRED |  |
+| 8 | `202609030001_economy_v12_claim_streak_and_population.sql` | REQUIRED |  |
+| 9 | `202609030002_economy_v12_atomic_daily_claim.sql` | REQUIRED |  |
+| 10 | `202609030003_economy_v12_telemetry_note.sql` | REQUIRED |  |
+| 11 | `202609040001_ghc_ledger_spend_rpc.sql` | REQUIRED |  |
+| 12 | `202609040002_membership_entitlements_and_activity_caps.sql` | REQUIRED |  |
+| 13 | `202609040003_pi_payment_intents_durable.sql` | REQUIRED |  |
+| 14 | `202609050001_p0_activity_governor_durable.sql` | REQUIRED |  |
+| 15 | `20260905_connection_request_intents.sql` | REQUIRES_APPROVAL | Do not auto-apply |
+| 16 | `20260906_community_join_reasons_proposal.sql` | PROPOSAL | Proposal only |
+| 17 | `20260907_community_governance_log_proposal.sql` | PROPOSAL | Proposal only |
+| 18 | `202609080001_ghc_spend_sign_and_idempotency.sql` | REQUIRED |  |
+| 19 | `202609080002_gh_pi_identities.sql` | REQUIRED |  |
+| 20 | `202609080003_gh_sessions.sql` | REQUIRED |  |
+| 21 | `202609080004_gh_step_ups.sql` | REQUIRED |  |
+| 22 | `202609080005_gh_webauthn_credentials.sql` | REQUIRED |  |
+| 23 | `20260911_ghc_wallet_snapshot.sql` | REQUIRED |  |
+| 24 | `202609120001_marketplace_listings_and_list_rpc.sql` | REQUIRED |  |
+| 25 | `202609120002_marketplace_orders_durable.sql` | REQUIRED |  |
+| 26 | `20260914_verification_requests_durable.sql` | REQUIRED |  |
+| 27 | `202609190001_gh_messaging_durable.sql` | REQUIRED | Durable messaging (feature-flag gated in app) |
+| 28 | `202609190002_gh_user_profiles_and_progress.sql` | REQUIRED |  |
+| 29 | `202609220001_ghc_stage_pending.sql` | REQUIRED |  |
+| 30 | `202609220002_ghc_stage_pending_limits.sql` | REQUIRED |  |
+| 31 | `202609230001_ghc_ledger_rpc_acl.sql` | REQUIRED |  |
+| 32 | `202609230002_ghc_user_accounts_rls_lockdown.sql` | REQUIRED |  |
+| 33 | `202609230003_gh_communities_core.sql` | REQUIRED |  |
+| 34 | `202609230004_gh_pass5_soft_limits_polls.sql` | REQUIRED |  |
+| 35 | `202609230005_gh_poll_vote_validate.sql` | REQUIRED |  |
+| 36 | `202609230006_gh_social_core.sql` | REQUIRED |  |
+| 37 | `202609250001_gh_poll_vote_authoritative.sql` | REQUIRED |  |
+| 38 | `202609250002_gh_post_list_feed_order_fix.sql` | REQUIRED |  |
+| 39 | `202609250003_rpc_acl_lockdown.sql` | REQUIRED |  |
+| 40 | `202609260001_ghc_withdrawal_requests.sql` | REQUIRED |  |
+| 41 | `202609260002_gh_reaction_multi_type.sql` | REQUIRED |  |
+| 42 | `202609270001_gh_content_attention_read.sql` | REQUIRED |  |
+| 43 | `202609270002_gh_content_events.sql` | REQUIRED |  |
+| 44 | `202609270003_gh_content_event_access_guard.sql` | REQUIRED |  |
+| 45 | `20260928_gh_post_curation.sql` | REQUIRED |  |
+| 46 | `20260929_gh_reputation.sql` | REQUIRED |  |
+| 47 | `202609300001_gh_creator_studio.sql` | REQUIRED |  |
+| 48 | `20260930_gh_ad_verification.sql` | REQUIRED |  |
+| 49 | `20261001_gh_media_assets.sql` | REQUIRED |  |
+| 50 | `20261002_gh_follow_status.sql` | REQUIRED |  |
+| 51 | `20261003_gh_social_notifications.sql` | REQUIRED |  |
+| 52 | `20261004_gh_search.sql` | REQUIRED |  |
+| 53 | `20261005_gh_post_shares.sql` | REQUIRED |  |
+| 54 | `20261006_gh_notif_share_type.sql` | REQUIRED |  |
+| 55 | `20261007_gh_messaging_edit_pin_prefs.sql` | REQUIRED | Durable messaging (feature-flag gated in app) |
+| 56 | `20261008_gh_post_archive_quote.sql` | REQUIRED |  |
+| 57 | `20261009_ghc_balance_lock_and_spendable.sql` | REQUIRED | Shared balance lock / spendable |
+| 58 | `20261010_ghc_withdrawal_settle_atomic.sql` | REQUIRED | Atomic withdrawal settle |
+| 59 | `20261011_ghc_activity_stage_atomic.sql` | REQUIRED |  |
+| 60 | `20261012_ghc_activity_stage_lock_align.sql` | REQUIRED |  |
+| 61 | `20261013_ghpv_judgment_infrastructure.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 62 | `20261014_ghpv_curation_weight_and_settle.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 63 | `20261015_ghpv_curator_calibration_apply.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 64 | `20261016_ghpv_active_weight_set_semantics.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 65 | `20261017_ghpv_settlement_engine.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 66 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 67 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 68 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 69 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
+| 70 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
 
 ---
 
-## Post-apply smoke SQL
+## Non-REQUIRED files (detail)
+
+### REQUIRES_APPROVAL (1)
+
+- `20260905_connection_request_intents.sql`
+
+### PROPOSAL (2) — do not apply by default
+
+- `20260906_community_join_reasons_proposal.sql`
+- `20260907_community_governance_log_proposal.sql`
+
+---
+
+## Post-apply verification (SQL examples — operator runs on Testnet)
 
 ```sql
+select to_regclass('public.ghc_user_accounts');
 select to_regclass('public.gh_pi_identities');
 select to_regclass('public.gh_sessions');
-select to_regclass('public.gh_user_profiles');
-select to_regclass('public.gh_conversations');
 select to_regclass('public.gh_posts');
 select to_regclass('public.gh_post_shares');
 select to_regclass('public.gh_social_notifications');
-select to_regclass('public.ghc_payment_intents');
-select to_regclass('public.ghc_membership_entitlements');
+select to_regclass('public.gh_content_quality_state');  -- GHPV
+select to_regclass('public.gh_content_rewards');        -- content rewards
 ```
 
-Then: `GET /api/health` and `docs/IDOR_TEST_CHECKLIST.md` on Staging/Testnet before Production.
+Also: `GET /api/health` → identity / session / supabase config flags.
 
 ---
 
-## Implementation vs apply status
+## Related docs
 
-| Layer | Status |
-|-------|--------|
-| SQL files in repo | Present (54) |
-| Applied on Testnet Supabase | **Operator action** — not certified by this document |
-| Applied on Mainnet Supabase | **Operator action** — not certified by this document |
+- `docs/MIGRATION_GAP_REPORT.md` — Phase 14A gap analysis (no live DB)
+- `docs/TESTNET_VERIFICATION_GATE.md` — Testnet procedure
+- `docs/DEFERRED_AND_GATED.md` — fail-closed surfaces
+- `scripts/print-migration-checklist.mjs` — regenerate console inventory
 
-Source presence ≠ database applied.
-
----
-
-## Additive migrations 55–56 (NOT YET APPLIED)
-
-| # | File | Purpose | Apply status |
-|---|------|---------|--------------|
-| 55 | `20261007_gh_messaging_edit_pin_prefs.sql` | Message edit/pin RPCs; per-user conversation pin/archive | **Pending Testnet** |
-| 56 | `20261008_gh_post_archive_quote.sql` | Post `archived_at`, `quote_of_post_id`, archive RPC | **Pending Testnet** |
-
-**Repo total SQL files:** 56 (54 historical + 2 additive).  
-Do not apply to Mainnet until Testnet IDOR + smoke pass.
-
-**Onboarding / returning-user:** server authority is `gh_pi_identities.onboarding_completed` (migration `20260908_gh_pi_identities.sql`) + `gh_user_profiles.onboarded` (`202609190002_gh_user_profiles_and_progress.sql`). Client device stamp `ghc.onboarding.completed.v1` is recovery-only when server flags lag.
-
----
-
-## LIVE DATABASE FACTS (operator-verified snapshot)
-
-Objects observed present on a production Supabase project (do not recreate blindly):
-
-- gh_conversation_members, gh_conversations, gh_messages
-- gh_pi_identities, gh_sessions
-- gh_user_achievements, gh_user_profiles, gh_user_progress
-- ghc_payment_intents (own RLS + payment-intent RPCs)
-
-Sample row counts at last inspection: gh_pi_identities=1, gh_sessions=10, gh_user_profiles=1.
-
-Most economy ledger, membership entitlements, marketplace, verification, and social/community durable objects were absent on that project — apply remaining baseline migrations on Testnet first.
-
-### Additive repo migrations (not applied until operator approval)
-
-| # | File | Notes |
-|---|------|--------|
-| 55 | 20261007_gh_messaging_edit_pin_prefs.sql | Requires messaging tables already present |
-| 56 | 20261008_gh_post_archive_quote.sql | Requires social posts baseline |
-
-### Economy v12 ordering note
-
-Apply streak/population foundation before atomic daily claim when both are needed:
-
-1. 202609030001_economy_v12_claim_streak_and_population.sql
-2. 202609030002_economy_v12_atomic_daily_claim.sql
-
-Do not renumber historical files. Repo total SQL files: 56.
+**Supersedes** older counts of 54 migrations in prior manifests.

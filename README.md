@@ -12,6 +12,26 @@
 
 Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.
 
+
+## Maintenance / Phase 14 (as of 2026-10-10)
+
+| Item | Status |
+|------|--------|
+| Migration inventory | **70** files — `docs/MIGRATION_CHECKLIST.md` |
+| Static security suites | `npm run verify:static` |
+| Design tokens runtime | **`app/globals.css`** (canonical). `styles/globals.css` is non-canonical |
+| Typecheck / production build | Operator machine — sandbox may OOM on `npm ci` |
+
+```bash
+npm ci --legacy-peer-deps
+npm run verify:static
+npm run typecheck
+npm run lint
+NODE_OPTIONS="--max-old-space-size=6144" npm run build
+```
+
+Do **not** apply all migrations blindly. Do **not** enable durable messaging until IDOR gates pass.
+
 ## Stack
 
 - Next.js 15 (App Router)

@@ -79,6 +79,7 @@ interface PostCardProps {
   isCommentingPostId?: boolean
 }
 
+/** @deprecated Use EnhancedPostCard — kept for match-screen compatibility */
 export const PostCard = memo(function PostCard({
   post,
   isLiked,
@@ -465,6 +466,7 @@ interface FloatingCreateButtonProps {
   isVisible: boolean
 }
 
+/** Prefer bottom-nav Create hub; FAB retained for rare embeds */
 export function FloatingCreateButton({ onClick, isVisible }: FloatingCreateButtonProps) {
   return (
     <button

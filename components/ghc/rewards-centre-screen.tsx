@@ -132,6 +132,9 @@ export function RewardsCentreScreen({
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [achievementsHydrating, setAchievementsHydrating] = useState(true)
   /** Durable unlocks from /api/profile/achievements (merged with local domain) */
   const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
     []
@@ -218,16 +221,25 @@ export function RewardsCentreScreen({
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
     let cancelled = false
-    void fetchServerAchievements().then((r) => {
-      if (cancelled || !r.ok) return
-      const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
-        id: a.achievementId,
-        title: a.achievementId.replace(/_/g, " "),
-        description: r.durable ? "Unlocked on this account" : undefined,
-        unlockedAt: a.unlockedAt,
-      })) as UnlockedAchievementRow[]
-      setServerAchievements(rows)
-    })
+    setAchievementsHydrating(true)
+    void fetchServerAchievements()
+      .then((r) => {
+        if (cancelled) return
+        if (!r.ok) {
+          setAchievementsHydrating(false)
+          return
+        }
+        const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
+          id: a.achievementId,
+          title: a.achievementId.replace(/_/g, " "),
+          description: r.durable ? "Unlocked on this account" : undefined,
+          unlockedAt: a.unlockedAt,
+        })) as UnlockedAchievementRow[]
+        setServerAchievements(rows)
+      })
+      .finally(() => {
+        if (!cancelled) setAchievementsHydrating(false)
+      })
     return () => {
       cancelled = true
     }
@@ -260,7 +272,11 @@ export function RewardsCentreScreen({
     return Array.from(map.values())
   }, [snapshot.pending])
 
-  const refresh = useCallback(() => setTick((t) => t + 1), [])
+  const refresh = useCallback(() => {
+    setTick((n) => n + 1)
+    setStatusMsg("Refreshing rewards…")
+    window.setTimeout(() => setStatusMsg(null), 1200)
+  }, [])
 
   useEffect(() => {
     const tabHandler = (e: Event) => {
@@ -273,11 +289,37 @@ export function RewardsCentreScreen({
     return () => window.removeEventListener("ghc:open-rewards-tab", tabHandler)
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showLearnMore) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowLearnMore(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showLearnMore])
+
 
   const claimPendingReward = useCallback(
     async (rewardId: string) => {
       if (claimingId) return
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        ghc.addToast?.("You are offline. Claims need a connection so the ledger can confirm.", "info")
+        return
+      }
       setClaimingId(rewardId)
+      setStatusMsg("Claiming…")
       try {
         const eco = getBoundDomainServices()?.economy
         if (!eco?.claimReward) {
@@ -328,7 +370,7 @@ export function RewardsCentreScreen({
           <button
             type="button"
             onClick={onOpenWallet}
-            className="min-h-9 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+            className="min-h-10 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -336,11 +378,23 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={refresh}
-          className="min-h-9 rounded-full border border-border/70 bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:bg-muted"
+          className="min-h-10 rounded-full border border-border/70 bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:bg-muted"
         >
           Refresh
         </button>
       </header>
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (achievementsHydrating ? "Loading achievements" : "")}
+      </div>
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          Offline — journey progress already on this device stays visible. Claims need a connection so the ledger can confirm.
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]">
         <div className="px-4 pt-3">
@@ -389,10 +443,43 @@ export function RewardsCentreScreen({
         </div>
 
         {((snapshot.wallet?.pending ?? 0) > 0 || snapshot.pending.length > 0) && (
-          <p className="mx-3 mt-2 text-[11px] text-amber-800/90">
-            Pending GHC is held for validation (usually within 24 hours) — not spendable until
-            cleared.
-          </p>
+          <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/80 px-3.5 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="text-[11px] leading-snug text-amber-900 dark:text-amber-100">
+              Pending GHC is held for validation (usually within 24 hours) — not spendable until
+              cleared.
+            </p>
+            {snapshot.pending.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setTab("history")}
+                className="mt-2 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-card px-3 py-1.5 text-[11px] font-bold text-amber-950 shadow-sm dark:text-amber-50"
+              >
+                Review {snapshot.pending.length} claim{snapshot.pending.length === 1 ? "" : "s"}
+                <ChevronRight size={12} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {snapshot.wallet != null && (
+          <div className="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-sm">
+            <GhcCoinIcon size={18} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available GHC</p>
+              <p className="text-[14px] font-bold tabular-nums text-foreground">
+                {formatGhc(Number(snapshot.wallet.balance) || 0)}
+              </p>
+            </div>
+            {onOpenWallet ? (
+              <button
+                type="button"
+                onClick={onOpenWallet}
+                className="rounded-full border border-border/70 bg-muted/40 px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:bg-muted"
+              >
+                Open Wallet
+              </button>
+            ) : null}
+          </div>
         )}
 
         <p className="mx-3 mt-2 text-[11px] leading-relaxed text-muted-foreground">
@@ -408,7 +495,7 @@ export function RewardsCentreScreen({
         {claimedFlash && onOpenWallet && (
           <div className="mx-4 mt-2 flex items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
             <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-100">Claimed ✓ · added to available balance</p>
-            <button type="button" onClick={onOpenWallet} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white">
+            <button type="button" onClick={onOpenWallet} className="shrink-0 rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white">
               View in Wallet
             </button>
           </div>
@@ -435,7 +522,29 @@ export function RewardsCentreScreen({
           </div>
         )}
 
-        <div className="mx-3 mt-4 flex gap-1 rounded-2xl border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]">
+        <div
+          className="mx-3 mt-4 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]"
+          role="tablist"
+          aria-label="Rewards sections"
+          onKeyDown={(e) => {
+            const order: Tab[] = ["challenges", "opportunities", "history", "achievements"]
+            const idx = order.indexOf(tab)
+            if (idx < 0) return
+            if (e.key === "ArrowRight") {
+              e.preventDefault()
+              setTab(order[(idx + 1) % order.length])
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault()
+              setTab(order[(idx - 1 + order.length) % order.length])
+            } else if (e.key === "Home") {
+              e.preventDefault()
+              setTab(order[0])
+            } else if (e.key === "End") {
+              e.preventDefault()
+              setTab(order[order.length - 1])
+            }
+          }}
+        >
           {(
             [
               { id: "challenges" as const, label: "Missions" },
@@ -443,21 +552,43 @@ export function RewardsCentreScreen({
               { id: "history" as const, label: "History" },
               { id: "achievements" as const, label: "Achievements" },
             ] as const
-          ).map((t) => (
+          ).map((item) => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              className={`shrink-0 flex-1 rounded-xl px-2 py-2.5 text-[11px] font-bold transition ${
-                tab === t.id
+              role="tab"
+              aria-selected={tab === item.id}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setTab(item.id)}
+              className={`shrink-0 flex-1 rounded-xl px-2 py-2.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                tab === item.id
                   ? "bg-[var(--gh-green)] text-white shadow-sm"
-                  : "text-muted-foreground hover:bg-muted/70"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t.label}
+              {item.label}
             </button>
           ))}
         </div>
+        <p className="mx-3 mt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+          {tab === "challenges"
+            ? `${snapshot.challenges.length} mission${snapshot.challenges.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "opportunities"
+            ? `${snapshot.rules.length} earn rule${snapshot.rules.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "history"
+            ? `${snapshot.rewards.length} history item${snapshot.rewards.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "achievements"
+            ? achievementsHydrating
+              ? "Loading achievements…"
+              : `${snapshot.achievements.length} achievement${snapshot.achievements.length === 1 ? "" : "s"}`
+            : null}
+          {snapshot.pending.length > 0
+            ? ` · ${snapshot.pending.length} pending claim${snapshot.pending.length === 1 ? "" : "s"}`
+            : ""}
+        </p>
 
         <div className="mx-3 mt-3 mb-8 space-y-2">
           {tab === "opportunities" && (
@@ -468,27 +599,27 @@ export function RewardsCentreScreen({
                 Engagement paths
               </h2>
               <ul className="mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Daily reward</p>
                   <p className="text-[10px] text-muted-foreground">On Home every 24h</p>
                 </li>
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Profile completion</p>
                   <p className="text-[10px] text-muted-foreground">Finish profile fields</p>
                 </li>
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Community activity</p>
                   <p className="text-[10px] text-muted-foreground">Posts & groups</p>
                 </li>
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Social milestones</p>
                   <p className="text-[10px] text-muted-foreground">Friends & messages</p>
                 </li>
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Referrals</p>
                   <p className="text-[10px] text-muted-foreground">Invite pioneers</p>
                 </li>
-                <li className="rounded-xl border border-border/40 bg-muted/30 px-2.5 py-2.5">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Campaigns</p>
                   <p className="text-[10px] text-muted-foreground">Limited-time events</p>
                 </li>
@@ -507,7 +638,7 @@ export function RewardsCentreScreen({
                 snapshot.rules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="rounded-2xl border border-border bg-card px-3 py-3"
+                    className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
@@ -573,7 +704,7 @@ export function RewardsCentreScreen({
                   return (
                     <div
                       key={r.id}
-                      className="rounded-2xl border border-border bg-card px-3 py-3"
+                      className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                     >
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
@@ -625,8 +756,8 @@ export function RewardsCentreScreen({
                             <button
                               type="button"
                               onClick={() => void claimPendingReward(String(r.id))}
-                              disabled={claimingId === String(r.id)}
-                              className="mt-2 flex min-h-11 w-full items-center justify-center rounded-2xl bg-emerald-600 px-3 py-2 text-[13px] font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                              disabled={claimingId === String(r.id) || isOffline}
+                              className="mt-2.5 flex min-h-11 w-full items-center justify-center rounded-[1.25rem] bg-[var(--gh-green)] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm shadow-emerald-700/15 transition hover:brightness-110 disabled:opacity-60"
                             >
                               {claimingId === String(r.id) ? "Claiming…" : claimedFlash === String(r.id) ? "✓ Claimed" : "Claim to available GHC"}
                             </button>
@@ -782,7 +913,7 @@ function ChallengeCardView({
                     /* */
                   }
                 }}
-                className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-[11px] font-bold text-amber-900"
+                className="mt-2.5 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-amber-50 px-3.5 py-1.5 text-[11px] font-bold text-amber-900 shadow-sm"
               >
                 View pending in Wallet
                 <ChevronRight size={12} aria-hidden />

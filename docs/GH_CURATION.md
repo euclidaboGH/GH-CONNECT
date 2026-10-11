@@ -38,3 +38,9 @@ Body: `{ "choice": "upvote" | "downvote" | "neutral" }`
 ## Migration
 
 `supabase/migrations/20260928_gh_post_curation.sql`
+
+## Content vs profile engagement
+
+- **Upvote / downvote** apply to **posts** (content quality, ranking, server-side reward eligibility).
+- **Like / Pass** apply to **profiles** (matching). See `docs/ENGAGEMENT_MODEL_CONTENT_VS_PROFILE.md`.
+- Client votes never mint GHC.

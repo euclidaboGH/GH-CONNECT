@@ -6,7 +6,7 @@
  * UX: All / Unread / Communities filters, clear empty states.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, memo } from "react"
-import { useGHCMessaging } from "@/contexts/ghc-context"
+import { useGHCMessaging, useGHC } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
 import {
   ConversationItem,
@@ -19,6 +19,7 @@ import {
 import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
+import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 
 const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
@@ -40,6 +41,7 @@ function isCommunityConversation(c: Conversation): boolean {
 export function MessageScreen() {
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, markConversationRead } = messaging
+  const { deleteMessage, replyToMessage } = useGHC()
   const ghc = {
     pinConversation: messaging.pinConversation,
     archiveConversation: messaging.archiveConversation,
@@ -61,8 +63,34 @@ export function MessageScreen() {
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [windowSize, setWindowSize] = useState(MESSAGE_WINDOW)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [replyToId, setReplyToId] = useState<string | null>(null)
+  const [replyPreview, setReplyPreview] = useState<string | null>(null)
+  const durablePreferred = isDurableMessagingEnabled()
   const bottomRef = useRef<HTMLDivElement>(null)
   const markedRef = useRef<string | null>(null)
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    const onOnline = () => {
+      sync()
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:messaging-reconcile"))
+      } catch {
+        /* */
+      }
+    }
+    window.addEventListener("online", onOnline)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
 
   useEffect(() => {
     const handle = window.setTimeout(() => setQueryDebounced(query), 180)
@@ -81,9 +109,14 @@ export function MessageScreen() {
       }
     }
     const onOpenConversation = (e: Event) => {
-      const id = String((e as CustomEvent).detail?.conversationId || "").trim()
+      const detail = (e as CustomEvent).detail || {}
+      const id = String(detail.conversationId || "").trim()
       if (!id) return
+      const kind = String(detail.kind || "").toLowerCase()
       startTransition(() => {
+        if (kind === "community" || kind === "group") {
+          setFilter("communities")
+        }
         setSelectedId(id)
         setDraft("")
         setWindowSize(MESSAGE_WINDOW)
@@ -184,6 +217,8 @@ export function MessageScreen() {
     startTransition(() => {
       setSelectedId(id)
       setDraft("")
+      setReplyToId(null)
+      setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     })
@@ -193,6 +228,8 @@ export function MessageScreen() {
     startTransition(() => {
       setSelectedId(null)
       setDraft("")
+      setReplyToId(null)
+      setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
     })
   }, [])
@@ -202,8 +239,17 @@ export function MessageScreen() {
     if (!text || !selectedId || sending) return
     setSending(true)
     setDraft("")
+    const replyingTo = replyToId
+    setReplyToId(null)
+    setReplyPreview(null)
     try {
-      await sendMessage?.(selectedId, text)
+      if (replyingTo) {
+        await replyToMessage(selectedId, replyingTo, text)
+      } else {
+        await sendMessage?.(selectedId, text)
+      }
+      setStatusMsg(isOffline ? "Saved locally — will sync when online" : "Message sent")
+      window.setTimeout(() => setStatusMsg(null), 2000)
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
       })
@@ -214,7 +260,9 @@ export function MessageScreen() {
         window.dispatchEvent(
           new CustomEvent("ghc:toast", {
             detail: {
-              message: "Message couldn't be sent. Check your connection and try again.",
+              message: isOffline
+                ? "You are offline. Message kept in the composer — send again when online."
+                : "Message couldn't be confirmed. Check your connection and try again.",
               type: "error",
             },
           })
@@ -225,7 +273,19 @@ export function MessageScreen() {
     } finally {
       setSending(false)
     }
-  }, [draft, selectedId, sending, sendMessage])
+  }, [draft, selectedId, sending, sendMessage, replyToMessage, replyToId, isOffline])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        closeThread()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [selectedId, closeThread])
 
   const goMatches = useCallback(() => {
     if (!navigateTo("matches")) {
@@ -273,8 +333,24 @@ export function MessageScreen() {
           }}
         />
 
+        <div className="sr-only" role="status" aria-live="polite">
+          {statusMsg || (sending ? "Sending message" : "")}
+        </div>
+
+        {isOffline ? (
+          <div
+            className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+          >
+            You are offline. You can still draft a message — send when you reconnect so delivery can be confirmed.
+          </div>
+        ) : null}
+
         <div
           className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3 contain-paint"
+          role="log"
+          aria-label={isCommunity ? "Community chat messages" : "Conversation messages"}
+          aria-relevant="additions"
           style={{ WebkitOverflowScrolling: "touch", contentVisibility: "auto" }}
         >
           {allMessages.length > windowSize && (
@@ -306,6 +382,33 @@ export function MessageScreen() {
                 isSentByCurrentUser={
                   msg.senderId === IdentityService.getCurrentUserId() || msg.senderId === "current-user" || Boolean((msg as { isOwn?: boolean }).isOwn)
                 }
+                onReply={(id) => {
+                  setReplyToId(id)
+                  setReplyPreview((msg.text || "").slice(0, 80))
+                }}
+                onCopy={(text) => {
+                  try {
+                    void navigator.clipboard?.writeText(text)
+                    setStatusMsg("Copied")
+                    window.setTimeout(() => setStatusMsg(null), 1500)
+                  } catch {
+                    /* */
+                  }
+                }}
+                onDelete={(id, forEveryone) => {
+                  void deleteMessage(selectedId!, id, Boolean(forEveryone))
+                }}
+                onRetry={
+                  msg.status === "failed"
+                    ? () => {
+                        if (msg.text) {
+                          setDraft(msg.text)
+                          setStatusMsg("Edit and send again")
+                          window.setTimeout(() => setStatusMsg(null), 2000)
+                        }
+                      }
+                    : undefined
+                }
               />
             ))
           )}
@@ -313,32 +416,50 @@ export function MessageScreen() {
         </div>
 
         <div className="shrink-0 border-t border-border/60 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+          {replyToId ? (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Replying</p>
+                <p className="truncate text-[12px] text-foreground">{replyPreview || "Message"}</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted"
+                onClick={() => {
+                  setReplyToId(null)
+                  setReplyPreview(null)
+                }}
+                aria-label="Cancel reply"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {selected.isMuted ? (
+            <p className="mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+              This conversation is muted — you still receive messages here; notifications stay quiet.
+            </p>
+          ) : null}
           <MessageInput
             messageText={draft}
             onMessageChange={setDraft}
             onSendMessage={() => void handleSend()}
             onEmojiClick={() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:toast", {
-                    detail: { message: "Emoji picker is not available in this build.", type: "info" },
-                  })
-                )
-              } catch { /* */ }
+              /* MessageInput owns the emoji sheet */
             }}
             onAttachmentClick={() => {
               try {
                 window.dispatchEvent(
                   new CustomEvent("ghc:toast", {
                     detail: {
-                      message: "File attachments require media storage (not enabled yet).",
+                      message: "Attachments are not enabled in this build (media storage gated).",
                       type: "info",
                     },
                   })
                 )
               } catch { /* */ }
             }}
-            disabled={sending}
+            disabled={sending || isOffline}
           />
         </div>
       </div>
@@ -354,6 +475,21 @@ export function MessageScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
+      <div className="px-3 pt-2" role="status">
+        {isOffline ? (
+          <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            Offline — messages queue on this device and sync when you reconnect.
+          </p>
+        ) : durablePreferred ? (
+          <p className="rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/60 px-3.5 py-2 text-[11px] leading-snug text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+            Durable messaging enabled — server confirms delivery when online.
+          </p>
+        ) : (
+          <p className="rounded-[1.25rem] border border-border/50 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
+            Hybrid messaging — server write attempted online; local copy kept if the network fails.
+          </p>
+        )}
+      </div>
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -374,7 +510,24 @@ export function MessageScreen() {
         <p className="mt-1.5 text-[10px] text-muted-foreground">
           Private messages stay separate from community boards.
         </p>
-        <div className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1" role="tablist" aria-label="Inbox filters">
+        <div
+          className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+          role="tablist"
+          aria-label="Inbox filters"
+          onKeyDown={(e) => {
+            const order: InboxFilter[] = ["all", "dms", "unread", "communities"]
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
+            e.preventDefault()
+            const idx = order.indexOf(filter)
+            if (idx < 0) return
+            let next = idx
+            if (e.key === "ArrowRight") next = (idx + 1) % order.length
+            if (e.key === "ArrowLeft") next = (idx - 1 + order.length) % order.length
+            if (e.key === "Home") next = 0
+            if (e.key === "End") next = order.length - 1
+            setFilter(order[next])
+          }}
+        >
           {filters.map((f) => (
             <button
               key={f.id}
@@ -452,7 +605,11 @@ export function MessageScreen() {
             />
           )
         ) : (
-          <ul className="contain-content">
+          <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+            {list.length} conversation{list.length === 1 ? "" : "s"}
+            {queryDebounced.trim() ? " matching search" : ""}
+          </p>
+          <ul className="contain-content" role="list" aria-label="Conversations">
             {list.map((c) => (
               <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
                 <ConversationItem

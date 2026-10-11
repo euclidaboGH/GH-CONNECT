@@ -286,7 +286,8 @@ export function ProfilePreviewPage({
             type="button"
             onClick={onPass}
             className="flex h-14 w-14 items-center justify-center rounded-full border border-white/25 bg-white/15 text-white shadow-lg backdrop-blur-md transition active:scale-95"
-            aria-label="Not interested"
+            aria-label="Pass — not interested for matching"
+            title="Pass — skip for matching"
           >
             <X size={26} strokeWidth={2.5} />
           </button>
@@ -311,7 +312,8 @@ export function ProfilePreviewPage({
                 ? "bg-[var(--gh-green)] text-white"
                 : "bg-gradient-to-br from-emerald-400 to-teal-600 text-white"
             }`}
-            aria-label="Like / Match interest"
+            aria-label="Like — interest for matching"
+            title="Like — helps matching when mutual"
           >
             <Heart size={28} fill={liked || isMatched ? "currentColor" : "none"} />
           </button>

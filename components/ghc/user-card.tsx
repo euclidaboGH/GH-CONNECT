@@ -317,6 +317,17 @@ function UserCardInner({
           >
             View profile
           </button>
+          {onPass ? (
+            <button
+              type="button"
+              onClick={() => onPass()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition hover:bg-muted active:scale-95"
+              aria-label={`Pass on ${safeName}`}
+              title="Pass — not interested for matching"
+            >
+              <X size={18} strokeWidth={2.25} />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -325,10 +336,15 @@ function UserCardInner({
             }}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition active:scale-95 ${
               liked || interestSent
-                ? "border-rose-200 bg-rose-50 text-rose-600"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
                 : "border-border bg-card text-muted-foreground hover:bg-muted"
             }`}
-            aria-label={interestSent && !isMatched ? `Interest sent to ${safeName}` : `Express interest in ${safeName}`}
+            aria-label={
+              interestSent && !isMatched
+                ? `Like sent to ${safeName} for matching`
+                : `Like ${safeName} for matching`
+            }
+            title="Like — helps matching when mutual"
             disabled={interestSent || isMatched}
           >
             <Heart size={18} fill={liked || interestSent ? "currentColor" : "none"} />
@@ -379,7 +395,7 @@ function UserCardInner({
                 }}
                 className="flex w-full items-center rounded-2xl px-3 py-3 text-left text-[14px] font-semibold text-muted-foreground hover:bg-muted"
               >
-                Not interested
+                Pass
               </button>
             )}
             {onReport && (

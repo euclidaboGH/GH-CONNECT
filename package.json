@@ -19,7 +19,11 @@
     "test:safety": "node scripts/scan-production-safety.mjs",
     "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run build",
     "test:idor-checklist": "node scripts/test-idor-isolation.mjs",
-    "ops:migration-check": "node scripts/print-migration-checklist.mjs"
+    "ops:migration-check": "node scripts/print-migration-checklist.mjs",
+    "verify:static": "node scripts/verify-phase14-static.mjs",
+    "verify:migrations": "node scripts/print-migration-checklist.mjs",
+    "test:social-authz": "node scripts/test-social-authz.mjs",
+    "test:idor-static": "node scripts/test-idor-static.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

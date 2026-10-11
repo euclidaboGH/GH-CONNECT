@@ -6,7 +6,7 @@
  * Never manufactures candidates; production filters studio seeds.
  */
 
-import { useMemo, useState, useCallback, startTransition } from "react"
+import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"
@@ -102,6 +102,9 @@ export function DiscoveryGridScreen() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [connectBusy, setConnectBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const userInterests = useMemo(
     () => (Array.isArray(ghc.profile?.interests) ? ghc.profile.interests : []),
@@ -174,10 +177,12 @@ export function DiscoveryGridScreen() {
       setBusyId(id)
       try {
         await ghc.swipe?.(id, "like")
+        setStatusMsg("Interest sent for matching")
         ghc.addToast?.(
-          "Interest expressed — a match is an opportunity, not an automatic connection",
+          "Liked for matching — mutual interest is an opportunity, not an automatic connection",
           "success"
         )
+        window.setTimeout(() => setStatusMsg(null), 2500)
       } catch {
         ghc.addToast?.("Could not send interest", "error")
       } finally {
@@ -246,8 +251,11 @@ export function DiscoveryGridScreen() {
       setBusyId(id)
       try {
         await ghc.swipe?.(id, "pass")
+        setStatusMsg("Passed — we will show fewer similar profiles")
+        ghc.addToast?.("Passed", "info")
+        window.setTimeout(() => setStatusMsg(null), 2000)
       } catch {
-        /* */
+        ghc.addToast?.("Could not update preference", "error")
       } finally {
         setBusyId(null)
       }
@@ -281,6 +289,14 @@ export function DiscoveryGridScreen() {
         })
         return
       }
+      if (action === "like") {
+        void onLike(id)
+        return
+      }
+      if (action === "pass") {
+        void onPass(id)
+        return
+      }
       if (action === "connect") {
         onConnect(id, candidate.displayName)
         return
@@ -299,8 +315,21 @@ export function DiscoveryGridScreen() {
         return
       }
     },
-    [ghc, onConnect, meId],
+    [ghc, onConnect, onLike, onPass, meId],
   )
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
 
   const emptyCopy = discoveryEmptyState(category)
   const loading = Boolean(ghc.loading)
@@ -336,8 +365,10 @@ export function DiscoveryGridScreen() {
           <button
             type="button"
             className="gh-icon-btn h-8 w-8 shrink-0 border border-border/40"
-            aria-label="Filters"
-            title="Connection filters below"
+            aria-label={filtersOpen ? "Hide connection filters" : "Show connection filters"}
+            aria-expanded={filtersOpen}
+            title="Connection intent filters"
+            onClick={() => setFiltersOpen((v) => !v)}
           >
             <SlidersHorizontal size={13} />
           </button>
@@ -345,23 +376,53 @@ export function DiscoveryGridScreen() {
       </header>
       <div className="px-3 pt-2.5">
         <div className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-[var(--gh-card-shadow)]">
-          <p className="text-[12px] font-bold text-foreground">Discover with intent</p>
+          <p className="text-[13px] font-bold tracking-tight text-foreground">Find people with intent</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            Friendship, work, mentoring, and communities — not a dating-only feed. Cards explain why they appear.
+            Friendship, work, mentoring, and communities — not dating-only. Like or pass for matching; connect when you are ready. Cards explain why they appear.
           </p>
         </div>
       </div>
 
 
-      <ConnectionModeBar
-        selectedIntents={selectedIntents}
-        onIntentsChange={(ids) => onIntentsChange(ids as ConnectionIntentId[])}
-      />
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (loading ? "Loading discovery" : "")}
+      </div>
+
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          <p className="font-semibold">You&apos;re offline</p>
+          <p className="mt-0.5 text-[11px] leading-snug opacity-90">
+            Showing candidates already on this device. New people load when you reconnect.
+          </p>
+        </div>
+      ) : null}
+
+            {filtersOpen ? (
+        <ConnectionModeBar
+          selectedIntents={selectedIntents}
+          onIntentsChange={(ids) => onIntentsChange(ids as ConnectionIntentId[])}
+        />
+      ) : null}
 
       <div
         className="flex gap-1.5 overflow-x-auto px-3 pb-2 scrollbar-hide"
         role="tablist"
         aria-label="Discovery categories"
+        onKeyDown={(e) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
+          e.preventDefault()
+          const idx = DISCOVERY_CATEGORIES.findIndex((c) => c.id === category)
+          if (idx < 0) return
+          let next = idx
+          if (e.key === "ArrowRight") next = (idx + 1) % DISCOVERY_CATEGORIES.length
+          if (e.key === "ArrowLeft") next = (idx - 1 + DISCOVERY_CATEGORIES.length) % DISCOVERY_CATEGORIES.length
+          if (e.key === "Home") next = 0
+          if (e.key === "End") next = DISCOVERY_CATEGORIES.length - 1
+          setCategory(DISCOVERY_CATEGORIES[next].id)
+        }}
       >
         {DISCOVERY_CATEGORIES.map((cat) => (
           <button
@@ -369,11 +430,12 @@ export function DiscoveryGridScreen() {
             type="button"
             role="tab"
             aria-selected={category === cat.id}
+            tabIndex={category === cat.id ? 0 : -1}
             onClick={() => setCategory(cat.id)}
             className={
               category === cat.id
-                ? "shrink-0 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground"
-                : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50"
+                ? "shrink-0 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             }
           >
             {cat.label}
@@ -383,9 +445,16 @@ export function DiscoveryGridScreen() {
 
       <div className="min-h-0 flex-1 gh-scroll-root overflow-y-auto px-3 pb-24 pt-1">
         {loading ? (
-          <div className="space-y-2" aria-busy="true" aria-label="Loading discovery">
+          <div className="space-y-3" aria-busy="true" aria-label="Loading discovery">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl bg-muted/50" />
+              <div key={i} className="animate-pulse overflow-hidden rounded-[1.25rem] border border-border/40 bg-card shadow-sm">
+                <div className="h-36 bg-muted/60" />
+                <div className="space-y-2 p-3">
+                  <div className="h-3 w-32 rounded bg-muted" />
+                  <div className="h-2.5 w-48 rounded bg-muted/70" />
+                  <div className="h-9 w-full rounded-2xl bg-muted/50" />
+                </div>
+              </div>
             ))}
           </div>
         ) : error ? (
@@ -428,26 +497,32 @@ export function DiscoveryGridScreen() {
               },
             }}
             secondaryAction={{
-              label: "Clear filters",
+              label: query.trim() ? "Clear search" : "Clear filters",
               onClick: () => {
                 onIntentsChange([])
                 setQuery("")
                 setCategory("people")
+                setFiltersOpen(true)
               },
             }}
           />
         ) : (
-          <div className="mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col gap-2.5 pb-2">
+          <div
+            className="mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col gap-2.5 pb-2"
+            role="list"
+            aria-label="Discovery candidates"
+          >
             <div className="flex items-center justify-between gap-2 px-0.5">
-              <p className="text-[11px] font-medium text-muted-foreground">
-                {adapted.list.length} {category} · explainable — real sources only
+              <p className="text-[11px] font-medium text-muted-foreground" aria-live="polite">
+                {adapted.list.length} {category}
+                {query.trim() ? ` matching “${query.trim()}”` : " · explainable matches"}
               </p>
               <button
                 type="button"
                 className="text-[10px] font-medium text-primary"
                 onClick={() => setUseModernCard((v) => !v)}
               >
-                {useModernCard ? "Classic cards" : "Connection cards"}
+                {useModernCard ? "Photo cards" : "Connection cards"}
               </button>
             </div>
             {adapted.list.map((candidate) => {

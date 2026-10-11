@@ -24,7 +24,6 @@ import { SaveToCollectionSheet } from "./save-to-collection"
 import { MediaLightbox } from "./media-lightbox"
 import { PostInsightsSheet } from "./post-insights"
 import { PostSkeleton } from "./feed-components"
-import { EnhancedComment } from "./feed-enhancements"
 import { CommentSheet } from "./comment-sheet"
 import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
@@ -56,7 +55,6 @@ const FEED_FILTERS: {
   { value: "trending", label: "Trending", shortLabel: "Trending", icon: <TrendingUp size={14} />, hint: "What's rising now" },
 ]
 
-const COMMENT_EMOJIS = ["😀","😂","❤️","👍","🔥","🙏","😍","🎉"]
 
 interface EnhancedFeedScreenProps {
   onCompose?: () => void
@@ -90,8 +88,8 @@ function FeedSkeleton() {
 
 export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenProps) {
   const {
-    posts, profile, candidates, likePost, reactToPost, addComment, editComment, deleteComment,
-    addCommentReaction, removeCommentReaction, pinComment, addToast, followUser,
+    posts, profile, candidates, likePost, reactToPost,
+    addToast, followUser,
     blockUser, reportPost, reportContent, deletePost, following, friends,
     blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
     muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed,
@@ -131,10 +129,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>([])
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<Error | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [feedStatusMsg, setFeedStatusMsg] = useState<string | null>(null)
   const [showComposer, setShowComposer] = useState(false)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [composeMode, setComposeMode] = useState<"post" | "story">("post")
-  const [showCommentEmoji, setShowCommentEmoji] = useState(false)
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
   const [saveCollectionPostId, setSaveCollectionPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; caption?: string } | null>(null)
@@ -142,9 +141,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } = useScrollHeader({
     threshold: 40,
   })
-  const [commentText, setCommentText] = useState("")
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
-  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null)
   const [commentSort, setCommentSort] = useState<"newest" | "liked" | "pinned">("newest")
   const containerRef = useRef<HTMLDivElement>(null)
   const startYRef = useRef(0)
@@ -196,7 +192,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
 
     return () => observer.disconnect()
-  }, [isLoadingMore, displayedPostsCount, loadMorePosts])
+  }, [isLoadingMore, displayedPostsCount, loadMorePosts, rankedPosts.length])
 
   // Rank posts based on filter
   useEffect(() => {
@@ -216,7 +212,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       const feedContext = {
         userProfile: profile,
         userInterests: Array.isArray(profile?.interests) ? profile.interests : [],
-        recentlyEngagedPostIds: likedPosts,
+        recentlyEngagedPostIds: [...new Set([...bookmarkedPostIds, ...likedPosts])],
         blockedUserIds: blockedIds,
         followingIds: following || [],
         friendIds: friends || [],
@@ -279,27 +275,46 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     touchIdentifierRef.current = null
   }
 
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
   const handleRefresh = async () => {
     try {
       setIsRefreshing(true)
+      setFeedStatusMsg("Refreshing feed…")
       setFeedError(null)
       const result = await refreshFeed()
       if (!result.ok) {
         const err = new Error(result.error || "Failed to refresh feed")
         setFeedError(err)
+        setFeedStatusMsg("Refresh failed")
         addToast(result.error || "Failed to refresh. Try again.", "error")
         return
       }
       setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
       if (result.durable) {
         addToast("Feed refreshed", "success")
+        setFeedStatusMsg("Feed updated")
       } else {
         addToast("Showing local feed — server feed unavailable", "info")
+        setFeedStatusMsg("Showing local feed")
       }
+      window.setTimeout(() => setFeedStatusMsg(null), 2500)
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to refresh feed")
       console.error("[Refresh Error]", err)
       setFeedError(err)
+      setFeedStatusMsg("Refresh failed")
       addToast("Failed to refresh. Try again.", "error")
     } finally {
       setIsRefreshing(false)
@@ -389,36 +404,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const openComments = useCallback((postId: string) => {
     setCommentingPostId(postId)
-    setReplyingToCommentId(null)
-    setCommentText("")
   }, [])
-
-  const startReply = useCallback((commentId: string) => {
-    setReplyingToCommentId(commentId)
-    setCommentText("")
-  }, [])
-
-  const submitComment = useCallback(async () => {
-    const postId = commentingPostId
-    const text = (commentText ?? "").trim()
-    if (!postId || !text || isSubmittingComment || pendingCommentsRef.current.has(postId)) {
-      if (!text && postId) addToast("Comment cannot be empty", "error")
-      return
-    }
-    pendingCommentsRef.current.add(postId)
-    setIsSubmittingComment(true)
-    try {
-      await addComment(postId, text, replyingToCommentId || undefined)
-      setCommentText("")
-      setReplyingToCommentId(null)
-      // Toast is owned by addComment (success or error)
-    } catch {
-      addToast("Could not post comment", "error")
-    } finally {
-      pendingCommentsRef.current.delete(postId)
-      setIsSubmittingComment(false)
-    }
-  }, [addComment, addToast, commentingPostId, commentText, isSubmittingComment, replyingToCommentId])
 
   const handleShowVisibilityReason = useCallback((postId: string) => {
     setVisibilityReasonPostId(postId)
@@ -517,6 +503,19 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
               role="tablist"
               aria-label="Feed modes"
+              onKeyDown={(e) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
+                e.preventDefault()
+                const idx = FEED_FILTERS.findIndex((f) => f.value === activeFilter)
+                if (idx < 0) return
+                let next = idx
+                if (e.key === "ArrowRight") next = (idx + 1) % FEED_FILTERS.length
+                if (e.key === "ArrowLeft") next = (idx - 1 + FEED_FILTERS.length) % FEED_FILTERS.length
+                if (e.key === "Home") next = 0
+                if (e.key === "End") next = FEED_FILTERS.length - 1
+                setActiveFilter(FEED_FILTERS[next].value)
+                setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
+              }}
             >
               {FEED_FILTERS.map((filter) => {
                 const selected = activeFilter === filter.value
@@ -530,9 +529,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     }}
                     role="tab"
                     aria-selected={selected}
+                    tabIndex={selected ? 0 : -1}
                     aria-label={`${filter.label} feed — ${filter.hint}`}
                     title={filter.hint}
-                    className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all active:scale-[0.97] ${
+                    className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] ${
                       selected
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
@@ -551,6 +551,27 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       />
 
 
+      <div className="sr-only" role="status" aria-live="polite">
+        {feedStatusMsg || (isRefreshing ? "Refreshing feed" : "")}
+      </div>
+
+      {isOffline && (
+        <div
+          className="mx-3 mt-2 flex items-start gap-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-left shadow-sm dark:border-amber-900 dark:bg-amber-950/40"
+          role="status"
+        >
+          <span className="mt-0.5 text-amber-800 dark:text-amber-200" aria-hidden>
+            !
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold text-amber-950 dark:text-amber-100">You&apos;re offline</p>
+            <p className="text-[11px] leading-snug text-amber-900/90 dark:text-amber-200/90">
+              Showing what&apos;s already on this device. New posts load when you&apos;re back online.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Error state */}
       {feedError && (
         <div className="mx-3 mt-4 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 p-4 shadow-sm">
@@ -558,11 +579,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             <div className="mt-0.5 text-destructive" aria-hidden="true">⚠️</div>
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-semibold text-destructive">Couldn&apos;t load your feed</h3>
-              <p className="text-xs text-red-700 mt-1">{feedError.message || "Check your connection and try again."}</p>
+              <p className="mt-1 text-xs text-destructive/90">{feedError.message || "Check your connection and try again."}</p>
               <button
                 type="button"
                 onClick={() => { setFeedError(null); void handleRefresh() }}
-                className="mt-2 min-h-9 rounded-full px-3 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="mt-2 min-h-9 rounded-full border border-destructive/30 bg-card px-3 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
               >
                 Try again
               </button>
@@ -584,14 +605,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           onHeaderScroll(e)
           closeAllActionSheets()
         }}
-        role="main"
+        role="feed"
         aria-label={`${activeFilter} feed`}
-        aria-live="polite"
-        aria-busy={isLoadingMore}
+        aria-busy={isRefreshing || isLoadingMore}
         className="gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background px-1 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
-        <div className="space-y-4 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
+        <div className="space-y-3.5 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
           <HomeCommandCentre
             onCompose={() => {
               try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
@@ -639,7 +659,16 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
                       },
                     }
-                  : undefined
+                  : {
+                      label: "Create a post",
+                      onClick: () => {
+                        try {
+                          window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } }))
+                        } catch {
+                          setShowComposer(true)
+                        }
+                      },
+                    }
               }
             />
           ) : (
@@ -652,10 +681,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   isSaved={bookmarkedPostIds.includes(rankedPost.post.id)}
                   isOwnPost={isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile)}
                   onLike={(id) => {
-                    if (!perms.canLike(rankedPost.post.authorId)) {
-                      addToast("You can't like this post", "error")
-                      return
-                    }
+                    // Post-level likes deprecated for matching; keep handler for ranking legacy signals only
+                    if (!perms.canLike(rankedPost.post.authorId)) return
                     handleLike(id)
                   }}
                   onReact={(id, reaction) => {
@@ -735,6 +762,87 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           )}
 
           
+
+
+{/* Loading indicator */}
+          {isLoadingMore && (
+            <div className="space-y-4">
+              <PostSkeleton />
+              <PostSkeleton />
+            </div>
+          )}
+
+          {/* Infinite scroll trigger */}
+          {displayedPostsCount < rankedPosts.length && <div ref={observerTargetRef} className="h-10" />}
+
+          {/* End of feed */}
+          {displayedPostsCount < rankedPosts.length && rankedPosts.length > 0 && (
+            <div className="flex justify-center py-3">
+              <button
+                type="button"
+                disabled={isLoadingMore}
+                onClick={() => void loadMorePosts()}
+                className="min-h-10 rounded-full border border-border/70 bg-card px-5 text-xs font-bold text-foreground shadow-sm transition hover:bg-muted disabled:opacity-60"
+              >
+                {isLoadingMore ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
+
+          {displayedPostsCount >= rankedPosts.length && rankedPosts.length > 0 && (
+            <div
+              className="mx-1 rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-gradient-to-b from-emerald-50/70 to-background px-5 py-8 text-center dark:border-emerald-900/50 dark:from-emerald-950/30"
+              role="status"
+            >
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                <Users size={20} aria-hidden="true" />
+              </div>
+              <p className="text-sm font-bold text-foreground">You&apos;re all caught up</p>
+              <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+                Find people or share a moment.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTab?.("discover")}
+                  className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
+                >
+                  Find people
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                    } catch {
+                      setShowComposer(true)
+                    }
+                  }}
+                  className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "story" } }))
+                    } catch {
+                      setShowComposer(true)
+                    }
+                  }}
+                  className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95"
+                >
+                  Add story
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
+
       {sharePostId && (() => {
         const sp = posts.find((p) => p.id === sharePostId) || rankedPosts.find((r) => r.post.id === sharePostId)?.post
         if (!sp) return null
@@ -780,44 +888,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         )
       })()}
 
-{/* Loading indicator */}
-          {isLoadingMore && (
-            <div className="space-y-4">
-              <PostSkeleton />
-              <PostSkeleton />
-            </div>
-          )}
-
-          {/* Infinite scroll trigger */}
-          {displayedPostsCount < rankedPosts.length && <div ref={observerTargetRef} className="h-10" />}
-
-          {/* End of feed */}
-          {displayedPostsCount >= rankedPosts.length && rankedPosts.length > 0 && (
-  <div className="mx-1 rounded-2xl border border-dashed border-emerald-200 bg-gradient-to-b from-emerald-50/70 to-background px-5 py-8 text-center" role="status">
-  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><Users size={20} aria-hidden="true" /></div>
-  <p className="text-sm font-bold text-foreground">You&apos;re all caught up</p>
-  <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">Find people or share a moment.</p>
-  <div className="mt-4 flex flex-wrap justify-center gap-2">
-  <button type="button" onClick={() => { setTab?.("discover") }} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Find people</button>
-  <div className="flex flex-wrap justify-center gap-2">
-  <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { setShowComposer(true) } }} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95">Create</button>
-  <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "story" } })) } catch { setShowComposer(true) } }} className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95">Add story</button>
-  </div>
-  </div>
-  </div>
-          )}
-        </div>
-      </div>
-      )}
-
       <CommentSheet
         post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}
         open={Boolean(commentingPostId)}
         onClose={() => {
           setCommentingPostId(null)
-          setReplyingToCommentId(null)
-          setCommentText("")
-          setShowCommentEmoji(false)
         }}
       />
 
@@ -881,7 +956,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               </div>
               <div className="px-5 py-5">
                 <div className="flex items-center gap-4">
-                  <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-100" loading="lazy" decoding="async" />
+                  <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-emerald-100 dark:ring-emerald-900" loading="lazy" decoding="async" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-lg font-bold text-foreground">{name}</p>
                     <p className="text-xs text-muted-foreground">{candidate?.location || "GreenHaven member"}</p>
@@ -904,12 +979,12 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     setViewingAuthorId(null)
                     setTab("discover")
                   }}
-                  className="mt-3 w-full min-h-10 rounded-xl border border-stone-200 bg-stone-50 text-sm font-semibold text-stone-700"
+                  className="mt-3 min-h-10 w-full rounded-xl border border-border/70 bg-muted/40 text-sm font-semibold text-foreground"
                 >
                   Open in Find
                 </button>
-                <p className="mt-3 text-center text-[11px] text-stone-400">
-                  Follow, Connect, Match or Message — based on your relationship. Messaging respects privacy and blocks.
+                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  Like or pass for matching, or connect and message — based on your relationship. Blocks are always respected.
                 </p>
               </div>
             </div>

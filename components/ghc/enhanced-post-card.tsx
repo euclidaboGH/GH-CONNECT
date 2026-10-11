@@ -2,7 +2,6 @@
 
 import { memo, useState, useRef, useEffect } from "react"
 import {
-  Heart,
   MessageCircle,
   Share2,
   ThumbsUp,
@@ -43,10 +42,12 @@ const REACTIONS: PostReaction[] = [
 
 interface EnhancedPostCardProps {
   post: Post
-  isLiked: boolean
+  /** @deprecated Post likes are not used for matching; optional legacy signal */
+  isLiked?: boolean
   isSaved: boolean
   isOwnPost?: boolean
-  onLike: (postId: string, isDouble?: boolean) => void
+  /** @deprecated Prefer profile Like/Pass; optional legacy */
+  onLike?: (postId: string, isDouble?: boolean) => void
   onReact?: (postId: string, reaction: PostReaction["type"]) => void
   onComment: (postId: string) => void
   onShare: (postId: string) => void
@@ -70,7 +71,7 @@ interface EnhancedPostCardProps {
 
 function EnhancedPostCardInner({
   post,
-  isLiked,
+  isLiked = false,
   isSaved,
   isOwnPost = false,
   onLike,
@@ -203,41 +204,22 @@ function EnhancedPostCardInner({
     }
   }, [post.id])
 
-  // Double-tap to like
+  // Double-tap media → author profile (Like/Pass for matching live on profiles, not posts)
   const handleImageTap = () => {
     const now = Date.now()
     const timeSinceLastTap = now - lastTapTime
     setLastTapTime(now)
 
     if (timeSinceLastTap < 300 && tapCount > 0) {
-      // Double tap detected
-      if (!isLiked) {
-        onLike(post.id, true)
-        showDoubleTapAnimation()
-      }
       setTapCount(0)
+      if (!isOwn && post.authorId) {
+        onOpenProfile?.(post.authorId)
+      }
     } else {
       setTapCount(1)
       doubleTapTimerRef.current = setTimeout(() => {
         setTapCount(0)
       }, 300)
-    }
-  }
-
-  const showDoubleTapAnimation = () => {
-    // Visual feedback for double tap
-    if (containerRef.current) {
-      const el = document.createElement("div")
-      el.textContent = "❤️"
-      el.style.position = "fixed"
-      el.style.fontSize = "48px"
-      el.style.pointerEvents = "none"
-      el.style.animation = "float-up 0.8s ease-out forwards"
-      const rect = containerRef.current.getBoundingClientRect()
-      el.style.left = rect.left + rect.width / 2 - 24 + "px"
-      el.style.top = rect.top + rect.height / 2 - 24 + "px"
-      document.body.appendChild(el)
-      setTimeout(() => el.remove(), 800)
     }
   }
 
@@ -263,16 +245,14 @@ function EnhancedPostCardInner({
       }
     }
     setShowReactions(false)
+    // Heart-style "like" on content maps to upvote (quality), not profile interest
     if (reaction.type === "like") {
-      onLike(post.id)
+      void handleCuration("upvote")
       return
     }
     if (onReact) {
       onReact(post.id, reaction.type)
-      return
     }
-    // Fallback: treat non-like as like for backward compatibility
-    onLike(post.id)
   }
 
   // Media gallery navigation
@@ -319,19 +299,19 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)]"
+      role="article" aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)]"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pb-2.5 pt-3.5">
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <div className="flex flex-1 items-center gap-2.5">
           <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${post.authorName}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
               alt={post.authorName}
-              className="h-11 w-11 rounded-full object-cover bg-muted ring-1 ring-border/40"
+              className="h-11 w-11 rounded-full object-cover bg-muted ring-2 ring-background shadow-sm"
             />
-            {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" title="Online now" aria-label="Online now" />}
-            {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-blue-600 shadow-sm" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
+            {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
+            {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
           <div className="min-w-0 flex-1">
             <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{post.authorName}</button>
@@ -459,13 +439,13 @@ function EnhancedPostCardInner({
       {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl"><h2 className="text-lg font-bold text-foreground">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
 
       {/* Content with rich formatting */}
-      <div className="p-4">
+      <div className="px-4 pb-3 pt-1">
         {detectSpecialPost(post.content) ? (
           <SpecialPostBody content={post.content || ""} />
         ) : (
           <>
             <div
-              className={`mb-1 break-words text-[15px] sm:text-base leading-relaxed text-foreground ${
+              className={`mb-1 break-words text-[15px] leading-[1.55] tracking-[-0.011em] text-foreground sm:text-base ${
                 !contentExpanded && (post.content?.length || 0) > 220 ? "line-clamp-5" : ""
               }`}
             >
@@ -503,7 +483,7 @@ function EnhancedPostCardInner({
               <button
                 type="button"
                 onClick={() => setContentExpanded((v) => !v)}
-                className="mb-3 text-[13px] font-bold text-emerald-700 hover:text-emerald-800"
+                className="mb-3 text-[13px] font-bold text-[var(--gh-green)] hover:brightness-110"
               >
                 {contentExpanded ? "Show less" : "more"}
               </button>
@@ -517,7 +497,7 @@ function EnhancedPostCardInner({
             href={post.linkPreview.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mb-2 block overflow-hidden rounded-xl border border-border/60 transition hover:border-border"
+            className="mb-2 block overflow-hidden rounded-[1.15rem] border border-border/50 shadow-sm transition hover:border-border hover:shadow-[var(--gh-card-shadow)]"
           >
             <div className="flex gap-2 bg-muted/40 p-2 hover:bg-muted/60">
               {post.linkPreview.image && (
@@ -538,7 +518,7 @@ function EnhancedPostCardInner({
         {/* Media gallery with improved viewing */}
         {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
           <div
-            className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-xl sm:aspect-video bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 group cursor-pointer"
+            className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-[1.15rem] sm:aspect-video bg-muted/50 group cursor-pointer"
             onClick={handleImageTap}
             onMouseDown={handleLongPress}
             onMouseUp={handlePressEnd}
@@ -601,7 +581,7 @@ function EnhancedPostCardInner({
 
       {/* Engagement stats */}
       {post.engagement && (
-        <div className="px-3 py-2 bg-muted/40 border-t border-border/50 text-xs text-muted-foreground space-y-1">
+        <div className="space-y-1 border-t border-border/40 bg-muted/25 px-3.5 py-1.5 text-[11px] text-muted-foreground">
           <div className="flex justify-between">
             <span>{post.engagement.views} views</span>
             <span>{post.engagement.saves} saved</span>
@@ -611,16 +591,17 @@ function EnhancedPostCardInner({
 
       {/* Primary actions — curation · comments · save · share */}
       <div
-        className="flex items-center gap-1 border-t border-border/40 px-2.5 py-2"
+        className="flex items-center gap-1 border-t border-border/40 px-3 py-2.5"
         role="toolbar"
-        aria-label="Post actions"
+        aria-label="Content quality and post actions"
       >
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Upvote — improve quality ranking"
+          aria-label="Upvote content — improves quality ranking and reward eligibility"
           aria-pressed={curationChoice === "upvote"}
           onClick={() => void handleCuration("upvote")}
+          title="Upvote content quality. Server ranking and reward eligibility may improve — votes never mint GHC on the client."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "upvote"
               ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -633,9 +614,10 @@ function EnhancedPostCardInner({
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Downvote — lower quality ranking"
+          aria-label="Downvote content — lowers quality ranking and may reduce reward eligibility"
           aria-pressed={curationChoice === "downvote"}
           onClick={() => void handleCuration("downvote")}
+          title="Downvote weak content. Quality ranking and reward eligibility may fall — never client-minted penalties."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "downvote"
               ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
@@ -697,37 +679,22 @@ function EnhancedPostCardInner({
         downvoteCount={downvoteCount}
       />
 
-      {/* Secondary: reactions + quality status (not currency) */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/40 px-3 py-1.5">
-        <button
-          type="button"
-          onClick={() => onLike(post.id)}
-          className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition active:scale-95 ${
-            isLiked
-              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-              : "text-muted-foreground hover:bg-muted"
-          }`}
-          aria-label={isLiked ? "Unlike" : "Like"}
-          aria-pressed={isLiked}
-        >
-          <Heart size={15} fill={isLiked ? "currentColor" : "none"} aria-hidden />
-          <span className="tabular-nums">
-            {Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) + (isLiked ? 1 : 0))}
-          </span>
-        </button>
-        {judgmentLabel && (
-          <p className="truncate text-[10px] font-medium text-muted-foreground" title={judgmentLabel}>
-            {judgmentLabel}
-          </p>
-        )}
+      {/* Content quality strip — no profile-style like; matching lives on profiles */}
+      <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3.5 py-1.5">
+        <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
+          {judgmentLabel
+            ? judgmentLabel
+            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
+        </p>
         <span
-          className={`text-[10px] font-bold tabular-nums ${
+          className={`shrink-0 text-[10px] font-bold tabular-nums ${
             netJudgment > 0
               ? "text-emerald-700"
               : netJudgment < 0
                 ? "text-rose-600"
                 : "text-muted-foreground"
           }`}
+          title="Net content quality (upvotes minus downvotes)"
         >
           Net {netJudgment > 0 ? "+" : ""}
           {netJudgment}

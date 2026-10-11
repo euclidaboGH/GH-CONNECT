@@ -58,14 +58,23 @@ Apply policy:
   - PROPOSAL → do NOT apply without explicit approval
 
 Staging order (REQUIRED groups, oldest first):
-1) Economy / ledger / accounts / payment intents / membership
-2) Pi identities + sessions + profiles
-3) Messaging durable
-4) Marketplace listings + orders
-5) Social core + communities + polls + ACL lockdown
-6) Phase 1–13 social/economy (20260926 → 20261005b)
+1) Economy / ledger / claims / membership / Pi intents (20260821 → 20260905 governor)
+2) Pi identities + sessions + WebAuthn (20260908*)
+3) Wallet snapshot + marketplace (20260911 → 20260912)
+4) Verification + messaging + profiles (20260914 → 20260919)
+5) Stage pending + ACL + communities + social core + polls (20260922 → 20260925)
+6) Withdrawal + reactions + attention + curation + reputation + ads + creator (20260926 → 20260930)
+7) Media / follow / notifications / search / shares / messaging prefs / archive (20261001 → 20261008)
+8) Balance lock / spendable / withdrawal settle / activity stage (20261009 → 20261012)
+9) GHPV judgment → weight → calibration → settlement infra (20261013 → 20261020)
+10) Notification types + content rewards tables (20261021 → 20261022)
 
-There are no Phase 14/15 migrations in this repository.
+GHPV settlement is system-only; votes must not mint GHC.
+There are no Phase 15 product migrations in this repository.
+Phase 14 is hardening/verification (docs), not a new migration wave.
+
+Full inventory: docs/MIGRATION_CHECKLIST.md
+Gap report: docs/MIGRATION_GAP_REPORT.md
 
 Verify after apply (SQL):
   select to_regclass('public.gh_pi_identities');

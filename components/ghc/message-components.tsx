@@ -6,7 +6,7 @@ import type { Conversation } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 // Import for re-export: enhanced group message component available
-// Use EnhancedGroupMessage from '@/components/ghc/enhanced-group-message' for group chats
+// Group chats use MessageScreen threads (conversationType/group). EnhancedGroupMessage is deprecated.
 // This file preserves private message components and maintains separation of concerns
 
 // Empty state when no conversations exist
@@ -112,8 +112,8 @@ export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQ
           className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {searchQuery && (
-          <button onClick={() => onSearchChange("")} className="absolute right-3 text-muted-foreground hover:text-foreground active:scale-90 transition">
-            <X size={16} />
+          <button type="button" onClick={() => onSearchChange("")} className="absolute right-3 text-muted-foreground hover:text-foreground active:scale-90 transition" aria-label="Clear search">
+            <X size={16} aria-hidden />
           </button>
         )}
       </div>
@@ -245,7 +245,7 @@ function ConversationItemBase({
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   ) : (
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-600" aria-label="Unread" />
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--gh-green)]" aria-label="Unread" />
                   )
                 )}
               </div>
@@ -327,11 +327,14 @@ export function MessageInput({
       <div className="flex min-w-0 items-end gap-2">
         {/* Emoji button */}
         <button
+          type="button"
           onClick={toggleEmojiPicker}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition hover:bg-muted/80 active:scale-90"
           title="Add emoji"
+          aria-label="Add emoji"
+          disabled={disabled}
         >
-          <Smile size={20} />
+          <Smile size={20} aria-hidden />
         </button>
 
         {/* Message input */}
@@ -339,33 +342,40 @@ export function MessageInput({
           value={messageText}
           onChange={(e) => onMessageChange(e.target.value)}
           onKeyDown={handleKeyPress}
-          placeholder="Type a message…"
-          className="min-h-11 min-w-0 max-h-[120px] flex-1 resize-none rounded-2xl border border-border bg-muted px-3 py-2.5 text-[15px] leading-[1.45] transition focus:border-emerald-400 focus:bg-card focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
+          disabled={disabled}
+          aria-label="Message text"
+          className="min-h-11 min-w-0 max-h-[120px] flex-1 resize-none rounded-2xl border border-border bg-muted px-3 py-2.5 text-[15px] leading-[1.45] transition focus:border-[var(--gh-green)] focus:bg-card focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
           rows={1}
           style={{ minHeight: "44px", maxHeight: "120px" }}
         />
 
         {/* Attachment button */}
         <button
+          type="button"
           onClick={onAttachmentClick}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition hover:bg-muted/80 active:scale-90"
           title="Attach file"
+          aria-label="Attach file"
+          disabled={disabled}
         >
-          <Paperclip size={20} />
+          <Paperclip size={20} aria-hidden />
         </button>
 
         {/* Send button */}
         <button
+          type="button"
           onClick={onSendMessage}
           disabled={!messageText.trim() || disabled}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-90 disabled:bg-muted disabled:text-muted-foreground"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--gh-green)] text-white transition hover:brightness-110 active:scale-90 disabled:bg-muted disabled:text-muted-foreground"
           title="Send message"
+          aria-label="Send message"
         >
-          <Send size={20} />
+          <Send size={20} aria-hidden />
         </button>
       </div>
 
-      <p className="mt-1.5 text-[10px] text-muted-foreground">Enter to send</p>
+      <p className="mt-1.5 text-[10px] text-muted-foreground">{disabled ? "Sending is paused until you are back online or the connection recovers." : "Enter to send · Shift+Enter for new line"}</p>
     </div>
   )
 }
@@ -758,7 +768,12 @@ export function ChatHeader({
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
       <div className="flex min-w-0 items-center gap-3">
-        <button type="button" onClick={onBack} className="shrink-0 text-sm font-semibold text-muted-foreground" aria-label="Back">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-muted-foreground transition hover:bg-muted active:scale-95"
+          aria-label="Back to inbox"
+        >
           ←
         </button>
         <button

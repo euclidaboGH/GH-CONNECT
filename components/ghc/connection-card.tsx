@@ -128,9 +128,20 @@ export function ConnectionCard({
             disabled={busy || connectionState === "blocked"}
             onClick={() => onAction?.(action, candidate)}
             className={
-              action === "connect" || action === "accept"
+              action === "connect" || action === "accept" || action === "like"
                 ? "rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground disabled:opacity-50"
-                : "rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground disabled:opacity-50"
+                : action === "pass"
+                  ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
+                  : "rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground disabled:opacity-50"
+            }
+            title={
+              action === "like"
+                ? "Like for matching — mutual interest is an opportunity, not auto-connect"
+                : action === "pass"
+                  ? "Pass — not interested for matching"
+                  : action === "connect"
+                    ? "Send a connection request"
+                    : undefined
             }
           >
             {labelForAction(action)}
@@ -157,6 +168,10 @@ function labelForAction(action: ConnectionCardAction): string {
       return "Invite"
     case "save":
       return "Save"
+    case "like":
+      return "Like"
+    case "pass":
+      return "Pass"
     default:
       return action
   }
