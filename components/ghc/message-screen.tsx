@@ -605,6 +605,7 @@ export function MessageScreen() {
             />
           )
         ) : (
+          <>
           <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
             {list.length} conversation{list.length === 1 ? "" : "s"}
             {queryDebounced.trim() ? " matching search" : ""}
@@ -635,6 +636,7 @@ export function MessageScreen() {
               </li>
             ))}
           </ul>
+          </>
         )}
       </div>
     </div>
