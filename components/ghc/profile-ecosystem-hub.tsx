@@ -144,7 +144,7 @@ export function ProfileEcosystemHub({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [uid])
 
   const xp = (() => {
     try {

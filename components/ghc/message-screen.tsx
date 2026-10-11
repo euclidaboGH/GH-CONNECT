@@ -606,36 +606,36 @@ export function MessageScreen() {
           )
         ) : (
           <>
-          <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
-            {list.length} conversation{list.length === 1 ? "" : "s"}
-            {queryDebounced.trim() ? " matching search" : ""}
-          </p>
-          <ul className="contain-content" role="list" aria-label="Conversations">
-            {list.map((c) => (
-              <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
-                <ConversationItem
-                  conversation={c}
-                  isSelected={false}
-                  onClick={() => openThread(c.id)}
-                  onPin={ghc.pinConversation}
-                  onArchive={ghc.archiveConversation}
-                  onMute={ghc.muteConversation}
-                  onOpenProfile={() => {
-                    if (isCommunityConversation(c)) return
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent("ghc:open-profile", {
-                          detail: { userId: c.participantId, name: c.participantName },
-                        }),
-                      )
-                    } catch {
-                      /* */
-                    }
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+            <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+              {list.length} conversation{list.length === 1 ? "" : "s"}
+              {queryDebounced.trim() ? " matching search" : ""}
+            </p>
+            <ul className="contain-content" role="list" aria-label="Conversations">
+              {list.map((c) => (
+                <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
+                  <ConversationItem
+                    conversation={c}
+                    isSelected={false}
+                    onClick={() => openThread(c.id)}
+                    onPin={ghc.pinConversation}
+                    onArchive={ghc.archiveConversation}
+                    onMute={ghc.muteConversation}
+                    onOpenProfile={() => {
+                      if (isCommunityConversation(c)) return
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent("ghc:open-profile", {
+                            detail: { userId: c.participantId, name: c.participantName },
+                          }),
+                        )
+                      } catch {
+                        /* */
+                      }
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
           </>
         )}
       </div>

@@ -272,7 +272,7 @@ export function NotificationBell({
         e.preventDefault()
         setOpen(false)
         try {
-          dispatchCloseTransientUI({ reason: "notification-escape" })
+          dispatchCloseTransientUI({ reason: "escape" })
         } catch {
           /* */
         }

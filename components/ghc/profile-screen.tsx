@@ -54,7 +54,7 @@ export function ProfileScreen({
     addToast?: (m: string, t?: "success" | "error" | "info") => void
   }
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
-  const p = ghc.profile || ({} as Profile)
+  const p = useMemo(() => ghc.profile || ({} as Profile), [ghc.profile])
   const name = p.displayName || "Member"
   const photos = useMemo(() => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []), [p.photos])
   const photo = photos[0] || ""
