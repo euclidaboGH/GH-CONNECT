@@ -68,6 +68,11 @@ export function ProfileScreen({
   )
   const showMediaTab = mediaPosts.length > 0
 
+  const [editOpen, setEditOpen] = useState(false)
+  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+
   useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setIsOffline(!navigator.onLine)
@@ -96,11 +101,6 @@ export function ProfileScreen({
       setProfileActivityTab("posts")
     }
   }, [profileActivityTab, showMediaTab])
-
-  const [editOpen, setEditOpen] = useState(false)
-  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
-  const [isOffline, setIsOffline] = useState(false)
-  const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const initials = useMemo(() => {
     const parts = String(name).trim().split(/\s+/).filter(Boolean)
