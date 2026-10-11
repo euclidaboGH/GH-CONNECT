@@ -14,6 +14,7 @@
  * No economics / payment changes.
  */
 
+import { randomUUID } from "node:crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
 export type PiIdentityRecord = {
@@ -58,8 +59,14 @@ function isProductionRuntime(): boolean {
   )
 }
 
-function newGhUserId(piAppUid: string): string {
-  return String(piAppUid).trim()
+/**
+ * Allocate an internal GH identity independently from the external Pi UID.
+ * The verified Pi UID remains the unique lookup key; this UUID is stable only
+ * while its mapping row exists. If an operator deliberately removes that row,
+ * the next verified sign-in creates a new GH identity.
+ */
+function newGhUserId(_piAppUid: string): string {
+  return randomUUID()
 }
 
 function memoryGetByPi(piAppUid: string): PiIdentityRecord | null {
@@ -280,8 +287,7 @@ export async function getByGhUserId(ghUserId: string): Promise<PiIdentityRecord 
  *
  * Conflict: if gh_user_id uniqueness would be violated by a different pi_app_uid
  * mapping to the same gh id with mismatched data — we do not auto-merge; we
- * keep pi_app_uid as primary key (new row) and log. Current scheme uses
- * ghUserId === piAppUid on create so conflict is rare.
+ * keep pi_app_uid as primary key (new row) and log. Internal GH IDs are random UUIDs.
  */
 export async function findOrCreateFromVerifiedPi(input: {
   piAppUid: string

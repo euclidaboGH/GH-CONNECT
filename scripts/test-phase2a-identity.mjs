@@ -74,7 +74,7 @@ function findOrCreate(piAppUid, piUsername) {
   }
   const rec = {
     piAppUid,
-    ghUserId: piAppUid,
+    ghUserId: `gh-${Math.random().toString(16).slice(2)}-${Date.now()}`,
     piUsername: piUsername || null,
     onboardingCompleted: false,
   }
@@ -96,6 +96,7 @@ function markOnboarded(ghUserId) {
 let r1 = findOrCreate("uid-new-1", "alice")
 assert(r1.isNew === true, "new Pi identity isNew")
 assert(r1.record.onboardingCompleted === false, "new identity needs onboarding")
+assert(r1.record.ghUserId !== "uid-new-1", "internal GH user ID is independent of Pi UID")
 
 // 2. Existing identity
 let r2 = findOrCreate("uid-new-1", "alice")
@@ -103,9 +104,9 @@ assert(r2.isNew === false, "existing Pi identity not new")
 assert(r2.record.onboardingCompleted === false, "still not onboarded")
 
 // 3. Onboarding completion + idempotent
-let m1 = markOnboarded("uid-new-1")
+let m1 = markOnboarded(r1.record.ghUserId)
 assert(m1 && m1.onboardingCompleted === true, "onboarding complete")
-let m2 = markOnboarded("uid-new-1")
+let m2 = markOnboarded(r1.record.ghUserId)
 assert(m2 && m2.onboardingCompleted === true, "idempotent onboarding complete")
 
 // 4. Returning after "restart" (memory still has data — simulates durable when DB present)
@@ -116,7 +117,7 @@ assert(r3.isNew === false && r3.record.onboardingCompleted === true, "returning 
 byPi.clear()
 byGh.clear()
 let r4 = findOrCreate("uid-new-1", "alice")
-assert(r4.isNew === true && r4.record.onboardingCompleted === false, "memory-only loses mapping on restart (why durable DB is required)")
+assert(r4.isNew === true && r4.record.onboardingCompleted === false && r4.record.ghUserId !== r1.record.ghUserId, "missing mapping creates a fresh internal GH identity")
 
 // 6. Identity uniqueness
 findOrCreate("uid-a", "a")
