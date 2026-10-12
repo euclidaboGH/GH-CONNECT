@@ -515,6 +515,9 @@ export function ProfileScreen({
         ) : null}
 
         <div className="mt-4 w-full px-4">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            GreenHaven ecosystem
+          </p>
           <ProfileEcosystemHub
             userId={meId}
             displayName={name}

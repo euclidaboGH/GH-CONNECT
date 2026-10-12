@@ -155,10 +155,16 @@ export function ProfileMoreNav({
         <NavGrid items={personal} />
       </div>
 
-      <div className="gh-surface-muted rounded-xl border border-emerald-200/40 p-3 dark:border-emerald-900/30">
-        <p className="mb-2 px-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-          Marketplace & Ecosystem
-        </p>
+      <div
+        className="gh-surface-muted rounded-xl border border-emerald-200/50 p-3 dark:border-emerald-900/40"
+        aria-label="Marketplace and GreenHaven ecosystem"
+      >
+        <div className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+            Marketplace &amp; Ecosystem
+          </p>
+          <p className="text-[9px] font-medium text-muted-foreground">Always visible</p>
+        </div>
         <NavGrid items={services} />
       </div>
 

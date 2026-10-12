@@ -1,12 +1,11 @@
 "use client"
 
-import { navigateTo } from "@/lib/navigation/navigate"
-
 /**
- * Profile ecosystem hub — Identity → Membership → Wallet → Rewards
- * Display-only summaries. Balances from existing APIs; never invent GHC.
+ * Profile ecosystem hub — Identity · Membership · Wallet · Rewards · Market · Ecosystem
+ * Display-only summaries from existing APIs. Never invent GHC balances or entitlements.
  */
-import { useEffect, useState } from "react"
+
+import { useCallback, useEffect, useState } from "react"
 import {
   BadgeCheck,
   ChevronRight,
@@ -16,6 +15,7 @@ import {
   Wallet,
   ShoppingBag,
   LayoutGrid,
+  RefreshCw,
 } from "lucide-react"
 import {
   formatGreenHavenIdDisplay,
@@ -23,16 +23,19 @@ import {
 } from "@/lib/domains/greenhaven-id"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { getUserXp, xpProgress } from "@/lib/domains/reward-level-domain"
+import { navigateTo } from "@/lib/navigation/navigate"
 
 type MembershipSummary = {
   tier: "free" | "vip" | "vvip"
   active: boolean
   expiresAt?: number
+  loaded: boolean
 }
 
 type WalletSummary = {
   balance: number | null
   durable: boolean
+  loaded: boolean
 }
 
 function formatGhc(n: number | null): string {
@@ -76,79 +79,117 @@ export function ProfileEcosystemHub({
   const [membership, setMembership] = useState<MembershipSummary>({
     tier: "free",
     active: true,
+    loaded: false,
   })
-  const [wallet, setWallet] = useState<WalletSummary>({ balance: null, durable: false })
+  const [wallet, setWallet] = useState<WalletSummary>({
+    balance: null,
+    durable: false,
+    loaded: false,
+  })
+  const [isOffline, setIsOffline] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch("/api/membership/status", {
-          credentials: "include",
-          cache: "no-store",
-          headers: IdentityService.getAuthHeaders?.() || {},
-        })
-        if (!res.ok || cancelled) return
-        const data = await res.json().catch(() => ({}))
-        const e = data?.entitlement as Record<string, unknown> | undefined
-        if (!e || cancelled) return
-        const raw = String(e.tier || "free").toLowerCase()
-        const tier: MembershipSummary["tier"] =
-          raw === "vip" || raw === "vvip" ? raw : "free"
-        setMembership({
-          tier,
-          active: e.active !== false,
-          expiresAt:
-            e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
-              ? Number(e.expiresAt)
-              : undefined,
-        })
-      } catch {
-        /* keep free default */
+  const loadMembership = useCallback(async () => {
+    try {
+      const res = await fetch("/api/membership/status", {
+        credentials: "include",
+        cache: "no-store",
+        headers: IdentityService.getAuthHeaders?.() || {},
+      })
+      if (!res.ok) {
+        setMembership((m) => ({ ...m, loaded: true }))
+        return
       }
-    })()
-    return () => {
-      cancelled = true
+      const data = await res.json().catch(() => ({}))
+      const e = data?.entitlement as Record<string, unknown> | undefined
+      if (!e) {
+        setMembership((m) => ({ ...m, loaded: true }))
+        return
+      }
+      const raw = String(e.tier || "free").toLowerCase()
+      const tier: MembershipSummary["tier"] =
+        raw === "vip" || raw === "vvip" ? raw : "free"
+      setMembership({
+        tier,
+        active: e.active !== false,
+        expiresAt:
+          e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
+            ? Number(e.expiresAt)
+            : undefined,
+        loaded: true,
+      })
+    } catch {
+      setMembership((m) => ({ ...m, loaded: true }))
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/economy/wallet/${encodeURIComponent(uid)}`, {
-          credentials: "include",
-          cache: "no-store",
-          headers: IdentityService.getAuthHeaders?.() || {},
-        })
-        if (cancelled) return
-        if (!res.ok) {
-          setWallet({ balance: null, durable: false })
-          return
-        }
-        const data = await res.json().catch(() => ({}))
-        const bal =
-          typeof data?.balance === "number"
-            ? data.balance
-            : typeof data?.wallet?.balance === "number"
-              ? data.wallet.balance
-              : typeof data?.available === "number"
-                ? data.available
-                : null
-        if (!cancelled) {
-          setWallet({
-            balance: bal,
-            durable: data?.ok === true || data?.durable === true,
-          })
-        }
-      } catch {
-        if (!cancelled) setWallet({ balance: null, durable: false })
+  const loadWallet = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/economy/wallet/${encodeURIComponent(uid)}`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: IdentityService.getAuthHeaders?.() || {},
+      })
+      if (!res.ok) {
+        setWallet({ balance: null, durable: false, loaded: true })
+        return
       }
-    })()
-    return () => {
-      cancelled = true
+      const data = await res.json().catch(() => ({}))
+      const bal =
+        typeof data?.balance === "number"
+          ? data.balance
+          : typeof data?.wallet?.balance === "number"
+            ? data.wallet.balance
+            : typeof data?.available === "number"
+              ? data.available
+              : null
+      setWallet({
+        balance: bal,
+        durable: data?.ok === true || data?.durable === true,
+        loaded: true,
+      })
+    } catch {
+      setWallet({ balance: null, durable: false, loaded: true })
     }
   }, [uid])
+
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([loadMembership(), loadWallet()])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [loadMembership, loadWallet])
+
+  useEffect(() => {
+    void refreshAll()
+  }, [refreshAll])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    const onOnline = () => {
+      sync()
+      void refreshAll()
+    }
+    window.addEventListener("online", onOnline)
+    window.addEventListener("offline", sync)
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshAll()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    window.addEventListener("ghc:membership-refresh", refreshAll)
+    window.addEventListener("ghc:pi-payment-complete", refreshAll)
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("offline", sync)
+      document.removeEventListener("visibilitychange", onVis)
+      window.removeEventListener("ghc:membership-refresh", refreshAll)
+      window.removeEventListener("ghc:pi-payment-complete", refreshAll)
+    }
+  }, [refreshAll])
 
   const xp = (() => {
     try {
@@ -167,20 +208,53 @@ export function ProfileEcosystemHub({
     membership.tier === "vvip" ? "VVIP" : membership.tier === "vip" ? "VIP" : "Free"
   const expiry = formatExpiry(membership.expiresAt)
 
+  const openWallet = () => {
+    if (onOpenWallet) onOpenWallet()
+    else navigateTo("wallet")
+  }
+  const openMembership = () => {
+    if (onOpenMembership) onOpenMembership()
+    else navigateTo("membership")
+  }
+  const openRewards = () => {
+    if (onOpenRewards) onOpenRewards()
+    else navigateTo("rewards")
+  }
+
   return (
-    <div className="space-y-3" aria-label="GreenHaven ecosystem">
+    <div className="space-y-3" aria-label="GreenHaven ecosystem on profile">
+      {isOffline ? (
+        <p
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
+          role="status"
+        >
+          You are offline — showing the last known membership and wallet values.
+        </p>
+      ) : null}
+
       {/* Identity */}
       <section className="rounded-[1.25rem] border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          Identity
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Identity
+          </p>
+          <button
+            type="button"
+            onClick={() => void refreshAll()}
+            disabled={refreshing}
+            className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+            aria-label="Refresh ecosystem summaries"
+          >
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} aria-hidden />
+          </button>
+        </div>
         <div className="mt-2.5 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">
               <BadgeCheck size={16} className="shrink-0 text-sky-600" aria-hidden />
               GreenHaven ID
             </p>
-            <p className="mt-1 font-mono text-[13px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">
+            <p className="mt-1 break-all font-mono text-[13px] font-bold tracking-wide text-emerald-800 dark:text-emerald-300">
               {ghId}
             </p>
             {displayName ? (
@@ -200,12 +274,16 @@ export function ProfileEcosystemHub({
         </div>
       </section>
 
-      {/* Membership · Wallet · Rewards — real data only */}
+      <p className="px-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        Your services
+      </p>
+
+      {/* Membership · Wallet · Rewards */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <button
           type="button"
-          onClick={onOpenMembership}
-          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-violet-200 hover:shadow-md active:scale-[0.99] dark:hover:border-violet-800"
+          onClick={openMembership}
+          className="flex min-h-[108px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-violet-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 active:scale-[0.99] dark:hover:border-violet-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-50 ring-1 ring-violet-100 dark:bg-violet-950/40 dark:ring-violet-900/40">
@@ -213,15 +291,19 @@ export function ProfileEcosystemHub({
             </span>
             Membership
           </span>
-          <span className="mt-2 text-lg font-bold text-foreground">{tierLabel}</span>
+          <span className="mt-2 text-lg font-bold text-foreground">
+            {membership.loaded ? tierLabel : "…"}
+          </span>
           <span className="mt-0.5 text-[11px] text-muted-foreground">
-            {membership.tier === "free"
-              ? "Free plan"
-              : membership.active
-                ? expiry
-                  ? `Active until ${expiry}`
-                  : "Active"
-                : "Inactive"}
+            {!membership.loaded
+              ? "Loading…"
+              : membership.tier === "free"
+                ? "Free plan"
+                : membership.active
+                  ? expiry
+                    ? `Active until ${expiry}`
+                    : "Active"
+                  : "Inactive"}
           </span>
           <span className="mt-auto flex items-center gap-0.5 pt-2 text-[11px] font-bold text-violet-700 dark:text-violet-300">
             View membership
@@ -231,8 +313,8 @@ export function ProfileEcosystemHub({
 
         <button
           type="button"
-          onClick={onOpenWallet}
-          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md active:scale-[0.99] dark:hover:border-emerald-800"
+          onClick={openWallet}
+          className="flex min-h-[108px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 active:scale-[0.99] dark:hover:border-emerald-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
@@ -241,11 +323,15 @@ export function ProfileEcosystemHub({
             GHC Wallet
           </span>
           <span className="mt-2 text-lg font-bold tabular-nums text-foreground">
-            {formatGhc(wallet.balance)}{" "}
+            {wallet.loaded ? formatGhc(wallet.balance) : "…"}{" "}
             <span className="text-sm font-semibold text-muted-foreground">GHC</span>
           </span>
           <span className="mt-0.5 text-[11px] text-muted-foreground">
-            {wallet.durable ? "Ledger balance" : "Open wallet for full ledger"}
+            {!wallet.loaded
+              ? "Loading…"
+              : wallet.durable
+                ? "Ledger balance"
+                : "Open wallet for full ledger"}
           </span>
           <span className="mt-auto flex items-center gap-0.5 pt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
             Open wallet
@@ -255,8 +341,8 @@ export function ProfileEcosystemHub({
 
         <button
           type="button"
-          onClick={onOpenRewards}
-          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-amber-200 hover:shadow-md active:scale-[0.99] dark:hover:border-amber-800"
+          onClick={openRewards}
+          className="flex min-h-[108px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-amber-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-[0.99] dark:hover:border-amber-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">
@@ -278,30 +364,40 @@ export function ProfileEcosystemHub({
         </button>
       </div>
 
+      <p className="px-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        Marketplace &amp; ecosystem
+      </p>
+
       <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
           onClick={() => navigateTo("marketplace")}
-          className="flex min-h-[72px] flex-col rounded-[1.25rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-card p-3.5 text-left shadow-sm transition hover:border-emerald-300 active:scale-[0.99] dark:border-emerald-900 dark:from-emerald-950/30"
+          className="flex min-h-[80px] flex-col rounded-[1.25rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-card p-3.5 text-left shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 active:scale-[0.99] dark:border-emerald-900 dark:from-emerald-950/30"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
             <ShoppingBag size={14} aria-hidden />
             Marketplace
           </span>
           <span className="mt-1 text-[12px] text-muted-foreground">Buy · sell · listings</span>
-          <span className="mt-auto pt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open →</span>
+          <span className="mt-auto flex items-center gap-0.5 pt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+            Open
+            <ChevronRight size={14} aria-hidden />
+          </span>
         </button>
         <button
           type="button"
           onClick={() => navigateTo("ecosystem")}
-          className="flex min-h-[72px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-sm transition hover:bg-muted/40 active:scale-[0.99]"
+          className="flex min-h-[80px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 active:scale-[0.99]"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
             <LayoutGrid size={14} aria-hidden />
             Full ecosystem
           </span>
           <span className="mt-1 text-[12px] text-muted-foreground">All GreenHaven services</span>
-          <span className="mt-auto pt-2 text-[11px] font-bold text-foreground">Explore →</span>
+          <span className="mt-auto flex items-center gap-0.5 pt-2 text-[11px] font-bold text-foreground">
+            Explore
+            <ChevronRight size={14} aria-hidden />
+          </span>
         </button>
       </div>
     </div>
