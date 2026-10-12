@@ -6,6 +6,8 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { awardProgressionXp } from "@/lib/server/progression/award"
+import { qualifyGrowthReferral } from "@/lib/server/growth/referrals"
 import {
   getServerProfile,
   upsertServerProfile,
@@ -89,6 +91,20 @@ export async function PATCH(request: Request) {
         },
         { status: 503, headers: { "Cache-Control": "no-store" } }
       )
+    }
+
+    // Award a one-time non-financial milestone only after a durable profile write.
+    // XP does not grant GHC, membership, or reputation privileges.
+    if (saved.onboarded && saved.displayName && saved.bio && saved.bio.length >= 20 && saved.interests.length >= 3) {
+      await awardProgressionXp({
+        userId: auth.userId,
+        eventType: "profile_completed",
+        xp: 25,
+        idempotencyKey: `profile-completed:${auth.userId}`,
+        sourceRef: `profile:${auth.userId}`,
+        metadata: { rulesVersion: "progression-v1" },
+      })
+      await qualifyGrowthReferral({ referredUserId: auth.userId, event: "profile_verified", evidenceRef: `profile:${auth.userId}` })
     }
 
     return NextResponse.json(

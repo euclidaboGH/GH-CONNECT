@@ -1,9 +1,9 @@
 # GreenHaven — Migration Checklist (authoritative inventory)
 
-**Generated:** 2026-10-09T20:54:04Z  
+**Generated:** 2026-10-11T18:15:00Z  
 **Canonical path:** `supabase/migrations/*.sql`  
-**On-disk count:** **70**  
-**Classification:** REQUIRED **67** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
+**On-disk count:** **72**  
+**Classification:** REQUIRED **69** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
 
 This document is the **source inventory**. It does **not** mean migrations are applied to Testnet or Production.
 
@@ -33,6 +33,8 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 8. **Balance lock / spendable / withdrawal settle / activity stage** (20261009 → 20261012)
 9. **GHPV judgment → weight → calibration → settlement infra → soft-delete** (20261013 → 20261020)
 10. **Notification types extend + content rewards tables** (20261021 → 20261022)
+11. **Durable curation preferences** (20261023) — preference controls, server feed ordering and transactional outbox event.
+12. **Global ecosystem hardening** (20261024) — new outbox, referral/progression/trust, ranking telemetry, reward appeals, atomic marketplace settlement and moderation; review against Testnet schema before apply
 
 **Notes on groups 8–10:**
 
@@ -116,6 +118,8 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 | 68 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
 | 69 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
 | 70 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
+| 71 | `20261023_gh_post_curation_feedback.sql` | REQUIRED | Durable curation preferences and transactional outbox; repository-only until verified. |
+| 72 | `20261024_gh_global_ecosystem_hardening.sql` | REQUIRED | New source migration only; not applied. Requires review of ledger, Pi intent, social, and marketplace schemas before Testnet. Pi refunds and referral payouts remain disabled. |
 
 ---
 

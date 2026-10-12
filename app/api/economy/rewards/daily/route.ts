@@ -7,7 +7,11 @@
  * Client amounts are ignored. Double-submit returns existing success (idempotent).
  */
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { computeDailyClaim } from "@/lib/server/economy/claim-engine"
+import {
+  computeDailyClaim,
+  loadClaimStreakState,
+  lagosDayKey,
+} from "@/lib/server/economy/claim-engine"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 import { rpcExecuteDailyClaimV12 } from "@/lib/server/economy/db"
 import {
@@ -35,6 +39,53 @@ import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+/**
+ * GET /api/economy/rewards/daily
+ * Read-only claim status for today (Africa/Lagos). Does not mint GHC or advance streak.
+ */
+export async function GET(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  pruneRateLimitBuckets()
+  const rl = checkRateLimit(`daily_status:${auth.userId}`, 30, 60_000)
+  if (!rl.ok) {
+    return jsonErr("RATE_LIMITED", `Too many status reads; retry in ${rl.retryAfterSec}s`, 429)
+  }
+
+  if (!isDatabaseConfigured() && !allowMemoryServer()) {
+    return jsonErr(
+      "SERVER_UNAVAILABLE",
+      "Daily claim status requires durable economy configuration.",
+      503
+    )
+  }
+
+  try {
+    const state = await loadClaimStreakState(auth.userId)
+    const today = lagosDayKey()
+    const alreadyClaimed = state.lastClaimDayKey === today
+    return jsonOk({
+      alreadyClaimed,
+      canClaimToday: !alreadyClaimed,
+      dayKey: today,
+      lastClaimDayKey: state.lastClaimDayKey,
+      cycleDay: state.cycleDay,
+      completedCycles: state.completedCycles,
+      totalSuccessfulClaims: state.totalSuccessfulClaims,
+      economicVersion: state.economicVersion || ECONOMY_VERSION,
+      // Never include inventable amounts on GET — client uses server POST for values
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "STATUS_FAILED"
+    if (msg === "STREAK_BACKEND_UNAVAILABLE") {
+      return jsonErr("SERVER_UNAVAILABLE", "Streak backend unavailable", 503)
+    }
+    return jsonErr("STATUS_FAILED", msg, 500)
+  }
+}
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)

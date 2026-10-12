@@ -110,3 +110,24 @@ See `docs/PHASE_14C_BUILD_STATUS.md`.
 
 Surgical upgrades documented in `docs/MAINTENANCE_MODERNIZATION_2026-10-11.md`.  
 Run `npm run verify:static` after install. Still not Testnet/Production certified.
+
+## Global ecosystem hardening pass (2026-10-11)
+
+The repository now includes `supabase/migrations/20261024_gh_global_ecosystem_hardening.sql`, server APIs for referrals/progression/trust/reward appeals/marketplace moderation and analytics, feed preference controls and impression telemetry, atomic marketplace payment/stock settlement, idempotent order creation, and the implementation/runbook docs in `docs/product/GLOBAL_ECOSYSTEM_IMPLEMENTATION_STATUS.md` and `docs/operations/GLOBAL_ECOSYSTEM_ROLLOUT.md`.
+
+New static verification:
+
+```bash
+npm run test:curation-preferences
+npm run test:global-ecosystem
+npm run test:release
+```
+
+The sandbox static gates pass. A global TypeScript syntax parse of 440 TS/TSX files also passed, but **that is not a typecheck**. `npm ci`, full `npm run typecheck`, lint, build, live Supabase migration apply, Pi Browser E2E, and multi-instance concurrency remain unverified. The new migration is repository-only and must be reviewed against Testnet before any apply. Do not enable Pi refunds or claim every item in the 140-point blueprint is production-shipped.
+
+
+## Solidification A–I (2026-10-12)
+
+Static gates: `npm run ops:all-gates`  
+Index: `docs/SOLIDIFICATION_A_I_STATUS.md`  
+Still **not** Production/Mainnet approval.

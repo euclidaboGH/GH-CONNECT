@@ -9,6 +9,10 @@
  * Server always uses durable store when Supabase is configured regardless of this flag.
  * Client still attempts durable write when online (see messaging-domain) and treats
  * API failure as soft (local optimistic retained) unless the flag is on.
+ *
+ * Production: keep NEXT_PUBLIC_MESSAGING_DURABLE unset/0 until IDOR +
+ * multi-instance messaging authz pass on Testnet. Flag alone does not
+ * create durable tables — Supabase messaging migrations required.
  */
 export function isDurableMessagingEnabled(): boolean {
   try {

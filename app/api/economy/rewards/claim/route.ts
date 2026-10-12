@@ -16,6 +16,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { enqueueDomainEvent } from "@/lib/server/domain-events/outbox"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -52,6 +53,14 @@ export async function POST(request: Request) {
         status
       )
     }
+    if (result.transactionId) void enqueueDomainEvent({
+      eventType: "reward.claimed",
+      idempotencyKey: `reward.claimed:${result.transactionId}`,
+      aggregateType: "reward_claim",
+      aggregateId: holdId,
+      actorId: auth.userId,
+      payload: { userId: auth.userId, holdId, transactionId: result.transactionId, amount: result.amount, rail: "GHC" },
+    })
     return jsonOk({
       ok: true,
       alreadyClaimed: result.alreadyClaimed,
@@ -66,6 +75,14 @@ export async function POST(request: Request) {
       holdId,
     })
     if (!result.ok) return jsonErr(result.error, result.error, 404)
+    void enqueueDomainEvent({
+      eventType: "reward.claimed",
+      idempotencyKey: `reward.claimed:${result.tx.id}`,
+      aggregateType: "reward_claim",
+      aggregateId: holdId,
+      actorId: auth.userId,
+      payload: { userId: auth.userId, holdId, transactionId: result.tx.id, amount: result.amount, rail: "GHC", mode: "memory" },
+    })
     return jsonOk({
       ok: true,
       alreadyClaimed: result.alreadyClaimed,

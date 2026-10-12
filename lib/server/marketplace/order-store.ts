@@ -160,9 +160,8 @@ export function getOrder(id: string): ServerMarketOrder | null {
 }
 
 export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
-  const mem = map().get(id)
-  if (mem) return mem
-  if (!dbConfigured()) return null
+  if (!dbConfigured()) return map().get(id) || null
+  // Durable state always wins over the process cache; serverless instances may be stale.
   const data = await rpcJson("gh_marketplace_order_get", { p_id: id })
   if (!data || typeof data !== "object") return null
   const order = rowToOrder(data as Record<string, unknown>)
@@ -177,7 +176,6 @@ export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
 export async function saveOrder(
   order: ServerMarketOrder
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  map().set(order.id, order)
   if (!dbConfigured()) {
     if (isProd()) {
       return {
@@ -185,14 +183,14 @@ export async function saveOrder(
         error: "DURABLE_REQUIRED: production requires Supabase marketplace orders schema",
       }
     }
+    map().set(order.id, order)
     return { ok: true }
   }
   const res = await rpcJson("gh_marketplace_order_upsert", { p_row: orderToRow(order) })
   if (res == null || (typeof res === "object" && (res as { ok?: boolean }).ok === false)) {
-    if (isProd() || dbConfigured()) {
-      return { ok: false, error: "DURABLE_WRITE_FAILED: gh_marketplace_order_upsert" }
-    }
+    return { ok: false, error: "DURABLE_WRITE_FAILED: gh_marketplace_order_upsert" }
   }
+  map().set(order.id, order)
   return { ok: true }
 }
 
@@ -239,16 +237,32 @@ export async function transitionOrder(
   actor: string,
   detail?: string
 ): Promise<{ ok: true; order: ServerMarketOrder } | { ok: false; error: string }> {
-  let order = map().get(orderId) || null
-  if (!order && dbConfigured()) {
-    order = await loadOrder(orderId)
-  }
+  let order = dbConfigured() ? await loadOrder(orderId) : map().get(orderId) || null
   if (!order) return { ok: false, error: "NOT_FOUND" }
   if (order.status === to) return { ok: true, order }
 
-  const allowed = ALLOWED[order.status] || []
+  const expectedStatus = order.status
+  const allowed = ALLOWED[expectedStatus] || []
   if (!allowed.includes(to)) {
-    return { ok: false, error: `INVALID_TRANSITION:${order.status}->${to}` }
+    return { ok: false, error: `INVALID_TRANSITION:${expectedStatus}->${to}` }
+  }
+
+  // In DB mode, use a row-locked compare-and-transition RPC rather than a
+  // read/modify/upsert sequence that can lose concurrent updates.
+  if (dbConfigured()) {
+    const raw = await rpcJson("gh_marketplace_order_transition_atomic", {
+      p_order_id: orderId,
+      p_expected_status: expectedStatus,
+      p_to_status: to,
+      p_actor_id: actor,
+      p_detail: detail ?? null,
+    })
+    if (!raw || typeof raw !== "object") return { ok: false, error: "ATOMIC_TRANSITION_UNAVAILABLE" }
+    const data = raw as Record<string, unknown>
+    if (data.ok !== true) return { ok: false, error: String(data.error || "TRANSITION_FAILED") }
+    const transitioned = rowToOrder(data)
+    map().set(transitioned.id, transitioned)
+    return { ok: true, order: transitioned }
   }
 
   order.status = to
@@ -269,4 +283,23 @@ export async function transitionOrder(
 
 export function marketplaceOrdersDurable(): boolean {
   return dbConfigured()
+}
+
+export async function claimOrderIdempotency(input: {
+  buyerId: string
+  idempotencyKey: string
+  requestFingerprint: string
+  proposedOrderId: string
+}): Promise<{ ok: true; orderId: string; duplicate: boolean } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DATABASE_UNAVAILABLE" }
+  const raw = await rpcJson("gh_marketplace_order_idempotency_claim", {
+    p_buyer_id: input.buyerId,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_fingerprint: input.requestFingerprint,
+    p_proposed_order_id: input.proposedOrderId,
+  })
+  if (!raw || typeof raw !== "object") return { ok: false, error: "IDEMPOTENCY_SERVICE_UNAVAILABLE" }
+  const data = raw as Record<string, unknown>
+  if (data.ok !== true) return { ok: false, error: String(data.error || "IDEMPOTENCY_FAILED") }
+  return { ok: true, orderId: String(data.orderId || input.proposedOrderId), duplicate: Boolean(data.duplicate) }
 }

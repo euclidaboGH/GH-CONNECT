@@ -6,7 +6,8 @@
  * Inspired by structured polls (clear question, 2–6 options, duration, audience).
  */
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
+import { useFocusTrap } from "@/hooks/use-focus-trap"
 import { X, Plus, Trash2, BarChart3, Clock, Users } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 
@@ -38,6 +39,9 @@ export function PollComposer({
   }
 
   const [question, setQuestion] = useState("")
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(open, dialogRef)
+  const MAX_Q = 240
   const [options, setOptions] = useState(["", ""])
   const [duration, setDuration] = useState<(typeof DURATIONS)[number]["id"]>("3d")
   const [audience, setAudience] = useState<"public" | "followers">("public")
@@ -133,7 +137,7 @@ export function PollComposer({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-background" role="dialog" aria-modal="true" aria-label="Create poll">
+    <div className="fixed inset-0 z-[90] flex flex-col bg-background" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Create poll">
       <header className="flex items-center justify-between border-b border-border px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <button type="button" onClick={() => onOpenChange(false)} className="flex h-10 w-10 items-center justify-center rounded-full" aria-label="Close">
           <X size={22} />

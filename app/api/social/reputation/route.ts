@@ -20,6 +20,7 @@ import {
   verifyProfileComplete,
 } from "@/lib/server/reputation/verify"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
+import { enqueueDomainEvent } from "@/lib/server/domain-events/outbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -153,6 +154,15 @@ export async function POST(request: Request) {
       { status: result.error === "DB_UNAVAILABLE" ? 503 : 400 }
     )
   }
+
+  if (!result.duplicate) await enqueueDomainEvent({
+    eventType: "reputation.signal_recorded",
+    idempotencyKey: `reputation.event:${result.eventId}`,
+    aggregateType: "reputation",
+    aggregateId: auth.userId,
+    actorId: auth.userId,
+    payload: { userId: auth.userId, eventType, sourceRef, eventId: result.eventId, level: result.level },
+  })
 
   // Level-up only when server level actually increases (not client-forged)
   if (!result.duplicate && result.level > prevLevel) {

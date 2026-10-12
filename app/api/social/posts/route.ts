@@ -11,6 +11,8 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { resolveMediaAssets } from "@/lib/server/media/asset-store"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { awardProgressionXp } from "@/lib/server/progression/award"
+import { qualifyGrowthReferral } from "@/lib/server/growth/referrals"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -291,6 +293,20 @@ export async function POST(request: Request) {
     } catch {
       /* column may not exist until migration 56 */
     }
+  }
+
+  // A single first-original-post milestone, idempotent per account; subsequent
+  // posts do not mint XP and quoted content is not treated as original.
+  if (!quoteOf) {
+    await awardProgressionXp({
+      userId: auth.userId,
+      eventType: "original_post_published",
+      xp: 10,
+      idempotencyKey: `first-original-post:${auth.userId}`,
+      sourceRef: `post:${id}`,
+      metadata: { rulesVersion: "progression-v1" },
+    })
+    await qualifyGrowthReferral({ referredUserId: auth.userId, event: "first_original_post", evidenceRef: `post:${id}` })
   }
 
   return NextResponse.json({ ok: true, durable: true, post: row })

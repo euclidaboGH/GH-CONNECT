@@ -77,7 +77,7 @@ export function WalletBalanceCard({
           </button>
         </div>
 
-        <p className="relative mt-4 flex flex-wrap items-baseline gap-2.5 text-[2.6rem] font-bold leading-none tracking-tight tabular-nums sm:text-[2.85rem]">
+        <p className="relative mt-4 flex flex-wrap items-baseline gap-2.5 min-h-[2.85rem] text-[2.6rem] font-bold leading-none tracking-tight tabular-nums sm:text-[2.85rem]">
           {refreshing && balance === 0 ? (
             <span
               className="inline-block h-11 w-44 animate-pulse rounded-xl bg-white/20"

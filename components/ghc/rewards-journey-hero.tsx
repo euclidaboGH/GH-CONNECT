@@ -1,5 +1,8 @@
 "use client"
 
+import { mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
+
+
 /**
  * Rewards as a journey/game surface — not an accounting ledger.
  * XP path + streak + today's opportunities.
@@ -79,6 +82,38 @@ export function RewardsJourneyHero({
     }
   }, [])
 
+
+  // Hydrate claimed-today from server (read-only) so CTA is not green after cold start
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/economy/rewards/daily", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        })
+        if (!res.ok || cancelled) return
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (data.alreadyClaimed === true || data.canClaimToday === false) {
+          try {
+            claimDailyStreak(userId, membershipTier)
+          } catch {
+            /* local UI mark only */
+          }
+          setTick((n) => n + 1)
+        }
+      } catch {
+        /* keep local streak */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userId, membershipTier])
+
   const claimDaily = useCallback(async () => {
     // Server-authoritative daily claim only — no local GHC mint
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -111,7 +146,7 @@ export function RewardsJourneyHero({
           onClaimed?.()
           return
         }
-        ghc.addToast?.(errText, "error")
+        ghc.addToast?.(mapGhcUxError(errText).body || errText, "error")
         setTick((n) => n + 1)
         return
       }
@@ -152,8 +187,9 @@ export function RewardsJourneyHero({
       }
       setTick((t) => t + 1)
       onClaimed?.()
-    } catch {
-      ghc.addToast?.("Claim failed", "error")
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "NETWORK_UNAVAILABLE"
+      ghc.addToast?.(mapGhcUxError(msg).body || "Claim failed", "error")
       setTick((t) => t + 1)
     } finally {
       setClaimingDaily(false)

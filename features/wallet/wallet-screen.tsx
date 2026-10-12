@@ -54,6 +54,7 @@ import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
 import { ASSET_POLICY } from "@/lib/asset-separation"
+import { RewardHoldsAppealsCard } from "./reward-holds-card"
 
 function formatGhc(n: number) {
   if (!Number.isFinite(n)) return "0.00"
@@ -927,6 +928,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             onOpenPending={() => setShowPendingSheet(true)}
           />
         </div>
+
+        <RewardHoldsAppealsCard />
 
         {/* ZONE: ACTIONS — balance → primary actions (not withdraw first) */}
         <WalletPrimaryActions

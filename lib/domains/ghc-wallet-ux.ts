@@ -21,6 +21,12 @@ export type GhcUxErrorCode =
   | "REQUEST_NOT_AUTHORIZED"
   | "ACCOUNT_RESTRICTED"
   | "NETWORK_UNAVAILABLE"
+  | "STEP_UP_REQUIRED"
+  | "RATE_LIMITED"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "ALREADY_CLAIMED_TODAY"
+  | "IDENTITY_STORE_UNAVAILABLE"
+  | "FORBIDDEN"
   | "UNKNOWN"
 
 export type GhcUxMessage = { title: string; body: string; next?: string }
@@ -103,6 +109,34 @@ const ERROR_MAP: Record<GhcUxErrorCode, GhcUxMessage> = {
     title: "You are offline",
     body: "Connect to the internet to move GHC.",
   },
+  STEP_UP_REQUIRED: {
+    title: "Confirm it is you",
+    body: "This action needs a recent security confirmation.",
+    next: "Unlock with Pi or your passkey, then try again.",
+  },
+  RATE_LIMITED: {
+    title: "Too many attempts",
+    body: "Please wait a moment before trying again.",
+  },
+  IDEMPOTENCY_KEY_REQUIRED: {
+    title: "Could not start safely",
+    body: "A secure request key is required to avoid duplicates.",
+    next: "Retry from the app — do not submit the same payment twice manually.",
+  },
+  ALREADY_CLAIMED_TODAY: {
+    title: "Already claimed today",
+    body: "Your daily reward for today is already recorded.",
+    next: "Come back after midnight (Africa/Lagos).",
+  },
+  IDENTITY_STORE_UNAVAILABLE: {
+    title: "Sign-in temporarily unavailable",
+    body: "Identity storage is not ready on the server.",
+    next: "Try again shortly. If this continues, contact support.",
+  },
+  FORBIDDEN: {
+    title: "Not allowed",
+    body: "You do not have permission for this action.",
+  },
   UNKNOWN: {
     title: "Something went wrong",
     body: "Please try again.",
@@ -126,6 +160,12 @@ export function mapGhcUxError(raw?: string | null): GhcUxMessage {
   if (/self/i.test(s)) return ERROR_MAP.SELF_TRANSFER
   if (/auth|sign.?in|unauthor/i.test(s)) return ERROR_MAP.AUTH_REQUIRED
   if (/server|503|unavailable/i.test(s)) return ERROR_MAP.SERVER_UNAVAILABLE
+  if (/step.?up|STEP_UP/i.test(s)) return ERROR_MAP.STEP_UP_REQUIRED
+  if (/rate.?limit|too many/i.test(s)) return ERROR_MAP.RATE_LIMITED
+  if (/idempotenc/i.test(s)) return ERROR_MAP.IDEMPOTENCY_KEY_REQUIRED
+  if (/already.?claimed/i.test(s)) return ERROR_MAP.ALREADY_CLAIMED_TODAY
+  if (/IDENTITY_STORE|identity store/i.test(s)) return ERROR_MAP.IDENTITY_STORE_UNAVAILABLE
+  if (/forbidden|not allowed|403/i.test(s)) return ERROR_MAP.FORBIDDEN
   if (/limit/i.test(s)) return ERROR_MAP.TRANSFER_LIMIT_EXCEEDED
   if (/expir/i.test(s)) return ERROR_MAP.REQUEST_EXPIRED
   // Strip technical leakage

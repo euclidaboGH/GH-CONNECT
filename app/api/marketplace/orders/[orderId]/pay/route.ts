@@ -7,75 +7,26 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import {
-  loadOrder,
-  transitionOrder,
-  saveOrder,
-  marketplaceOrdersDurable,
-} from "@/lib/server/marketplace/order-store"
-import { loadPaymentIntent } from "@/lib/server/payments/intent-store"
-import {
-  executeAuthoritativeSpend,
-  getProcessGhcStore,
-} from "@/lib/server/economy/store"
-import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { loadOrder, marketplaceOrdersDurable } from "@/lib/server/marketplace/order-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { validateListingStockReservation } from "@/lib/server/marketplace/listing-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-async function rpcGhcSpend(input: {
-  userId: string
-  amount: number
-  referenceId: string
-  reason: string
-  sourceEvent: string
-}): Promise<{ ok: boolean; idempotent?: boolean; tx?: unknown; error?: string }> {
+async function rpcMarketplacePayment(name: string, args: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return { ok: false, error: "SERVER_UNAVAILABLE" }
-  }
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_execute_spend`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({
-          p_user_id: input.userId,
-          p_amount: input.amount,
-          p_reference_id: input.referenceId,
-          p_reason: input.reason,
-          p_source_event: input.sourceEvent,
-        }),
-      }
-    )
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      const err =
-        data && typeof data === "object" && "message" in data
-          ? String((data as { message: string }).message)
-          : "SPEND_FAILED"
-      return { ok: false, error: err }
-    }
-    if (data && typeof data === "object" && (data as { ok?: boolean }).ok === false) {
-      return {
-        ok: false,
-        error: String((data as { error?: string }).error || "SPEND_FAILED"),
-      }
-    }
-    return {
-      ok: true,
-      idempotent: Boolean(data && (data as { idempotent?: boolean }).idempotent),
-      tx: data,
-    }
-  } catch {
-    return { ok: false, error: "SPEND_FAILED" }
-  }
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+      body: JSON.stringify(args), cache: "no-store",
+    })
+    const data = await response.json().catch(() => null) as Record<string, unknown> | null
+    return data
+  } catch { return null }
 }
 
 export async function POST(
@@ -86,6 +37,8 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const rateLimit = checkRateLimit(`market-order-pay:${auth.userId}`, 10, 60_000)
+  if (!rateLimit.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED", retryAfterSec: rateLimit.retryAfterSec }, { status: 429 })
 
   const { orderId } = await ctx.params
   const order = await loadOrder(orderId)
@@ -100,7 +53,7 @@ export async function POST(
   // After a successful pay, status is no longer created|payment_pending.
   if (
     order.paymentStatus === "verified" &&
-    order.ghcSpendRef &&
+    ((order.paymentMethod === "ghc" && order.ghcSpendRef) || (order.paymentMethod === "pi" && order.paymentIntentId)) &&
     (order.status === "payment_verified" ||
       order.status === "confirmed" ||
       order.status === "fulfilling" ||
@@ -116,6 +69,15 @@ export async function POST(
     )
   }
 
+  const stockReservation = await validateListingStockReservation(order.id)
+  if (!stockReservation.ok) {
+    return NextResponse.json({
+      ok: false,
+      error: stockReservation.error || "STOCK_RESERVATION_INVALID",
+      message: "Checkout stock reservation is missing or expired. No payment was attempted; create a new order.",
+    }, { status: 409 })
+  }
+
   const body = await request.json().catch(() => ({}))
   const method = String(body.method || "").toLowerCase()
   // Ignore client amount/balance claims
@@ -123,154 +85,61 @@ export async function POST(
   void body.balance
   void body.userId
 
+  if (process.env.GH_MARKETPLACE_PAUSED === "1") return NextResponse.json({ ok: false, error: "MARKETPLACE_PAUSED" }, { status: 503 })
+
   if (method === "ghc") {
-    const amount = Number(order.totalAmount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json({ ok: false, error: "INVALID_ORDER_AMOUNT" }, { status: 400 })
+    if (String(order.currency).toUpperCase() !== "GHC") {
+      return NextResponse.json({ ok: false, error: "CURRENCY_METHOD_MISMATCH", message: "GHC ledger spend can only settle GHC-denominated orders." }, { status: 409 })
     }
-
-    const referenceId = `market_order_${order.id}`
-    const reason = `Marketplace order ${order.listingTitle || order.id}`
-
-    let spendOk = false
-    let spendTx: unknown = null
-    let spendError = "SPEND_FAILED"
-    let idempotent = false
-
-    if (isDatabaseConfigured()) {
-      const rpc = await rpcGhcSpend({
-        userId: auth.userId,
-        amount,
-        referenceId,
-        reason,
-        sourceEvent: "MARKETPLACE_PURCHASE",
-      })
-      spendOk = rpc.ok
-      spendTx = rpc.tx
-      spendError = rpc.error || "SPEND_FAILED"
-      idempotent = Boolean(rpc.idempotent)
-    } else if (allowMemoryServer()) {
-      const spend = await executeAuthoritativeSpend(getProcessGhcStore(), {
-        userId: auth.userId,
-        amount,
-        referenceId,
-        reason,
-        sourceEvent: "MARKETPLACE_PURCHASE",
-      })
-      if (spend.ok) {
-        spendOk = true
-        spendTx = spend.tx
-        idempotent = Boolean(spend.idempotent)
-      } else {
-        spendError = spend.error || "SPEND_FAILED"
-      }
-    } else {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "SERVER_UNAVAILABLE",
-          message: "Marketplace GHC spend requires database configuration",
-        },
-        { status: 503 }
-      )
+    const result = await rpcMarketplacePayment("gh_marketplace_pay_ghc_atomic", {
+      p_order_id: order.id,
+      p_buyer_id: auth.userId,
+    })
+    if (!result) return NextResponse.json({ ok: false, error: "PAYMENT_SERVICE_UNAVAILABLE" }, { status: 503 })
+    if (result.ok !== true) {
+      const error = String(result.error || "SPEND_FAILED")
+      const status = error === "INSUFFICIENT_BALANCE" ? 402 : ["STOCK_RESERVATION_INVALID", "NOT_PAYABLE", "PAYMENT_INTENT_ORDER_MISMATCH"].includes(error) ? 409 : error === "FORBIDDEN" ? 403 : 503
+      return NextResponse.json({ ok: false, error, detail: result.detail }, { status })
     }
-
-    if (!spendOk) {
-      const status = spendError === "INSUFFICIENT_BALANCE" ? 402 : 400
-      return NextResponse.json({ ok: false, error: spendError }, { status })
-    }
-
-    order.paymentMethod = "ghc"
-    order.paymentStatus = "verified"
-    order.ghcSpendRef = referenceId
-    order.updatedAt = Date.now()
-    order.audit = [
-      ...(order.audit || []),
-      { at: Date.now(), action: "PAY_GHC", detail: referenceId },
-    ]
-    const saved = await saveOrder(order)
-    if (!saved.ok) {
-      return NextResponse.json(
-        { ok: false, error: "ORDER_PERSIST_FAILED", detail: saved.error },
-        { status: 503 }
-      )
-    }
-
-    const v = await transitionOrder(order.id, "payment_verified", auth.userId, "ghc")
-    if (!v.ok) {
-      return NextResponse.json({ ok: false, error: v.error }, { status: 409 })
-    }
-    await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
-
     return NextResponse.json({
       ok: true,
-      order: await loadOrder(order.id),
-      spend: spendTx,
-      idempotent,
+      order: result.order || await loadOrder(order.id),
+      spend: result.spend,
+      idempotent: Boolean(result.duplicate),
       durableOrders: marketplaceOrdersDurable(),
-    })
+      settlement: "atomic-ledger-stock-order",
+    }, { headers: { "Cache-Control": "no-store" } })
   }
 
   if (method === "pi") {
+    if (String(order.currency).toUpperCase() !== "PI") {
+      return NextResponse.json({ ok: false, error: "CURRENCY_METHOD_MISMATCH", message: "Pi payment can only settle PI-denominated orders." }, { status: 409 })
+    }
     const intentId = String(body.intentId || "").trim()
-    const paymentId = String(body.paymentId || "").trim()
-    const txid = String(body.txid || "").trim()
+    if (!intentId) return NextResponse.json({ ok: false, error: "INTENT_REQUIRED", message: "Complete GH Pay intent first" }, { status: 400 })
 
-    if (!intentId) {
-      return NextResponse.json(
-        { ok: false, error: "INTENT_REQUIRED", message: "Complete GH Pay intent first" },
-        { status: 400 }
-      )
+    // The database function locks and verifies the durable provider intent, exact
+    // order reference, amount, currency, buyer and stock reservation in one transaction.
+    const result = await rpcMarketplacePayment("gh_marketplace_pay_pi_atomic", {
+      p_order_id: order.id,
+      p_buyer_id: auth.userId,
+      p_intent_id: intentId,
+      p_payment_id: null,
+      p_txid: null,
+    })
+    if (!result) return NextResponse.json({ ok: false, error: "PAYMENT_SERVICE_UNAVAILABLE" }, { status: 503 })
+    if (result.ok !== true) {
+      const error = String(result.error || "PAYMENT_FAILED")
+      const status = error === "FORBIDDEN" ? 403 : error === "INTENT_NOT_FOUND" ? 404 : ["STOCK_RESERVATION_INVALID", "NOT_PAYABLE", "PAYMENT_INTENT_ORDER_MISMATCH"].includes(error) ? 409 : 503
+      return NextResponse.json({ ok: false, error }, { status })
     }
-
-    const intent = (await loadPaymentIntent(intentId)) || null
-    if (!intent || intent.userId !== auth.userId) {
-      return NextResponse.json({ ok: false, error: "INTENT_NOT_FOUND" }, { status: 404 })
-    }
-    if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
-      return NextResponse.json(
-        { ok: false, error: "PAYMENT_NOT_COMPLETED", status: intent.status },
-        { status: 409 }
-      )
-    }
-    if (Math.abs(intent.amount - order.totalAmount) > 0.001 && order.currency === "PI") {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "amount_mismatch",
-          expected: order.totalAmount,
-          actual: intent.amount,
-        },
-        { status: 409 }
-      )
-    }
-
-    order.paymentMethod = "pi"
-    order.paymentStatus = "verified"
-    order.paymentIntentId = intentId
-    order.paymentId = intent.providerPaymentId || paymentId
-    order.txid = intent.txid || txid
-    order.updatedAt = Date.now()
-    order.audit = [
-      ...(order.audit || []),
-      { at: Date.now(), action: "PAY_PI", detail: intentId },
-    ]
-    const saved = await saveOrder(order)
-    if (!saved.ok) {
-      return NextResponse.json(
-        { ok: false, error: "ORDER_PERSIST_FAILED", detail: saved.error },
-        { status: 503 }
-      )
-    }
-
-    await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
-    await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
-
     return NextResponse.json({
       ok: true,
-      order: await loadOrder(order.id),
+      order: result.order || await loadOrder(order.id),
+      idempotent: Boolean(result.duplicate),
       durableOrders: marketplaceOrdersDurable(),
-    })
+      settlement: "provider-verified-atomic-stock-order",
+    }, { headers: { "Cache-Control": "no-store" } })
   }
 
   return NextResponse.json({ ok: false, error: "INVALID_METHOD" }, { status: 400 })

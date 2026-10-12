@@ -43,6 +43,8 @@ const SUITES = [
   ["scripts/test-social-os-foundation.mjs", "social-os-foundation"],
   ["scripts/test-economy-v12.mjs", "economy-v12"],
   ["scripts/test-pi-payment-durable.mjs", "pi-payment-durable"],
+  ["scripts/test-curation-preferences-static.mjs", "curation-preferences"],
+  ["scripts/test-global-ecosystem-static.mjs", "global-ecosystem"],
 ]
 
 function run(script) {

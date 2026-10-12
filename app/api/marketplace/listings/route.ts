@@ -9,6 +9,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   upsertListing,
   listingsDurable,
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const rateLimit = checkRateLimit(`marketplace-listing-write:${auth.userId}`, 20, 60_000)
+  if (!rateLimit.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED", retryAfterSec: rateLimit.retryAfterSec }, { status: 429 })
   if (!listingsDurable()) {
     return NextResponse.json(
       {
@@ -69,7 +72,17 @@ export async function POST(request: Request) {
   const currency = String(body.currency || "GHC").toUpperCase().slice(0, 8)
   const availability = Math.max(0, Math.min(9999, Math.floor(Number(body.availability) || 1)))
   let status = String(body.status || "draft")
+  if (process.env.GH_MARKETPLACE_PAUSED === "1" && status === "active") return NextResponse.json({ ok: false, error: "MARKETPLACE_PAUSED" }, { status: 503 })
   const kind = String(body.kind || "product").slice(0, 64)
+  const categories = new Set(["Goods", "Services", "Digital", "Professional", "Community", "Opportunities", "Other"])
+  const conditions = new Set(["new", "like_new", "good", "fair", "not_applicable"])
+  const category = categories.has(String(body.category || "Other")) ? String(body.category || "Other") : "Other"
+  const condition = conditions.has(String(body.condition || "not_applicable")) ? String(body.condition || "not_applicable") : "not_applicable"
+  const location = String(body.location || "").trim().slice(0, 120)
+  const shippingInfo = String(body.shippingInfo || "").trim().slice(0, 500)
+  const allowedDeliveryOptions = new Set(["shipping", "pickup", "local_delivery", "digital", "remote_service"])
+  const deliveryOptions = Array.isArray(body.deliveryOptions) ? [...new Set(body.deliveryOptions.map((option: unknown) => String(option).trim()).filter((option: string) => allowedDeliveryOptions.has(option)))] : []
+  const tags = Array.isArray(body.tags) ? body.tags.map((tag: unknown) => String(tag).trim().slice(0, 40)).filter(Boolean).slice(0, 20) : []
   const id =
     String(body.id || "").trim() ||
     `lst_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -80,9 +93,10 @@ export async function POST(request: Request) {
   if (!Number.isFinite(price) || price < 0 || price > 1_000_000) {
     return NextResponse.json({ ok: false, error: "INVALID_PRICE" }, { status: 400 })
   }
-  if (decimalPlaces(price) > MAX_PRICE_DECIMALS) {
+  const allowedPriceDecimals = currency === "GHC" ? 4 : MAX_PRICE_DECIMALS
+  if (decimalPlaces(price) > allowedPriceDecimals) {
     return NextResponse.json(
-      { ok: false, error: "PRICE_PRECISION", maxDecimals: MAX_PRICE_DECIMALS },
+      { ok: false, error: "PRICE_PRECISION", maxDecimals: allowedPriceDecimals, currency },
       { status: 400 }
     )
   }
@@ -154,6 +168,14 @@ export async function POST(request: Request) {
     availability,
     status: status as "draft" | "active" | "paused" | "sold_out" | "removed",
     kind,
+    metadata: {
+      category: body.category == null ? String(existing?.metadata?.category || category) : category,
+      condition: body.condition == null ? String(existing?.metadata?.condition || condition) : condition,
+      location: body.location == null ? String(existing?.metadata?.location || location) : location,
+      shippingInfo: body.shippingInfo == null ? String(existing?.metadata?.shippingInfo || shippingInfo) : shippingInfo,
+      deliveryOptions: body.deliveryOptions == null && Array.isArray(existing?.metadata?.deliveryOptions) ? existing.metadata.deliveryOptions : deliveryOptions,
+      tags: body.tags == null && Array.isArray(existing?.metadata?.tags) ? existing.metadata.tags : tags,
+    },
   })
   if (!saved.ok) {
     const durable =
@@ -182,6 +204,12 @@ export async function POST(request: Request) {
       availability,
       status,
       kind,
+      category,
+      condition,
+      location,
+      shippingInfo,
+      deliveryOptions,
+      tags,
     },
     /** Platform service charge — distinct from seller product price */
     listingFee: {
@@ -241,9 +269,33 @@ export async function GET(request: Request) {
     )
   }
 
-  const listings = await listActiveListings(limit)
+  const query = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 80)
+  const category = String(url.searchParams.get("category") || "").trim()
+  const conditionFilter = String(url.searchParams.get("condition") || "").trim()
+  const locationFilter = String(url.searchParams.get("location") || "").trim().toLowerCase().slice(0, 120)
+  const deliveryFilter = String(url.searchParams.get("deliveryOption") || "").trim()
+  const kindFilter = String(url.searchParams.get("kind") || "").trim()
+  const currencyFilter = String(url.searchParams.get("currency") || "").trim().toUpperCase()
+  const minPrice = url.searchParams.has("minPrice") ? Number(url.searchParams.get("minPrice")) : null
+  const maxPrice = url.searchParams.has("maxPrice") ? Number(url.searchParams.get("maxPrice")) : null
+  const availableOnly = url.searchParams.get("availableOnly") === "true"
+  let listings = await listActiveListings(100)
+  listings = listings.filter((listing) => {
+    const meta = listing.metadata || {}
+    if (query && !`${listing.title} ${listing.description || ""} ${Array.isArray(meta.tags) ? meta.tags.join(" ") : ""}`.toLowerCase().includes(query)) return false
+    if (category && String(meta.category || "Other") !== category) return false
+    if (conditionFilter && String(meta.condition || "not_applicable") !== conditionFilter) return false
+    if (locationFilter && !String(meta.location || "").toLowerCase().includes(locationFilter)) return false
+    if (deliveryFilter && !(Array.isArray(meta.deliveryOptions) && meta.deliveryOptions.includes(deliveryFilter))) return false
+    if (kindFilter && listing.kind !== kindFilter) return false
+    if (currencyFilter && listing.currency.toUpperCase() !== currencyFilter) return false
+    if (minPrice != null && Number.isFinite(minPrice) && listing.price < minPrice) return false
+    if (maxPrice != null && Number.isFinite(maxPrice) && listing.price > maxPrice) return false
+    if (availableOnly && listing.availability <= 0) return false
+    return true
+  }).slice(0, limit)
   return NextResponse.json(
-    { ok: true, durable: listingsDurable(), listings },
+    { ok: true, durable: listingsDurable(), listings, facets: { categories: [...new Set(listings.map((l) => String(l.metadata?.category || "Other")))], conditions: [...new Set(listings.map((l) => String(l.metadata?.condition || "not_applicable")))], deliveryOptions: [...new Set(listings.flatMap((l) => Array.isArray(l.metadata?.deliveryOptions) ? l.metadata.deliveryOptions.map(String) : []))], currencies: [...new Set(listings.map((l) => l.currency))] } },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

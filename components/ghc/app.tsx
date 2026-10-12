@@ -22,6 +22,7 @@ import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation
 import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 import { CreatorStudioOverlay } from "./creator-studio-overlay"
+import { GlobalComposeHost } from "./global-compose-host"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -803,6 +804,7 @@ export function GHConnectApp() {
     >
       <OfflineBanner />
       <PaymentRecoveryListener />
+      <GlobalComposeHost />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"

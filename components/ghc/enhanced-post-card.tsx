@@ -58,6 +58,7 @@ interface EnhancedPostCardProps {
   onHide?: (postId: string) => void
   onArchive?: (postId: string) => void
   onNotInterested?: (postId: string) => void
+  onCurationFeedback?: (postId: string, feedback: "show_less" | "show_more") => void
   onMute?: (postId: string) => void
   onReport?: (postId: string, reason: string) => void
   onBlock?: (postId: string) => void
@@ -85,6 +86,7 @@ function EnhancedPostCardInner({
   onHide,
   onArchive,
   onNotInterested,
+  onCurationFeedback,
   onMute,
   onReport,
   onBlock,
@@ -100,6 +102,7 @@ function EnhancedPostCardInner({
   const [tapCount, setTapCount] = useState<number>(0)
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
   const [showMenu, setShowMenu] = useState(false)
+  const [showCurationMenu, setShowCurationMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
   const [imageIndex, setImageIndex] = useState<number>(0)
@@ -421,7 +424,13 @@ function EnhancedPostCardInner({
           <ActionSheetItem onClick={() => { onHide(post.id); setShowMenu(false) }}>Hide post</ActionSheetItem>
         )}
         {!isOwn && onNotInterested && (
-          <ActionSheetItem onClick={() => { onNotInterested(post.id); setShowMenu(false) }}>Not interested</ActionSheetItem>
+          <ActionSheetItem onClick={() => { onNotInterested(post.id); setShowMenu(false) }}>Hide this post</ActionSheetItem>
+        )}
+        {!isOwn && onCurationFeedback && (
+          <>
+            <ActionSheetItem onClick={() => { onCurationFeedback(post.id, "show_more"); setShowMenu(false) }}>Show me more like this</ActionSheetItem>
+            <ActionSheetItem onClick={() => { onCurationFeedback(post.id, "show_less"); setShowMenu(false) }}>Show me less like this</ActionSheetItem>
+          </>
         )}
         {!isOwn && onMute && (
           <ActionSheetItem onClick={() => { onMute(post.id); setShowMenu(false) }}>Mute author</ActionSheetItem>
@@ -664,13 +673,58 @@ function EnhancedPostCardInner({
         </button>
         <button
           type="button"
-          aria-label="More actions"
-          onClick={() => setShowMenu(true)}
+          aria-label="Curation and feed options"
+          aria-expanded={showCurationMenu}
+          onClick={() => {
+            if (!showCurationMenu) closeAllActionSheets()
+            setShowCurationMenu(true)
+          }}
           className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
         >
           <MoreVertical size={20} aria-hidden />
         </button>
       </div>
+
+      <ActionSheet
+        open={showCurationMenu}
+        onClose={() => setShowCurationMenu(false)}
+        title="Curation & feed controls"
+      >
+        <div className="mx-1 my-2 rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50 via-white to-emerald-50 p-3 dark:border-violet-900/50 dark:from-violet-950/40 dark:via-card dark:to-emerald-950/20">
+          <p className="text-sm font-bold text-foreground">Help surface useful content</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Your upvote or downvote helps rank this post. Reward amounts are determined by the server and depend on eligibility and pool funding.</p>
+        </div>
+        {onShowVisibilityReason && (
+          <ActionSheetItem icon={<Eye size={16} />} onClick={() => { onShowVisibilityReason(post.id); setShowCurationMenu(false) }}>
+            Why this post is in your feed
+          </ActionSheetItem>
+        )}
+        {!isOwn && onNotInterested && (
+          <ActionSheetItem onClick={() => { onNotInterested(post.id); setShowCurationMenu(false) }}>
+            Hide this post
+          </ActionSheetItem>
+        )}
+        {!isOwn && onCurationFeedback && (
+          <>
+            <ActionSheetItem onClick={() => { onCurationFeedback(post.id, "show_more"); setShowCurationMenu(false) }}>
+              Show me more like this
+            </ActionSheetItem>
+            <ActionSheetItem onClick={() => { onCurationFeedback(post.id, "show_less"); setShowCurationMenu(false) }}>
+              Show me less like this
+            </ActionSheetItem>
+          </>
+        )}
+        {!isOwn && onMute && (
+          <ActionSheetItem onClick={() => { onMute(post.id); setShowCurationMenu(false) }}>
+            Mute this author
+          </ActionSheetItem>
+        )}
+        {!isOwn && onReport && (
+          <div className="px-2 py-1">
+            <ReportChooser label="Report content quality or safety" targetType="post" targetId={post.id} onSubmit={(reason) => { onReport(post.id, reason); setShowCurationMenu(false) }} />
+          </div>
+        )}
+      </ActionSheet>
 
       {/* Public reward / quality strip — GHC amounts only when server-enabled */}
       <PostRewardPanel

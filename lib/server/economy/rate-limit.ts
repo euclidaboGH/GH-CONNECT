@@ -25,6 +25,11 @@ export function checkRateLimit(
   }
   b.count += 1
   if (b.count > limit) {
+    console.info("[rate-limit] RATE_LIMIT_HIT", {
+      key: String(key).slice(0, 64),
+      limit,
+      windowMs,
+    })
     return { ok: false, retryAfterSec: Math.max(1, Math.ceil((b.resetAt - now) / 1000)) }
   }
   return { ok: true, remaining: Math.max(0, limit - b.count) }

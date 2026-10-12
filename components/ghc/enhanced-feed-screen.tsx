@@ -27,11 +27,10 @@ import { PostSkeleton } from "./feed-components"
 import { CommentSheet } from "./comment-sheet"
 import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
-import { PostComposer } from "./post-composer"
 import ProfileStorySection from "./profile-story-section"
 import { HomeCommandCentre } from "./home-command-centre"
 import { TrustDurabilityBanner } from "./trust-durability-banner"
-import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
+import { rankFeed, extractHashtags, extractMentions, FEED_RANKING_VERSION } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
 import { useScrollHeader } from "@/lib/use-scroll-header"
@@ -127,13 +126,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     category: string
   } | null>(null)
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>([])
+  const [curationFeedbackByPost, setCurationFeedbackByPost] = useState<Record<string, "hide" | "show_less" | "show_more">>({})
+  const [curationRankingPaused, setCurationRankingPaused] = useState(false)
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<Error | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [feedStatusMsg, setFeedStatusMsg] = useState<string | null>(null)
-  const [showComposer, setShowComposer] = useState(false)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
-  const [composeMode, setComposeMode] = useState<"post" | "story">("post")
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
   const [saveCollectionPostId, setSaveCollectionPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; caption?: string } | null>(null)
@@ -145,6 +144,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const containerRef = useRef<HTMLDivElement>(null)
   const startYRef = useRef(0)
   const touchIdentifierRef = useRef<number | null>(null)
+  const sentRankingImpressionsRef = useRef<Set<string>>(new Set())
+  const pendingRankingImpressionsRef = useRef<Set<string>>(new Set())
   const pendingLikesRef = useRef(new Set<string>())
   const pendingCommentsRef = useRef(new Set<string>())
 
@@ -201,6 +202,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       const blockedIds = Array.from(
         new Set([...(blockedUsers || []), ...((settings as any)?.blockedUsers || [])].filter(Boolean))
       )
+      const mutedIds = Array.from(new Set([...(Array.isArray((settings as any)?.mutedUsers) ? (settings as any).mutedUsers : [])].filter(Boolean)))
       const communityIds = (conversations || [])
         .filter(
           (c) =>
@@ -214,6 +216,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         userInterests: Array.isArray(profile?.interests) ? profile.interests : [],
         recentlyEngagedPostIds: [...new Set([...bookmarkedPostIds, ...likedPosts])],
         blockedUserIds: blockedIds,
+        mutedUserIds: mutedIds,
         followingIds: following || [],
         friendIds: friends || [],
         communityIds,
@@ -237,7 +240,13 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         activeFilter,
         feedContext
       )
-      setRankedPosts(ranked)
+      const rankedWithPreferences = curationRankingPaused
+        ? ranked
+        : ranked.map((item, index) => ({ item, index })).sort((a, b) => {
+            const priority = (postId: string) => curationFeedbackByPost[postId] === "show_more" ? 0 : curationFeedbackByPost[postId] === "show_less" ? 2 : 1
+            return priority(a.item.post.id) - priority(b.item.post.id) || a.index - b.index
+          }).map(({ item }) => item)
+      setRankedPosts(rankedWithPreferences)
       setFeedBootstrapped(true)
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to rank feed")
@@ -247,7 +256,33 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       setRankedPosts(posts.map((post) => ({ post, score: 0, reason: { reason: "Feed unavailable", category: "error" } })))
       setFeedBootstrapped(true)
     }
-  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode])
+  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode, curationFeedbackByPost, curationRankingPaused])
+
+  // Record only posts actually exposed in the visible feed window. Telemetry is
+  // bounded, privacy-minimized and never used to award GHC, XP or reputation.
+  useEffect(() => {
+    if (!feedBootstrapped || rankedPosts.length === 0) return
+    const visible = rankedPosts.slice(0, Math.min(displayedPostsCount, 100))
+      .filter((item) => item.post?.id && !seedPostIds.has(item.post.id))
+      .filter((item) => !sentRankingImpressionsRef.current.has(item.post.id) && !pendingRankingImpressionsRef.current.has(item.post.id))
+      .slice(0, 20)
+    if (!visible.length) return
+    const ids = visible.map((item) => item.post.id)
+    ids.forEach((id) => pendingRankingImpressionsRef.current.add(id))
+    void fetch("/api/social/ranking/impressions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ impressions: visible.map((item) => ({
+        postId: item.post.id,
+        rankPosition: rankedPosts.findIndex((ranked) => ranked.post.id === item.post.id) + 1,
+        reasonCategory: item.reason?.category || "unknown",
+        rankingVersion: FEED_RANKING_VERSION,
+      })) }),
+    }).then((response) => {
+      if (response.ok) ids.forEach((id) => sentRankingImpressionsRef.current.add(id))
+      else ids.forEach((id) => pendingRankingImpressionsRef.current.delete(id))
+    }).catch(() => ids.forEach((id) => pendingRankingImpressionsRef.current.delete(id)))
+  }, [feedBootstrapped, rankedPosts, displayedPostsCount, seedPostIds])
 
   // Pull-to-refresh handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -354,26 +389,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     [reactToPost, addToast]
   )
 
-  useEffect(() => {
-    const open = (e: Event) => {
-      const d = (e as CustomEvent).detail || {}
-      if (d.mode === "story") setComposeMode("story")
-      else setComposeMode("post")
-      setShowComposer(true)
-    }
-    window.addEventListener("ghc:open-compose", open as EventListener)
-    const close = () => setShowComposer(false)
-    window.addEventListener("ghc:close-compose", close)
-    window.addEventListener("ghc:tab-change", close)
-    window.addEventListener("ghc:close-transient-ui", close)
-    return () => {
-      window.removeEventListener("ghc:open-compose", open as EventListener)
-      window.removeEventListener("ghc:close-compose", close)
-      window.removeEventListener("ghc:tab-change", close)
-      window.removeEventListener("ghc:close-transient-ui", close)
-    }
-  }, [])
-
   const handleSave = useCallback(async (postId: string) => {
     const isBookmarked = bookmarkedPostIds.includes(postId)
     const previous = bookmarkedPostIds
@@ -397,10 +412,72 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
   }, [bookmarkedPostIds, addToast, savePost, unsavePost])
 
+  // Load durable feed feedback so a dismissed post stays dismissed across devices/sessions.
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/social/curation-preferences", { method: "GET", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null
+        return await response.json() as { ok?: boolean; rankingPaused?: boolean; items?: Array<{ postId?: string; feedback?: string }> }
+      })
+      .then((data) => {
+        if (cancelled || !data?.ok || !Array.isArray(data.items)) return
+        const feedback: Record<string, "hide" | "show_less" | "show_more"> = {}
+        for (const item of data.items) {
+          const id = String(item.postId || "").trim()
+          if (id && (item.feedback === "hide" || item.feedback === "show_less" || item.feedback === "show_more")) feedback[id] = item.feedback
+        }
+        setCurationFeedbackByPost(feedback)
+        setCurationRankingPaused(Boolean(data.rankingPaused))
+        setNotInterestedIds(Object.entries(feedback).filter(([, value]) => value === "hide").map(([id]) => id))
+      })
+      .catch(() => { /* Keep the feed usable when preference service is unavailable. */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    const reset = () => {
+      setNotInterestedIds([])
+      setCurationFeedbackByPost({})
+    }
+    window.addEventListener("ghc:curation-reset", reset)
+    return () => window.removeEventListener("ghc:curation-reset", reset)
+  }, [])
+
+  const saveCurationFeedback = useCallback(async (postId: string, feedback: "hide" | "show_less" | "show_more") => {
+    const id = String(postId || "").trim()
+    if (!id) return
+    try {
+      const response = await fetch("/api/social/curation-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: id, feedback }),
+      })
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!response.ok || data.ok !== true) throw new Error(data.error || "PREFERENCE_SAVE_FAILED")
+      setCurationFeedbackByPost((prev) => ({ ...prev, [id]: feedback }))
+      if (feedback === "hide") setNotInterestedIds((prev) => prev.includes(id) ? prev : [...prev, id])
+      else setNotInterestedIds((prev) => prev.filter((postId) => postId !== id))
+      const message = feedback === "hide"
+        ? "Preference saved. This post will be hidden from your feed."
+        : curationRankingPaused
+          ? "Preference saved. Ranking personalization is temporarily paused."
+          : feedback === "show_more"
+            ? "Preference saved. Similar posts will be prioritized when eligible."
+            : "Preference saved. Similar posts will be deprioritized when eligible."
+      addToast(message, "success")
+    } catch {
+      addToast("Could not save this feed preference. Please try again.", "error")
+    }
+  }, [addToast, curationRankingPaused])
+
   const handleNotInterested = useCallback((postId: string) => {
-    setNotInterestedIds((prev) => [...prev, postId])
-    addToast("You won't see posts like this", "info")
-  }, [addToast])
+    void saveCurationFeedback(postId, "hide")
+  }, [saveCurationFeedback])
+
+  const handleCurationFeedback = useCallback((postId: string, feedback: "show_less" | "show_more") => {
+    void saveCurationFeedback(postId, feedback)
+  }, [saveCurationFeedback])
 
   const openComments = useCallback((postId: string) => {
     setCommentingPostId(postId)
@@ -702,6 +779,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   onShare={(postId) => setSharePostId(postId)}
                   onSave={handleSave}
                   onNotInterested={handleNotInterested}
+                  onCurationFeedback={handleCurationFeedback}
                   onShowVisibilityReason={handleShowVisibilityReason}
                   visibilityReason={rankedPost.reason}
                   onOpenProfile={(authorId) => {
@@ -895,10 +973,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           setCommentingPostId(null)
         }}
       />
-
-      {/* Create: bottom-nav Create hub only (no floating FAB) */}
-      <PostComposer open={showComposer} onOpenChange={setShowComposer} initialMode={composeMode} />
-
 
       {/* Visibility reason tooltip */}
       {selectedVisibilityReason && (

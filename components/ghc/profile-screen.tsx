@@ -9,6 +9,8 @@ import { useMemo, useState, useCallback, useEffect } from "react"
 import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
+import { ProfileProgressionCard } from "./profile-progression-card"
+import { ProfileTrustCard } from "./profile-trust-card"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal, calculateProfileCompletion } from "./profile-components"
@@ -469,6 +471,9 @@ export function ProfileScreen({
           conversations={messaging?.conversations}
           viewerId={meId}
         />
+
+        <ProfileProgressionCard />
+        <ProfileTrustCard />
 
         {intents.length > 0 ? (
           <section className="mt-4 w-full px-4">

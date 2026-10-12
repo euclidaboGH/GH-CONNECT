@@ -14,6 +14,7 @@ export type ServerMarketListing = {
   availability: number
   status: "draft" | "active" | "paused" | "sold_out" | "removed"
   kind?: string
+  metadata?: Record<string, unknown>
 }
 
 function dbConfigured(): boolean {
@@ -64,6 +65,7 @@ export async function getListing(id: string): Promise<ServerMarketListing | null
     availability: Number(d.availability) || 0,
     status: (d.status as ServerMarketListing["status"]) || "active",
     kind: d.kind != null ? String(d.kind) : undefined,
+    metadata: d.metadata && typeof d.metadata === "object" && !Array.isArray(d.metadata) ? d.metadata as Record<string, unknown> : {},
   }
 }
 
@@ -84,6 +86,7 @@ export async function upsertListing(
       availability: input.availability,
       status: input.status,
       kind: input.kind || "product",
+      metadata: input.metadata || {},
     },
   })
   if (!res || typeof res !== "object") return { ok: false, error: "UPSERT_FAILED" }
@@ -105,7 +108,7 @@ export async function listActiveListings(limit = 50): Promise<ServerMarketListin
   const lim = Math.min(Math.max(limit, 1), 100)
   try {
     const q =
-      `gh_marketplace_listings?status=eq.active&select=id,seller_id,title,description,price,currency,availability,status,kind&order=updated_at.desc&limit=${lim}`
+      `gh_marketplace_listings?status=eq.active&select=id,seller_id,title,description,price,currency,availability,status,kind,metadata&order=updated_at.desc&limit=${lim}`
     const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
       headers: {
         apikey: env.supabaseServiceRoleKey,
@@ -126,6 +129,7 @@ export async function listActiveListings(limit = 50): Promise<ServerMarketListin
       availability: Number(r.availability) || 0,
       status: (r.status as ServerMarketListing["status"]) || "active",
       kind: r.kind != null ? String(r.kind) : undefined,
+      metadata: r.metadata && typeof r.metadata === "object" && !Array.isArray(r.metadata) ? r.metadata as Record<string, unknown> : {},
     }))
   } catch {
     return []
@@ -144,7 +148,7 @@ export async function listSellerListings(
   const lim = Math.min(Math.max(limit, 1), 100)
   try {
     const q =
-      `gh_marketplace_listings?seller_id=eq.${encodeURIComponent(sid)}&status=neq.removed&select=id,seller_id,title,description,price,currency,availability,status,kind&order=updated_at.desc&limit=${lim}`
+      `gh_marketplace_listings?seller_id=eq.${encodeURIComponent(sid)}&status=neq.removed&select=id,seller_id,title,description,price,currency,availability,status,kind,metadata&order=updated_at.desc&limit=${lim}`
     const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
       headers: {
         apikey: env.supabaseServiceRoleKey,
@@ -165,9 +169,68 @@ export async function listSellerListings(
       availability: Number(r.availability) || 0,
       status: (r.status as ServerMarketListing["status"]) || "active",
       kind: r.kind != null ? String(r.kind) : undefined,
+      metadata: r.metadata && typeof r.metadata === "object" && !Array.isArray(r.metadata) ? r.metadata as Record<string, unknown> : {},
     }))
   } catch {
     return []
   }
 }
 
+
+/** Reserve stock in the database under a row lock; environment flags are not proof of atomicity. */
+export async function reserveListingStock(input: {
+  listingId: string
+  orderId: string
+  buyerId: string
+  quantity: number
+  ttlSeconds?: number
+}): Promise<{ ok: true; duplicate?: boolean; expiresAt?: string; remaining?: number } | { ok: false; error: string; available?: number }> {
+  if (!dbConfigured()) return { ok: false, error: "STOCK_RESERVATION_DATABASE_REQUIRED" }
+  const raw = await rpcJson("gh_marketplace_stock_reserve", {
+    p_listing_id: input.listingId,
+    p_order_id: input.orderId,
+    p_buyer_id: input.buyerId,
+    p_quantity: input.quantity,
+    p_ttl_seconds: input.ttlSeconds ?? 900,
+  })
+  if (!raw || typeof raw !== "object") return { ok: false, error: "STOCK_RESERVATION_RPC_UNAVAILABLE" }
+  const data = raw as Record<string, unknown>
+  if (data.ok !== true) return {
+    ok: false,
+    error: String(data.error || "STOCK_RESERVATION_FAILED"),
+    available: Number.isFinite(Number(data.available)) ? Number(data.available) : undefined,
+  }
+  return {
+    ok: true,
+    duplicate: Boolean(data.duplicate),
+    expiresAt: data.expiresAt == null ? undefined : String(data.expiresAt),
+    remaining: Number.isFinite(Number(data.remaining)) ? Number(data.remaining) : undefined,
+  }
+}
+
+export async function commitListingStock(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dbConfigured()) return { ok: false, error: "STOCK_RESERVATION_DATABASE_REQUIRED" }
+  const raw = await rpcJson("gh_marketplace_stock_commit", { p_order_id: orderId })
+  if (!raw || typeof raw !== "object" || (raw as { ok?: boolean }).ok !== true) {
+    return { ok: false, error: String((raw as { error?: string } | null)?.error || "STOCK_COMMIT_FAILED") }
+  }
+  return { ok: true }
+}
+
+export async function releaseListingStock(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dbConfigured()) return { ok: false, error: "STOCK_RESERVATION_DATABASE_REQUIRED" }
+  const raw = await rpcJson("gh_marketplace_stock_release", { p_order_id: orderId, p_final_status: "released" })
+  if (!raw || typeof raw !== "object" || (raw as { ok?: boolean }).ok !== true) {
+    return { ok: false, error: String((raw as { error?: string } | null)?.error || "STOCK_RELEASE_FAILED") }
+  }
+  return { ok: true }
+}
+
+export async function validateListingStockReservation(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dbConfigured()) return { ok: false, error: "STOCK_RESERVATION_DATABASE_REQUIRED" }
+  const raw = await rpcJson("gh_marketplace_stock_validate", { p_order_id: orderId })
+  if (!raw || typeof raw !== "object" || (raw as { ok?: boolean }).ok !== true) {
+    return { ok: false, error: String((raw as { error?: string } | null)?.error || "STOCK_RESERVATION_INVALID") }
+  }
+  return { ok: true }
+}

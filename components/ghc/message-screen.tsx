@@ -315,7 +315,7 @@ export function MessageScreen() {
         <ChatHeader
           participantName={selected.groupName || selected.participantName || "Chat"}
           participantPhoto={selected.groupPhoto || selected.participantPhoto || ""}
-          isOnline={Boolean(selected.online)}
+          isOnline={Boolean(selected.online)} // Presence is optional — chat must work when unknown/offline
           isTyping={Boolean(selected.isTyping)}
           isCommunity={isCommunity}
           onBack={closeThread}
