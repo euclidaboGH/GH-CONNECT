@@ -137,7 +137,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       const t = setTimeout(() => inputRef.current?.focus(), 200)
       return () => clearTimeout(t)
     }
-  }, [open])
+  }, [open, post?.id])
 
   // Reset ephemeral state when sheet closes
   useEffect(() => {
@@ -148,7 +148,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       setEditingId(null)
       setEditText("")
     }
-  }, [open])
+  }, [open, post?.id])
 
   if (!open || !post) return null
 

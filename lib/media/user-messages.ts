@@ -37,8 +37,10 @@ export function mediaUserMessage(code: string, detail?: string): string {
 }
 
 export const MEDIA_PROGRESS = {
+  preparingPhoto: "Preparing photo…",
   compressing: "Optimizing photo…",
   uploading: "Uploading…",
+  preparingFile: "Preparing file…",
   preparingVideo: "Preparing video…",
   optimizingVideo: "Checking video…",
   ready: "Ready",

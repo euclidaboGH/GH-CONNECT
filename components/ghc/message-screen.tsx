@@ -168,6 +168,8 @@ export function MessageScreen() {
       window.removeEventListener("ghc:open-conversation", onOpenConversation as EventListener)
       window.removeEventListener("ghc:messaging-reconcile", onReconcile as EventListener)
     }
+    // selectedId intentionally omitted — listeners should not rebind every selection change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const unreadCount = useMemo(
