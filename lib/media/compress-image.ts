@@ -32,14 +32,14 @@ const PRESETS: Record<
 > = {
   avatar: { maxWidth: 512, maxHeight: 512, quality: 0.84 },
   cover: { maxWidth: 1600, maxHeight: 900, quality: 0.82 },
-  feed: { maxWidth: 1280, maxHeight: 1280, quality: 0.82 },
-  story: { maxWidth: 1080, maxHeight: 1920, quality: 0.8 },
+  feed: { maxWidth: 1600, maxHeight: 1600, quality: 0.88 },
+  story: { maxWidth: 1080, maxHeight: 1920, quality: 0.86 },
   message: { maxWidth: 1280, maxHeight: 1280, quality: 0.78 },
   theme: { maxWidth: 1440, maxHeight: 2560, quality: 0.72 },
-  general: { maxWidth: 1200, maxHeight: 1200, quality: 0.8 },
+  general: { maxWidth: 1600, maxHeight: 1600, quality: 0.86 },
 }
 
-const DEFAULT_MAX_INPUT = 25 * 1024 * 1024
+const DEFAULT_MAX_INPUT = 50 * 1024 * 1024
 
 function supportsWebp(): boolean {
   try {
@@ -90,7 +90,7 @@ export function compressImageFile(
 
   const type = (file as File).type || ""
   if (type && !type.startsWith("image/") && type !== "application/octet-stream") {
-    return Promise.reject(new Error("Please choose an image file."))
+    return Promise.reject(new Error("Please choose a photo file (JPG, PNG, WebP, GIF, HEIC)."))
   }
 
   return new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ export function compressImageFile(
         }
       }
       img.onerror = () =>
-        reject(new Error("Could not decode this image. Try JPG, PNG, or WebP."))
+        reject(new Error("Could not decode this image on this device. Try JPG or PNG, or re-export from your gallery."))
       img.src = reader.result as string
     }
     reader.readAsDataURL(file)

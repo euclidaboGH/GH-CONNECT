@@ -37,6 +37,7 @@ import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
+import { prepareProfilePhoto } from "@/lib/profile-media"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -136,7 +137,13 @@ export function ProfileScreen({
   const handleSave = useCallback(
     (updates: Partial<Profile>) => {
       try {
-        ghc.updateProfile?.(updates)
+        const payload = {
+          ...updates,
+          interests: Array.isArray(updates.interests)
+            ? updates.interests.map((i) => String(i).trim()).filter(Boolean).slice(0, 30)
+            : updates.interests,
+        }
+        void Promise.resolve(ghc.updateProfile?.(payload))
         setStatusMsg("Profile updated")
         window.setTimeout(() => setStatusMsg(null), 2000)
         ghc.addToast?.("Profile updated", "success")
@@ -153,37 +160,49 @@ export function ProfileScreen({
     (kind: "photo" | "cover") => {
       setPhotoSheet(null)
       if (typeof navigator !== "undefined" && !navigator.onLine) {
-        ghc.addToast?.("You are offline. Choose a photo now — it saves on this device and may sync when you reconnect.", "info")
+        ghc.addToast?.(
+          "You are offline. We will still optimize the photo on this device and sync when possible.",
+          "info",
+        )
       }
       try {
         const input = document.createElement("input")
         input.type = "file"
-        input.accept = "image/*"
+        input.accept = "image/*,.heic,.heif,.avif"
         input.onchange = () => {
           const file = input.files?.[0]
           if (!file) return
-          if (file.size > 4 * 1024 * 1024) {
-            ghc.addToast?.("Image must be under 4 MB", "error")
+          if (file.size > 50 * 1024 * 1024) {
+            ghc.addToast?.("Image is too large. Try a normal camera photo under 50 MB.", "error")
             return
           }
-          const reader = new FileReader()
-          reader.onload = () => {
-            const dataUrl = String(reader.result || "")
-            if (!dataUrl) return
-            if (kind === "photo") {
-              const next = [dataUrl, ...photos.filter((x) => x !== dataUrl)].slice(0, 6)
-              ghc.updateProfile?.({ photos: next })
-              setStatusMsg("Profile photo updated")
-              window.setTimeout(() => setStatusMsg(null), 2000)
-              ghc.addToast?.("Profile photo updated", "success")
-            } else {
-              ghc.updateProfile?.({ coverPhoto: dataUrl })
-              setStatusMsg("Cover photo updated")
-              window.setTimeout(() => setStatusMsg(null), 2000)
-              ghc.addToast?.("Cover photo updated", "success")
+          setStatusMsg(kind === "cover" ? "Optimizing cover…" : "Optimizing photo…")
+          void (async () => {
+            const prepared = await prepareProfilePhoto(file, kind)
+            if (!prepared.ok) {
+              setStatusMsg(null)
+              ghc.addToast?.(prepared.error || "Could not process image", "error")
+              return
             }
-          }
-          reader.readAsDataURL(file)
+            const url = prepared.url
+            if (kind === "photo") {
+              const next = [url, ...photos.filter((x) => x !== url)].slice(0, 6)
+              await Promise.resolve(ghc.updateProfile?.({ photos: next }))
+              setStatusMsg(prepared.durable ? "Profile photo saved" : "Profile photo saved on device")
+              ghc.addToast?.(
+                prepared.durable ? "Profile photo updated" : "Photo updated (will use cloud when storage is configured)",
+                "success",
+              )
+            } else {
+              await Promise.resolve(ghc.updateProfile?.({ coverPhoto: url }))
+              setStatusMsg(prepared.durable ? "Cover saved" : "Cover saved on device")
+              ghc.addToast?.(
+                prepared.durable ? "Cover photo updated" : "Cover updated (will use cloud when storage is configured)",
+                "success",
+              )
+            }
+            window.setTimeout(() => setStatusMsg(null), 2500)
+          })()
         }
         input.click()
       } catch {

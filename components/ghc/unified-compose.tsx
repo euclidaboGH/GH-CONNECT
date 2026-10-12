@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 import { Image as ImageIcon, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
-import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
+import {
+  validateImageFiles,
+  validateMediaFile,
+  validateMediaFileSoft,
+  MEDIA_LIMITS,
+} from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
@@ -277,7 +282,17 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ Photo ready", "success")
       } else {
-        const validated = validateImageFiles(Array.from(files), 10)
+        const validated = validateImageFiles(Array.from(files), MEDIA_LIMITS.maxImages)
+        if (!validated.length) {
+          addToast(
+            mediaUserMessage(
+              "UNSUPPORTED_TYPE",
+              "No supported photos in that selection. Try JPG, PNG, WebP, or HEIC.",
+            ),
+            "error",
+          )
+          return
+        }
         const images: string[] = []
         for (const file of validated) {
           setUploadProgress(MEDIA_PROGRESS.compressing)
@@ -363,11 +378,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handleVideo = async (file: File | undefined) => {
     if (!file) return
-    const sizeMb = file.size / (1024 * 1024)
-    if (sizeMb > 80) {
-      addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
+    const check = validateMediaFileSoft(file, "video")
+    if (!check.ok) {
+      addToast(check.error, "error")
       return
     }
+    const sizeMb = file.size / (1024 * 1024)
     setUploadProgress(
       sizeMb > 8
         ? `${MEDIA_PROGRESS.preparingVideo} (${sizeMb.toFixed(0)} MB)`
@@ -410,12 +426,21 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setStoryMedia(null)
         addToast("Video attached", "success")
       } else if (!up.ok) {
-        addToast(mediaUserMessage(up.error || "FILE_TOO_LARGE", up.userMessage), "error")
+        addToast(
+          mediaUserMessage(
+            up.error || "STORAGE_ERROR",
+            up.userMessage ||
+              (up.error === "MEDIA_STORAGE_UNAVAILABLE"
+                ? "Video needs cloud storage on this environment. Photos still work with on-device compression."
+                : undefined),
+          ),
+          "error",
+        )
       } else {
-        addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
+        addToast(mediaUserMessage("STORAGE_ERROR"), "error")
       }
     } catch {
-      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
+      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try MP4/MOV or a shorter clip"), "error")
     } finally {
       setUploadProgress(null)
     }
@@ -946,7 +971,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <input
           ref={imageInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif,.avif,.bmp"
           multiple={mode === "post"}
           className="sr-only"
           onChange={(e) => {
@@ -957,7 +982,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <input
           ref={videoInputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,.mp4,.m4v,.mov,.webm,.3gp"
           className="sr-only"
           onChange={(e) => {
             void handleVideo(e.target.files?.[0])

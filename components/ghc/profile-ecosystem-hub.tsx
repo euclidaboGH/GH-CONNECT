@@ -1,5 +1,7 @@
 "use client"
 
+import { navigateTo } from "@/lib/navigation/navigate"
+
 /**
  * Profile ecosystem hub — Identity → Membership → Wallet → Rewards
  * Display-only summaries. Balances from existing APIs; never invent GHC.
@@ -11,8 +13,7 @@ import {
   Crown,
   Gift,
   Share2,
-  Wallet,
-} from "lucide-react"
+  Wallet,, ShoppingBag, LayoutGrid } from "lucide-react"
 import {
   formatGreenHavenIdDisplay,
   getOrCreateGreenHavenId,
@@ -271,6 +272,33 @@ export function ProfileEcosystemHub({
             View rewards
             <ChevronRight size={14} aria-hidden />
           </span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={() => navigateTo("marketplace")}
+          className="flex min-h-[72px] flex-col rounded-[1.25rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-card p-3.5 text-left shadow-sm transition hover:border-emerald-300 active:scale-[0.99] dark:border-emerald-900 dark:from-emerald-950/30"
+        >
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+            <ShoppingBag size={14} aria-hidden />
+            Marketplace
+          </span>
+          <span className="mt-1 text-[12px] text-muted-foreground">Buy · sell · listings</span>
+          <span className="mt-auto pt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open →</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigateTo("ecosystem")}
+          className="flex min-h-[72px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-sm transition hover:bg-muted/40 active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
+            <LayoutGrid size={14} aria-hidden />
+            Full ecosystem
+          </span>
+          <span className="mt-1 text-[12px] text-muted-foreground">All GreenHaven services</span>
+          <span className="mt-auto pt-2 text-[11px] font-bold text-foreground">Explore →</span>
         </button>
       </div>
     </div>

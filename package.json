@@ -39,7 +39,13 @@
     "ops:gh-gates": "node scripts/operator-verify-g-h-gates.mjs",
     "test:observability-i": "node scripts/test-observability-i-static.mjs",
     "ops:i-gates": "node scripts/operator-verify-i-gates.mjs",
-    "ops:all-gates": "npm run test:identity-conflict && npm run test:identity-authz && npm run test:economy-cd && npm run test:security-cd && npm run test:feed-compose-ef && npm run test:messaging-marketplace-gh && npm run test:observability-i && npm run test:global-compose-host && npm run verify:static"
+    "ops:all-gates": "npm run test:identity-conflict && npm run test:identity-authz && npm run test:economy-cd && npm run test:security-cd && npm run test:feed-compose-ef && npm run test:messaging-marketplace-gh && npm run test:observability-i && npm run test:global-compose-host && npm run verify:static",
+    "test:messaging-comments-upgrade": "node scripts/test-messaging-comments-upgrade-static.mjs",
+    "test:media-upload": "node scripts/test-media-upload-relaxation-static.mjs",
+    "test:returning-onboarding": "node scripts/test-returning-onboarding-static.mjs",
+    "test:profile-interests": "node scripts/test-profile-interests-static.mjs",
+    "test:ecosystem-discoverability": "node scripts/test-ecosystem-discoverability-static.mjs",
+    "test:profile-media": "node scripts/test-profile-media-persist-static.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

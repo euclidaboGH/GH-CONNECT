@@ -113,12 +113,9 @@ export async function POST(request: Request) {
       const profile = await getServerProfile(record.ghUserId)
       const hasEstablishedProfile = Boolean(
         profile &&
-        (profile.onboarded ||
-          (profile.displayName &&
-            profile.displayName.trim().length > 0 &&
-            (profile.interests.length > 0 ||
-              profile.connectionIntents.length > 0 ||
-              profile.photos.length > 0)))
+        (profile.onboarded === true ||
+          (typeof profile.displayName === "string" &&
+            profile.displayName.trim().length > 0))
       )
       if (hasEstablishedProfile) {
         const repaired = await markOnboardingCompleted(record.ghUserId)

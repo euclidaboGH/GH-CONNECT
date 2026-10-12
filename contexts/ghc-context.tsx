@@ -41,7 +41,13 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import {
   findCompletedLocalProfileForUser,
   isCompletedProfileShape,
+  hasLocalOnboardingStampForUser,
 } from "@/lib/onboarding-local"
+import {
+  saveProfileMediaCache,
+  loadProfileMediaCache,
+  mergeProfileMedia,
+} from "@/lib/profile-photo-cache"
 import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
@@ -613,7 +619,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               (typeof profile.displayName === "string" &&
                 profile.displayName.trim().length > 0 &&
                 Array.isArray(profile.photos) &&
-                profile.photos.length > 0)
+                profile.photos.length > 0) ||
+              hasLocalOnboardingStampForUser({
+                userId: String(d.uid || profile.id || ""),
+                username: d.username || profile.username || null,
+                candidateUserIds: [d.uid, profile.id],
+              })
             // Also consult local profile store (PIN unlock / cold start race)
             if (!alreadyLocal) {
               try {
@@ -637,18 +648,77 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 /* */
               }
             }
-            if (!alreadyLocal) {
-              profile.onboarded = false
-            } else {
+            if (alreadyLocal) {
               profile.onboarded = true
+            } else if (
+              hasLocalOnboardingStampForUser({
+                userId: String(d.uid || profile.id || ""),
+                username: d.username || profile.username || null,
+                candidateUserIds: [d.uid, profile.id],
+              })
+            ) {
+              // Never force registration for a device that already finished onboarding
+              profile.onboarded = true
+            } else {
+              profile.onboarded = false
             }
           }
+        }
+        // Re-apply device photo cache for returning user
+        try {
+          const media = mergeProfileMedia(
+            String(profile.id || d.uid || ""),
+            profile.photos,
+            profile.coverPhoto ?? null,
+          )
+          if (media.photos.length && (!profile.photos || profile.photos.length === 0)) {
+            profile.photos = media.photos
+          }
+          if (media.coverPhoto && !profile.coverPhoto) {
+            profile.coverPhoto = media.coverPhoto
+          }
+        } catch {
+          /* */
         }
         return { ...prev, profile }
       })
     }
     window.addEventListener("ghc:pi-identity-ready", onPi as EventListener)
     return () => window.removeEventListener("ghc:pi-identity-ready", onPi as EventListener)
+  }, [])
+
+
+  // BOOT_PROFILE_HYDRATE — restore onboarded so returning users never flash registration
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = window.localStorage.getItem("ghc.profile")
+      if (!raw) return
+      const stored = coerceStoredProfile(JSON.parse(raw))
+      if (!stored) return
+      setState((s) => {
+        if (s.profile.onboarded === true) return s
+        const onboarded =
+          stored.onboarded === true ||
+          hasLocalOnboardingStampForUser({
+            userId: stored.id,
+            username: stored.username || stored.displayName,
+            candidateUserIds: [stored.id],
+          }) ||
+          isCompletedProfileShape(stored)
+        if (!onboarded && !stored.displayName) return s
+        return {
+          ...s,
+          profile: {
+            ...s.profile,
+            ...stored,
+            onboarded: onboarded || stored.onboarded === true,
+          },
+        }
+      })
+    } catch {
+      /* */
+    }
   }, [])
 
   // Keep IdentityService aligned with profile (Pi UID always wins)
@@ -1171,21 +1241,52 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           // Durable server row is authority: honor explicit empty arrays / false onboarded.
           // Non-durable or offline: keep local cache to avoid flash-wipe.
           const durable = result.durable && result.exists
-          const photos =
+          let photos =
             durable && Array.isArray(server.photos)
               ? server.photos
               : Array.isArray(server.photos) && server.photos.length > 0
                 ? server.photos
                 : s.profile.photos
-          const coverPhoto =
+          let coverPhoto =
             durable && (server.coverPhoto === null || server.coverPhoto === "")
               ? ""
               : typeof server.coverPhoto === "string" && server.coverPhoto.length > 0
                 ? server.coverPhoto
                 : s.profile.coverPhoto
-          const onboarded = durable
+          // Restore device media if server returned empty (logout/login or clip legacy)
+          {
+            const merged = mergeProfileMedia(
+              String(server.id || s.profile.id || ""),
+              Array.isArray(photos) ? photos : [],
+              typeof coverPhoto === "string" ? coverPhoto : null,
+            )
+            if ((!photos || photos.length === 0) && merged.photos.length > 0) {
+              photos = merged.photos
+            }
+            if ((!coverPhoto || coverPhoto === "") && merged.coverPhoto) {
+              coverPhoto = merged.coverPhoto
+            }
+          }
+          let onboarded = durable
             ? Boolean(server.onboarded)
             : Boolean(server.onboarded) || Boolean(s.profile.onboarded)
+          // Returning-user guard: durable row may lag identity onboardingCompleted repair
+          if (!onboarded) {
+            try {
+              if (
+                s.profile.onboarded === true ||
+                hasLocalOnboardingStampForUser({
+                  userId: String(server.id || s.profile.id || ""),
+                  username: (server.username as string) || s.profile.username || null,
+                  candidateUserIds: [server.id as string, s.profile.id],
+                })
+              ) {
+                onboarded = true
+              }
+            } catch {
+              if (s.profile.onboarded === true) onboarded = true
+            }
+          }
           return {
             ...s,
             profile: {
@@ -1255,7 +1356,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      setState((s) => ({ ...s, profile: { ...s.profile, ...result.data } }))
+      setState((s) => {
+        const next = { ...s.profile, ...result.data }
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("ghc.profile", JSON.stringify(next))
+            saveProfileMediaCache({
+              userId: next.id,
+              photos: next.photos,
+              coverPhoto: next.coverPhoto ?? null,
+            })
+          }
+        } catch {
+          /* */
+        }
+        return { ...s, profile: next }
+      })
 
       // Durable social profile (server). Await so reload can hydrate photos/fields.
       // Failures do not roll back local UX; queue offline sync when needed.
@@ -4822,6 +4938,29 @@ const dismissMatchCelebration = useCallback(() => {
       }
       // Identity domain session signal (does not replace Pi auth transport)
       await domains.identity.clearSession()
+      try {
+        // Keep avatar/cover on this device for the same user after re-login
+        saveProfileMediaCache({
+          userId: state.profile?.id,
+          photos: state.profile?.photos,
+          coverPhoto: state.profile?.coverPhoto ?? null,
+        })
+        if (state.profile?.id) {
+          try {
+            window.localStorage.setItem(
+              "ghc.profile",
+              JSON.stringify({
+                ...state.profile,
+                // mark so boot hydrate can prefer media
+              }),
+            )
+          } catch {
+            /* */
+          }
+        }
+      } catch {
+        /* */
+      }
       try {
         IdentityService.clear()
       } catch {

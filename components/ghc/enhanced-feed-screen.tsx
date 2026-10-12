@@ -13,7 +13,7 @@ import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
-import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, ShoppingBag } from "lucide-react"
+import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, ShoppingBag, LayoutGrid } from "lucide-react"
 import { MOBILE_PAGE_SIZES } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { NotificationBell } from "./notification-bell"
@@ -35,6 +35,8 @@ import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
+import { EcosystemQuickAccess } from "./ecosystem-quick-access"
+import { navigateTo } from "@/lib/navigation/navigate"
 import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
@@ -543,6 +545,22 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             />
             <button
               type="button"
+              onClick={() => navigateTo("marketplace")}
+              aria-label="Open Marketplace"
+              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-emerald-50 active:scale-90 dark:hover:bg-emerald-950/40"
+            >
+              <ShoppingBag size={18} className="text-emerald-700 dark:text-emerald-300" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateTo("ecosystem")}
+              aria-label="Open GreenHaven Ecosystem"
+              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-muted active:scale-90"
+            >
+              <LayoutGrid size={18} className="text-foreground/80" />
+            </button>
+            <button
+              type="button"
               onClick={() => setIsSearchOpen(true)}
               aria-label="Search"
               aria-expanded={isSearchOpen}
@@ -668,6 +686,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           </div>
         </div>
       )}
+
+            <div className="px-3 pt-2 pb-1">
+        <EcosystemQuickAccess variant="compact" />
+      </div>
 
       {/* Feed content — skeleton until bootstrap so empty state never flashes under load */}
       {(!feedBootstrapped || (isRefreshing && rankedPosts.length === 0)) ? (

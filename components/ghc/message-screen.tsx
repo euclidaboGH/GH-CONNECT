@@ -20,8 +20,21 @@ import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
+import {
+  MAX_MESSAGE_LENGTH,
+  MESSAGE_WINDOW_DEFAULT,
+  MESSAGE_WINDOW_STEP,
+  clipMessageText,
+  loadConversationDraft,
+  saveConversationDraft,
+  clearConversationDraft,
+  shouldGroupWithPrevious,
+  formatMessageDayDivider,
+  dayKey,
+} from "@/lib/messaging/messaging-ux"
+import { formatApiErrorToast } from "@/lib/ux/map-api-error"
 
-const MESSAGE_WINDOW = 40
+const MESSAGE_WINDOW = MESSAGE_WINDOW_DEFAULT
 const WINDOW_STEP = 24
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"
@@ -92,6 +105,21 @@ export function MessageScreen() {
     }
   }, [])
 
+
+  // Per-conversation draft restore (local only — never server-fabricated messages)
+  useEffect(() => {
+    if (!selectedId) return
+    const saved = loadConversationDraft(selectedId)
+    setDraft(saved)
+  }, [selectedId])
+
+  // Persist draft while typing
+  useEffect(() => {
+    if (!selectedId) return
+    const handle = window.setTimeout(() => saveConversationDraft(selectedId, draft), 250)
+    return () => window.clearTimeout(handle)
+  }, [draft, selectedId])
+
   useEffect(() => {
     const handle = window.setTimeout(() => setQueryDebounced(query), 180)
     return () => window.clearTimeout(handle)
@@ -105,6 +133,7 @@ export function MessageScreen() {
       if (typeof tab === "string" && tab !== "messages") {
         setSelectedId(null)
         setDraft("")
+      if (selectedId) clearConversationDraft(selectedId)
         setWindowSize(MESSAGE_WINDOW)
       }
     }
@@ -235,7 +264,7 @@ export function MessageScreen() {
   }, [])
 
   const handleSend = useCallback(async () => {
-    const text = draft.trim()
+    const text = clipMessageText(draft).trim()
     if (!text || !selectedId || sending) return
     setSending(true)
     setDraft("")
@@ -440,9 +469,14 @@ export function MessageScreen() {
               This conversation is muted — you still receive messages here; notifications stay quiet.
             </p>
           ) : null}
+          {draft.length > MAX_MESSAGE_LENGTH * 0.85 ? (
+            <p className="mb-1 text-right text-[10px] tabular-nums text-muted-foreground" aria-live="polite">
+              {draft.length}/{MAX_MESSAGE_LENGTH}
+            </p>
+          ) : null}
           <MessageInput
             messageText={draft}
-            onMessageChange={setDraft}
+            onMessageChange={(v) => setDraft(clipMessageText(v))}
             onSendMessage={() => void handleSend()}
             onEmojiClick={() => {
               /* MessageInput owns the emoji sheet */
