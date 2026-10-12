@@ -526,6 +526,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       window.removeEventListener("ghc:pi-payment-complete", refresh)
       window.removeEventListener("ghc:membership-refresh", refresh)
     }
+  // refreshMembershipFromServer is stable for this screen lifecycle
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: listeners only
   }, [])
 
   return (

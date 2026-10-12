@@ -764,7 +764,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         try {
                           window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } }))
                         } catch {
-                          setShowComposer(true)
+                          /* global compose host owns the sheet */
                         }
                       },
                     }
@@ -915,7 +915,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
                     } catch {
-                      setShowComposer(true)
+                      try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } })) } catch { /* */ }
                     }
                   }}
                   className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
@@ -928,7 +928,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "story" } }))
                     } catch {
-                      setShowComposer(true)
+                      /* global compose host owns the sheet */
                     }
                   }}
                   className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95"
