@@ -13,7 +13,10 @@ import {
   Crown,
   Gift,
   Share2,
-  Wallet,, ShoppingBag, LayoutGrid } from "lucide-react"
+  Wallet,
+  ShoppingBag,
+  LayoutGrid,
+} from "lucide-react"
 import {
   formatGreenHavenIdDisplay,
   getOrCreateGreenHavenId,
