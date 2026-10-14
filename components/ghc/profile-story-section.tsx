@@ -5,6 +5,8 @@ import { Image as ImageIcon, Plus, Video, X } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { socialViewStory } from "@/lib/social/client"
 import { compressImage } from "@/lib/ghc-data"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { mediaUserMessage } from "@/lib/media/user-messages"
 import type { StoryItem } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
 
@@ -84,11 +86,21 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
     if (!file) return
     setUploading(type)
     try {
-      const url = type === "image" ? await compressImage(file) : URL.createObjectURL(file)
-      setMedia({ type, url })
-      addToast(`${type === "image" ? "Photo compressed" : "Video"} ready to share`, "success")
+      const preview = type === "image" ? await compressImage(file) : ""
+      const uploadBlob = type === "image" ? await (await fetch(preview)).blob() : file
+      const uploaded = await uploadDurableMedia(uploadBlob, { fileName: file.name })
+      if (uploaded.ok && uploaded.url && uploaded.kind === type) {
+        setMedia({ type, url: uploaded.url })
+        addToast(`${type === "image" ? "Photo" : "Video"} uploaded and ready to share`, "success")
+      } else if (type === "image" && preview.length > 0 && preview.length <= 180_000) {
+        // Only small images may use the legacy inline fallback; videos must be durable.
+        setMedia({ type, url: preview })
+        addToast("Small photo ready to share", "success")
+      } else {
+        addToast(mediaUserMessage(uploaded.ok ? "STORAGE_ERROR" : uploaded.error, uploaded.ok ? undefined : uploaded.userMessage), "error")
+      }
     } catch {
-      addToast(`Could not load this ${type}. Try another file.`, "error")
+      addToast(`Could not upload this ${type}. Check your connection and try again.`, "error")
     } finally {
       setUploading(null)
     }

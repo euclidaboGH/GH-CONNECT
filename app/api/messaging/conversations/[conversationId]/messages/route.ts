@@ -33,7 +33,14 @@ export async function GET(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const readLimit = checkRateLimit(`msg-read:${auth.userId}`, 120, 60_000)
+    if (!readLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const url = new URL(request.url)
     const rawLimit = Number(url.searchParams.get("limit") || "50")
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100)
@@ -85,6 +92,9 @@ export async function POST(request: Request, ctx: Ctx) {
       )
     }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const rl = checkRateLimit(`msg-send:${auth.userId}`, 60, 60_000)
     if (!rl.ok) {
       return NextResponse.json(
@@ -156,10 +166,21 @@ export async function PATCH(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const editLimit = checkRateLimit(`msg-edit:${auth.userId}`, 60, 60_000)
+    if (!editLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(editLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const contentLength = request.headers.get("content-length")
+    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 16 * 1024)) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
     const body = await request.json().catch(() => ({}))
     const messageId = String(body?.messageId || "").trim()
-    if (!messageId) {
+    if (!messageId || messageId.length > 180 || /[\u0000-\u001f\u007f]/.test(messageId)) {
       return NextResponse.json(
         { ok: false, error: "MESSAGE_ID_REQUIRED" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
@@ -189,6 +210,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
     // Edit body
     const text = typeof body?.body === "string" ? body.body : ""
+    if (text.length > 8000) {
+      return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const result = await editMessage({
       conversationId,
       messageId,
@@ -238,10 +262,17 @@ export async function DELETE(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const deleteLimit = checkRateLimit(`msg-delete:${auth.userId}`, 60, 60_000)
+    if (!deleteLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(deleteLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const url = new URL(request.url)
     const messageId = url.searchParams.get("messageId") || ""
-    if (!messageId) {
+    if (!messageId || messageId.length > 180 || /[\u0000-\u001f\u007f]/.test(messageId)) {
       return NextResponse.json(
         { ok: false, error: "MESSAGE_ID_REQUIRED" },
         { status: 400, headers: { "Cache-Control": "no-store" } }

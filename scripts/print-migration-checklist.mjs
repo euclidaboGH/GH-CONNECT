@@ -68,9 +68,10 @@ Staging order (REQUIRED groups, oldest first):
 8) Balance lock / spendable / withdrawal settle / activity stage (20261009 → 20261012)
 9) GHPV judgment → weight → calibration → settlement infra (20261013 → 20261020)
 10) Notification types + content rewards tables (20261021 → 20261022)
+11) Profile content library search (20261023; additive social read RPC, no economy coupling)
 
 GHPV settlement is system-only; votes must not mint GHC.
-There are no Phase 15 product migrations in this repository.
+Profile content library is additive social infrastructure; it does not change economy or payment rules.
 Phase 14 is hardening/verification (docs), not a new migration wave.
 
 Full inventory: docs/MIGRATION_CHECKLIST.md

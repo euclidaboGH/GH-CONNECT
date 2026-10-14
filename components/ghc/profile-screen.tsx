@@ -1,17 +1,16 @@
 "use client"
 
 /**
- * Profile — Facebook-style photo/cover interaction.
- * Tap cover or avatar → action sheet (Change photo / Remove).
- * Full-width layout: no left gutter shift.
+ * Profile — owner identity and owner posts, with non-essential account tools grouped
+ * inside a collapsed Dashboard. Profile post actions reuse the canonical feed card.
  */
 import { useMemo, useState, useCallback, useEffect } from "react"
-import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
+import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
-import { EditProfileModal, calculateProfileCompletion } from "./profile-components"
+import { EditProfileModal, calculateProfileCompletion, OwnPostCard } from "./profile-components"
 import {
   Settings as SettingsIcon,
   Wallet,
@@ -25,6 +24,7 @@ import {
 } from "lucide-react"
 import { LazyImage } from "./lazy-image"
 import type { Profile } from "@/lib/ghc-types"
+import { isOwnProfilePost } from "@/lib/ownership"
 import { IdentityService } from "@/lib/identity/identity-service"
 import {
   formatGreenHavenIdDisplay,
@@ -34,6 +34,8 @@ import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { ProfileContentLibrary } from "./profile-content-library"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -46,13 +48,13 @@ export function ProfileScreen({
 }) {
   const ghc = useGHCProfile() as {
     profile?: Profile
-    posts?: { id?: string; text?: string; content?: string; createdAt?: number; images?: string[] }[]
     friends?: unknown[]
     following?: unknown[]
-    updateProfile?: (updates: Partial<Profile>) => void
+    updateProfile?: (updates: Partial<Profile>) => Promise<void>
     addToast?: (m: string, t?: "success" | "error" | "info") => void
   }
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
+  const feed = useGHCFeed()
   const p = useMemo(() => ghc.profile || ({} as Profile), [ghc.profile])
   const name = p.displayName || "Member"
   const photos = useMemo(() => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []), [p.photos])
@@ -60,12 +62,13 @@ export function ProfileScreen({
   const cover = p.coverPhoto || ""
   const interests = Array.isArray(p.interests) ? p.interests.filter(Boolean) : []
   const intents = Array.isArray(p.connectionIntents) ? p.connectionIntents.filter(Boolean) : []
-  const posts = Array.isArray(ghc.posts) ? ghc.posts : []
-  const [profileActivityTab, setProfileActivityTab] = useState<"posts" | "media" | "activity">("posts")
-  const mediaPosts = posts.filter(
-    (post) => Array.isArray(post.images) && post.images.length > 0
+  const meId = IdentityService.getCurrentUserId()
+  const posts = useMemo(
+    () => (Array.isArray(feed.posts) ? feed.posts.filter((post) => isOwnProfilePost(post.authorId, post.authorName, meId, p)) : []),
+    [feed.posts, meId, p],
   )
-  const showMediaTab = mediaPosts.length > 0
+  const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -93,12 +96,6 @@ export function ProfileScreen({
     return () => window.removeEventListener("keydown", onKey)
   }, [photoSheet, editOpen])
 
-  useEffect(() => {
-    if (profileActivityTab === "media" && !showMediaTab) {
-      setProfileActivityTab("posts")
-    }
-  }, [profileActivityTab, showMediaTab])
-
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
@@ -119,7 +116,6 @@ export function ProfileScreen({
     return `@${base || "member"}`
   }, [p.username, name])
 
-  const meId = IdentityService.getCurrentUserId()
   const ghDisplay = useMemo(
     () => formatGreenHavenIdDisplay(getOrCreateGreenHavenId(meId, null)),
     [meId]
@@ -132,16 +128,19 @@ export function ProfileScreen({
   const openEdit = useCallback(() => setEditOpen(true), [])
 
   const handleSave = useCallback(
-    (updates: Partial<Profile>) => {
+    async (updates: Partial<Profile>): Promise<boolean> => {
       try {
-        ghc.updateProfile?.(updates)
+        if (!ghc.updateProfile) throw new Error("Profile updates are unavailable")
+        await ghc.updateProfile(updates)
         setStatusMsg("Profile updated")
         window.setTimeout(() => setStatusMsg(null), 2000)
         ghc.addToast?.("Profile updated", "success")
+        return true
       } catch {
         setStatusMsg("Could not save profile")
         window.setTimeout(() => setStatusMsg(null), 2500)
         ghc.addToast?.("Could not save profile", "error")
+        return false
       }
     },
     [ghc]
@@ -150,45 +149,86 @@ export function ProfileScreen({
   const pickImage = useCallback(
     (kind: "photo" | "cover") => {
       setPhotoSheet(null)
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        ghc.addToast?.("You are offline. Choose a photo now — it saves on this device and may sync when you reconnect.", "info")
+      const offline = typeof navigator !== "undefined" && !navigator.onLine
+      if (offline) {
+        ghc.addToast?.("You are offline. The photo can be saved locally and synced when you reconnect.", "info")
       }
       try {
         const input = document.createElement("input")
         input.type = "file"
-        input.accept = "image/*"
+        input.accept = "image/jpeg,image/png,image/webp,image/gif"
         input.onchange = () => {
           const file = input.files?.[0]
           if (!file) return
+          if (!file.type.startsWith("image/")) {
+            ghc.addToast?.("Choose a valid image file", "error")
+            return
+          }
           if (file.size > 4 * 1024 * 1024) {
             ghc.addToast?.("Image must be under 4 MB", "error")
             return
           }
-          const reader = new FileReader()
-          reader.onload = () => {
-            const dataUrl = String(reader.result || "")
-            if (!dataUrl) return
+          void (async () => {
+            let imageUrl = ""
+            const uploaded = offline ? null : await uploadDurableMedia(file, { fileName: file.name })
+            if (uploaded?.ok && uploaded.kind === "image") {
+              imageUrl = uploaded.url
+            } else if (offline || (uploaded && !uploaded.ok && uploaded.error === "MEDIA_STORAGE_UNAVAILABLE")) {
+              // Offline/local fallback, or compatibility fallback when durable media storage is not configured.
+              imageUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onerror = () => reject(new Error("Could not read this image. Try another file."))
+                reader.onload = () => {
+                  const value = String(reader.result || "")
+                  if (!value.startsWith("data:image/")) reject(new Error("The selected image could not be processed."))
+                  else resolve(value)
+                }
+                reader.readAsDataURL(file)
+              })
+            } else {
+              throw new Error(uploaded && !uploaded.ok ? uploaded.userMessage : "This upload was not recognized as an image.")
+            }
+            const changedAt = Date.now()
             if (kind === "photo") {
-              const next = [dataUrl, ...photos.filter((x) => x !== dataUrl)].slice(0, 6)
-              ghc.updateProfile?.({ photos: next })
+              const previous = photos[0]
+              const oldHistory = Array.isArray(p.profilePhotoHistory) ? p.profilePhotoHistory : []
+              const history = previous && /^https:\/\//i.test(previous) && previous !== imageUrl
+                ? [{ url: previous, changedAt, caption: "Previous profile photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
+                : oldHistory.slice(0, 24)
+              const next = [imageUrl, ...photos.filter((x) => x !== imageUrl)].slice(0, 6)
+              await ghc.updateProfile?.({
+                photos: next,
+                profilePhotoHistory: history,
+                profilePayload: { ...(p.profilePayload || {}), profilePhotoHistory: history, coverPhotoHistory: p.coverPhotoHistory || [] },
+              })
               setStatusMsg("Profile photo updated")
               window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Profile photo updated", "success")
             } else {
-              ghc.updateProfile?.({ coverPhoto: dataUrl })
+              const previous = cover
+              const oldHistory = Array.isArray(p.coverPhotoHistory) ? p.coverPhotoHistory : []
+              const history = previous && /^https:\/\//i.test(previous) && previous !== imageUrl
+                ? [{ url: previous, changedAt, caption: "Previous cover photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
+                : oldHistory.slice(0, 24)
+              await ghc.updateProfile?.({
+                coverPhoto: imageUrl,
+                coverPhotoHistory: history,
+                profilePayload: { ...(p.profilePayload || {}), profilePhotoHistory: p.profilePhotoHistory || [], coverPhotoHistory: history },
+              })
               setStatusMsg("Cover photo updated")
               window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Cover photo updated", "success")
             }
-          }
-          reader.readAsDataURL(file)
+          })().catch((error) => {
+            ghc.addToast?.(error instanceof Error ? error.message : "Could not update this image", "error")
+          })
         }
         input.click()
       } catch {
         ghc.addToast?.("Could not open gallery", "error")
       }
     },
-    [ghc, photos]
+    [ghc, photos, p, cover]
   )
 
   const removeImage = useCallback(
@@ -352,14 +392,17 @@ export function ProfileScreen({
                 type="button"
                 className="rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 onClick={() => {
-                  try {
-                    void navigator.clipboard?.writeText(ghDisplay)
-                    setStatusMsg("GH ID copied")
-                    window.setTimeout(() => setStatusMsg(null), 1500)
-                    ghc.addToast?.("GH ID copied", "success")
-                  } catch {
-                    ghc.addToast?.("Could not copy GH ID", "error")
-                  }
+                  void (async () => {
+                    try {
+                      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable")
+                      await navigator.clipboard.writeText(ghDisplay)
+                      setStatusMsg("GH ID copied")
+                      window.setTimeout(() => setStatusMsg(null), 1500)
+                      ghc.addToast?.("GH ID copied", "success")
+                    } catch {
+                      ghc.addToast?.("Could not copy GH ID. You can select the ID and copy it manually.", "error")
+                    }
+                  })()
                 }}
                 aria-label="Copy GreenHaven ID"
               >
@@ -426,6 +469,27 @@ export function ProfileScreen({
           </div>
         </div>
 
+        <section className="mt-4 w-full px-4" aria-label="Profile dashboard">
+          <button
+            type="button"
+            aria-expanded={dashboardOpen}
+            aria-controls="profile-dashboard-content"
+            onClick={() => setDashboardOpen((open) => !open)}
+            className="flex min-h-12 w-full items-center justify-between rounded-[1.1rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] font-bold text-foreground">Dashboard</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
+            </span>
+            <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">{dashboardOpen ? "Hide" : "Open"}</span>
+          </button>
+          {dashboardOpen ? (
+            <div id="profile-dashboard-content" className="mt-3 space-y-3">
+              <button type="button" onClick={() => setLibraryOpen(true)} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:bg-muted" aria-label="Open profile content library">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><ImagePlus size={19} /></span>
+                <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold">Photos, videos & documents</span><span className="mt-0.5 block text-[11px] text-muted-foreground">Search older posts and browse published files</span></span>
+                <span className="text-xs font-bold text-muted-foreground">Open</span>
+              </button>
         {extraPhotos.length > 0 ? (
           <section className="mt-3 w-full px-4" aria-label="More photos">
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -538,155 +602,6 @@ export function ProfileScreen({
         </section>
 
         
-        <section className="mt-4 w-full px-4" aria-label="Personal activity">
-          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
-          <div
-            className="flex items-center gap-1 border-b border-border/60 px-1"
-            role="tablist"
-            aria-label="Profile activity"
-            onKeyDown={(e) => {
-              const tabs: ("posts" | "media" | "activity")[] = showMediaTab
-                ? ["posts", "media", "activity"]
-                : ["posts", "activity"]
-              const idx = tabs.indexOf(profileActivityTab)
-              if (idx < 0) return
-              if (e.key === "ArrowRight") {
-                e.preventDefault()
-                setProfileActivityTab(tabs[(idx + 1) % tabs.length])
-              } else if (e.key === "ArrowLeft") {
-                e.preventDefault()
-                setProfileActivityTab(tabs[(idx - 1 + tabs.length) % tabs.length])
-              }
-            }}
-          >
-            {(
-              [
-                { id: "posts" as const, label: "Posts" as const },
-                ...(showMediaTab
-                  ? [{ id: "media" as const, label: "Media" as const }]
-                  : []),
-                { id: "activity" as const, label: "Activity" as const },
-              ] as { id: "posts" | "media" | "activity"; label: string }[]
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={profileActivityTab === tab.id}
-                tabIndex={profileActivityTab === tab.id ? 0 : -1}
-                onClick={() => setProfileActivityTab(tab.id)}
-                className={`min-h-11 flex-1 px-2 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                  profileActivityTab === tab.id
-                    ? "border-b-2 border-[var(--gh-green)] text-foreground"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {(profileActivityTab === "posts" || profileActivityTab === "activity") && (
-            <>
-              {posts.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: {} }))
-                    } catch {
-                      /* */
-                    }
-                  }}
-                  className="m-3 w-[calc(100%-1.5rem)] rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
-                >
-                  <p className="text-[13px] font-semibold text-foreground">No posts yet</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Share a thought, photo, or win with your network.
-                  </p>
-                </button>
-              ) : (
-                <>
-                <p className="px-3 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
-                  {Math.min(posts.length, profileActivityTab === "activity" ? 12 : 8)} of {posts.length}{" "}
-                  post{posts.length === 1 ? "" : "s"}
-                </p>
-                <ul className="space-y-2 p-3" role="list" aria-label="Your posts">
-                  {posts.slice(0, profileActivityTab === "activity" ? 12 : 8).map((post, idx) => {
-                    const body = String(post.content || post.text || "").trim()
-                    const preview =
-                      body
-                        .replace(/^📊\s*POLL[^\n]*\n?/i, "Poll · ")
-                        .replace(/^🏆\s*CHALLENGE[^\n]*\n?/i, "Challenge · ")
-                        .slice(0, 140) || "Shared a post"
-                    return (
-                      <li
-                        key={post.id || idx}
-                        className="rounded-[1rem] border border-border/40 bg-background/80 px-3.5 py-3 shadow-sm"
-                      >
-                        <button
-                          type="button"
-                          className="w-full text-left"
-                          onClick={() => {
-                            if (!post.id) return
-                            try {
-                              window.dispatchEvent(
-                                new CustomEvent("ghc:navigate-tab", { detail: "home" })
-                              )
-                              window.dispatchEvent(
-                                new CustomEvent("ghc:open-post", { detail: { postId: post.id } })
-                              )
-                            } catch {
-                              /* */
-                            }
-                          }}
-                        >
-                        <p className="line-clamp-2 text-[12px] leading-snug text-foreground">{preview}</p>
-                        {post.createdAt ? (
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            {new Date(post.createdAt).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </p>
-                        ) : null}
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-                </>
-              )}
-            </>
-          )}
-
-          {profileActivityTab === "media" && showMediaTab && (
-            mediaPosts.length === 0 ? (
-              <p className="mt-3 px-1 text-center text-[12px] text-muted-foreground">
-                No media posts yet. Photos you share on Feed appear here.
-              </p>
-            ) : (
-            <ul className="grid grid-cols-3 gap-1.5 p-3" role="list" aria-label="Media posts">
-              {mediaPosts.slice(0, 12).map((post, idx) => {
-                const src = post.images?.[0]
-                return (
-                  <li
-                    key={post.id || idx}
-                    className="aspect-square overflow-hidden rounded-lg bg-muted"
-                  >
-                    {src ? (
-                      <img src={src} alt="" className="h-full w-full object-cover" />
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
-            )
-          )}
-          </div>
-        </section>
-
-
         <div className="mt-4 w-full space-y-3 px-4 pb-8">
           <SetupChecklist
             onNavigate={(tab) => {
@@ -699,7 +614,79 @@ export function ProfileScreen({
           />
           <ProfileMoreNav onOpenSettings={onSettings} onOpenWallet={onOpenWallet} />
         </div>
+
+            </div>
+          ) : null}
+        </section>
+
+        <section className="mt-4 w-full px-4" aria-label="Your posts">
+          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
+            <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
+              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in current feed</span></div>
+              <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
+            </div>
+            {posts.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } })) } catch { /* */ }
+                }}
+                className="m-3 w-[calc(100%-1.5rem)] rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
+              >
+                <p className="text-[13px] font-semibold text-foreground">No posts yet</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Share a thought, photo, or win with your network.</p>
+                <span className="mt-3 inline-flex rounded-full bg-[var(--gh-green)] px-4 py-2 text-[11px] font-bold text-white">Create post</span>
+              </button>
+            ) : (
+              <ul className="space-y-3 p-3" role="list" aria-label="Your posts">
+                {posts.map((post) => (
+                  <li key={post.id}>
+                    <OwnPostCard
+                      post={post}
+                      isLiked={feed.likedPostIds.includes(post.id)}
+                      onDelete={(postId) => { void feed.deletePost(postId) }}
+                      onLike={(postId) => { void feed.likePost(postId) }}
+                      onComment={(postId) => {
+                        try {
+                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                          window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId, action: "comment" } }))
+                        } catch { /* */ }
+                      }}
+                      onShare={(postId) => {
+                        try {
+                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                          window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId, action: "share" } }))
+                        } catch { /* */ }
+                      }}
+                      onSave={(postId) => { void feed.savePost(postId).catch(() => ghc.addToast?.("Could not save post", "error")) }}
+                      onEdit={(postId, content) => { void feed.editPost(postId, content) }}
+                      onArchive={(postId) => { void feed.archivePost(postId) }}
+                      onInsights={(postId) => {
+                        try {
+                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                          window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId, action: "insights" } }))
+                        } catch { /* */ }
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
+
+      <ProfileContentLibrary
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        profileId={meId}
+        profileName={name}
+        isOwner
+        profilePhotos={photos}
+        coverPhoto={cover}
+        profilePhotoHistory={p.profilePhotoHistory || []}
+        coverPhotoHistory={p.coverPhotoHistory || []}
+      />
 
       {/* Photo / cover action sheet — Facebook-style */}
       {photoSheet ? (

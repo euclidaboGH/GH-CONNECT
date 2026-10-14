@@ -413,6 +413,31 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     setCommentingPostId(postId)
   }, [])
 
+  // Profile owner-post actions route through the canonical Feed overlays so the
+  // same comment, share, and insights flows are reused instead of duplicated.
+  useEffect(() => {
+    const handleOpenPostAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail
+      const postId = typeof detail?.postId === "string" ? detail.postId.trim() : ""
+      if (!postId) return
+      const action = typeof detail?.action === "string" ? detail.action : ""
+      if (action === "comment") {
+        if (posts.some((post) => post.id === postId)) openComments(postId)
+        return
+      }
+      if (action === "share") {
+        if (posts.some((post) => post.id === postId)) setSharePostId(postId)
+        return
+      }
+      if (action === "insights") {
+        const target = posts.find((post) => post.id === postId)
+        if (target) setInsightsPost(target)
+      }
+    }
+    window.addEventListener("ghc:open-post", handleOpenPostAction)
+    return () => window.removeEventListener("ghc:open-post", handleOpenPostAction)
+  }, [openComments, posts])
+
   const handleShowVisibilityReason = useCallback((postId: string) => {
     setVisibilityReasonPostId(postId)
     const post = posts.find((p) => p.id === postId)

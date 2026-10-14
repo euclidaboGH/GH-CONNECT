@@ -612,7 +612,7 @@ export function EditProfileModal({
   isOpen: boolean
   onClose: () => void
   profile: Profile
-  onSave: (updates: Partial<Profile>) => void
+  onSave: (updates: Partial<Profile>) => Promise<boolean | void> | boolean | void
   onChangeCover?: () => void
   onChangePhoto?: () => void
 }) {
@@ -632,6 +632,8 @@ export function EditProfileModal({
   )
   const [interests, setInterests] = useState(profile.interests)
   const [newInterest, setNewInterest] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Keep local form in sync when profile changes while modal is closed
   useEffect(() => {
@@ -659,33 +661,51 @@ export function EditProfileModal({
     }
   }
 
-  const handleSave = () => {
-    onSave({
-      displayName,
-      bio,
-      profession,
-      education,
-      hometown,
-      bornDate,
-      city,
-      country,
-      homeLocation: homeLoc,
-      locationPrivacy,
-      interests,
-    })
-    onClose()
+  const handleSave = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const saved = await onSave({
+        displayName,
+        bio,
+        profession,
+        education,
+        hometown,
+        bornDate,
+        city,
+        country,
+        homeLocation: homeLoc,
+        locationPrivacy,
+        interests,
+      })
+      // A failed persistence result keeps the editor open so the user can retry.
+      if (saved === false) return
+      onClose()
+    } catch {
+      setSaveError("Could not save your profile. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full bg-card rounded-t-3xl px-5 py-5 max-h-[85vh] overflow-y-auto space-y-4 sm:px-6">
+      <div className="fixed inset-0 bg-black/50" onClick={() => { if (!isSaving) onClose() }} aria-hidden="true" />
+      <div
+        className="relative w-full bg-card rounded-t-3xl px-5 py-5 max-h-[85vh] overflow-y-auto space-y-4 sm:px-6"
+        aria-busy={isSaving}
+        onKeyDownCapture={(event) => {
+          if (isSaving && event.key === "Escape") event.stopPropagation()
+        }}
+      >
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-foreground">Edit Profile</h2>
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-muted-foreground hover:bg-muted"
+            onClick={() => { if (!isSaving) onClose() }}
+            disabled={isSaving}
+            className="rounded-full p-2 text-muted-foreground hover:bg-muted disabled:opacity-50"
             aria-label="Close"
           >
             <X size={20} />
@@ -847,19 +867,23 @@ export function EditProfileModal({
           </div>
         </div>
 
+        {saveError ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</p> : null}
+
         {/* Buttons */}
         <div className="flex gap-3 pt-2 pb-2">
           <button
             type="button"
-            onClick={handleSave}
-            className="flex-1 rounded-xl bg-gradient-to-r from-[var(--gh-green)] to-teal-600 py-3 font-bold text-white transition active:scale-95"
+            onClick={() => { void handleSave() }}
+            disabled={isSaving}
+            className="flex-1 rounded-xl bg-gradient-to-r from-[var(--gh-green)] to-teal-600 py-3 font-bold text-white transition active:scale-95 disabled:cursor-wait disabled:opacity-60"
           >
-            Save Changes
+            {isSaving ? "Saving…" : "Save Changes"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl bg-muted py-3 font-bold text-foreground transition hover:bg-muted/80 active:scale-95"
+            disabled={isSaving}
+            className="flex-1 rounded-xl bg-muted py-3 font-bold text-foreground transition hover:bg-muted/80 active:scale-95 disabled:opacity-50"
           >
             Cancel
           </button>

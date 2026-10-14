@@ -23,6 +23,24 @@ export function isOwnAuthor(
   return false
 }
 
+/**
+ * Strict owner-post filter for the signed-in profile. When a post has an author ID,
+ * that stable identity takes precedence over display-name matching; names are only
+ * used as a legacy fallback when the post has no author ID.
+ */
+export function isOwnProfilePost(
+  authorId?: string | null,
+  authorName?: string | null,
+  userId?: string | null,
+  profile?: Pick<Profile, "displayName" | "id"> | Profile | null,
+): boolean {
+  const id = (authorId || "").trim()
+  if (id) {
+    return id === CURRENT_USER_ID || (!!userId && id === userId) || (!!profile?.id && id === profile.id)
+  }
+  return isOwnAuthor(null, authorName, profile)
+}
+
 export function canEditPost(authorId?: string | null, authorName?: string | null, profile?: Pick<Profile, "displayName" | "id"> | Profile | null) {
   return isOwnAuthor(authorId, authorName, profile)
 }

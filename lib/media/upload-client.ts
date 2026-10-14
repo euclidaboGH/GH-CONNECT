@@ -31,6 +31,18 @@ export async function uploadDurableMedia(
     onProgress?: (label: string) => void
   }
 ): Promise<DurableMediaResult> {
+  // Vercel Functions cap request bodies at 4.5 MB. Keep a 4 MB file ceiling
+  // for this proxy path so multipart overhead cannot turn a valid selection into a 413.
+  // Large uploads must use the planned direct-to-storage/resumable path.
+  if (file.size > 4 * 1024 * 1024) {
+    return {
+      ok: false,
+      durable: false,
+      error: "MEDIA_DIRECT_UPLOAD_REQUIRED",
+      userMessage: mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"),
+    }
+  }
+
   const form = new FormData()
   const name =
     meta?.fileName ||

@@ -67,6 +67,12 @@ export interface Profile {
   interests: string[]
   photos: string[] // max 6 base64 or URLs
   coverPhoto: string | null
+  /** Previous public-facing profile image references; stored in profile_payload. */
+  profilePhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Previous cover image references; stored in profile_payload. */
+  coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Non-financial extension payload persisted by the server profile store. */
+  profilePayload?: Record<string, unknown>
   status: string // custom status
   profession: string
   bornDate: string
@@ -298,6 +304,11 @@ export interface Candidate {
   verified: boolean
   online: boolean
   lastSeen: number
+  /** Optional media fields when the public-profile adapter supplies them. */
+  photos?: string[]
+  coverPhoto?: string | null
+  profilePhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
 }
 
 export interface MatchEntry {

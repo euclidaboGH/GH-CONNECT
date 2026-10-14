@@ -25,6 +25,7 @@ Human Connection OS — social connection, communities, messaging, discovery, an
 ```bash
 npm ci --legacy-peer-deps
 npm run verify:static
+npm run audit:profile
 npm run typecheck
 npm run lint
 NODE_OPTIONS="--max-old-space-size=6144" npm run build
@@ -128,3 +129,17 @@ Do not commit the key. Missing env returns 503 (fail-closed).
 ## License
 
 Private / proprietary unless otherwise stated by the repository owner.
+
+
+## Profile content library
+
+The profile and peer-profile surfaces now include a searchable content library for posts, photos, videos, PDF attachments and profile-photo history. Its server-authorized query API requires the additive `20261023_gh_profile_content_library.sql` migration; apply it on Testnet and verify relationship/privacy behavior before release. See `docs/GH_MEDIA.md` for the media-storage privacy caveat and rollout steps.
+
+See `docs/GH_PROFILE_CONTENT_LIBRARY.md` for the feature specification, authorization model, migration rollout, verification and media-storage release gate.
+
+## Profile-connected hardening pass B (2026-10-14)
+
+- Peer-profile preview is now mounted by the app shell and handles the shared `ghc:open-profile` event used by multiple surfaces.
+- Story and media APIs have additional request bounds, URL/identifier validation, per-user rate limits, no-store responses and safer error payloads.
+- Message read/edit/delete and conversation creation paths have additional rate and input bounds.
+- Run `npm run audit:profile-connected-v2` as an additional static gate. This complements, but does not replace, full typecheck/lint/build and Testnet verification.

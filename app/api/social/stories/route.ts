@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
@@ -14,36 +15,88 @@ function genId(): string {
   return `story_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 }
 
+type StoryRequestBody = {
+  text?: unknown
+  media?: { url?: unknown; type?: unknown }
+  mediaUrl?: unknown
+  mediaType?: unknown
+  expiresAt?: unknown
+  photo?: unknown
+  ownerPhoto?: unknown
+  audience?: unknown
+}
+
+function safeStoryMediaUrl(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : ""
+  if (!raw || raw.length > 4000 || /[\u0000-\u001f\u007f]/.test(raw)) return null
+  // Small inline images are retained for compatibility with the existing compressed-image fallback.
+  if (/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(raw)) {
+    return raw.length <= 512 * 1024 ? raw : null
+  }
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) return null
+    return parsed.href
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
+  }
+  const rl = checkRateLimit(`stories-list:${auth.userId}`, 120, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
   }
   if (!socialDbConfigured()) {
     const nd = nonDurableReadResponse("Stories", { stories: [] })
-    return NextResponse.json(nd.body, { status: nd.status })
+    return NextResponse.json(nd.body, { status: nd.status, headers: { "Cache-Control": "no-store" } })
   }
   const result = await socialRpc("gh_story_list_active", {
     p_viewer_id: auth.userId,
   })
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: "STORY_LIST_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
   const data = result.data as { stories?: unknown[] }
   return NextResponse.json({
     ok: true,
-    durable: result.ok,
+    durable: true,
     stories: Array.isArray(data?.stories) ? data.stories : [],
-  })
+  }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
   }
-  const body = await request.json().catch(() => ({}))
-  const text = String(body.text || "").trim()
-  const mediaUrl = body.media?.url || body.mediaUrl || null
+  const rl = checkRateLimit(`stories-create:${auth.userId}`, 10, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+  }
+  const contentLength = request.headers.get("content-length")
+  if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 1024 * 1024)) {
+    return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+  }
+  const body = await request.json().catch(() => null) as StoryRequestBody | null
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ ok: false, error: "INVALID_BODY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const text = typeof body.text === "string" ? body.text.trim() : ""
+  if (text.length > 2000) {
+    return NextResponse.json({ ok: false, error: "STORY_TOO_LONG" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const mediaCandidate = body.media?.url ?? body.mediaUrl ?? null
+  const mediaUrl = mediaCandidate == null || mediaCandidate === "" ? null : safeStoryMediaUrl(mediaCandidate)
+  if (mediaCandidate && !mediaUrl) {
+    return NextResponse.json({ ok: false, error: "INVALID_MEDIA_URL", message: "Use a secure HTTPS media URL or a small compressed image." }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
   if (!text && !mediaUrl) {
-    return NextResponse.json({ ok: false, error: "EMPTY_STORY" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "EMPTY_STORY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
   // Authoritative expiry: max 24h from server clock — client cannot extend indefinitely
@@ -53,17 +106,19 @@ export async function POST(request: Request) {
     typeof body.expiresAt === "number" && body.expiresAt > now ? body.expiresAt : now + MAX_STORY_MS
   const expiresAt = Math.min(requested, now + MAX_STORY_MS)
 
+  const requestedMediaType = String(body.media?.type || body.mediaType || "").toLowerCase()
+  if (requestedMediaType && !["image", "video"].includes(requestedMediaType)) {
+    return NextResponse.json({ ok: false, error: "INVALID_MEDIA_TYPE" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
   const row = {
-    id: String(body.id || "").trim() || genId(),
+    // IDs and identity labels are server-derived so clients cannot spoof an existing story.
+    id: genId(),
     ownerId: auth.userId,
-    ownerName: String(body.name || body.ownerName || auth.username || "Member").slice(
-      0,
-      120
-    ),
-    ownerPhoto: String(body.photo || body.ownerPhoto || "").slice(0, 2000),
+    ownerName: String(auth.username || "Member").trim().slice(0, 120) || "Member",
+    ownerPhoto: safeStoryMediaUrl(body.photo || body.ownerPhoto) || "",
     text,
-    mediaType: body.media?.type || body.mediaType || (mediaUrl ? "image" : null),
-    mediaUrl: mediaUrl ? String(mediaUrl).slice(0, 4000) : null,
+    mediaType: requestedMediaType || (mediaUrl ? "image" : null),
+    mediaUrl,
     audience: ["everyone", "followers", "friends", "matches-only", "private"].includes(
       String(body.audience || "")
     )
@@ -75,15 +130,19 @@ export async function POST(request: Request) {
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Story create", { extra: { story: null } })
-    return NextResponse.json(nd.body, { status: nd.status })
+    return NextResponse.json(nd.body, { status: nd.status, headers: { "Cache-Control": "no-store" } })
   }
 
   const result = await socialRpc("gh_story_create", { p_row: row })
   if (!result.ok) {
     return NextResponse.json(
-      { ok: false, error: result.error || "STORY_CREATE_FAILED" },
-      { status: 503 }
+      { ok: false, error: "STORY_CREATE_FAILED" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
-  return NextResponse.json({ ok: true, durable: true, story: row })
+  const resultData = result.data as { ok?: boolean; error?: string } | null
+  if (resultData?.ok === false) {
+    return NextResponse.json({ ok: false, error: "STORY_CREATE_FAILED" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  return NextResponse.json({ ok: true, durable: true, story: row }, { headers: { "Cache-Control": "no-store" } })
 }

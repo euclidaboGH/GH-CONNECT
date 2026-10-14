@@ -209,8 +209,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           })
           if (up.ok && up.url) {
             setStoryMedia({ type: "image", url: up.url })
-          } else {
+          } else if (dataUrl.length <= 180_000) {
+            // Small compatibility fallback only; avoid storing large inline payloads in story JSON.
             setStoryMedia({ type: "image", url: dataUrl })
+          } else {
+            addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
+            return
           }
         } catch {
           setStoryMedia({ type: "image", url: dataUrl })
@@ -275,6 +279,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
         return
       }
+      if (file.size > 4 * 1024 * 1024) {
+        addToast(mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"), "error")
+        return
+      }
       setUploadProgress(MEDIA_PROGRESS.uploading)
       const up = await uploadDurableMedia(file, {
         fileName: file.name,
@@ -310,6 +318,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
       return
     }
+    if (file.size > 4 * 1024 * 1024) {
+      addToast(mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"), "error")
+      return
+    }
     setUploadProgress(
       sizeMb > 8
         ? `${MEDIA_PROGRESS.preparingVideo} (${sizeMb.toFixed(0)} MB)`
@@ -325,13 +337,9 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       if (mode === "story") {
         if (up.ok && up.url) {
           setStoryMedia({ type: "video", url: up.url })
-        } else if (sizeMb <= 12) {
-          setStoryMedia({ type: "video", url: URL.createObjectURL(file) })
-        } else if (!up.ok) {
-          addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
-          return
         } else {
-          addToast(mediaUserMessage("STORAGE_ERROR"), "error")
+          // Blob URLs are local to this browser session and must never be published as durable media.
+          addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
           return
         }
         setSelectedImages([])
@@ -347,15 +355,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         addToast("✓ Video ready", "success")
         return
       }
-      if (sizeMb <= 12) {
-        setSelectedVideo(URL.createObjectURL(file))
-        setStoryMedia(null)
-        addToast("Video attached", "success")
-      } else if (!up.ok) {
-        addToast(mediaUserMessage(up.error || "FILE_TOO_LARGE", up.userMessage), "error")
-      } else {
-        addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
-      }
+      // Never persist a blob: URL in a post; it cannot be fetched by other users or after reload.
+      addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
     } catch {
       addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
     } finally {

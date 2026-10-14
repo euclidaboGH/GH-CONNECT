@@ -35,7 +35,8 @@ assert(matchCard.includes("Connect") && matchCard.includes("Request pending"), "
 assert(matchCard.includes("Match = mutual interest"), "match vs connection copy")
 
 const ms = readFileSync(join(root, "components/ghc/match-screen.tsx"), "utf8")
-assert(ms.includes("handleConnectMatch") && ms.includes("sendUnifiedConnectionRequest"), "MatchScreen connect")
+assert(ms.includes("handleConnectMatch") && ms.includes("submitConnectionFromPicker"), "MatchScreen uses the intent-picker connection flow")
+assert(ms.includes("ConnectionIntentPicker") && ms.includes("confirmMatchConnect"), "MatchScreen confirms explicit connection intent")
 assert(ms.includes("ConnectionRequestInbox"), "MatchScreen inbox")
 assert(ms.includes("ghc:open-connection-inbox"), "inbox event listener")
 assert(!ms.includes("useEffect(() => {\n    const open = () => setShowRequestInbox(true)\n    window.addEventListener(\"ghc:open-connection-inbox\"" ) || ms.includes("open-connection-inbox"), "event wiring")

@@ -23,7 +23,10 @@
     "verify:static": "node scripts/verify-phase14-static.mjs",
     "verify:migrations": "node scripts/print-migration-checklist.mjs",
     "test:social-authz": "node scripts/test-social-authz.mjs",
-    "test:idor-static": "node scripts/test-idor-static.mjs"
+    "test:idor-static": "node scripts/test-idor-static.mjs",
+    "audit:profile": "node scripts/audit-profile-production.mjs",
+    "audit:profile-connected": "node scripts/audit-profile-connected-production.mjs",
+    "audit:profile-connected-v2": "node scripts/audit-profile-connected-v2.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

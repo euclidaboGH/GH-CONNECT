@@ -140,6 +140,11 @@ export async function uploadMediaBlob(
     fileName?: string
   }
 ): Promise<{ url: string }> {
+  // Keep every upload entry point below Vercel's 4.5 MB request limit until
+  // signed direct-to-storage/resumable uploads are implemented.
+  if (blob.size > 4 * 1024 * 1024) {
+    throw new Error("MEDIA_DIRECT_UPLOAD_REQUIRED: Large uploads are not enabled yet. Choose a file under 4 MB or compress it first.")
+  }
   // Prefer same-origin durable API. Optional NEXT_PUBLIC_API_URL / __GHC_API_URL__ for remote.
   const base = resolveApiBaseUrl()
   const path = opts.path || "/api/media"

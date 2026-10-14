@@ -376,9 +376,9 @@ export function DiscoveryGridScreen() {
       </header>
       <div className="px-3 pt-2.5">
         <div className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-[var(--gh-card-shadow)]">
-          <p className="text-[13px] font-bold tracking-tight text-foreground">Find people with intent</p>
+          <p className="text-[13px] font-bold tracking-tight text-foreground">Discover with intent</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            Friendship, work, mentoring, and communities — not dating-only. Like or pass for matching; connect when you are ready. Cards explain why they appear.
+            Friendship, work, mentoring, and communities — this is not a dating-only platform. Like or pass for matching; connect when you are ready. Cards explain why they appear.
           </p>
         </div>
       </div>

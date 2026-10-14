@@ -17,6 +17,12 @@ import {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+function jsonNoStore(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("Cache-Control", "no-store")
+  return NextResponse.json(body, { ...init, headers })
+}
+
 const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
 const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
 const ALLOWED_FILE = new Set(["application/pdf", "application/x-pdf"])
@@ -24,65 +30,70 @@ const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024
 const MAX_FILE_BYTES = 8 * 1024 * 1024
 
-function sniffKind(buf: Buffer): "image" | "video" | "file" | "unknown" {
-  if (buf.length < 12) return "unknown"
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image"
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image"
-  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image"
-  if (
-    buf[0] === 0x52 &&
-    buf[1] === 0x49 &&
-    buf[2] === 0x46 &&
-    buf[3] === 0x46 &&
-    buf[8] === 0x57 &&
-    buf[9] === 0x45 &&
-    buf[10] === 0x42 &&
-    buf[11] === 0x50
-  )
-    return "image"
-  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return "file"
-  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "video"
-  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video"
-  return "unknown"
+function sniffMime(buf: Buffer): string | null {
+  if (buf.length < 12) return null
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg"
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png"
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image/gif"
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "image/webp"
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return "application/pdf"
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) {
+    const brand = buf.subarray(8, 12).toString("ascii").toLowerCase()
+    if (brand.startsWith("qt")) return "video/quicktime"
+    // Do not classify every ISO-BMFF file as video: AVIF also uses an ftyp box.
+    if (["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "dash", "m4v ", "m4a ", "msnv"].includes(brand) || brand.startsWith("3gp")) return "video/mp4"
+    return null
+  }
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video/webm"
+  return null
 }
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return jsonNoStore({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const rl = checkRateLimit(`media-resolve:${auth.userId}`, 120, 60_000)
+  if (!rl.ok) {
+    return jsonNoStore({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
   }
   const url = new URL(request.url)
-  const ids = (url.searchParams.get("ids") || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 20)
+  const rawIds = (url.searchParams.get("ids") || "").split(",").map((s) => s.trim()).filter(Boolean)
+  if (rawIds.length > 20 || rawIds.some((id) => id.length > 240 || /[\u0000-\u001f\u007f]/.test(id) || id.includes("..") || id.startsWith("/"))) {
+    return jsonNoStore({ ok: false, error: "INVALID_MEDIA_IDS" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const ids = rawIds
   const resolved = await resolveMediaAssets(auth.userId, ids)
-  return NextResponse.json({
+  return jsonNoStore({
     ok: resolved.ok,
     assets: resolved.assets,
-    error: resolved.error,
-  })
+    error: resolved.ok ? undefined : "MEDIA_RESOLUTION_UNAVAILABLE",
+  }, { status: resolved.ok ? 200 : 503, headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return jsonNoStore({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
   const rl = checkRateLimit(`media-upload:${auth.userId}`, 30, 60_000)
   if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+    return jsonNoStore({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
 
   const env = readGhcServerEnv()
   const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
   const hasStorage = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
 
-  const contentType = request.headers.get("content-type") || ""
+  const contentType = (request.headers.get("content-type") || "").toLowerCase()
+  const contentLength = Number(request.headers.get("content-length") || 0)
+  // Leave room for multipart boundaries/metadata above the largest accepted file.
+  if (Number.isFinite(contentLength) && contentLength > MAX_VIDEO_BYTES + 2 * 1024 * 1024) {
+    return jsonNoStore({ ok: false, error: "REQUEST_TOO_LARGE", message: "This upload exceeds the supported request size." }, { status: 413 })
+  }
   if (!contentType.includes("multipart/form-data")) {
-    return NextResponse.json(
+    return jsonNoStore(
       {
         ok: false,
         error: "USE_MULTIPART",
@@ -95,7 +106,7 @@ export async function POST(request: Request) {
   }
 
   if (!hasStorage) {
-    return NextResponse.json(
+    return jsonNoStore(
       {
         ok: false,
         error: "MEDIA_STORAGE_UNAVAILABLE",
@@ -111,49 +122,41 @@ export async function POST(request: Request) {
   try {
     form = await request.formData()
   } catch {
-    return NextResponse.json({ ok: false, error: "INVALID_FORM" }, { status: 400 })
+    return jsonNoStore({ ok: false, error: "INVALID_FORM" }, { status: 400 })
   }
 
   const file = form.get("file")
   if (!(file instanceof Blob) || file.size <= 0) {
-    return NextResponse.json({ ok: false, error: "FILE_REQUIRED" }, { status: 400 })
+    return jsonNoStore({ ok: false, error: "FILE_REQUIRED" }, { status: 400 })
   }
 
   let mime = (file.type || "").toLowerCase()
-  let isImage = ALLOWED_IMAGE.has(mime)
-  let isVideo = ALLOWED_VIDEO.has(mime)
-  let isFile = ALLOWED_FILE.has(mime)
-  // Peek signature before trusting client MIME alone
+  // Validate actual bytes, not just the browser-provided MIME type.
   const head = Buffer.from(await file.slice(0, 16).arrayBuffer())
-  const sniffed = sniffKind(head)
-  if (!isImage && !isVideo && !isFile) {
-    if (sniffed === "image") {
-      isImage = true
-      mime = mime || "image/jpeg"
-    } else if (sniffed === "video") {
-      isVideo = true
-      mime = mime || "video/mp4"
-    } else if (sniffed === "file") {
-      isFile = true
-      mime = "application/pdf"
-    } else {
-      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
-    }
-  } else if (sniffed !== "unknown") {
-    // Reject MIME/signature mismatch for safety
-    if (isImage && sniffed !== "image") {
-      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
-    }
-    if (isVideo && sniffed !== "video") {
-      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
-    }
-    if (isFile && sniffed !== "file") {
-      return NextResponse.json({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
-    }
+  const sniffedMime = sniffMime(head)
+  if (!sniffedMime) {
+    return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE", message: "The file signature is not a supported image, video or PDF." }, { status: 400 })
   }
+  if (mime && mime !== sniffedMime) {
+    // Normalize generic/incorrect client MIME values only when the bytes are a known supported format.
+    const genericMime = mime === "application/octet-stream" || mime === "binary/octet-stream"
+    if (genericMime || !(ALLOWED_IMAGE.has(mime) || ALLOWED_VIDEO.has(mime) || ALLOWED_FILE.has(mime))) {
+      mime = sniffedMime
+    } else {
+      return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE", message: "The file type does not match its contents." }, { status: 400 })
+    }
+  } else {
+    mime = sniffedMime
+  }
+  if (!ALLOWED_IMAGE.has(mime) && !ALLOWED_VIDEO.has(mime) && !ALLOWED_FILE.has(mime)) {
+    return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
+  }
+  const isImage = ALLOWED_IMAGE.has(mime)
+  const isVideo = ALLOWED_VIDEO.has(mime)
+  const isFile = ALLOWED_FILE.has(mime)
   const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES
   if (file.size > maxBytes) {
-    return NextResponse.json({ ok: false, error: "FILE_TOO_LARGE" }, { status: 400 })
+    return jsonNoStore({ ok: false, error: "FILE_TOO_LARGE" }, { status: 400 })
   }
 
   // Ignore any client-supplied owner/path fields
@@ -210,13 +213,12 @@ export async function POST(request: Request) {
       }
     )
     if (!uploadRes.ok) {
-      const detail = await uploadRes.text().catch(() => "")
-      return NextResponse.json(
+      await uploadRes.text().catch(() => "")
+      return jsonNoStore(
         {
           ok: false,
           error: "STORAGE_UPLOAD_FAILED",
           message: "Object storage rejected the upload.",
-          detail: detail.slice(0, 200),
         },
         { status: 502 }
       )
@@ -240,19 +242,18 @@ export async function POST(request: Request) {
     })
 
     if (!record.ok) {
-      return NextResponse.json(
+      return jsonNoStore(
         {
           ok: false,
           error: "ASSET_RECORD_FAILED",
           message:
             "File may have been stored but durable asset record failed. Apply migration 20261001_gh_media_assets.sql.",
-          detail: record.error,
         },
         { status: 503 }
       )
     }
 
-    return NextResponse.json({
+    return jsonNoStore({
       ok: true,
       durable: true,
       mediaId: record.id,
@@ -266,7 +267,7 @@ export async function POST(request: Request) {
       durationMs,
     })
   } catch (e) {
-    return NextResponse.json(
+    return jsonNoStore(
       {
         ok: false,
         error: "STORAGE_ERROR",

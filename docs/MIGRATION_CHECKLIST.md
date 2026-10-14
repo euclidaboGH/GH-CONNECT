@@ -116,6 +116,7 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 | 68 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
 | 69 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
 | 70 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
+| 71 | `20261023_gh_profile_content_library.sql` | NEW | Apply on Testnet before enabling profile library search.
 
 ---
 

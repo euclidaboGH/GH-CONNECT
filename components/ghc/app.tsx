@@ -5,6 +5,7 @@ import { IdentityService } from "@/lib/identity/identity-service"
 
 import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
 import { useGHCShell, useGHCProfile, useGHCDiscovery } from "@/contexts/ghc-context"
+import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
 import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
@@ -68,6 +69,9 @@ const MarketplaceScreenLazy = lazy(() =>
 )
 const MatchCelebrationLazy = lazy(() =>
   import("./match-celebration").then((m) => ({ default: m.MatchCelebration }))
+)
+const ProfilePreviewPageLazy = lazy(() =>
+  import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
 )
 
 function TabScreenFallback({ label }: { label: string }) {
@@ -239,7 +243,8 @@ function onTabScrollHideNav(e: UIEvent<HTMLElement>) {
 export function GHConnectApp() {
   const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
-  const { candidates } = useGHCDiscovery()
+  const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
+  const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   useEffect(() => {
@@ -258,6 +263,29 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:open-connection-inbox", refresh)
     }
   }, [])
+  // One canonical peer-profile entry point for cards, messages, matches and notifications.
+  // The profile data is sourced from the authenticated discovery context; unknown IDs fail visibly.
+  useEffect(() => {
+    const openProfile = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: unknown; id?: unknown }>).detail
+      const userId = String(detail?.userId || detail?.id || "").trim()
+      if (!userId) return
+      if (userId === String(profile?.id || "")) {
+        startTransition(() => setTab("profile"))
+        return
+      }
+      const candidate = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
+      if (!candidate) {
+        addToast("This profile is not available in your current connection results yet.", "info")
+        startTransition(() => setTab("discover"))
+        return
+      }
+      setPeerProfile(candidate)
+    }
+    window.addEventListener("ghc:open-profile", openProfile as EventListener)
+    return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
+  }, [candidates, profile?.id, setTab, addToast])
+
   // Deep link: /?tab=messages|discover|profile|... (PWA shortcuts, /share redirect)
   useEffect(() => {
     if (!ready || typeof window === "undefined") return
@@ -1077,6 +1105,33 @@ export function GHConnectApp() {
         }}
       />
       </Suspense>
+
+      {peerProfile ? (
+        <Suspense fallback={null}>
+          <ProfilePreviewPageLazy
+            candidate={peerProfile}
+            userInterests={Array.isArray(profile?.interests) ? profile.interests : []}
+            onBack={() => setPeerProfile(null)}
+            onMessage={() => {
+              const target = peerProfile
+              void startConversation(target.id, target.name, target.photo).then(() => {
+                setPeerProfile(null)
+                startTransition(() => setTab("messages"))
+              }).catch(() => addToast("Could not open this conversation. Please try again.", "error"))
+            }}
+            onLike={() => { void swipe(peerProfile.id, "like").catch(() => addToast("Could not send interest. Please try again.", "error")) }}
+            onPass={() => { void swipe(peerProfile.id, "pass").then(() => setPeerProfile(null)).catch(() => addToast("Could not update this preference.", "error")) }}
+            onFollow={() => {
+              const wasFollowing = following.includes(peerProfile.id)
+              void followUser(peerProfile.id).then(() => addToast(wasFollowing ? `Unfollowed ${peerProfile.name}` : `Following ${peerProfile.name}`, "success")).catch(() => addToast("Could not update this follow.", "error"))
+            }}
+            onBlock={() => { void blockUser(peerProfile.id).then(() => { setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
+            onReport={(reason) => { void reportUser(peerProfile.id, reason).then(() => addToast("Report submitted", "success")).catch(() => addToast("Could not submit report.", "error")) }}
+            isFollowing={following.includes(peerProfile.id)}
+            isMatched={matches.some((item) => item.userId === peerProfile.id || item.id === peerProfile.id)}
+          />
+        </Suspense>
+      ) : null}
 
       <CreatorStudioOverlay />
 

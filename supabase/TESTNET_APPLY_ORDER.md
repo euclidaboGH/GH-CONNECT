@@ -96,6 +96,7 @@ system-only and votes must not mint GHC (see `README.md`).
 | 68 | `20261020_ghpv_soft_delete_atomic.sql` | apply |
 | 69 | `20261021_gh_social_notifications_types_extend.sql` | apply |
 | 70 | `20261022_gh_content_rewards.sql` | apply |
+| 71 | `20261023_gh_profile_content_library.sql` | apply after review |
 
 ## After apply (read-only checks)
 

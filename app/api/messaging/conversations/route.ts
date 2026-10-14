@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   listConversationsForUser,
   createDirectConversation,
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
       )
     }
     const url = new URL(request.url)
-    const limit = Number(url.searchParams.get("limit") || "50")
+    const rawLimit = Number(url.searchParams.get("limit") || "50")
+    const limit = Math.min(100, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 50))
     // Ignore client userId
     void url.searchParams.get("userId")
 
@@ -59,6 +61,14 @@ export async function POST(request: Request) {
         { ok: false, error: "AUTH_REQUIRED" },
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
+    }
+    const rl = checkRateLimit(`conversation-create:${auth.userId}`, 20, 60_000)
+    if (!rl.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+    }
+    const contentLength = request.headers.get("content-length")
+    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 16 * 1024)) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }
     const body = await request.json().catch(() => ({}))
     const otherUserId =
