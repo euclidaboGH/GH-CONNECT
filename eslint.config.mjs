@@ -1,38 +1,27 @@
-import { dirname } from "path"
-import { fileURLToPath } from "url"
-import { FlatCompat } from "@eslint/eslintrc"
-import nextPlugin from "@next/eslint-plugin-next"
+import { defineConfig, globalIgnores } from "eslint/config"
+import nextVitals from "eslint-config-next/core-web-vitals"
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-})
-
-/** @type {import("eslint").Linter.Config[]} */
-const eslintConfig = [
+/**
+ * Use the supported flat-config entry point from eslint-config-next.
+ * This lets Next.js detect its plugin reliably during production builds.
+ */
+export default defineConfig([
+  ...nextVitals,
+  globalIgnores([
+    ".next/**",
+    "node_modules/**",
+    "coverage/**",
+    "dist/**",
+    "public/**",
+    "scripts/**",
+    "supabase/**",
+    "docs/**",
+    "*.config.js",
+    "*.config.mjs",
+  ]),
   {
-    ignores: [
-      ".next/**",
-      "node_modules/**",
-      "coverage/**",
-      "dist/**",
-      "public/**",
-      "scripts/**",
-      "supabase/**",
-      "docs/**",
-      "*.config.js",
-      "*.config.mjs",
-    ],
-  },
-  ...compat.extends("next/core-web-vitals"),
-  {
-    plugins: {
-      "@next/next": nextPlugin,
-    },
     rules: {
-      // Keep production builds green; tighten gradually in CI-only strict mode
+      // Keep production builds green; tighten gradually in CI-only strict mode.
       "react/no-unescaped-entities": "off",
       "@next/next/no-img-element": "off",
       "react-hooks/exhaustive-deps": "warn",
@@ -40,10 +29,8 @@ const eslintConfig = [
       "import/no-anonymous-default-export": "warn",
       "jsx-a11y/alt-text": "warn",
       "jsx-a11y/role-has-required-aria-props": "warn",
-      // rules-of-hooks stays error — real bugs
+      // rules-of-hooks stays error — real bugs.
       "react-hooks/rules-of-hooks": "error",
     },
   },
-]
-
-export default eslintConfig
+])
