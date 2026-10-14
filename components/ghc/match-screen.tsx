@@ -33,6 +33,7 @@ import {
 import { EmptyState } from "./empty-state"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
+import { PremiumSurfaceActions } from "./premium-surface-actions"
 
 export function MatchScreen() {
   const {
@@ -276,6 +277,7 @@ export function MatchScreen() {
               <Heart size={14} />
             </div>
           }
+          actions={<PremiumSurfaceActions />}
         />
         <div className="flex flex-1 items-center justify-center">
           <EmptyMatchesState onStartSwiping={handleStartSwiping} />
@@ -297,9 +299,12 @@ export function MatchScreen() {
           </div>
         }
         actions={
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            {baseAll.length}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <PremiumSurfaceActions />
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+              {baseAll.length}
+            </span>
+          </div>
         }
         secondary={
           <div className="space-y-2">

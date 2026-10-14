@@ -13,7 +13,7 @@ import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
-import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, ShoppingBag } from "lucide-react"
+import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash } from "lucide-react"
 import { MOBILE_PAGE_SIZES } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { NotificationBell } from "./notification-bell"
@@ -36,6 +36,7 @@ import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
+import { PremiumSurfaceActions } from "./premium-surface-actions"
 import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
@@ -463,6 +464,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         compactLeading={<BrandLogo size="compact" className="object-left" />}
         actions={
           <>
+            <PremiumSurfaceActions />
             <NotificationBell
               onOpenTarget={(n) => {
                 if (n.type === "message") setTab("messages")

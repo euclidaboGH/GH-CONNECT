@@ -30,6 +30,7 @@ import { GroupCard } from "./group-card"
 import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
+import { PremiumSurfaceActions } from "./premium-surface-actions"
 import { EmptyState } from "./empty-state"
 import { CommunityJoinReasonPicker } from "./community-join-reason-picker"
 import {
@@ -982,15 +983,18 @@ export function CommunitiesScreen() {
           </button>
         }
         actions={
-          <button
-            type="button"
-            onClick={openCreateCommunity}
-            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
-            aria-label="Create community"
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            Create
-          </button>
+          <div className="flex items-center gap-1.5">
+            <PremiumSurfaceActions />
+            <button
+              type="button"
+              onClick={openCreateCommunity}
+              className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
+              aria-label="Create community"
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              Create
+            </button>
+          </div>
         }
         secondary={
           <>

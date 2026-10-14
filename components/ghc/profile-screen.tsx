@@ -12,7 +12,6 @@ import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal, calculateProfileCompletion } from "./profile-components"
-import { SignatureGhIdCard } from "./signature-gh-id"
 import {
   Settings as SettingsIcon,
   Wallet,
@@ -445,27 +444,6 @@ export function ProfileScreen({
           </section>
         ) : null}
 
-        {/* GH ID card */}
-        <div className="mt-4 w-full px-4">
-          <SignatureGhIdCard
-            userId={meId}
-            displayName={name}
-            onToast={
-              (() => {
-                const addToast = ghc.addToast
-                if (!addToast) return undefined
-                return (msg: string, type?: string) => {
-                  const kind =
-                    type === "error" || type === "success" || type === "info"
-                      ? type
-                      : "info"
-                  addToast(msg, kind)
-                }
-              })()
-            }
-          />
-        </div>
-
         <ProfileMyCommunities
           conversations={messaging?.conversations}
           viewerId={meId}
@@ -491,31 +469,44 @@ export function ProfileScreen({
           </section>
         ) : null}
 
+        {/* Compact dashboard — tools once, not repeated under posts */}
         <div className="mt-4 w-full px-4">
-          <ProfileEcosystemHub
-            userId={meId}
-            displayName={name}
-            onOpenWallet={onOpenWallet}
-            onShareProfile={() => void shareProfile()}
-            onOpenMembership={() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })
-                )
-              } catch {
-                /* */
-              }
-            }}
-            onOpenRewards={() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })
-                )
-              } catch {
-                /* */
-              }
-            }}
-          />
+          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Dashboard
+              </p>
+              <span className="font-mono text-[10px] font-bold text-emerald-800/80 dark:text-emerald-300/80">
+                {ghDisplay}
+              </span>
+            </div>
+            <div className="p-2.5 pt-2">
+              <ProfileEcosystemHub
+                userId={meId}
+                displayName={name}
+                onOpenWallet={onOpenWallet}
+                onShareProfile={() => void shareProfile()}
+                onOpenMembership={() => {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })
+                    )
+                  } catch {
+                    /* */
+                  }
+                }}
+                onOpenRewards={() => {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })
+                    )
+                  } catch {
+                    /* */
+                  }
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         <section className="mt-4 w-full px-4">
