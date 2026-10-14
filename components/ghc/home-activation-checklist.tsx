@@ -5,7 +5,8 @@
  * Presentation only — completion is passed in from real data (never invented here).
  */
 
-import { Check } from "lucide-react"
+import { Check, X, Sparkles } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import type { ActivationChecklistResult, ActivationItem } from "@/lib/domains/adapters/home-activation-checklist"
 import { navigateTo } from "@/lib/navigation/navigate"
 
@@ -33,61 +34,91 @@ export function HomeActivationChecklist({
 }: {
   checklist: ActivationChecklistResult
 }) {
-  if (checklist.complete) return null
+  const [visible, setVisible] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (checklist.complete || typeof window === "undefined") return
+    const clearTimers = () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+      idleTimer.current = null
+      hideTimer.current = null
+    }
+    const scheduleIdlePrompt = () => {
+      clearTimers()
+      idleTimer.current = setTimeout(() => {
+        setVisible(true)
+        hideTimer.current = setTimeout(() => {
+          setVisible(false)
+          setExpanded(false)
+          scheduleIdlePrompt()
+        }, 9000)
+      }, 45000)
+    }
+    const onActivity = (event: Event) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-gh-setup-notice="true"]')) return
+      setVisible(false)
+      setExpanded(false)
+      scheduleIdlePrompt()
+    }
+    scheduleIdlePrompt()
+    window.addEventListener("pointerdown", onActivity, { passive: true })
+    window.addEventListener("keydown", onActivity)
+    window.addEventListener("scroll", onActivity, { passive: true })
+    window.addEventListener("visibilitychange", onActivity)
+    return () => {
+      clearTimers()
+      window.removeEventListener("pointerdown", onActivity)
+      window.removeEventListener("keydown", onActivity)
+      window.removeEventListener("scroll", onActivity)
+      window.removeEventListener("visibilitychange", onActivity)
+    }
+  }, [checklist.complete])
+
+  if (checklist.complete || !visible) return null
 
   return (
-    <section
-      className="gh-card mx-0 space-y-2.5 p-3"
-      aria-label="GreenHaven setup checklist"
+    <aside
+      data-gh-setup-notice="true"
+      className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.75rem)] left-3 right-3 z-[70] mx-auto max-w-md animate-in slide-in-from-bottom-2 duration-300"
+      aria-label="GreenHaven setup reminder"
+      role="status"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="gh-type-title text-[13px]">Complete your GreenHaven setup</h2>
-          <p className="gh-type-meta mt-0.5 text-muted-foreground">
-            {checklist.doneCount} of {checklist.total} done · based on your account
-          </p>
-        </div>
-        <span
-          className="shrink-0 rounded-full bg-emerald-600/10 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300"
-          aria-label={`${checklist.percent} percent complete`}
-        >
-          {checklist.percent}%
-        </span>
-      </div>
-
-      <ul className="space-y-1">
-        {checklist.items.map((item) => (
-          <li key={item.id}>
-            {item.done ? (
-              <div className="flex min-h-10 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-[13px] text-muted-foreground">
-                <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"
-                  aria-hidden
-                >
-                  <Check size={12} strokeWidth={3} />
-                </span>
-                <span className="line-through decoration-muted-foreground/50">{item.label}</span>
-                <span className="sr-only">Completed</span>
+      <div className="overflow-hidden rounded-2xl border border-emerald-600/20 bg-card/95 shadow-xl backdrop-blur-xl">
+        <div className="flex items-start gap-3 p-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700 dark:text-emerald-300"><Sparkles size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-[13px] font-bold">Make GreenHaven yours</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">{checklist.doneCount} of {checklist.total} setup steps complete · {checklist.percent}%</p>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => go(item.target)}
-                className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left text-[13px] font-medium text-foreground transition hover:bg-muted/50 active:scale-[0.99]"
-              >
-                <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1">{item.label}</span>
-                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                  Go
-                </span>
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
+              <button type="button" onClick={() => { setVisible(false); setExpanded(false) }} className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Dismiss setup reminder"><X size={16} /></button>
+            </div>
+            {expanded ? (
+              <ul className="mt-2 space-y-1 border-t border-border/60 pt-2">
+                {checklist.items.filter((item) => !item.done).map((item) => (
+                  <li key={item.id}>
+                    <button type="button" onClick={() => go(item.target)} className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs font-medium hover:bg-muted/70">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                      <span className="min-w-0 flex-1">{item.label}</span>
+                      <span className="text-emerald-700 dark:text-emerald-300">Open</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${checklist.percent}%` }} /></span>
+              <button type="button" onClick={() => setExpanded((value) => !value)} className="shrink-0 rounded-full bg-emerald-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800">{expanded ? "Less" : "Continue setup"}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
   )
 }

@@ -645,12 +645,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
         <div className="space-y-3.5 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
-          <HomeCommandCentre
-            onCompose={() => {
-              try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
-            }}
-          />
-          <TrustDurabilityBanner />
+          {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
 
           {displayPosts.length === 0 ? (
@@ -794,8 +789,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             ))
           )}
 
-          
-
+          <div className="pt-2">
+            <HomeCommandCentre
+              onCompose={() => {
+                try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
+              }}
+            />
+            <TrustDurabilityBanner />
+          </div>
 
 {/* Loading indicator */}
           {isLoadingMore && (

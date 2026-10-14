@@ -21,6 +21,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
   const profile = ghc.profile
   const stories = Array.isArray(ghc.stories) ? ghc.stories : []
   const following = Array.isArray(ghc.following) ? ghc.following : []
+  const friends = Array.isArray(ghc.friends) ? ghc.friends : []
   const publishStory = ghc.publishStory
   const addToast = ghc.addToast
   const startConversation = ghc.startConversation
@@ -34,19 +35,31 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
   const ownStory = stories
     .filter((story) => story.ownerId === "current-user")
     .sort((a, b) => b.createdAt - a.createdAt)[0]
-  const followingSet = new Set(following)
-  // On profile: never show other users' stories. On feed: show followed people.
-  const otherStories =
-    scope === "feed"
-      ? stories
-          .filter(
-            (story) =>
-              story.id !== ownStory?.id &&
-              story.ownerId !== "current-user" &&
-              (!story.ownerId || followingSet.size === 0 || followingSet.has(story.ownerId)),
-          )
-          .sort((a, b) => b.createdAt - a.createdAt)
-      : []
+  const followingSet = new Set(following.map(String))
+  const friendSet = new Set(friends.map((friend: unknown) => {
+    if (typeof friend === "string") return friend
+    if (friend && typeof friend === "object") {
+      const item = friend as { id?: string; userId?: string; friendId?: string }
+      return String(item.userId || item.friendId || item.id || "")
+    }
+    return ""
+  }).filter(Boolean))
+  // Never treat an empty following list as permission to show everyone.
+  const otherStories = scope === "feed"
+    ? stories
+        .filter((story) => {
+          if (!story.ownerId || story.ownerId === "current-user" || story.id === ownStory?.id) return false
+          const isFollowing = followingSet.has(String(story.ownerId))
+          const isFriend = friendSet.has(String(story.ownerId))
+          if (!isFollowing && !isFriend) return false
+          const audience = (story as StoryItem & { audience?: string }).audience
+          if (audience === "private") return false
+          if (audience === "friends" && !isFriend) return false
+          if (audience === "followers" && !isFollowing && !isFriend) return false
+          return true
+        })
+        .sort((a, b) => b.createdAt - a.createdAt)
+    : []
   const [composerOpen, setComposerOpen] = useState(false)
   const [text, setText] = useState("")
   const [media, setMedia] = useState<StoryItem["media"]>(null)
@@ -169,37 +182,31 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
     })
   }
 
-  // Feed: compact Instagram-style rings only (no large "Share a moment" chrome)
+  // GreenHaven Moments: landscape oval cards, own moment first, then the social circle.
   if (scope === "feed") {
     return (
-      <section className="bg-background px-3 py-1.5" aria-label="Stories">
-        <p className="mb-2 text-[10px] text-muted-foreground">
-          Tip: Community events near you can appear as stories when communities share them — quality over view counts.
-        </p>
-        <div className="flex gap-3 overflow-x-auto pb-0.5 scrollbar-hide">
-          <button
-            type="button"
-            onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
-            className="w-16 shrink-0 text-center"
-          >
-            <div className="relative mx-auto h-[56px] w-[56px] rounded-full border-2 border-dashed border-emerald-500 bg-emerald-50 p-0.5 dark:bg-emerald-950/40">
-              <LazyImage
-                src={profile.photos?.[0] || "/avatars/user.svg"}
-                alt="Your story"
-                className="h-full w-full rounded-full border-2 border-white object-cover"
-              />
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white shadow">
-                <Plus size={11} strokeWidth={3} />
-              </span>
-            </div>
-            <span className="mt-1.5 block truncate text-[11px] font-bold text-foreground">Your story</span>
+      <section className="-mx-1 rounded-[1.35rem] border border-border/60 bg-card/80 px-3 py-3 shadow-sm" aria-label="Stories and status updates">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold tracking-tight text-foreground">Moments</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Fresh updates from your GreenHaven circle</p>
+          </div>
+          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">24 hours</span>
+        </div>
+        <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
+          <button type="button" onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
+            className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-emerald-600/20 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-900 p-3 text-left text-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={ownStory ? "View your story" : "Create your first story"}>
+            <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+            <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/15" />
+            <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/15 backdrop-blur-sm"><Plus size={18} strokeWidth={2.5} /></span>
+            <span className="absolute bottom-3 left-3 right-3 z-10 block truncate text-xs font-bold">{ownStory ? "Your moment" : "Add a moment"}</span>
+            {ownStory ? <span className="absolute right-3 top-3 z-10 rounded-full bg-white/20 px-2 py-1 text-[9px] font-semibold backdrop-blur-sm">Your story</span> : null}
           </button>
           {otherStories.map((story) => (
             <button key={story.id} type="button" onClick={() => {
                 setViewing(story)
                 setStoryReaction(null)
-                // Record the view outside the state updater; React may invoke
-                // updater functions more than once in development.
                 try { void socialViewStory(String(story.id)).catch(() => {}) } catch { /* fail-soft */ }
                 setSeenStoryIds((prev) => {
                   if (prev.includes(story.id)) return prev
@@ -207,21 +214,17 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                   try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}
                   return next
                 })
-              }} className="w-16 shrink-0 text-center">
-              <div className={`mx-auto h-[56px] w-[56px] rounded-full p-[2.5px] ${
-                seenStoryIds.includes(story.id)
-                  ? "bg-stone-300"
-                  : "bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-400"
-              }`}>
-                <LazyImage
-                  src={story.photo || `/avatars/${story.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`}
-                  alt={`${story.name}'s story`}
-                  className="h-full w-full rounded-full border-2 border-white object-cover"
-                />
-              </div>
-              <span className="mt-1.5 block truncate text-[11px] font-semibold text-foreground">{story.name}</span>
+              }} className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-border/60 bg-muted text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name}'s story`}>
+              <LazyImage src={story.photo || `/avatars/${story.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/10" />
+              <span className={`absolute left-2.5 top-2.5 h-8 w-8 overflow-hidden rounded-full border-2 p-0.5 ${seenStoryIds.includes(story.id) ? "border-white/60" : "border-emerald-300"}`}>
+                <LazyImage src={story.photo || "/avatars/user.svg"} alt="" className="h-full w-full rounded-full object-cover" />
+              </span>
+              <span className="absolute bottom-3 left-3 right-3 z-10 truncate text-xs font-bold text-white">{story.name}</span>
+              {seenStoryIds.includes(story.id) ? <span className="absolute right-2.5 top-3 z-10 rounded-full bg-black/30 px-1.5 py-0.5 text-[9px] text-white">Seen</span> : <span className="absolute right-2.5 top-3 z-10 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">New</span>}
             </button>
           ))}
+          {otherStories.length === 0 ? <div className="flex min-h-[112px] min-w-[150px] items-center rounded-[1.4rem] border border-dashed border-border/70 px-4 text-xs leading-relaxed text-muted-foreground">Follow people to see their moments here.</div> : null}
         </div>
         {composerOpen && (
           <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5">

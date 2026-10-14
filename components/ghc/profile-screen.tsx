@@ -452,7 +452,6 @@ export function ProfileScreen({
                 </button>
               ))}
             </div>
-            <div className="mt-4"><ProfileStorySection scope="profile" /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
                 type="button"
@@ -487,7 +486,26 @@ export function ProfileScreen({
 
         </section>
 
-        <section className="mt-4 w-full px-4" aria-label="Your posts">
+        {/* Profile sequence: Dashboard → Moments → shared composer → owner timeline. */}
+        <section className="mt-3 w-full px-4" aria-label="Your stories and moments">
+          <ProfileStorySection scope="profile" />
+        </section>
+
+        <section className="mt-3 w-full px-4" aria-label="Create a post">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))}
+            className="flex w-full items-center gap-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-sm font-bold text-emerald-700" aria-hidden="true">
+              {(name || "G").trim().slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 rounded-full bg-muted/70 px-4 py-2.5 text-[13px] text-muted-foreground">What would you like to share with GreenHaven?</span>
+            <span className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Create</span>
+          </button>
+        </section>
+
+        <section className="mt-3 w-full px-4" aria-label="Your posts">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
               <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in current feed</span></div><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-700">＋ Create post</button>
