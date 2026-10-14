@@ -421,6 +421,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       const postId = typeof detail?.postId === "string" ? detail.postId.trim() : ""
       if (!postId) return
       const action = typeof detail?.action === "string" ? detail.action : ""
+      // Bring the post into view when routed from Profile or notifications
+      window.setTimeout(() => {
+        try {
+          const el = document.querySelector(`[data-post-id="${CSS.escape(postId)}"]`) as HTMLElement | null
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" })
+            el.classList.add("ring-2", "ring-emerald-400/80")
+            window.setTimeout(() => el.classList.remove("ring-2", "ring-emerald-400/80"), 1600)
+          }
+        } catch { /* */ }
+      }, 120)
       if (action === "comment") {
         if (posts.some((post) => post.id === postId)) openComments(postId)
         return

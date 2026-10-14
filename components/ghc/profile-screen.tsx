@@ -36,6 +36,7 @@ import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { ProfileContentLibrary } from "./profile-content-library"
+import { PremiumSurfaceActions } from "./premium-surface-actions"
 import ProfileStorySection from "./profile-story-section"
 
 type PhotoTarget = "photo" | "cover" | null
@@ -275,7 +276,8 @@ export function ProfileScreen({
     <div className="gh-profile-shell flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
       <header className="flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
+          <PremiumSurfaceActions />
           <button
             type="button"
             onClick={() => onOpenWallet?.()}
@@ -303,7 +305,7 @@ export function ProfileScreen({
           className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
         >
-          You are offline. Profile edits may save on this device and sync when you reconnect.
+          You are offline. Changes stay on this device and sync when you reconnect.
         </div>
       ) : null}
 
@@ -505,7 +507,7 @@ export function ProfileScreen({
           </button>
         </section>
 
-        <section className="mt-3 w-full px-4" aria-label="Your posts">
+        <section className="mt-3 w-full px-4" aria-label="Your posts timeline">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
               <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
@@ -517,7 +519,7 @@ export function ProfileScreen({
                 <p className="mt-1 text-[11px] text-muted-foreground">Use the composer above to share a thought, photo, video or update.</p>
               </div>
             ) : (
-              <ul className="space-y-3 p-3" role="list" aria-label="Your posts">
+              <ul className="space-y-3 p-3" role="list" aria-label="Your posts timeline">
                 {posts.map((post) => (
                   <li key={post.id}>
                     <OwnPostCard

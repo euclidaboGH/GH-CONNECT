@@ -153,7 +153,15 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
           } catch { /* */ }
           return
         }
+      {
+        const _mediaUrl = next.media && typeof next.media === "object" && next.media !== null && "url" in next.media
+          ? String((next.media as { url?: string }).url || "") : ""
+        if (_mediaUrl.startsWith("blob:")) {
+          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Story media still preparing — wait for upload", type: "error" } })) } catch { /* */ }
+          return
+        }
       await publishStory(next)
+      }
       }
       setText("")
       setMedia(null)
