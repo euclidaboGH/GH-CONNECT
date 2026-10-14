@@ -757,3 +757,208 @@ body {
   border-radius: calc(var(--radius) + 2px);
 }
 
+
+/* --------------------------------------------------------------------------
+   GreenHaven UI refinement pass — calm surfaces, clearer hierarchy, and
+   consistent accessible interaction states across the product.
+   Intentionally additive: keeps existing component behavior and layout intact.
+   -------------------------------------------------------------------------- */
+:root {
+  --gh-radius-sm: 0.625rem;
+  --gh-radius-md: 0.875rem;
+  --gh-radius-lg: 1.125rem;
+  --gh-card-shadow: 0 1px 2px rgb(16 24 20 / 0.035), 0 6px 20px rgb(16 24 20 / 0.045);
+  --gh-card-shadow-lg: 0 8px 28px rgb(16 24 20 / 0.075), 0 2px 6px rgb(16 24 20 / 0.035);
+  --gh-focus-ring: 0 0 0 3px color-mix(in oklab, var(--primary) 24%, transparent);
+}
+
+.dark {
+  --gh-card-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 6px 20px rgb(0 0 0 / 0.14);
+  --gh-card-shadow-lg: 0 8px 28px rgb(0 0 0 / 0.24), 0 2px 6px rgb(0 0 0 / 0.16);
+}
+
+.gh-app-shell {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.gh-app-shell :where(button, a, input, textarea, select, [role="button"], [tabindex]:not([tabindex="-1"])) {
+  outline-offset: 3px;
+}
+
+.gh-app-shell :where(button, a, [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gh-app-shell :where(button, [role="button"]) :where(svg) {
+  flex-shrink: 0;
+}
+
+.gh-app-shell :where(button, [role="button"]):disabled,
+.gh-app-shell :where(button, [role="button"])[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.gh-app-shell :where(button, a, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-app-shell :where(input, textarea, select) {
+  min-width: 0;
+  accent-color: var(--primary);
+}
+
+.gh-app-shell :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  border-radius: max(0.625rem, var(--gh-radius-sm));
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.gh-app-shell :where(input, textarea, select)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.78;
+}
+
+.gh-app-shell :where(input, textarea, select):focus-visible {
+  border-color: var(--ring);
+}
+
+.gh-surface-elevated,
+.gh-card,
+.gh-card-surface {
+  box-shadow: var(--gh-card-shadow);
+}
+
+.gh-card-outline {
+  border-color: color-mix(in oklab, var(--border) 82%, transparent);
+}
+
+.gh-card,
+.gh-card-outline,
+.gh-surface,
+.gh-surface-muted,
+.gh-surface-elevated,
+.gh-card-surface {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gh-btn,
+.gh-cta,
+.gh-icon-btn,
+.gh-chip,
+.gh-list-row,
+.gh-soft-panel {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}
+
+.gh-btn-primary,
+.gh-cta {
+  box-shadow: 0 2px 7px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.gh-btn-primary:hover:not(:disabled),
+.gh-cta:hover:not(:disabled) {
+  filter: brightness(1.025);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+
+.gh-btn-secondary:hover:not(:disabled) {
+  background: var(--muted);
+  border-color: color-mix(in oklab, var(--border) 65%, var(--foreground));
+}
+
+.gh-icon-btn {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.gh-chip {
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.gh-list-row {
+  min-width: 0;
+}
+
+.gh-list-row:focus-within {
+  border-radius: var(--gh-radius-sm);
+}
+
+.gh-section-title {
+  letter-spacing: 0.085em;
+}
+
+.gh-page-header-slim {
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+
+.gh-app-shell :where(p, li) {
+  text-wrap: pretty;
+}
+
+.gh-app-shell :where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+.gh-app-shell :where(img, video) {
+  max-width: 100%;
+}
+
+.gh-app-shell :where(a) {
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.gh-app-shell :where(a:not([class])) {
+  color: var(--primary);
+}
+
+.gh-app-shell ::selection {
+  background: color-mix(in oklab, var(--primary) 24%, transparent);
+  color: var(--foreground);
+}
+
+.gh-app-shell :where([role="dialog"], [data-state="open"][data-radix-popper-content-wrapper]) {
+  -webkit-backdrop-filter: saturate(125%);
+  backdrop-filter: saturate(125%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gh-card-outline:hover {
+    border-color: color-mix(in oklab, var(--border) 65%, var(--primary));
+  }
+  .gh-surface-elevated:hover {
+    box-shadow: var(--gh-card-shadow-lg);
+  }
+}
+
+@media (max-width: 380px) {
+  .gh-app-shell {
+    --gh-space-4: 0.875rem;
+    --gh-space-5: 1.125rem;
+  }
+  .gh-type-display {
+    font-size: 1.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-btn,
+  .gh-cta,
+  .gh-icon-btn,
+  .gh-chip,
+  .gh-list-row,
+  .gh-soft-panel {
+    transition: none !important;
+  }
+}
