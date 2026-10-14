@@ -508,21 +508,14 @@ export function ProfileScreen({
         <section className="mt-3 w-full px-4" aria-label="Your posts">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
-              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in current feed</span></div><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-700">＋ Create post</button>
+              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
               <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
             </div>
             {posts.length === 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } })) } catch { /* */ }
-                }}
-                className="m-3 w-[calc(100%-1.5rem)] rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-6 text-center transition hover:bg-muted/40"
-              >
-                <p className="text-[13px] font-semibold text-foreground">No posts yet</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Share a thought, photo, or win with your network.</p>
-                <span className="mt-3 inline-flex rounded-full bg-[var(--gh-green)] px-4 py-2 text-[11px] font-bold text-white">Create post</span>
-              </button>
+              <div className="m-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-7 text-center">
+                <p className="text-[13px] font-semibold text-foreground">Your timeline starts here</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Use the composer above to share a thought, photo, video or update.</p>
+              </div>
             ) : (
               <ul className="space-y-3 p-3" role="list" aria-label="Your posts">
                 {posts.map((post) => (

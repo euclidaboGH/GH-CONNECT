@@ -89,6 +89,7 @@ export function ProfileContentLibrary({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -256,7 +257,7 @@ export function ProfileContentLibrary({
                 {(["Profile photos", "Cover photos"] as const).map((group) => {
                   const items = historyItems.filter((item) => item.category === group)
                   if (!items.length) return null
-                  return <section key={group}><h3 className="mb-2 flex items-center gap-2 text-sm font-bold"><CalendarDays size={16} />{group}</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{items.map((item) => <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card"><img src={item.url} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className={`w-full bg-muted object-cover ${group === "Cover photos" ? "aspect-[16/9]" : "aspect-square"}`} /><div className="p-2.5"><p className="text-xs font-semibold">{item.title}</p>{item.changedAt ? <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(item.changedAt)}</p> : null}</div></article>)}</div></section>
+                  return <section key={group}><h3 className="mb-2 flex items-center gap-2 text-sm font-bold"><CalendarDays size={16} />{group}</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{items.map((item) => <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card"><button type="button" onClick={() => setLightbox({ src: item.url, alt: item.title })} className="block w-full cursor-zoom-in" aria-label={`View ${item.title} full screen`}><img src={item.url} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className={`w-full bg-muted object-cover ${group === "Cover photos" ? "aspect-[16/9]" : "aspect-square"}`} /></button><div className="p-2.5"><p className="text-xs font-semibold">{item.title}</p>{item.changedAt ? <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(item.changedAt)}</p> : null}</div></article>)}</div></section>
                 })}
                 {!isOwner ? <p className="text-xs text-muted-foreground">Only profile and cover images shared with you are shown here.</p> : null}
               </div>
@@ -279,7 +280,7 @@ export function ProfileContentLibrary({
                     <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold capitalize text-muted-foreground">{pdf ? "Document" : video ? "Video" : images.length ? "Photo" : "Post"}</span>
                   </div>
                   {post.content ? <p className="whitespace-pre-wrap break-words px-3.5 py-3 text-sm leading-relaxed text-foreground">{post.content}</p> : null}
-                  {images.length ? <div className={`grid gap-1.5 px-3.5 pb-3 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>{images.slice(0, 10).map((src, index) => <a key={`${post.id}-image-${index}`} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl bg-muted"><img src={src} alt={`Photo ${index + 1} from ${formatDate(Number(post.createdAt) || undefined)}`} loading="lazy" referrerPolicy="no-referrer" className={`w-full object-cover ${images.length === 1 ? "max-h-[28rem]" : "aspect-square"}`} /></a>)}</div> : null}
+                  {images.length ? <div className={`grid gap-1.5 px-3.5 pb-3 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>{images.slice(0, 10).map((src, index) => <button key={`${post.id}-image-${index}`} type="button" onClick={() => setLightbox({ src, alt: `Photo ${index + 1} from ${formatDate(Number(post.createdAt) || undefined)}` })} className="block w-full cursor-zoom-in overflow-hidden rounded-xl bg-muted" aria-label={`View photo ${index + 1} full screen`}><img src={src} alt={`Photo ${index + 1} from ${formatDate(Number(post.createdAt) || undefined)}`} loading="lazy" referrerPolicy="no-referrer" className={`w-full object-cover ${images.length === 1 ? "max-h-[28rem]" : "aspect-square"}`} /></button>)}</div> : null}
                   {video ? <div className="px-3.5 pb-3"><video src={video} controls preload="metadata" className="max-h-[28rem] w-full rounded-xl bg-black" aria-label="Post video" /></div> : null}
                   {pdf ? <div className="px-3.5 pb-3"><div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600"><FileText size={21} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{post.pdfName || "Published PDF document"}</p><p className="mt-0.5 text-[11px] text-muted-foreground">PDF · Shared according to post permissions</p></div><a href={pdf} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold hover:bg-muted"><ExternalLink size={14} />Open</a></div></div> : null}
                 </article>
@@ -289,6 +290,12 @@ export function ProfileContentLibrary({
           )}
         </div>
       </section>
+      {lightbox ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Photo viewer" onClick={() => setLightbox(null)}>
+          <button type="button" onClick={() => setLightbox(null)} className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white" aria-label="Close photo viewer"><X size={22} /></button>
+          <img src={lightbox.src} alt={lightbox.alt} referrerPolicy="no-referrer" className="max-h-[92dvh] max-w-full object-contain" onClick={(event) => event.stopPropagation()} />
+        </div>
+      ) : null}
     </div>
   )
 }
