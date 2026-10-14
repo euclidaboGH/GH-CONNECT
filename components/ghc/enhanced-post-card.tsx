@@ -129,34 +129,26 @@ function EnhancedPostCardInner({
 
   useEffect(() => {
     let cancelled = false
-
     void (async () => {
       try {
         const { IdentityService } = await import("@/lib/identity/identity-service")
-        const response = await fetch(`/api/social/posts/${encodeURIComponent(post.id)}/ghpv`, {
-          credentials: "include",
-          headers: { ...(IdentityService.getAuthHeaders?.() || {}) },
+        await fetch(`/api/social/posts/${encodeURIComponent(post.id)}/ghpv`, {
+          credentials: "include", headers: { ...(IdentityService.getAuthHeaders?.() || {}) },
         })
-
-        if (!response.ok) {
-          if (!cancelled) setJudgmentLabel(null)
-          return
-        }
-
-        const data = (await response.json()) as { status?: string }
-        if (cancelled) return
-
-        const status = String(data?.status || "open")
-        if (status === "settled") setJudgmentLabel("Community review complete")
-        else if (status === "unresolved") setJudgmentLabel("Community review unresolved")
-        else if (status === "pending") setJudgmentLabel("Community review in progress")
-        else setJudgmentLabel("Community review open")
-      } catch {
-        // Fail softly: community-review status is supplementary UI.
-        if (!cancelled) setJudgmentLabel(null)
-      }
+      } catch { /* fail-soft */ }
     })()
-
+      .then((r) => r.json())
+      .then((data: { status?: string }) => {
+        if (cancelled) return
+        const s = String(data?.status || "open")
+        if (s === "settled") setJudgmentLabel("Community review complete")
+        else if (s === "unresolved") setJudgmentLabel("Community review unresolved")
+        else if (s === "pending") setJudgmentLabel("Community review in progress")
+        else setJudgmentLabel("Community review open")
+      })
+      .catch(() => {
+        if (!cancelled) setJudgmentLabel(null)
+      })
     return () => {
       cancelled = true
     }

@@ -74,7 +74,9 @@ for (const f of routes) {
       r.includes('auth/pi') ||
       r.includes('auth/logout') ||
       r.includes('validation-key') ||
-      r.includes('health/')
+      r.includes('health/') ||
+      // Anonymous, rate-limited analytics intake; events are validated and not persisted.
+      r.includes('analytics/events')
     // System ops: internal shared secret (not ordinary user session)
     const systemMutation =
       r.includes('ghpv/settle') &&

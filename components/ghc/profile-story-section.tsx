@@ -186,8 +186,10 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
             <button key={story.id} type="button" onClick={() => {
                 setViewing(story)
                 setStoryReaction(null)
+                // Record the view outside the state updater; React may invoke
+                // updater functions more than once in development.
+                try { void socialViewStory(String(story.id)).catch(() => {}) } catch { /* fail-soft */ }
                 setSeenStoryIds((prev) => {
-                try { void socialViewStory(String(story?.id || s?.id || "")).catch(() => {}) } catch { /* */ }
                   if (prev.includes(story.id)) return prev
                   const next = [...prev, story.id].slice(-80)
                   try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}
