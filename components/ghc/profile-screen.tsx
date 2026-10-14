@@ -36,6 +36,7 @@ import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { ProfileContentLibrary } from "./profile-content-library"
+import ProfileStorySection from "./profile-story-section"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -67,8 +68,9 @@ export function ProfileScreen({
     () => (Array.isArray(feed.posts) ? feed.posts.filter((post) => isOwnProfilePost(post.authorId, post.authorName, meId, p)) : []),
     [feed.posts, meId, p],
   )
-  const [dashboardOpen, setDashboardOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
+  const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -437,20 +439,20 @@ export function ProfileScreen({
             ) : null}
 
             {/* Stats — real counts only */}
-            <div className="mt-4 flex gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
+            <div className="mt-4 grid grid-cols-4 gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
               {[
-                { label: "Posts", value: posts.length },
-                { label: "Friends", value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
-                { label: "Following", value: Array.isArray(ghc.following) ? ghc.following.length : 0 },
+                { label: "Posts" as const, value: posts.length },
+                { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
+                { label: "Following" as const, value: Array.isArray(ghc.following) ? ghc.following.length : 0 },
+                { label: "Followers" as const, value: Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers!.length : 0 },
               ].map((s) => (
-                <div key={s.label} className="flex min-w-0 flex-1 flex-col items-center py-2.5 text-center">
-                  <p className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {s.label}
-                  </p>
-                </div>
+                <button key={s.label} type="button" onClick={() => setSocialList(s.label)} className="flex min-w-0 flex-col items-center rounded-xl py-2.5 text-center transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${s.label.toLowerCase()} list`}>
+                  <span className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{s.label}</span>
+                </button>
               ))}
             </div>
+            <div className="mt-4"><ProfileStorySection scope="profile" /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
                 type="button"
@@ -472,157 +474,23 @@ export function ProfileScreen({
         <section className="mt-4 w-full px-4" aria-label="Profile dashboard">
           <button
             type="button"
-            aria-expanded={dashboardOpen}
-            aria-controls="profile-dashboard-content"
-            onClick={() => setDashboardOpen((open) => !open)}
+            aria-expanded={dashboardPageOpen}
+            onClick={() => setDashboardPageOpen(true)}
             className="flex min-h-12 w-full items-center justify-between rounded-[1.1rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="min-w-0">
               <span className="block text-[13px] font-bold text-foreground">Dashboard</span>
               <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
             </span>
-            <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">{dashboardOpen ? "Hide" : "Open"}</span>
+            <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open</span>
           </button>
-          {dashboardOpen ? (
-            <div id="profile-dashboard-content" className="mt-3 space-y-3">
-              <button type="button" onClick={() => setLibraryOpen(true)} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:bg-muted" aria-label="Open profile content library">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><ImagePlus size={19} /></span>
-                <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold">Photos, videos & documents</span><span className="mt-0.5 block text-[11px] text-muted-foreground">Search older posts and browse published files</span></span>
-                <span className="text-xs font-bold text-muted-foreground">Open</span>
-              </button>
-        {extraPhotos.length > 0 ? (
-          <section className="mt-3 w-full px-4" aria-label="More photos">
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {extraPhotos.map((src, i) => (
-                <button
-                  key={`${i}-${src.slice(0, 24)}`}
-                  type="button"
-                  onClick={() => setPhotoSheet("photo")}
-                  className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-border/50 bg-muted shadow-sm"
-                  aria-label={`Photo ${i + 2}`}
-                >
-                  <img src={src} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
-        <ProfileMyCommunities
-          conversations={messaging?.conversations}
-          viewerId={meId}
-        />
-
-        {intents.length > 0 ? (
-          <section className="mt-4 w-full px-4">
-            <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-              Looking for
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {intents.map((i) => (
-                <span
-                  key={i}
-                  className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold capitalize text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-                >
-                  {i}
-                </span>
-              ))}
-            </div>
-            </div>
-          </section>
-        ) : null}
-
-        {/* Compact dashboard — tools once, not repeated under posts */}
-        <div className="mt-4 w-full px-4">
-          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                Dashboard
-              </p>
-              <span className="font-mono text-[10px] font-bold text-emerald-800/80 dark:text-emerald-300/80">
-                {ghDisplay}
-              </span>
-            </div>
-            <div className="p-2.5 pt-2">
-              <ProfileEcosystemHub
-                userId={meId}
-                displayName={name}
-                onOpenWallet={onOpenWallet}
-                onShareProfile={() => void shareProfile()}
-                onOpenMembership={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })
-                    )
-                  } catch {
-                    /* */
-                  }
-                }}
-                onOpenRewards={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })
-                    )
-                  } catch {
-                    /* */
-                  }
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <section className="mt-4 w-full px-4">
-          <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Interests
-          </p>
-          {interests.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {interests.map((i) => (
-                <span
-                  key={i}
-                  className="rounded-full bg-muted/80 px-2.5 py-1 text-[11px] font-semibold text-foreground ring-1 ring-border/40"
-                >
-                  {i}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={openEdit}
-              className="mt-2 w-full rounded-xl border border-dashed border-border bg-muted/30 px-3 py-3 text-left text-[12px] text-muted-foreground transition hover:bg-muted/50"
-            >
-              Add interests so Discover can recommend better matches.
-            </button>
-          )}
-          </div>
-        </section>
-
-        
-        <div className="mt-4 w-full space-y-3 px-4 pb-8">
-          <SetupChecklist
-            onNavigate={(tab) => {
-              try {
-                window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab }))
-              } catch {
-                /* */
-              }
-            }}
-          />
-          <ProfileMoreNav onOpenSettings={onSettings} onOpenWallet={onOpenWallet} />
-        </div>
-
-            </div>
-          ) : null}
         </section>
 
         <section className="mt-4 w-full px-4" aria-label="Your posts">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
-              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in current feed</span></div>
+              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in current feed</span></div><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-700">＋ Create post</button>
               <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
             </div>
             {posts.length === 0 ? (
@@ -675,6 +543,42 @@ export function ProfileScreen({
           </div>
         </section>
       </div>
+
+      {dashboardPageOpen ? (
+        <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
+          <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <button type="button" onClick={() => setDashboardPageOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close dashboard"><X size={20} /></button>
+            <div className="min-w-0"><h2 className="text-base font-bold">Dashboard</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8">
+            <ProfileEcosystemHub userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
+            <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Your communities">
+              <h3 className="mb-2 text-sm font-bold">Your communities</h3>
+              <ProfileMyCommunities conversations={messaging?.conversations} viewerId={meId} />
+            </section>
+            <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Account setup checklist">
+              <h3 className="mb-2 text-sm font-bold">Account setup</h3>
+              <SetupChecklist onNavigate={(tab) => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab })) }} />
+            </section>
+            <div className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
+              <h3 className="mb-2 text-sm font-bold">More account tools</h3>
+              <ProfileMoreNav onOpenSettings={() => { setDashboardPageOpen(false); onSettings() }} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} />
+            </div>
+            <div className="mt-4 space-y-2">
+              <button type="button" onClick={() => { setDashboardPageOpen(false); setLibraryOpen(true) }} className="w-full rounded-xl border border-border p-3 text-left text-sm font-semibold hover:bg-muted">Photos, videos & documents <span className="float-right text-muted-foreground">Open</span></button>
+              <button type="button" onClick={() => { setDashboardPageOpen(false); onSettings() }} className="w-full rounded-xl border border-border p-3 text-left text-sm font-semibold hover:bg-muted">Account settings <span className="float-right text-muted-foreground">Open</span></button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {socialList ? (() => {
+        const list = socialList === "Posts" ? posts : socialList === "Friends" ? (Array.isArray(ghc.friends) ? ghc.friends : []) : socialList === "Following" ? (Array.isArray(ghc.following) ? ghc.following : []) : (Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers! : [])
+        return <div className="fixed inset-0 z-[85] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label={socialList}>
+          <header className="flex items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]"><button type="button" onClick={() => setSocialList(null)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Back to profile"><X size={20} /></button><h2 className="text-base font-bold">{socialList}</h2><span className="ml-auto text-xs text-muted-foreground">{list.length}</span></header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">{list.length ? list.map((entry, i) => { const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null; const idValue = item?.id ?? item?.userId ?? item?.ownerId ?? item?.targetUserId ?? (typeof entry === "string" ? entry : null); const memberId = idValue == null ? "" : String(idValue).trim(); const label = socialList === "Posts" ? String(item?.content || item?.text || "Post") : String(item?.displayName || item?.name || item?.username || (memberId && !/^[a-f0-9-]{16,}$/i.test(memberId) ? memberId : "GreenHaven member")); const key = memberId || `entry-${i}`; const openEntry = () => { if (socialList === "Posts" && memberId) { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" })); window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: memberId } })); setSocialList(null); return; } if (memberId) { window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: memberId } })); setSocialList(null); } }; return <button type="button" key={key} onClick={openEntry} disabled={!memberId} className="flex w-full items-center gap-3 border-b border-border/60 px-2 py-3 text-left transition hover:bg-muted/50 disabled:cursor-default"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-sm font-bold text-emerald-700">{label.slice(0,1).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{label}</p>{socialList === "Posts" && item?.createdAt ? <p className="text-xs text-muted-foreground">{new Date(Number(item.createdAt)).toLocaleDateString()}</p> : socialList !== "Posts" && item?.username ? <p className="truncate text-xs text-muted-foreground">@{String(item.username).replace(/^@/, "")}</p> : null}</div>{memberId ? <span className="text-xs font-semibold text-emerald-700">Open</span> : null}</button> }) : <div className="p-8 text-center text-sm text-muted-foreground">{socialList === "Posts" ? "Your posts will appear here." : `No ${socialList.toLowerCase()} to show yet.`}</div>}</div>
+        </div>
+      })() : null}
 
       <ProfileContentLibrary
         open={libraryOpen}

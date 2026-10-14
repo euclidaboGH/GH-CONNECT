@@ -1,8 +1,8 @@
 import { defineConfig, globalIgnores } from "eslint/config"
-import nextVitals from "eslint-config-next/core-web-vitals"
+import nextVitals from "eslint-config-next/core-web-vitals.js"
 
 /**
- * Use the supported flat-config entry point from eslint-config-next.
+ * Use the flat-config entry point with an explicit .js extension. Node ESM resolution on the deployed Next 15 package requires this file suffix.
  * This lets Next.js detect its plugin reliably during production builds.
  */
 export default defineConfig([
