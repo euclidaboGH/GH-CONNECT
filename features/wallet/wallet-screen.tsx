@@ -54,7 +54,6 @@ import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
 import { ASSET_POLICY } from "@/lib/asset-separation"
-import { RewardHoldsAppealsCard } from "./reward-holds-card"
 
 function formatGhc(n: number) {
   if (!Number.isFinite(n)) return "0.00"
@@ -224,6 +223,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [showPendingSheet, setShowPendingSheet] = useState(false)
   const [showUtilityHelp, setShowUtilityHelp] = useState(false)
   const [claimingHoldId, setClaimingHoldId] = useState<string | null>(null)
+  const [walletOnline, setWalletOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine)
   const [claimFeedback, setClaimFeedback] = useState<string | null>(null)
   const [claimReceipt, setClaimReceipt] = useState<{ amount: number; ref?: string } | null>(null)
   const [fuelExpanded, setFuelExpanded] = useState(() => {
@@ -237,8 +237,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     const onRefresh = () => setTick((x) => x + 1)
+    const onOnline = () => setWalletOnline(true)
+    const onOffline = () => setWalletOnline(false)
+    const onFocus = () => { try { window.dispatchEvent(new CustomEvent("ghc:wallet-refresh")) } catch { /* */ } }
+    window.addEventListener("online", onOnline)
+    window.addEventListener("offline", onOffline)
+    window.addEventListener("ghc:wallet-focus", onFocus)
     window.addEventListener("ghc:wallet-refresh", onRefresh)
-    return () => window.removeEventListener("ghc:wallet-refresh", onRefresh)
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("offline", onOffline)
+      window.removeEventListener("ghc:wallet-focus", onFocus)
+      window.removeEventListener("ghc:wallet-refresh", onRefresh)
+    }
   }, [])
 
   // Load durable Pi payment intents when user opens π rail
@@ -441,6 +452,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   const claimPendingHold = async (holdId: string) => {
     if (claimingHoldId) return
+    if (!walletOnline) {
+      setClaimFeedback?.("You are offline — claim when reconnected")
+      return
+    }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setClaimFeedback("You are offline. Claims need a connection so the ledger can confirm.")
       return
@@ -464,10 +479,14 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       for (const id of ids) {
         // Prefer server claim when available, then local domain
         try {
+          const claimHeaders: Record<string, string> = { "Content-Type": "application/json" }
+          try {
+            const { IdentityService } = await import("@/lib/identity/identity-service")
+            Object.assign(claimHeaders, IdentityService.getAuthHeaders?.() || {})
+          } catch { /* */ }
           const serverRes = await fetch("/api/economy/rewards/claim", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ holdId: id }),
+            method: "POST", credentials: "include", headers: claimHeaders,
+            body: JSON.stringify({ holdId: id, clientRequestId: `claim-${Date.now()}-${id}` }),
           })
           if (serverRes.ok) {
             const body = (await serverRes.json()) as { ok?: boolean; mode?: string }
@@ -678,7 +697,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     ]
     const recent = txs.slice(0, 15)
     if (recent.length === 0) {
-      lines.push("No activity yet yet.")
+      lines.push("No activity yet.")
     } else {
       for (const tx of recent) {
         const sign = tx.amount >= 0 ? "+" : ""
@@ -928,8 +947,6 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             onOpenPending={() => setShowPendingSheet(true)}
           />
         </div>
-
-        <RewardHoldsAppealsCard />
 
         {/* ZONE: ACTIONS — balance → primary actions (not withdraw first) */}
         <WalletPrimaryActions

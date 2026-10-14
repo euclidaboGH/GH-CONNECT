@@ -20,18 +20,9 @@ export const STORAGE_KEYS = {
 
 // Interests
 export const INTERESTS = {
-  hobbies: [
-    "Music", "Sports", "Travel", "Reading", "Gaming", "Cooking", "Photography",
-    "Fitness", "Fashion", "Food", "Movies", "Art", "Dance", "Outdoors", "Cycling",
-  ],
-  professional: [
-    "Tech", "Finance", "Healthcare", "Education", "Arts", "Entrepreneurship",
-    "Marketing", "Design", "Law", "Engineering", "Media", "Agriculture",
-  ],
-  lifestyle: [
-    "Wellness", "Nature", "Volunteering", "Pets", "Spirituality", "Writing",
-    "Community", "Family", "Languages", "Sustainability", "Faith", "Mentorship",
-  ],
+  hobbies: ["Music", "Sports", "Travel", "Reading", "Gaming", "Cooking", "Photography", "Fitness", "Fashion", "Food"],
+  professional: ["Tech", "Finance", "Healthcare", "Education", "Arts", "Entrepreneurship"],
+  lifestyle: ["Wellness", "Nature", "Volunteering", "Pets", "Spirituality", "Writing"],
 }
 
 export const ALL_INTERESTS = [...INTERESTS.hobbies, ...INTERESTS.professional, ...INTERESTS.lifestyle]

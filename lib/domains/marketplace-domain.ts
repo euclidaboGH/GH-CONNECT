@@ -539,7 +539,6 @@ export function createMarketplaceDomain(deps: {
         // Ensure server order exists
         let serverOrderId = local.serverOrderId
         if (!serverOrderId) {
-          headers["Idempotency-Key"] = `ghc-market-order-${local.id}`
           const createRes = await fetch("/api/marketplace/orders", {
             method: "POST",
             headers,

@@ -18,9 +18,7 @@ import {
   findOrCreateFromVerifiedPi,
   touchLastSeen,
   isPiIdentityDurable,
-  markOnboardingCompleted,
 } from "@/lib/server/identity/pi-identity-store"
-import { getServerProfile } from "@/lib/server/identity/profile-store"
 import {
   createSession,
   buildSessionCookieHeader,
@@ -105,26 +103,9 @@ export async function POST(request: Request) {
 
     void touchLastSeen(record.ghUserId)
 
-    // Repair legacy accounts whose identity row was created before the
-    // onboarding flag was reliably stamped. Only trust the server-side profile
-    // associated with this verified identity; never accept a client user id.
-    let effectiveRecord = record
-    if (!record.onboardingCompleted) {
-      const profile = await getServerProfile(record.ghUserId)
-      const hasEstablishedProfile = Boolean(
-        profile &&
-        (profile.onboarded === true ||
-          (typeof profile.displayName === "string" &&
-            profile.displayName.trim().length > 0))
-      )
-      if (hasEstablishedProfile) {
-        const repaired = await markOnboardingCompleted(record.ghUserId)
-        if (repaired) effectiveRecord = repaired
-      }
-    }
-
-    const isReturning = !isNew && effectiveRecord.onboardingCompleted === true
-    const needsOnboarding = effectiveRecord.onboardingCompleted !== true
+    const isReturning = !isNew && record.onboardingCompleted === true
+    const needsOnboarding = record.onboardingCompleted !== true
+    // Existing mapping row (may still need onboarding form if onboardingCompleted was never stamped)
     const identityExisted = !isNew
 
     // Issue GH server session only after verified Pi identity
@@ -175,12 +156,12 @@ export async function POST(request: Request) {
           absoluteExpiresAt: issued.record.absoluteExpiresAt,
         },
         identity: {
-          ghUserId: effectiveRecord.ghUserId,
-          piAppUid: effectiveRecord.piAppUid,
-          piUsername: effectiveRecord.piUsername,
-          onboardingCompleted: effectiveRecord.onboardingCompleted,
-          verifiedAt: effectiveRecord.verifiedAt,
-          lastSeenAt: effectiveRecord.lastSeenAt,
+          ghUserId: record.ghUserId,
+          piAppUid: record.piAppUid,
+          piUsername: record.piUsername,
+          onboardingCompleted: record.onboardingCompleted,
+          verifiedAt: record.verifiedAt,
+          lastSeenAt: record.lastSeenAt,
         },
       },
       { headers: { "Cache-Control": "no-store" } }

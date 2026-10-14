@@ -348,25 +348,6 @@ export function resolveUiOnboardingGate(input: {
     }
   }
 
-  // Local device proof beats a flaky/non-durable server "required" flag
-  if (
-    hasLocalOnboardingStampForUser({
-      userId: uid,
-      username: un,
-      candidateUserIds: candidates,
-    })
-  ) {
-    return "complete"
-  }
-  const localAgain = findCompletedLocalProfileForUser({
-    userId: uid,
-    username: un,
-    candidateUserIds: candidates,
-  })
-  if (localAgain && (isStrongCompletedProfileShape(localAgain) || isCompletedProfileShape(localAgain))) {
-    return "complete"
-  }
-
   if (pi === "required") return "required"
 
   // unknown: keep loading shell — never force registration from userId alone

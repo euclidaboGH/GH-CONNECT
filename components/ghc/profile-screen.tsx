@@ -9,8 +9,6 @@ import { useMemo, useState, useCallback, useEffect } from "react"
 import { useGHCProfile, useGHCMessaging } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
-import { ProfileProgressionCard } from "./profile-progression-card"
-import { ProfileTrustCard } from "./profile-trust-card"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal, calculateProfileCompletion } from "./profile-components"
@@ -37,7 +35,6 @@ import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
-import { prepareProfilePhoto } from "@/lib/profile-media"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -57,7 +54,7 @@ export function ProfileScreen({
     addToast?: (m: string, t?: "success" | "error" | "info") => void
   }
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
-  const p = useMemo(() => ghc.profile || ({} as Profile), [ghc.profile])
+  const p = ghc.profile || ({} as Profile)
   const name = p.displayName || "Member"
   const photos = useMemo(() => (Array.isArray(p.photos) ? p.photos.filter(Boolean) : []), [p.photos])
   const photo = photos[0] || ""
@@ -71,11 +68,6 @@ export function ProfileScreen({
   )
   const showMediaTab = mediaPosts.length > 0
 
-  const [editOpen, setEditOpen] = useState(false)
-  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
-  const [isOffline, setIsOffline] = useState(false)
-  const [statusMsg, setStatusMsg] = useState<string | null>(null)
-
   useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setIsOffline(!navigator.onLine)
@@ -87,6 +79,9 @@ export function ProfileScreen({
       window.removeEventListener("offline", sync)
     }
   }, [])
+
+  const [editOpen, setEditOpen] = useState(false)
+  const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
 
   useEffect(() => {
     if (!photoSheet && !editOpen) return
@@ -104,6 +99,9 @@ export function ProfileScreen({
       setProfileActivityTab("posts")
     }
   }, [profileActivityTab, showMediaTab])
+
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const initials = useMemo(() => {
     const parts = String(name).trim().split(/\s+/).filter(Boolean)
@@ -137,13 +135,7 @@ export function ProfileScreen({
   const handleSave = useCallback(
     (updates: Partial<Profile>) => {
       try {
-        const payload = {
-          ...updates,
-          interests: Array.isArray(updates.interests)
-            ? updates.interests.map((i) => String(i).trim()).filter(Boolean).slice(0, 30)
-            : updates.interests,
-        }
-        void Promise.resolve(ghc.updateProfile?.(payload))
+        ghc.updateProfile?.(updates)
         setStatusMsg("Profile updated")
         window.setTimeout(() => setStatusMsg(null), 2000)
         ghc.addToast?.("Profile updated", "success")
@@ -160,49 +152,37 @@ export function ProfileScreen({
     (kind: "photo" | "cover") => {
       setPhotoSheet(null)
       if (typeof navigator !== "undefined" && !navigator.onLine) {
-        ghc.addToast?.(
-          "You are offline. We will still optimize the photo on this device and sync when possible.",
-          "info",
-        )
+        ghc.addToast?.("You are offline. Choose a photo now — it saves on this device and may sync when you reconnect.", "info")
       }
       try {
         const input = document.createElement("input")
         input.type = "file"
-        input.accept = "image/*,.heic,.heif,.avif"
+        input.accept = "image/*"
         input.onchange = () => {
           const file = input.files?.[0]
           if (!file) return
-          if (file.size > 50 * 1024 * 1024) {
-            ghc.addToast?.("Image is too large. Try a normal camera photo under 50 MB.", "error")
+          if (file.size > 4 * 1024 * 1024) {
+            ghc.addToast?.("Image must be under 4 MB", "error")
             return
           }
-          setStatusMsg(kind === "cover" ? "Optimizing cover…" : "Optimizing photo…")
-          void (async () => {
-            const prepared = await prepareProfilePhoto(file, kind)
-            if (!prepared.ok) {
-              setStatusMsg(null)
-              ghc.addToast?.(prepared.error || "Could not process image", "error")
-              return
-            }
-            const url = prepared.url
+          const reader = new FileReader()
+          reader.onload = () => {
+            const dataUrl = String(reader.result || "")
+            if (!dataUrl) return
             if (kind === "photo") {
-              const next = [url, ...photos.filter((x) => x !== url)].slice(0, 6)
-              await Promise.resolve(ghc.updateProfile?.({ photos: next }))
-              setStatusMsg(prepared.durable ? "Profile photo saved" : "Profile photo saved on device")
-              ghc.addToast?.(
-                prepared.durable ? "Profile photo updated" : "Photo updated (will use cloud when storage is configured)",
-                "success",
-              )
+              const next = [dataUrl, ...photos.filter((x) => x !== dataUrl)].slice(0, 6)
+              ghc.updateProfile?.({ photos: next })
+              setStatusMsg("Profile photo updated")
+              window.setTimeout(() => setStatusMsg(null), 2000)
+              ghc.addToast?.("Profile photo updated", "success")
             } else {
-              await Promise.resolve(ghc.updateProfile?.({ coverPhoto: url }))
-              setStatusMsg(prepared.durable ? "Cover saved" : "Cover saved on device")
-              ghc.addToast?.(
-                prepared.durable ? "Cover photo updated" : "Cover updated (will use cloud when storage is configured)",
-                "success",
-              )
+              ghc.updateProfile?.({ coverPhoto: dataUrl })
+              setStatusMsg("Cover photo updated")
+              window.setTimeout(() => setStatusMsg(null), 2000)
+              ghc.addToast?.("Cover photo updated", "success")
             }
-            window.setTimeout(() => setStatusMsg(null), 2500)
-          })()
+          }
+          reader.readAsDataURL(file)
         }
         input.click()
       } catch {
@@ -491,9 +471,6 @@ export function ProfileScreen({
           viewerId={meId}
         />
 
-        <ProfileProgressionCard />
-        <ProfileTrustCard />
-
         {intents.length > 0 ? (
           <section className="mt-4 w-full px-4">
             <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-sm">
@@ -515,9 +492,6 @@ export function ProfileScreen({
         ) : null}
 
         <div className="mt-4 w-full px-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-            GreenHaven ecosystem
-          </p>
           <ProfileEcosystemHub
             userId={meId}
             displayName={name}

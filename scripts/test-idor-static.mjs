@@ -77,16 +77,9 @@ for (const f of routes) {
       r.includes('health/')
     // System ops: internal shared secret (not ordinary user session)
     const systemMutation =
-      (r.includes('ghpv/settle') &&
-        /GH_SETTLEMENT_INTERNAL_KEY/.test(src) &&
-        /timingSafeEqual/.test(src)) ||
-      (r.includes('domain-events/dispatch') &&
-        /GHC_DOMAIN_EVENT_CRON_SECRET|CRON_SECRET/.test(src) &&
-        /x-cron-secret|FORBIDDEN/.test(src)) ||
-      (r.includes('app/api/internal/') &&
-        /GHC_|CRON_SECRET|INTERNAL_KEY/.test(src) &&
-        /FORBIDDEN|UNAUTHORIZED|403/.test(src) &&
-        !/body\.userId\s*=/.test(src))
+      r.includes('ghpv/settle') &&
+      /GH_SETTLEMENT_INTERNAL_KEY/.test(src) &&
+      /timingSafeEqual/.test(src)
     if (!publicMutation && !systemMutation && !/resolveAuthenticatedUser|authorize\(/.test(src)) {
       issues.push(`${r}: mutation without resolveAuthenticatedUser/authorize`)
       fail++

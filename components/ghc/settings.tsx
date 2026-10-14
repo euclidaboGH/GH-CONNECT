@@ -787,28 +787,6 @@ export function SettingsScreen({
           </section>
 
           <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Feed personalization</p>
-            <h3 className="mt-1 text-[14px] font-bold">Reset your feed feedback</h3>
-            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Clear your saved per-post hide/show-more/show-less choices. This does not delete your posts, quality votes, rewards, or account data.</p>
-            <button
-              type="button"
-              className="mt-3 min-h-10 rounded-xl border border-border px-3 text-[12px] font-bold hover:bg-muted"
-              onClick={async () => {
-                if (!window.confirm("Reset your saved feed feedback? Your posts and rewards will not be changed.")) return
-                try {
-                  const response = await fetch("/api/social/curation-preferences", { method: "DELETE", cache: "no-store" })
-                  const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string }
-                  if (!response.ok || data.ok !== true) throw new Error(data.error || "RESET_FAILED")
-                  window.dispatchEvent(new CustomEvent("ghc:curation-reset"))
-                  window.alert("Feed feedback has been reset.")
-                } catch {
-                  window.alert("Could not reset feed feedback. Please try again.")
-                }
-              }}
-            >Reset feed feedback</button>
-          </section>
-
-          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[13px] font-bold text-foreground">Need finer alert control?</p>
             <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
               Choose which events can notify you under{" "}

@@ -504,32 +504,6 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener("keydown", onKey)
   }, [confirmTier, successStatus])
 
-
-  // After Pi Browser return / tab focus: re-read server entitlement (never invent tier)
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const refresh = () => {
-      void refreshMembershipFromServer()
-    }
-    const onVis = () => {
-      if (document.visibilityState === "visible") refresh()
-    }
-    window.addEventListener("pageshow", refresh)
-    document.addEventListener("visibilitychange", onVis)
-    window.addEventListener("focus", refresh)
-    window.addEventListener("ghc:pi-payment-complete", refresh)
-    window.addEventListener("ghc:membership-refresh", refresh)
-    return () => {
-      window.removeEventListener("pageshow", refresh)
-      document.removeEventListener("visibilitychange", onVis)
-      window.removeEventListener("focus", refresh)
-      window.removeEventListener("ghc:pi-payment-complete", refresh)
-      window.removeEventListener("ghc:membership-refresh", refresh)
-    }
-  // refreshMembershipFromServer is stable for this screen lifecycle
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: listeners only
-  }, [])
-
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-3 py-3 backdrop-blur-md">

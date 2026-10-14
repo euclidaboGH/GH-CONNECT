@@ -10,7 +10,6 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { loadOrder, transitionOrder } from "@/lib/server/marketplace/order-store"
 
 export const runtime = "nodejs"
@@ -34,8 +33,6 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const rateLimit = checkRateLimit(`market-order-transition:${auth.userId}`, 30, 60_000)
-  if (!rateLimit.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED", retryAfterSec: rateLimit.retryAfterSec }, { status: 429 })
 
   const { orderId } = await ctx.params
   const order = await loadOrder(orderId)
@@ -58,14 +55,6 @@ export async function POST(
   void body.userId
 
   const to = String(body.to || "").toLowerCase()
-
-  if (to === "refunded") {
-    return NextResponse.json({
-      ok: false,
-      error: "REFUND_PROVIDER_WORKFLOW_REQUIRED",
-      message: "A refund status cannot be set without a provider-verified refund and ledger-linked reversal.",
-    }, { status: 409 })
-  }
 
   // payment_verified is established only by POST .../pay after settlement
   if (to === "payment_verified") {
@@ -111,8 +100,8 @@ export async function POST(
   if (to === "fulfilling" && order.sellerId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "SELLER_ONLY" }, { status: 403 })
   }
-  if (to === "completed" && order.buyerId !== auth.userId) {
-    return NextResponse.json({ ok: false, error: "BUYER_CONFIRMATION_REQUIRED", message: "Only the buyer can confirm completion after seller fulfillment." }, { status: 403 })
+  if (to === "completed" && order.buyerId !== auth.userId && order.sellerId !== auth.userId) {
+    return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
   if (to === "cancelled" && order.status === "completed") {
     return NextResponse.json({ ok: false, error: "ALREADY_COMPLETED" }, { status: 409 })

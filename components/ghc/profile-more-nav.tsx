@@ -8,10 +8,10 @@
  * - Personal services: Wallet, Rewards, Membership
  * - Support: Settings, Help
  *
- * Marketplace and Ecosystem are also listed here so they are not buried.
+ * Marketplace and Ecosystem are reached from Home → Ecosystem, not Profile.
  */
 
-import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles, ShoppingBag, LayoutGrid } from "lucide-react"
+import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles } from "lucide-react"
 import { navigateTo, openMembership } from "@/lib/navigation/navigate"
 
 type NavItem = {
@@ -101,23 +101,6 @@ export function ProfileMoreNav({
     },
   ]
 
-  const services: NavItem[] = [
-    {
-      id: "marketplace",
-      label: "Marketplace",
-      icon: <ShoppingBag size={16} />,
-      hint: "Listings",
-      onClick: () => navigateTo("marketplace"),
-    },
-    {
-      id: "ecosystem",
-      label: "Ecosystem",
-      icon: <LayoutGrid size={16} />,
-      hint: "All services",
-      onClick: () => navigateTo("ecosystem"),
-    },
-  ]
-
   const support: NavItem[] = [
     {
       id: "settings",
@@ -153,19 +136,6 @@ export function ProfileMoreNav({
           <p className="text-[9px] font-medium text-muted-foreground">GHC · not Pi balance</p>
         </div>
         <NavGrid items={personal} />
-      </div>
-
-      <div
-        className="gh-surface-muted rounded-xl border border-emerald-200/50 p-3 dark:border-emerald-900/40"
-        aria-label="Marketplace and GreenHaven ecosystem"
-      >
-        <div className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-            Marketplace &amp; Ecosystem
-          </p>
-          <p className="text-[9px] font-medium text-muted-foreground">Always visible</p>
-        </div>
-        <NavGrid items={services} />
       </div>
 
       <div className="gh-surface-muted rounded-xl p-3">

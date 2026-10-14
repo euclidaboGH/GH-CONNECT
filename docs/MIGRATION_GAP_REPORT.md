@@ -102,7 +102,3 @@ Compare results to the full inventory in `docs/MIGRATION_CHECKLIST.md`.
 | Testnet gate inventory count | `docs/TESTNET_VERIFICATION_GATE.md` |
 
 **No tables dropped. No RLS disabled. No migrations executed.**
-
-## 2026-10-11 inventory update
-
-This Phase 14A report is a historical 2026-10-09 snapshot. The current authoritative inventory is `docs/MIGRATION_CHECKLIST.md`: **72** SQL migration files, including repository-only `20261023_gh_post_curation_feedback.sql` and `20261024_gh_global_ecosystem_hardening.sql`. The new migration has not been applied to Testnet or Mainnet; its prerequisites and operational limitations are documented in `docs/operations/GLOBAL_ECOSYSTEM_ROLLOUT.md`.

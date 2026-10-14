@@ -92,5 +92,3 @@ LATEST_GROUPS:
 
 DESIGN_TRANSFORM_PACKAGE: GH-CONNECT-DESIGN-TRANSFORM-2026-10-08.zip
 PHASE_14A: migration inventory reconciliation (docs only, no DB writes)
-
-Historical-manifest note (2026-10-11): this manifest predates the global ecosystem implementation pass and is not a complete current file/hash manifest. Current SQL migration inventory is 72 files; see docs/MIGRATION_CHECKLIST.md. The new 20261024 migration is repository-only and has not been applied to Supabase.

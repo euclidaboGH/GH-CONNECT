@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   const payload = result.data as { ok?: boolean; posts?: unknown[] }
   let posts = Array.isArray(payload?.posts) ? payload.posts : []
 
-  // Server-side mute enforcement (RPC still handles blocks).
+  // Server-side mute enforcement (RPC still handles blocks)
   const muted = await mutedAuthorIds(auth.userId)
   if (muted.size > 0) {
     posts = posts.filter((p) => {
@@ -81,63 +81,8 @@ export async function GET(request: Request) {
     })
   }
 
-  // Apply durable personal feedback after the database's hard eligibility/privacy
-  // filtering. Personal preferences can reorder eligible content but can never
-  // override block, visibility, moderation, or audience restrictions.
-  let preferenceState: "applied" | "unavailable" = "unavailable"
-  let hiddenByPreference = 0
-  let demotedByPreference = 0
-  let promotedByPreference = 0
-  const preferenceResult = await socialRpc("gh_post_curation_feedback_list", {
-    p_user_id: auth.userId,
-  })
-  const preferencePayload = preferenceResult.data as {
-    ok?: boolean
-    items?: Array<{ postId?: string; feedback?: string }>
-  } | null
-  if (preferenceResult.ok && preferencePayload?.ok !== false && Array.isArray(preferencePayload?.items)) {
-    const feedbackByPost = new Map<string, string>()
-    for (const item of preferencePayload.items) {
-      const id = String(item.postId || "").trim()
-      const feedback = String(item.feedback || "")
-      if (id && ["hide", "show_less", "show_more"].includes(feedback)) feedbackByPost.set(id, feedback)
-    }
-    const before = posts.length
-    posts = posts.filter((post) => {
-      const id = String((post as { id?: string }).id || "").trim()
-      return !id || feedbackByPost.get(id) !== "hide"
-    })
-    hiddenByPreference = before - posts.length
-    const priority = (post: unknown) => {
-      const id = String((post as { id?: string }).id || "").trim()
-      const feedback = feedbackByPost.get(id)
-      if (process.env.GHC_RANKING_PAUSED === "1") return 1
-      if (feedback === "show_more") return 0
-      if (feedback === "show_less") return 2
-      return 1
-    }
-    const originalOrder = new Map(posts.map((post, index) => [String((post as { id?: string }).id || ""), index]))
-    posts = [...posts].sort((a, b) => priority(a) - priority(b) ||
-      (originalOrder.get(String((a as { id?: string }).id || "")) || 0) -
-      (originalOrder.get(String((b as { id?: string }).id || "")) || 0))
-    promotedByPreference = posts.filter((post) => priority(post) === 0).length
-    demotedByPreference = posts.filter((post) => priority(post) === 2).length
-    preferenceState = "applied"
-  }
-
   return NextResponse.json(
-    {
-      ok: true,
-      durable: true,
-      posts,
-      mutedFiltered: muted.size,
-      curation: {
-        preferences: preferenceState,
-        hiddenByPreference,
-        demotedByPreference,
-        promotedByPreference,
-      },
-    },
+    { ok: true, durable: true, posts, mutedFiltered: muted.size },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

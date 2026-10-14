@@ -1,7 +1,5 @@
 "use client"
 
-import { MAX_MESSAGE_LENGTH, clipMessageText } from "@/lib/messaging/messaging-ux"
-
 import { useState, useMemo, useRef, useCallback, memo, type KeyboardEvent } from "react"
 import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX, FileText, Play, Phone, Video } from "lucide-react"
 import type { Conversation } from "@/lib/ghc-types"
@@ -342,8 +340,7 @@ export function MessageInput({
         {/* Message input */}
         <textarea
           value={messageText}
-          onChange={(e) => onMessageChange(clipMessageText(e.target.value))}
-          maxLength={MAX_MESSAGE_LENGTH}
+          onChange={(e) => onMessageChange(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}

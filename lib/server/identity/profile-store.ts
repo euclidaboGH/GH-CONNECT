@@ -37,7 +37,7 @@ const MAX_PHOTOS = 6
 const MAX_INTERESTS = 30
 const MAX_BIO = 500
 const MAX_NAME = 80
-const MAX_PAYLOAD_JSON = 48_000
+const MAX_PAYLOAD_JSON = 24_000
 
 const mem = new Map<string, ServerProfileRecord>()
 
@@ -73,31 +73,6 @@ function clipStr(v: unknown, max: number): string | null {
   return s.slice(0, max)
 }
 
-/** Profile media: https URLs or data:image refs. Data URLs need room for compressed JPEGs. */
-const MAX_MEDIA_REF = 900_000
-
-function clipMediaRef(v: unknown): string | null {
-  if (v == null) return null
-  const s = String(v).trim()
-  if (!s) return null
-  if (s.startsWith("https://") || s.startsWith("http://")) return s.slice(0, 2000)
-  if (s.startsWith("data:image/")) return s.slice(0, MAX_MEDIA_REF)
-  // relative / public storage paths
-  if (s.startsWith("/")) return s.slice(0, 2000)
-  return s.slice(0, Math.min(s.length, MAX_MEDIA_REF))
-}
-
-function normalizePhotoList(input: unknown, existing: string[] | undefined): string[] {
-  if (!Array.isArray(input)) return existing ?? []
-  const out: string[] = []
-  for (const item of input) {
-    const ref = clipMediaRef(item)
-    if (ref) out.push(ref)
-    if (out.length >= MAX_PHOTOS) break
-  }
-  return out
-}
-
 /** Strip financial / membership fields clients must not control. */
 export function sanitizeProfileInput(
   ghUserId: string,
@@ -110,7 +85,7 @@ export function sanitizeProfileInput(
     20
   )
   const skills = asStringArray(input.skills, 30)
-  const photos = normalizePhotoList(input.photos, existing?.photos)
+  const photos = asStringArray(input.photos, MAX_PHOTOS)
 
   let age: number | null = null
   if (typeof input.age === "number" && Number.isFinite(input.age)) {
@@ -199,7 +174,7 @@ export function sanitizeProfileInput(
     coverPhoto:
       input.coverPhoto === null || input.cover_photo === null
         ? null
-        : clipMediaRef(input.coverPhoto ?? input.cover_photo) ??
+        : clipStr(input.coverPhoto ?? input.cover_photo, 2000) ??
           existing?.coverPhoto ??
           null,
     profilePayload,

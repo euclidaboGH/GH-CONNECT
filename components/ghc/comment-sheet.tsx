@@ -10,17 +10,6 @@ import { buildCommentTree, countThread } from "@/lib/comment-thread-utils"
 import { LazyImage } from "./lazy-image"
 import { ReportChooser } from "./report-chooser"
 import { isOwnAuthor, canEditComment, canDeleteComment } from "@/lib/ownership"
-import {
-  MAX_COMMENT_LENGTH,
-  COMMENT_PAGE_SIZE,
-  clipCommentText,
-  loadCommentDraft,
-  saveCommentDraft,
-  clearCommentDraft,
-  reactionTotal,
-} from "@/lib/comments/comment-ux"
-import { formatApiErrorToast } from "@/lib/ux/map-api-error"
-import { useFocusTrap } from "@/hooks/use-focus-trap"
 
 interface CommentSheetProps {
   post: Post | null
@@ -57,54 +46,19 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const submittingRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState<number>(40)
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({})
-  const [sortMode, setSortMode] = useState<"newest" | "oldest" | "top">("newest")
-  const [isOffline, setIsOffline] = useState(false)
-  const sheetRef = useRef<HTMLDivElement | null>(null)
+  const [sortMode, setSortMode] = useState<"newest" | "oldest">("newest")
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  useFocusTrap(open, sheetRef)
 
   const isPostOwner = isOwnAuthor(post?.authorId, post?.authorName, profile)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const sync = () => setIsOffline(!navigator.onLine)
-    sync()
-    window.addEventListener("online", sync)
-    window.addEventListener("offline", sync)
-    return () => {
-      window.removeEventListener("online", sync)
-      window.removeEventListener("offline", sync)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!open || !post?.id) return
-    setText(loadCommentDraft(post.id))
-    setVisibleCount(COMMENT_PAGE_SIZE)
-    setReplyToId(null)
-    setEditingId(null)
-  }, [open, post?.id])
-
-  useEffect(() => {
-    if (!open || !post?.id) return
-    const h = window.setTimeout(() => saveCommentDraft(post.id, text), 250)
-    return () => window.clearTimeout(h)
-  }, [text, open, post?.id])
-
 
   const tree = useMemo(() => {
     if (!post?.comments?.length) return [] as PostComment[]
     const built = buildCommentTree(post.comments)
     const sorted = [...built].sort((a, b) => {
-      if (sortMode === "top") {
-        const ra = reactionTotal(a.reactions)
-        const rb = reactionTotal(b.reactions)
-        if (rb !== ra) return rb - ra
-      }
       const ta = a.createdAt || 0
       const tb = b.createdAt || 0
-      return sortMode === "oldest" ? ta - tb : tb - ta
+      return sortMode === "newest" ? tb - ta : ta - tb
     })
     const blockedSet = new Set(blockedUsers || [])
     return sorted.filter((c) => c.authorId && !blockedSet.has(c.authorId))
@@ -137,18 +91,17 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       const t = setTimeout(() => inputRef.current?.focus(), 200)
       return () => clearTimeout(t)
     }
-  }, [open, post?.id])
+  }, [open])
 
   // Reset ephemeral state when sheet closes
   useEffect(() => {
     if (!open) {
       setText("")
-      if (post?.id) clearCommentDraft(post.id)
       setReplyToId(null)
       setEditingId(null)
       setEditText("")
     }
-  }, [open, post?.id])
+  }, [open])
 
   if (!open || !post) return null
 
@@ -157,11 +110,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const canEdit = (c: PostComment) => canEditComment(c.authorId, c.authorName, profile)
 
   const handleSubmit = async () => {
-    if (isOffline) {
-      addToast("You are offline — comment will need a connection to post", "info")
-      return
-    }
-    const value = clipCommentText(text).trim()
+    const value = text.trim()
     if (!value || busy || submittingRef.current || !post?.id) return
     submittingRef.current = true
     setBusy(true)
@@ -176,7 +125,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     } catch {
       // Keep entered text for retry
       try {
-        addToast(formatApiErrorToast("SERVER_UNAVAILABLE") || "Could not post comment — your text was kept", "error")
+        addToast("Could not post comment — your text was kept", "error")
       } catch {
         /* */
       }
@@ -196,7 +145,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       setEditText("")
       addToast("Comment updated", "success")
     } catch {
-      addToast(formatApiErrorToast("SERVER_UNAVAILABLE") || "Could not edit comment", "error")
+      addToast("Could not edit comment", "error")
     } finally {
       setBusy(false)
     }
@@ -416,7 +365,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     >
       <div
         className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col rounded-t-2xl bg-white shadow-2xl"
-        ref={sheetRef} role="dialog"
+        role="dialog"
         aria-modal="true"
         aria-labelledby="comment-sheet-title"
         onClick={(e) => e.stopPropagation()}
@@ -435,11 +384,11 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSortMode((m) => (m === "newest" ? "oldest" : m === "oldest" ? "top" : "newest"))}
+              onClick={() => setSortMode((m) => (m === "newest" ? "oldest" : "newest"))}
               className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-bold text-stone-600"
               aria-label={`Sort by ${sortMode}`}
             >
-              {sortMode === "newest" ? "Newest" : sortMode === "oldest" ? "Oldest" : "Top"}
+              {sortMode === "newest" ? "Newest" : "Oldest"}
             </button>
             <button
               type="button"
@@ -458,11 +407,6 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <MessageCircle size={22} />
               </div>
-              {isOffline ? (
-                <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
-                  You are offline — comments will post when you reconnect.
-                </p>
-              ) : null}
               <p className="text-sm font-semibold text-stone-800">No comments yet</p>
               <p className="mt-1 max-w-xs text-xs text-stone-500">
                 Be the first with a thoughtful reply. Quality comments help the conversation — spam does not.
@@ -474,7 +418,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
               {tree.length > visibleCount && (
                 <button
                   type="button"
-                  onClick={() => setVisibleCount((n) => n + COMMENT_PAGE_SIZE)}
+                  onClick={() => setVisibleCount((n) => n + 40)}
                   className="mx-auto mt-2 block rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
                 >
                   Load more comments ({tree.length - visibleCount} left)

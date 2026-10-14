@@ -98,3 +98,16 @@ export async function apiMarkConversationRead(conversationId: string) {
   const body = await res.json().catch(() => ({}))
   return { httpOk: res.ok, ...body }
 }
+
+
+export async function apiSendMessageWithRetry(
+  conversationId: string,
+  text: string,
+  clientMessageId: string,
+) {
+  const first = await apiSendMessage(conversationId, text, clientMessageId)
+  if (first.httpOk || first.ok === true) return first
+  if (typeof first.error === "string" && /AUTH|FORBIDDEN|VALIDATION/i.test(first.error)) return first
+  await new Promise((r) => setTimeout(r, 800))
+  return apiSendMessage(conversationId, text, clientMessageId)
+}

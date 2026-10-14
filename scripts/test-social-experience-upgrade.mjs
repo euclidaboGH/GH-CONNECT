@@ -38,8 +38,8 @@ assert(feed.includes("resolvePostContentKind") && feed.includes("contentKindBadg
 assert(feed.includes("bg-card") && feed.includes("border-border"), "design tokens")
 
 const disc = readFileSync(join(root, "components/ghc/discovery-grid-screen.tsx"), "utf8")
-assert(disc.includes("<h1 className=\"text-[15px] font-bold leading-none tracking-tight text-foreground\">Discover</h1>"), "discover screen heading")
-assert(disc.includes("Friendship, work, mentoring, and communities") && disc.includes("not dating-only"), "broad discovery positioning")
+assert(disc.includes("Discover with intent"), "discover positioning")
+assert(disc.includes("not a dating-only"), "broad positioning")
 
 const msg = readFileSync(join(root, "components/ghc/message-screen.tsx"), "utf8")
 assert(msg.includes("Inbox filters") || msg.includes("role=\"tablist\""), "inbox a11y filters")

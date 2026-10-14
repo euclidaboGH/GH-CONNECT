@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Image as ImageIcon, Plus, Video, X } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
+import { socialViewStory } from "@/lib/social/client"
 import { compressImage } from "@/lib/ghc-data"
 import type { StoryItem } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
@@ -114,7 +115,21 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         audience: storyAudience,
         expiresAt: now + 24 * 60 * 60 * 1000,
       }
+      {
+        const _mediaUrl =
+          next.media && typeof next.media === "object" && next.media !== null && "url" in next.media
+            ? String((next.media as { url?: string }).url || "")
+            : ""
+        if (_mediaUrl.startsWith("blob:")) {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:toast", {
+              detail: { message: "Story media still preparing — wait for upload", type: "error" },
+            }))
+          } catch { /* */ }
+          return
+        }
       await publishStory(next)
+      }
       setText("")
       setMedia(null)
       setComposerOpen(false)
@@ -172,6 +187,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                 setViewing(story)
                 setStoryReaction(null)
                 setSeenStoryIds((prev) => {
+                try { void socialViewStory(String(story?.id || s?.id || "")).catch(() => {}) } catch { /* */ }
                   if (prev.includes(story.id)) return prev
                   const next = [...prev, story.id].slice(-80)
                   try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}

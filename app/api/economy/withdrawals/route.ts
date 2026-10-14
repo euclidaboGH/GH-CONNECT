@@ -4,7 +4,6 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { rpcWalletSnapshot } from "@/lib/server/economy/db"
 import {
   createWithdrawalRequest,
@@ -43,14 +42,6 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
-  }
-  // Sensitive: withdrawal request requires recent step-up (Pi reauth or WebAuthn)
-  const stepUpErr = await requireRecentStepUp(auth)
-  if (stepUpErr) {
-    return NextResponse.json(
-      { ok: false, error: stepUpErr.code, message: stepUpErr.message },
-      { status: stepUpErr.status }
-    )
   }
   const body = await request.json().catch(() => ({}))
   const ghcAmount = Number(body.ghcAmount)

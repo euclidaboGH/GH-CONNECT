@@ -75,6 +75,7 @@ async function creditDailyToWallet(
     }
     const dailyRes = await fetch("/api/economy/rewards/daily", {
       method: "POST",
+      credentials: "include",
       headers,
       body: JSON.stringify({
         rewardDayKey,
@@ -103,6 +104,7 @@ async function creditDailyToWallet(
 
     const evalRes = await fetch("/api/economy/rewards/evaluate", {
       method: "POST",
+      credentials: "include",
       headers,
       body: JSON.stringify({
         sourceEvent: "DAILY_CHECKIN",
@@ -124,11 +126,13 @@ async function creditDailyToWallet(
       if (holdId) {
         const claimRes = await fetch("/api/economy/rewards/claim", {
           method: "POST",
+          credentials: "include",
           headers,
           body: JSON.stringify({ holdId }),
         })
         if (claimRes.ok) {
           const claimed = (await claimRes.json().catch(() => ({}))) as { amount?: number }
+          try { window.dispatchEvent(new CustomEvent("ghc:wallet-refresh")) } catch { /* */ }
           return { ok: true, serverAmount: Number(claimed.amount || data.amount) || undefined }
         }
       }
@@ -256,6 +260,10 @@ export function DailyRewardFeedCard({
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ghc.addToast?.("You are offline — claim when reconnected", "info")
+      return
+    }
     setClaiming(true)
     try {
       // Server is authoritative — never optimistically credit from client preview
@@ -389,6 +397,10 @@ export function DailyRewardSheet({
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ghc.addToast?.("You are offline — claim when reconnected", "info")
+      return
+    }
     setClaiming(true)
     try {
       const server = await creditDailyToWallet(

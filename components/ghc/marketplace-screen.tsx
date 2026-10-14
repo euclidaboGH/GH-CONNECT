@@ -69,6 +69,7 @@ function ListingCard({
     >
       <div className="relative aspect-[4/3] w-full bg-muted/50">
         {media ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={media}
             alt=""
@@ -143,7 +144,8 @@ function ListingDetail({
         <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-[var(--gh-card-shadow)]">
           <div className="relative aspect-[16/10] w-full bg-muted/40">
             {media ? (
-                  <img src={media} alt="" className="h-full w-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={media} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center">
                 <Package size={40} className="text-muted-foreground/50" aria-hidden />

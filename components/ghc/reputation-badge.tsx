@@ -1,62 +1,49 @@
 "use client"
-
-/**
- * Phase 4 — minimal reputation display (trust signal only).
- */
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { socialFetchReputation } from "@/lib/social/client"
-
+import { navigateTo } from "@/lib/navigation/navigate"
 export function ReputationBadge({ className = "" }: { className?: string }) {
   const [level, setLevel] = useState(1)
   const [name, setName] = useState("Seed")
   const [points, setPoints] = useState(0)
-  const [toNext, setToNext] = useState<number | null>(null)
   const [loaded, setLoaded] = useState(false)
-
+  const [failed, setFailed] = useState(false)
+  const lastFetchRef = useRef(0)
+  const apply = (res: { ok?: boolean; level?: number; levelName?: string; totalPoints?: number }) => {
+    if (!res.ok) { setFailed(true); return }
+    lastFetchRef.current = Date.now()
+    setLevel(Number(res.level ?? 1)); setName(String(res.levelName || "Seed"))
+    setPoints(Number(res.totalPoints ?? 0)); setFailed(false)
+  }
   useEffect(() => {
-    let cancelled = false
+    let c = false
     void (async () => {
-      const res = await socialFetchReputation()
-      if (cancelled) return
-      if (res.ok) {
-        setLevel(Number(res.level ?? 1))
-        setName(String(res.levelName || "Seed"))
-        setPoints(Number(res.totalPoints ?? 0))
-        setToNext(res.pointsToNext ?? null)
-      }
-      setLoaded(true)
+      try { const res = await socialFetchReputation(); if (!c) apply(res) }
+      catch { if (!c) setFailed(true) }
+      finally { if (!c) setLoaded(true) }
     })()
+    return () => { c = true }
+  }, [])
+  useEffect(() => {
+    const onCur = () => {
+      if (Date.now() - lastFetchRef.current < 8000) return
+      lastFetchRef.current = Date.now()
+      void socialFetchReputation().then(apply)
+    }
+    window.addEventListener("ghc:curation-updated", onCur)
+    window.addEventListener("ghc:daily-reward-claimed", onCur)
     return () => {
-      cancelled = true
+      window.removeEventListener("ghc:curation-updated", onCur)
+      window.removeEventListener("ghc:daily-reward-claimed", onCur)
     }
   }, [])
-
-  if (!loaded) {
-    return (
-      <div className={`rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground ${className}`}>
-        Reputation…
-      </div>
-    )
-  }
-
+  if (!loaded) return <span className={`inline-flex h-6 w-24 animate-pulse rounded-full bg-muted ${className}`} aria-hidden />
+  if (failed) return <span className={`inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground ${className}`}>Trust · —</span>
   return (
-    <div
-      className={`rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 ${className}`}
-      aria-label={`Reputation level ${level}, ${name}`}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80 dark:text-emerald-300/80">
-        Reputation
-      </p>
-      <p className="text-sm font-semibold text-foreground">
-        L{level} · {name}
-      </p>
-      <p className="text-[11px] text-muted-foreground tabular-nums">
-        {points} pts
-        {toNext != null ? ` · ${toNext} to next` : " · max level"}
-      </p>
-      <p className="mt-0.5 text-[10px] text-muted-foreground">
-        Trust signal only · not currency
-      </p>
-    </div>
+    <button type="button" onClick={() => { if (!navigateTo("profile")) { try { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "profile" })) } catch { /* */ } } }}
+      className={`inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-2.5 py-0.5 text-[10px] font-bold text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100 ${className}`}
+      aria-label={`Reputation ${name}, level ${level}, ${points} points`}>
+      <span className="tabular-nums">L{level}</span><span className="opacity-70">·</span><span>{name}</span><span className="tabular-nums opacity-80">{points}</span>
+    </button>
   )
 }

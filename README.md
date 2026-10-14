@@ -2,11 +2,12 @@
 
 ## Implementation status
 
-- Social, messaging, communities, wallet, Pi payments, and the GHC ledger are implemented in source.
-- GHPV (curation, active weights, settlement, calibration, soft-delete cleanup) is implemented in source. The migration history remains repository-only until each environment is reconciled and tested.
-- The 2026-10-11 global ecosystem pass adds durable feed preferences, diversity reranking and impression telemetry; server-authoritative XP levels; consent-based referral codes and verified qualification; contextual trust dimensions and appeals; reward holds/appeals and wallet export; marketplace stock reservations, idempotent checkout, atomic GHC/Pi finalization, GHC ledger-linked refunds for disputed orders, delayed reviews, listing reports/moderation and seller analytics.
-- `docs/product/GLOBAL_ECOSYSTEM_IMPLEMENTATION_STATUS.md` lists exact implemented scope and remaining limitations; `docs/operations/GLOBAL_ECOSYSTEM_ROLLOUT.md` contains the rollout/recovery runbook.
-- Static gates pass, but full typecheck, lint, build, Testnet migration apply, Pi Browser E2E and multi-instance concurrency are not certified here. Do not treat static tests as a production claim; Pi refunds and referral payouts remain disabled.
+- Social, messaging, communities, wallet, Pi payments, and GHC ledger are implemented in source.
+- GHPV (curation, active weights, settlement, calibration, soft-delete cleanup) is implemented in source. Migrations `20261013`–`20261020` are repository-only until Testnet.
+- Settlement is system-only (`GH_SETTLEMENT_INTERNAL_KEY`). Votes do not mint GHC.
+- Post restoration after soft-delete is not implemented.
+- CQI feed ranking, vote-to-GHC, and creator quality payouts are deferred.
+- Typecheck, lint, and production build were blocked in the last packaging environment because `node_modules` was incomplete. Do not treat static tests as a production claim.
 
 
 Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.
@@ -18,7 +19,7 @@ Human Connection OS — social connection, communities, messaging, discovery, an
 |------|--------|
 | Migration inventory | **70** files — `docs/MIGRATION_CHECKLIST.md` |
 | Static security suites | `npm run verify:static` |
-| Design tokens runtime | **`app/globals.css`** (canonical). `styles/globals.css` is non-canonical |
+| Design tokens runtime | **`app/globals.css`** (only stylesheet; the unused `styles/globals.css` copy was removed) |
 | Typecheck / production build | Operator machine — sandbox may OOM on `npm ci` |
 
 ```bash

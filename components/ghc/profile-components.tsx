@@ -3,7 +3,7 @@
 import { useState, useEffect, type ReactNode } from "react"
 import { Camera,  Share2, MoreVertical, X, Edit2, Lock, HelpCircle, Eye, EyeOff, Heart, MessageCircle } from "lucide-react"
 import type { Post, Profile } from "@/lib/ghc-types"
-import { timeAgo, ALL_INTERESTS, INTERESTS } from "@/lib/ghc-data"
+import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { EnhancedPostCard } from "./enhanced-post-card"
 import { LocationPicker } from "./location-picker"
@@ -630,9 +630,7 @@ export function EditProfileModal({
   const [locationPrivacy, setLocationPrivacy] = useState<LocationPrivacyLevel>(
     profile.locationPrivacy || "locality"
   )
-  const [interests, setInterests] = useState<string[]>(() =>
-    Array.isArray(profile.interests) ? profile.interests.filter(Boolean) : []
-  )
+  const [interests, setInterests] = useState(profile.interests)
   const [newInterest, setNewInterest] = useState("")
 
   // Keep local form in sync when profile changes while modal is closed
@@ -648,50 +646,32 @@ export function EditProfileModal({
       setCountry(profile.country || "")
       setHomeLoc(profile.homeLocation || parseLegacyLocation(profile.city || "", profile.country || ""))
       setLocationPrivacy(profile.locationPrivacy || "locality")
-      setInterests(Array.isArray(profile.interests) ? profile.interests.filter(Boolean) : [])
+      setInterests(profile.interests || [])
     }
   }, [profile, isOpen])
 
   if (!isOpen) return null
 
   const handleAddInterest = () => {
-    const v = newInterest.trim().slice(0, 40)
-    if (!v) return
-    const list = Array.isArray(interests) ? interests : []
-    if (list.some((i) => i.toLowerCase() === v.toLowerCase())) {
+    if (newInterest.trim() && !interests.includes(newInterest.trim())) {
+      setInterests([...interests, newInterest.trim()])
       setNewInterest("")
-      return
-    }
-    setInterests([...list, v].slice(0, 30))
-    setNewInterest("")
-  }
-
-  const togglePresetInterest = (interest: string) => {
-    const list = Array.isArray(interests) ? interests : []
-    if (list.includes(interest)) {
-      setInterests(list.filter((i) => i !== interest))
-    } else {
-      setInterests([...list, interest].slice(0, 30))
     }
   }
 
   const handleSave = () => {
-    const cleanInterests = (Array.isArray(interests) ? interests : [])
-      .map((i) => String(i).trim())
-      .filter(Boolean)
-      .slice(0, 30)
     onSave({
-      displayName: String(displayName || "").trim(),
-      bio: String(bio || "").trim(),
-      profession: String(profession || "").trim(),
-      education: String(education || "").trim(),
-      hometown: String(hometown || "").trim(),
-      bornDate: String(bornDate || "").trim(),
-      city: String(city || "").trim(),
-      country: String(country || "").trim(),
+      displayName,
+      bio,
+      profession,
+      education,
+      hometown,
+      bornDate,
+      city,
+      country,
       homeLocation: homeLoc,
       locationPrivacy,
-      interests: cleanInterests,
+      interests,
     })
     onClose()
   }
@@ -831,76 +811,39 @@ export function EditProfileModal({
           </div>
         </div>
 
-        {/* Interests — presets + custom (always record on Save) */}
+        {/* Interests */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-foreground">
-            Interests <span className="font-normal text-muted-foreground">({(interests || []).length} selected)</span>
-          </label>
-          <div className="mb-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-border/50 bg-muted/20 p-2">
-            {Object.entries(INTERESTS).map(([category, items]) => (
-              <div key={category}>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{category}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {items.map((interest) => {
-                    const selected = (interests || []).includes(interest)
-                    return (
-                      <button
-                        key={interest}
-                        type="button"
-                        onClick={() => togglePresetInterest(interest)}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                          selected
-                            ? "bg-[var(--gh-green)] text-white"
-                            : "bg-card text-foreground ring-1 ring-border/60 hover:bg-muted"
-                        }`}
-                      >
-                        {interest}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">Interests</label>
           <div className="mb-3 flex gap-2">
             <input
               type="text"
               value={newInterest}
-              onChange={(e) => setNewInterest(e.target.value.slice(0, 40))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  handleAddInterest()
-                }
-              }}
-              className="flex-1 rounded-lg border border-border/70 bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-              placeholder="Type your own interest"
-              maxLength={40}
-              aria-label="Custom interest"
+              onChange={(e) => setNewInterest(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleAddInterest()}
+              className="flex-1 rounded-lg border border-border/70 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              placeholder="Add an interest"
+              maxLength={30}
             />
             <button
               type="button"
               onClick={handleAddInterest}
-              className="rounded-lg bg-[var(--gh-green)] px-4 py-2 font-semibold text-white transition hover:brightness-105 active:scale-95"
+              className="rounded-lg bg-[var(--gh-green)] px-4 py-2 font-semibold text-white transition hover:brightness-105 active:scale-90"
             >
               Add
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(interests || []).map((interest) => (
+            {interests.map((interest) => (
               <button
                 key={interest}
                 type="button"
-                onClick={() => setInterests((interests || []).filter((i) => i !== interest))}
-                className="flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200/80 transition hover:bg-emerald-100 active:scale-95"
+                onClick={() => setInterests(interests.filter((i) => i !== interest))}
+                className="flex items-center gap-1 rounded-full bg-pink-100 px-3 py-1 text-sm font-semibold text-pink-700 transition hover:bg-pink-200 active:scale-90"
               >
                 {interest}
                 <X size={14} />
               </button>
             ))}
-            {(interests || []).length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">Pick from the list or type your own, then Save Changes.</p>
-            ) : null}
           </div>
         </div>
 

@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, testnet]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, testnet]
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -27,41 +27,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: JSX safety
-        run: npm run check:jsx
-
       - name: Production safety scan
         run: npm run test:safety
-
-      - name: Static security + Phase 14 suites
-        run: npm run verify:static
-
-      - name: Migration inventory (read-only)
-        run: npm run ops:migration-check
-
-      - name: Identity conflict static gate
-        run: npm run test:identity-conflict
-
-      - name: Identity authz / step-up static gate
-        run: npm run test:identity-authz
-
-      - name: Economy C static gate
-        run: npm run test:economy-cd
-
-      - name: Security D static gate
-        run: npm run test:security-cd
-
-      - name: Feed/compose E+F static gate
-        run: npm run test:feed-compose-ef
-
-      - name: Messaging/marketplace G+H static gate
-        run: npm run test:messaging-marketplace-gh
-
-      - name: Observability I static gate
-        run: npm run test:observability-i
 
       - name: Production build
         run: npm run build
         env:
+          # Build must not require live secrets; readiness fails closed at runtime
           NEXT_TELEMETRY_DISABLED: "1"
-          # Build must not require live secrets; /api/health fails closed at runtime

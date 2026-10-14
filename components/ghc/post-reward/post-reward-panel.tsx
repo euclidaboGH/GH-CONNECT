@@ -39,25 +39,27 @@ export function PostRewardPanel({
   const load = useCallback(() => {
     let cancelled = false
     setLoading(true)
-    void fetch(`/api/social/posts/${encodeURIComponent(postId)}/reward`, {
-      credentials: "include",
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((data: ContentRewardPublic & { ok?: boolean }) => {
+    void (async () => {
+      let headers: Record<string, string> = {}
+      try {
+        const { IdentityService } = await import("@/lib/identity/identity-service")
+        headers = { ...(IdentityService.getAuthHeaders?.() || {}) }
+      } catch { /* */ }
+      try {
+        const r = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/reward`, {
+          credentials: "include", headers, cache: "no-store",
+        })
+        const data = (await r.json().catch(() => null)) as (ContentRewardPublic & { ok?: boolean }) | null
         if (cancelled) return
         if (data && data.ok === true) setReward(data as ContentRewardPublic)
         else setReward(null)
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setReward(null)
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+      }
+    })()
+    return () => { cancelled = true }
   }, [postId])
 
   useEffect(() => {
@@ -79,66 +81,63 @@ export function PostRewardPanel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="block w-full border-t border-violet-200/70 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50 px-3 py-3 text-left transition hover:brightness-[0.99] dark:border-violet-900/40 dark:from-violet-950/30 dark:via-card dark:to-fuchsia-950/20 sm:px-4"
+        className="flex w-full items-stretch gap-0 border-t border-border/40 bg-card px-3 py-2.5 text-left transition hover:bg-muted/30 dark:hover:bg-muted/20"
         aria-label={showMoney ? "View post reward details" : "View community quality details"}
       >
-        {showMoney ? (
-          <>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <div className="flex min-w-0 flex-1 items-center gap-3 sm:min-w-[190px]">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-600 to-violet-600 text-white shadow-sm">
-                  <Coins size={25} strokeWidth={2.2} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wide text-violet-800 dark:text-violet-200">Total earned</p>
-                  <p className="whitespace-nowrap text-2xl font-extrabold leading-tight tracking-tight text-violet-950 dark:text-white">
-                    {formatGhc(reward.totalEarned)} <span className="text-sm font-bold">GHC</span>
-                  </p>
-                  <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${reward.status === "accruing" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" : "bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200"}`}>
-                    {reward.status === "accruing" ? "↗ Accruing" : reward.statusLabel}
-                  </span>
-                </div>
-              </div>
-              <div className="grid min-w-0 flex-1 grid-cols-2 gap-3 border-t border-violet-200/70 pt-3 dark:border-violet-900/50 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Author reward</p>
-                  <p className="text-lg font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">{formatGhc(reward.authorReward)} GHC</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">70%</p>
-                </div>
-                <div className="min-w-0 border-l border-violet-200/70 pl-3 dark:border-violet-900/50">
-                  <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Curation rewards</p>
-                  <p className="text-lg font-extrabold tabular-nums text-violet-700 dark:text-violet-300">{formatGhc(reward.curationReward)} GHC</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">30%</p>
-                </div>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-fuchsia-300 bg-fuchsia-100/80 px-3 py-2 text-xs font-bold text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-100">View details <ChevronRight size={16} /></span>
-            </div>
-            <div className="mt-3 grid grid-cols-3 divide-x divide-violet-200/80 rounded-2xl bg-white/70 px-1 py-2 dark:divide-violet-900/60 dark:bg-black/10">
-              <div className="flex items-center justify-center gap-2 px-1">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"><ArrowUpRight size={21} /></span>
-                <span className="min-w-0"><span className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300">Upvotes</span><span className="block text-xs font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">{up} · {reward.upvoteImpact != null ? `+${formatGhc(reward.upvoteImpact)}` : "—"} GHC</span></span>
-              </div>
-              <div className="flex items-center justify-center gap-2 px-1">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-100 text-pink-600 dark:bg-pink-900/40 dark:text-pink-300"><ArrowDownRight size={21} /></span>
-                <span className="min-w-0"><span className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300">Downvotes</span><span className="block text-xs font-extrabold tabular-nums text-pink-600 dark:text-pink-300">{down} · {formatGhc(reward.downvoteImpact)} GHC</span></span>
-              </div>
-              <div className="flex items-center justify-center gap-2 px-1">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"><Users size={20} /></span>
-                <span className="min-w-0"><span className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300">Net impact</span><span className="block text-xs font-extrabold tabular-nums text-violet-800 dark:text-violet-200">{reward.netImpact != null && reward.netImpact > 0 ? "+" : ""}{formatGhc(reward.netImpact)} GHC</span></span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-violet-50 to-fuchsia-50 p-3 dark:from-violet-950/30 dark:to-fuchsia-950/20">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-200"><Coins size={22} /></div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-extrabold uppercase tracking-wide text-violet-700 dark:text-violet-300">Community quality</p>
-              <p className="text-sm font-semibold text-foreground">{loading ? "Loading reward details…" : "Votes rank content · rewards when the pool is funded"}</p>
-              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{up} upvotes · {down} downvotes</p>
-            </div>
-            <ChevronRight size={20} className="shrink-0 text-violet-700" />
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${
+              showMoney
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900/40"
+                : "bg-muted text-muted-foreground ring-border/50"
+            }`}
+          >
+            <Coins size={20} strokeWidth={2} aria-hidden />
           </div>
-        )}
+          <div className="min-w-0">
+            {showMoney ? (
+              <>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Total earned
+                </p>
+                <p className="truncate text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                  {formatGhc(reward.totalEarned)}{" "}
+                  <span className="text-sm font-semibold text-emerald-700/80">GHC</span>
+                  {reward.status === "accruing" && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                      Accruing
+                    </span>
+                  )}
+                  {reward.status === "finalized" && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
+                      Finalized
+                    </span>
+                  )}
+                  {reward.status === "distributed" && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-800">
+                      Distributed
+                    </span>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-violet-600/90 dark:text-violet-300">
+                  Community quality
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {loading ? "Loading…" : "Votes rank content · rewards when pool is funded"}
+                </p>
+              </>
+            )}
+            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+              {up} upvotes · {down} downvotes
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center text-muted-foreground">
+          <ChevronRight size={18} aria-hidden />
+        </div>
       </button>
 
       {open && (

@@ -28,7 +28,6 @@ const eslintConfig = [
   },
   ...compat.extends("next/core-web-vitals"),
   {
-    files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
     plugins: {
       "@next/next": nextPlugin,
     },

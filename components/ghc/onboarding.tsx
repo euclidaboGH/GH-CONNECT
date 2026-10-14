@@ -5,9 +5,8 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import { useState, useEffect } from "react"
 import { ageFromBornDate, isAdultFromBornDate, maxBornDateForMinAge } from "@/lib/age-utils"
 import { useGHC } from "@/contexts/ghc-context"
-import { INTERESTS, ALL_INTERESTS } from "@/lib/ghc-data"
+import { INTERESTS } from "@/lib/ghc-data"
 import { compressForAvatar } from "@/lib/media/compress-image"
-import { prepareProfilePhoto } from "@/lib/profile-media"
 import type { OnboardingStep, Gender, PrimaryMode } from "@/lib/ghc-types"
 
 import {
@@ -254,13 +253,12 @@ export function Onboarding() {
     bio: safeProfile.bio || "",
     primaryMode: safeProfile.primaryMode || "friendship",
     connectionIntents: (() => { const n = normalizeIntents((safeProfile as { connectionIntents?: string[] }).connectionIntents); return n.length ? n : (["friendship"] as ConnectionIntentId[]) })(),
-    interests: Array.isArray(safeProfile.interests) ? safeProfile.interests.filter(Boolean) : [],
+    interests: safeProfile.interests || [],
     photos: safeProfile.photos || [],
   })
   const [uploading, setUploading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [finishing, setFinishing] = useState(false)
-  const [customInterest, setCustomInterest] = useState("")
 
   const validateStep = () => {
     const nextErrors: Record<string, string> = {}
@@ -367,8 +365,7 @@ export function Onboarding() {
     if (!file || formData.photos.length >= 6) return
     setUploading(true)
     try {
-      const prepared = await prepareProfilePhoto(file, "photo")
-      const compressed = prepared.ok ? prepared.url : await compressForAvatar(file)
+      const compressed = await compressForAvatar(file)
       setFormData((p) => ({ ...p, photos: [...p.photos, compressed] }))
       setErrors((p) => ({ ...p, photos: "" }))
     } catch (err) {
@@ -830,100 +827,7 @@ export function Onboarding() {
             </div>
           )}
 
-          
-              {/* Custom interest — always available even if catalog fails to render */}
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-white/35">Add your own</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customInterest}
-                    onChange={(e) => setCustomInterest(e.target.value.slice(0, 40))}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return
-                      e.preventDefault()
-                      const v = customInterest.trim()
-                      if (!v) return
-                      setFormData((p) =>
-                        p.interests.includes(v) ? p : { ...p, interests: [...p.interests, v].slice(0, 30) },
-                      )
-                      setCustomInterest("")
-                      setErrors((er) => ({ ...er, interests: "" }))
-                    }}
-                    placeholder="Type an interest and press Enter"
-                    className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-emerald-400/50 focus:outline-none"
-                    maxLength={40}
-                    aria-label="Custom interest"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const v = customInterest.trim()
-                      if (!v) return
-                      setFormData((p) =>
-                        p.interests.includes(v) ? p : { ...p, interests: [...p.interests, v].slice(0, 30) },
-                      )
-                      setCustomInterest("")
-                      setErrors((er) => ({ ...er, interests: "" }))
-                    }}
-                    className="shrink-0 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-                {formData.interests.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {formData.interests.map((interest) => (
-                      <button
-                        key={`sel-${interest}`}
-                        type="button"
-                        onClick={() =>
-                          setFormData((p) => ({
-                            ...p,
-                            interests: p.interests.filter((i) => i !== interest),
-                          }))
-                        }
-                        className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 ring-1 ring-emerald-400/30"
-                      >
-                        {interest} ×
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Fallback flat list if category map is empty */}
-              {Object.keys(INTERESTS || {}).length === 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {(ALL_INTERESTS.length ? ALL_INTERESTS : ["Music", "Sports", "Travel", "Tech", "Food"]).map((interest) => {
-                    const selected = formData.interests.includes(interest)
-                    return (
-                      <button
-                        key={interest}
-                        type="button"
-                        onClick={() => {
-                          setFormData((p) => {
-                            const isSelected = p.interests.includes(interest)
-                            return {
-                              ...p,
-                              interests: isSelected
-                                ? p.interests.filter((i) => i !== interest)
-                                : [...p.interests, interest],
-                            }
-                          })
-                        }}
-                        className={`rounded-full px-3.5 py-2 text-[13px] font-bold ${
-                          selected ? "bg-emerald-500 text-white" : "border border-white/10 text-white/80"
-                        }`}
-                      >
-                        {interest}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : null}
-
-{/* STEP 4 — Photos */}
+          {/* STEP 4 — Photos */}
           {step === 4 && (
             <div className="space-y-5 animate-in fade-in duration-300">
               <div className="text-center">

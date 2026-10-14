@@ -4,7 +4,6 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import {
   getEntitlement,
   tryGetEntitlementAuthoritative,
@@ -72,15 +71,6 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "x-request-id": reqCtx.requestId } })
-  }
-
-  // Sensitive: membership activation requires recent step-up (Pi reauth or WebAuthn)
-  const stepUpErr = await requireRecentStepUp(auth)
-  if (stepUpErr) {
-    return NextResponse.json(
-      { ok: false, error: stepUpErr.code, message: stepUpErr.message },
-      { status: stepUpErr.status, headers: { "x-request-id": reqCtx.requestId } }
-    )
   }
 
   const raw = await request.json().catch(() => ({}))

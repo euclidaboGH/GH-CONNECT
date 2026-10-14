@@ -36,70 +36,6 @@ export interface FeedContext {
   focusMode?: boolean
 }
 
-
-/**
- * Defensive eligibility gate for client ranking. The server remains authoritative,
- * but local ranking must never resurrect hidden/deleted/private items from a mixed cache.
- */
-export function isPostEligibleForRanking(post: Post, context: FeedContext): boolean {
-  const p = post as Post & {
-    visibility?: string; audience?: string; deletedAt?: unknown; isDeleted?: boolean;
-    moderationStatus?: string; moderation_status?: string; isPrivate?: boolean;
-    communityId?: string; authorBlocked?: boolean; unavailable?: boolean;
-  }
-  if (!post || typeof post !== "object") return false
-  if (!post.id || !post.authorId || post.isDraft || post.isScheduled) return false
-  if (p.isDeleted || p.deletedAt || p.unavailable || p.authorBlocked) return false
-  const moderation = String(p.moderationStatus || p.moderation_status || "").toLowerCase()
-  if (["removed", "deleted", "blocked", "rejected", "quarantined", "hidden", "restricted"].includes(moderation)) return false
-  if (context.blockedUserIds.includes(post.authorId) || (context.mutedUserIds || []).includes(post.authorId)) return false
-  const visibility = String(p.visibility || p.audience || (p.isPrivate ? "private" : "public")).toLowerCase()
-  if (["private", "only_me", "self"].includes(visibility)) return false
-  if (["followers", "following", "followers_only"].includes(visibility) && !context.followingIds.includes(post.authorId)) return false
-  if (["friends", "friends_only"].includes(visibility) && !(context.friendIds || []).includes(post.authorId)) return false
-  if (visibility === "community" || visibility === "community_only") {
-    const communityId = String(p.communityId || "")
-    if (!communityId || !(context.communityIds || []).includes(communityId)) return false
-  }
-  return matchesLocationLane(post, context)
-}
-
-function diversityTopics(post: Post): string[] {
-  const tags = post.hashtags || extractHashtags(post.content || "")
-  const communityId = String((post as Post & { communityId?: string }).communityId || "")
-  return [...new Set([...tags.map((t) => String(t).replace(/^#/, "").toLowerCase()), ...(communityId ? [`community:${communityId}`] : [])])].slice(0, 3)
-}
-
-/** Greedy, bounded diversity rerank; preserves score order when the pool is small. */
-export function applyRankingDiversity<T extends { post: Post; score: number; reason: PostVisibilityReason }>(
-  ranked: T[], options: { windowSize?: number; authorCap?: number; topicCap?: number } = {},
-): T[] {
-  const windowSize = Math.max(1, options.windowSize ?? 10)
-  const authorCap = Math.max(1, options.authorCap ?? 2)
-  const topicCap = Math.max(1, options.topicCap ?? 4)
-  const remaining = [...ranked]
-  const result: T[] = []
-  while (remaining.length) {
-    const window = remaining.slice(0, Math.max(windowSize, 1))
-    const authors = new Map<string, number>()
-    const topics = new Map<string, number>()
-    for (const item of result.slice(-windowSize)) {
-      authors.set(item.post.authorId, (authors.get(item.post.authorId) || 0) + 1)
-      for (const topic of diversityTopics(item.post)) topics.set(topic, (topics.get(topic) || 0) + 1)
-    }
-    let index = window.findIndex((item) => {
-      if ((authors.get(item.post.authorId) || 0) >= authorCap) return false
-      return diversityTopics(item.post).every((topic) => (topics.get(topic) || 0) < topicCap)
-    })
-    if (index < 0) index = 0 // never starve a creator when all candidates share a topic
-    const [picked] = remaining.splice(index, 1)
-    result.push(picked)
-  }
-  return result
-}
-
-export const FEED_RANKING_VERSION = "for-you-v2-diversity"
-
 // Extract hashtags from content
 export function extractHashtags(content: string): string[] {
   const regex = /#(\w+)/g
@@ -213,7 +149,11 @@ function intentionBoost(post: Post, bias: FeedIntentionBias | undefined): { scor
 export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const ranked = posts
     .filter(
-      (post) => isPostEligibleForRanking(post, context)
+      (post) =>
+        !context.blockedUserIds.includes(post.authorId) &&
+        !post.isDraft &&
+        !post.isScheduled &&
+        matchesLocationLane(post, context)
     )
     .map((post): RankedPost => {
       let score = 0
@@ -371,14 +311,18 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
     })
     .sort((a, b) => b.score - a.score)
 
-  return applyRankingDiversity(ranked)
+  return ranked
 }
 
 // Rank posts for "Following" feed
 export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const ranked = posts
     .filter(
-      (post) => context.followingIds.includes(post.authorId) && isPostEligibleForRanking(post, context)
+      (post) =>
+        context.followingIds.includes(post.authorId) &&
+        !post.isDraft &&
+        !post.isScheduled &&
+        !context.blockedUserIds.includes(post.authorId)
     )
     .map((post): RankedPost => {
       // Pure Following: chronological only (newest first). No engagement ranking.
@@ -401,7 +345,7 @@ export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[
   }
 
   const ranked = posts
-    .filter((post) => isPostEligibleForRanking(post, context))
+    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post) => {
       let score = 0
 
@@ -431,7 +375,7 @@ export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[
 // Rank posts for "Trending" feed
 export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const ranked = posts
-    .filter((post) => isPostEligibleForRanking(post, context))
+    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post) => {
       const engagementScore = calculateEngagementScore(post)
       const timeRecency = (Date.now() - post.createdAt) / (1000 * 60 * 60) // hours
@@ -453,7 +397,7 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
 // Rank posts for "Latest" feed
 export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const ranked = posts
-    .filter((post) => isPostEligibleForRanking(post, context))
+    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post): RankedPost => {
       let score = Date.now() - post.createdAt
 
@@ -476,10 +420,14 @@ export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[
 /** Friends mode — posts from friend graph (same store, different filter) */
 export function rankFriendsFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const friends = new Set(context.friendIds || [])
+  const blocked = new Set([...(context.blockedUserIds || []), ...(context.mutedUserIds || [])])
   return posts
     .filter(
       (post) =>
-        friends.has(post.authorId) && isPostEligibleForRanking(post, context)
+        !blocked.has(post.authorId) &&
+        !post.isDraft &&
+        !post.isScheduled &&
+        friends.has(post.authorId)
     )
     .map((post): RankedPost => {
       const reason: PostVisibilityReason = {
@@ -501,7 +449,7 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
   const blocked = new Set([...(context.blockedUserIds || []), ...(context.mutedUserIds || [])])
   return posts
     .filter((post) => {
-      if (blocked.has(post.authorId) || !isPostEligibleForRanking(post, context)) return false
+      if (blocked.has(post.authorId) || post.isDraft || post.isScheduled) return false
       if (!communities.size) {
         // Soft: show posts that declare a communityId / audience community
         return Boolean((post as any).communityId || (post as any).audience === "community")

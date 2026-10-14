@@ -22,7 +22,6 @@ import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation
 import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 import { CreatorStudioOverlay } from "./creator-studio-overlay"
-import { GlobalComposeHost } from "./global-compose-host"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -238,7 +237,7 @@ function onTabScrollHideNav(e: UIEvent<HTMLElement>) {
 }
 
 export function GHConnectApp() {
-  const { ready, tab, setTab, toasts, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
+  const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates } = useGHCDiscovery()
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
@@ -259,6 +258,20 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:open-connection-inbox", refresh)
     }
   }, [])
+  // Deep link: /?tab=messages|discover|profile|... (PWA shortcuts, /share redirect)
+  useEffect(() => {
+    if (!ready || typeof window === "undefined") return
+    try {
+      const url = new URL(window.location.href)
+      const requested = url.searchParams.get("tab")
+      if (!requested) return
+      if (isPrimaryTab(requested)) startTransition(() => setTab(requested))
+      url.searchParams.delete("tab")
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+    } catch {
+      /* ignore malformed URLs */
+    }
+  }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
     "main" | "wallet" | "rewards" | "membership" | "help"
@@ -366,6 +379,16 @@ export function GHConnectApp() {
       }
       startTransition(() => setTab("messages"))
     }
+    const onToast = (e: Event) => {
+      const d = (e as CustomEvent<{ message?: string; type?: string }>).detail || {}
+      const msg = String(d.message || "").trim()
+      if (!msg) return
+      try {
+        const t = (d.type === "success" || d.type === "error" || d.type === "info") ? d.type : "info"
+        addToast(msg, t)
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:toast", onToast)
     window.addEventListener("ghc:open-wallet", onWallet)
     window.addEventListener("ghc:open-rewards", onRewards)
     window.addEventListener("ghc:open-membership", onMembership)
@@ -391,6 +414,7 @@ export function GHConnectApp() {
     // still works when communities is already mounted (communities-screen listener).
     window.addEventListener("ghc:ensure-community-tab", onOpenCommunity)
     return () => {
+      window.removeEventListener("ghc:toast", onToast)
       window.removeEventListener("ghc:open-wallet", onWallet)
       window.removeEventListener("ghc:open-rewards", onRewards)
       window.removeEventListener("ghc:open-membership", onMembership)
@@ -398,7 +422,7 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:start-chat", onStartChat)
       window.removeEventListener("ghc:ensure-community-tab", onOpenCommunity)
     }
-  }, [openWallet, openSettings, startConversation, setTab])
+  }, [openWallet, openSettings, startConversation, setTab, addToast])
   /** Mount a tab once visited so switches stay instant without loading all 6 at boot */
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set(["home"]))
 
@@ -804,7 +828,6 @@ export function GHConnectApp() {
     >
       <OfflineBanner />
       <PaymentRecoveryListener />
-      <GlobalComposeHost />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"

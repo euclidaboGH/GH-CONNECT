@@ -29,7 +29,6 @@ import {
 } from "@/lib/server/economy/store"
 import { rpcActivityStageReward } from "@/lib/server/economy/db"
 import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
-import { recordRewardRiskHold } from "@/lib/server/economy/risk-holds"
 
 export type EvaluateRewardInput = {
   userId: string
@@ -252,9 +251,6 @@ export function verifyActionLegitimacy(input: {
 export async function evaluateRewardAuthoritative(
   input: EvaluateRewardInput
 ): Promise<EvaluateRewardResult> {
-  if (process.env.GHC_REWARDS_PAUSED === "1") {
-    return { ok: false, error: "REWARDS_PAUSED", deniedReasons: ["OPERATOR_KILL_SWITCH"] }
-  }
   const sourceEvent = String(input.sourceEvent || "").trim()
   const referenceId = String(input.referenceId || "").trim()
   if (!sourceEvent) return { ok: false, error: "SOURCE_EVENT_REQUIRED" }
@@ -292,9 +288,6 @@ export async function evaluateRewardAuthoritative(
     metadata: input.metadata,
   })
   if (!legitimacy.ok) {
-    if (legitimacy.reasons.some((reason) => ["SUSPICIOUS_ACTIVITY", "VELOCITY_LIMIT", "RECIPROCAL_ABUSE", "SELF_TARGET", "BOT_SCORE"].includes(reason))) {
-      await recordRewardRiskHold({ userId: input.userId, sourceEventId: referenceId, sourceEvent, reasons: legitimacy.reasons })
-    }
     return {
       ok: false,
       error: "ANTI_ABUSE",
@@ -303,7 +296,6 @@ export async function evaluateRewardAuthoritative(
   }
 
   if (rule.antiAbuse?.blockSelf && input.targetId && input.targetId === input.userId) {
-    await recordRewardRiskHold({ userId: input.userId, sourceEventId: referenceId, sourceEvent, reasons: ["SELF_TARGET"] })
     return { ok: false, error: "ANTI_ABUSE", deniedReasons: ["SELF_TARGET"] }
   }
 

@@ -20,21 +20,8 @@ import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
-import {
-  MAX_MESSAGE_LENGTH,
-  MESSAGE_WINDOW_DEFAULT,
-  MESSAGE_WINDOW_STEP,
-  clipMessageText,
-  loadConversationDraft,
-  saveConversationDraft,
-  clearConversationDraft,
-  shouldGroupWithPrevious,
-  formatMessageDayDivider,
-  dayKey,
-} from "@/lib/messaging/messaging-ux"
-import { formatApiErrorToast } from "@/lib/ux/map-api-error"
 
-const MESSAGE_WINDOW = MESSAGE_WINDOW_DEFAULT
+const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"
@@ -105,20 +92,18 @@ export function MessageScreen() {
     }
   }, [])
 
-
-  // Per-conversation draft restore (local only — never server-fabricated messages)
   useEffect(() => {
     if (!selectedId) return
-    const saved = loadConversationDraft(selectedId)
-    setDraft(saved)
-  }, [selectedId])
-
-  // Persist draft while typing
-  useEffect(() => {
-    if (!selectedId) return
-    const handle = window.setTimeout(() => saveConversationDraft(selectedId, draft), 250)
-    return () => window.clearTimeout(handle)
-  }, [draft, selectedId])
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try {
+          void markConversationRead?.(selectedId)
+        } catch { /* */ }
+      }
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [selectedId, markConversationRead])
 
   useEffect(() => {
     const handle = window.setTimeout(() => setQueryDebounced(query), 180)
@@ -133,7 +118,6 @@ export function MessageScreen() {
       if (typeof tab === "string" && tab !== "messages") {
         setSelectedId(null)
         setDraft("")
-      if (selectedId) clearConversationDraft(selectedId)
         setWindowSize(MESSAGE_WINDOW)
       }
     }
@@ -168,8 +152,6 @@ export function MessageScreen() {
       window.removeEventListener("ghc:open-conversation", onOpenConversation as EventListener)
       window.removeEventListener("ghc:messaging-reconcile", onReconcile as EventListener)
     }
-    // selectedId intentionally omitted — listeners should not rebind every selection change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const unreadCount = useMemo(
@@ -266,7 +248,7 @@ export function MessageScreen() {
   }, [])
 
   const handleSend = useCallback(async () => {
-    const text = clipMessageText(draft).trim()
+    const text = draft.trim()
     if (!text || !selectedId || sending) return
     setSending(true)
     setDraft("")
@@ -346,7 +328,7 @@ export function MessageScreen() {
         <ChatHeader
           participantName={selected.groupName || selected.participantName || "Chat"}
           participantPhoto={selected.groupPhoto || selected.participantPhoto || ""}
-          isOnline={Boolean(selected.online)} // Presence is optional — chat must work when unknown/offline
+          isOnline={Boolean(selected.online)}
           isTyping={Boolean(selected.isTyping)}
           isCommunity={isCommunity}
           onBack={closeThread}
@@ -471,14 +453,9 @@ export function MessageScreen() {
               This conversation is muted — you still receive messages here; notifications stay quiet.
             </p>
           ) : null}
-          {draft.length > MAX_MESSAGE_LENGTH * 0.85 ? (
-            <p className="mb-1 text-right text-[10px] tabular-nums text-muted-foreground" aria-live="polite">
-              {draft.length}/{MAX_MESSAGE_LENGTH}
-            </p>
-          ) : null}
           <MessageInput
             messageText={draft}
-            onMessageChange={(v) => setDraft(clipMessageText(v))}
+            onMessageChange={setDraft}
             onSendMessage={() => void handleSend()}
             onEmojiClick={() => {
               /* MessageInput owns the emoji sheet */
@@ -642,36 +619,36 @@ export function MessageScreen() {
           )
         ) : (
           <>
-            <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
-              {list.length} conversation{list.length === 1 ? "" : "s"}
-              {queryDebounced.trim() ? " matching search" : ""}
-            </p>
-            <ul className="contain-content" role="list" aria-label="Conversations">
-              {list.map((c) => (
-                <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
-                  <ConversationItem
-                    conversation={c}
-                    isSelected={false}
-                    onClick={() => openThread(c.id)}
-                    onPin={ghc.pinConversation}
-                    onArchive={ghc.archiveConversation}
-                    onMute={ghc.muteConversation}
-                    onOpenProfile={() => {
-                      if (isCommunityConversation(c)) return
-                      try {
-                        window.dispatchEvent(
-                          new CustomEvent("ghc:open-profile", {
-                            detail: { userId: c.participantId, name: c.participantName },
-                          }),
-                        )
-                      } catch {
-                        /* */
-                      }
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
+          <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+            {list.length} conversation{list.length === 1 ? "" : "s"}
+            {queryDebounced.trim() ? " matching search" : ""}
+          </p>
+          <ul className="contain-content" role="list" aria-label="Conversations">
+            {list.map((c) => (
+              <li key={c.id} className="content-visibility-auto" style={{ contentVisibility: "auto", containIntrinsicSize: "72px" }}>
+                <ConversationItem
+                  conversation={c}
+                  isSelected={false}
+                  onClick={() => openThread(c.id)}
+                  onPin={ghc.pinConversation}
+                  onArchive={ghc.archiveConversation}
+                  onMute={ghc.muteConversation}
+                  onOpenProfile={() => {
+                    if (isCommunityConversation(c)) return
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:open-profile", {
+                          detail: { userId: c.participantId, name: c.participantName },
+                        }),
+                      )
+                    } catch {
+                      /* */
+                    }
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
           </>
         )}
       </div>

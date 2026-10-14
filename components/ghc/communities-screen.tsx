@@ -303,8 +303,18 @@ export function CommunitiesScreen() {
   const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
-  /** Single entry — all Create CTAs call this (no parallel create flows) */
   const openCreateCommunity = useCallback(() => setShowCreate(true), [])
+  useEffect(() => {
+    const onCompose = () => openCreateCommunity()
+    window.addEventListener("ghc:open-community-compose", onCompose)
+    return () => window.removeEventListener("ghc:open-community-compose", onCompose)
+  }, [openCreateCommunity])
+  useEffect(() => {
+    if (!showCreate) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowCreate(false) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showCreate])
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
   /** Snapshot so hub opens immediately after create (before conversations state catches up) */
   const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
@@ -574,6 +584,10 @@ export function CommunitiesScreen() {
           /* non-authoritative */
         }
       }
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        addToast("You are offline — join when reconnected", "info")
+        return
+      }
       const ok = await joinCommunity(row.id)
       if (ok) {
         // Domain join / request succeeded. Toast authority is in joinCommunity
@@ -616,6 +630,10 @@ export function CommunitiesScreen() {
 
   const handleLeave = async (id: string, name: string) => {
     if (leaveCommunity) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        addToast("You are offline — leave when reconnected", "info")
+        return
+      }
       const ok = await leaveCommunity(id)
       if (ok) {
         // Mirror cache only after domain leave succeeds (Studio Class D)
@@ -1210,27 +1228,34 @@ export function CommunitiesScreen() {
             </p>
           ) : null}
 
-          {!directoryLoading &&
-          visibleGroups.length === 0 &&
-          !(directory === "my" && myCommunities.length === 0) ? (
-            <div className="rounded-[1.25rem] border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
+          {visibleGroups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
               <p className="text-[14px] font-bold text-foreground">
-                {searchQuery.trim() ? "No communities match" : "No communities here"}
+                {directory === "my" ? "No communities yet" : "No communities match"}
               </p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                {searchQuery.trim()
-                  ? "Try another keyword — or start a new community with Create in the header."
-                  : "Adjust filters, or use Create in the header to start a space."}
+                {directory === "my"
+                  ? "Join a space from Discover, or create one for your city or interest."
+                  : "Try another search or category."}
               </p>
-              {searchQuery.trim() ? (
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {directory === "my" ? (
+                  <button
+                    type="button"
+                    onClick={() => setDirectory("discover")}
+                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
+                  >
+                    Discover communities
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={openCreateCommunity}
-                  className="mt-3 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
+                  className="rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
                 >
                   Create community
                 </button>
-              ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -1280,6 +1305,24 @@ export function CommunitiesScreen() {
               )
             })}
             </>
+          ) : directory === "discover" ? (
+            <EmptyState
+              variant="communities"
+              title={searchQuery ? "No communities match" : "Find or start a community"}
+              description={
+                searchQuery
+                  ? `No results for “${searchQuery}”. Try another keyword — or create a community.`
+                  : "Board = posts & events · Chat = member conversation."
+              }
+              action={
+                searchQuery
+                  ? {
+                      label: "Create community",
+                      onClick: openCreateCommunity,
+                    }
+                  : { label: "Create community", onClick: openCreateCommunity }
+              }
+            />
           ) : null}
         </div>
       </div>

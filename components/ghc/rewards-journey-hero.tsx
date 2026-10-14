@@ -1,7 +1,6 @@
 "use client"
 
-import { mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
-
+import { IdentityService } from "@/lib/identity/identity-service"
 
 /**
  * Rewards as a journey/game surface — not an accounting ledger.
@@ -82,38 +81,6 @@ export function RewardsJourneyHero({
     }
   }, [])
 
-
-  // Hydrate claimed-today from server (read-only) so CTA is not green after cold start
-  useEffect(() => {
-    if (!userId || typeof window === "undefined") return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch("/api/economy/rewards/daily", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        })
-        if (!res.ok || cancelled) return
-        const data = await res.json().catch(() => ({}))
-        if (cancelled) return
-        if (data.alreadyClaimed === true || data.canClaimToday === false) {
-          try {
-            claimDailyStreak(userId, membershipTier)
-          } catch {
-            /* local UI mark only */
-          }
-          setTick((n) => n + 1)
-        }
-      } catch {
-        /* keep local streak */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [userId, membershipTier])
-
   const claimDaily = useCallback(async () => {
     // Server-authoritative daily claim only — no local GHC mint
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -124,30 +91,14 @@ export function RewardsJourneyHero({
     setClaimingDaily(true)
     try {
       const res = await fetch("/api/economy/rewards/daily", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", ...(IdentityService.getAuthHeaders?.() || {}) },
         body: JSON.stringify({}),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        const errText = String(data.error || data.message || "Claim failed")
-        const already =
-          data.alreadyClaimed === true ||
-          data.idempotent === true ||
-          /already claimed/i.test(errText)
-        if (already) {
-          try {
-            claimDailyStreak(userId, membershipTier)
-          } catch {
-            /* */
-          }
-          ghc.addToast?.("Already claimed today", "info")
-          setTick((n) => n + 1)
-          onClaimed?.()
-          return
-        }
-        ghc.addToast?.(mapGhcUxError(errText).body || errText, "error")
-        setTick((n) => n + 1)
+        ghc.addToast?.(data.error || data.message || "Claim failed", "error")
+        setTick((t) => t + 1)
         return
       }
       const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
@@ -168,16 +119,10 @@ export function RewardsJourneyHero({
       }
       ghc.addToast?.(
         data.alreadyClaimed || data.idempotent
-          ? `Already claimed today${amt ? ` · ${amt} GHC` : ""}`
+          ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`
           : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
         "success"
       )
-      // Sync local streak UI with server authority so the claim CTA is not green again today
-      try {
-        claimDailyStreak(userId, membershipTier)
-      } catch {
-        /* local mark is best-effort; server already recorded the claim */
-      }
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:daily-reward-claimed", { detail: { ...data, server: true } })
@@ -187,14 +132,13 @@ export function RewardsJourneyHero({
       }
       setTick((t) => t + 1)
       onClaimed?.()
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "NETWORK_UNAVAILABLE"
-      ghc.addToast?.(mapGhcUxError(msg).body || "Claim failed", "error")
+    } catch {
+      ghc.addToast?.("Claim failed", "error")
       setTick((t) => t + 1)
     } finally {
       setClaimingDaily(false)
     }
-  }, [userId, ghc, onClaimed, claimingDaily, membershipTier])
+  }, [userId, ghc, onClaimed, claimingDaily])
 
   const opportunities = [
     {
@@ -403,14 +347,9 @@ export function RewardsJourneyHero({
                   : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)} GHC`}
             </button>
           ) : (
-            <div
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-muted/50 py-3.5 text-[13px] font-bold text-muted-foreground"
-              role="status"
-              aria-label="Daily reward already claimed today"
-            >
-              <Check size={16} className="text-[var(--gh-green)]" aria-hidden />
-              Claimed today · next after midnight (Africa/Lagos)
-            </div>
+            <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">
+              Today claimed · next reward after midnight (Africa/Lagos)
+            </p>
           )}
         </div>
       </section>

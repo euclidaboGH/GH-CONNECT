@@ -39,7 +39,7 @@ import {
   isDurableMessagingEnabled,
   shouldAttemptDurableMessaging,
 } from "../messaging/durable-flag"
-import { apiSendMessage } from "../messaging/server-messaging-sync"
+import { apiSendMessage, apiSendMessageWithRetry } from "../messaging/server-messaging-sync"
 import {
   canMessageUser,
   buildPermissionContext,
@@ -274,7 +274,7 @@ export function createMessagingDomain(deps: {
           // clientMessageId = uiMessage.id for idempotent dedupe on the server.
           // Flag still gates *requiring* durable success for production ops.
           if (shouldAttemptDurableMessaging(i.offline)) {
-            void apiSendMessage(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
+            void apiSendMessageWithRetry(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
               const ok = Boolean(res && (res as { ok?: boolean }).ok)
               if (!ok) {
                 try {

@@ -3,12 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Image as ImageIcon, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
-import {
-  validateImageFiles,
-  validateMediaFile,
-  validateMediaFileSoft,
-  MEDIA_LIMITS,
-} from "@/lib/media-validation"
+import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
@@ -17,26 +12,7 @@ import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
 export type ComposeMode = "post" | "story"
-
 export type Audience = "public" | "followers" | "mutuals" | "private"
-
-/** Server-aligned soft limits — server still enforces final caps */
-export const MAX_POST_TEXT = 4000
-export const MAX_POST_IMAGES = 10
-export const OFFLINE_COMPOSE_QUEUE_KEY = "ghc-offline-compose-queue-v1"
-
-function enqueueOfflineCompose(entry: Record<string, unknown>) {
-  try {
-    const raw = window.localStorage.getItem(OFFLINE_COMPOSE_QUEUE_KEY)
-    const q = raw ? (JSON.parse(raw) as unknown[]) : []
-    const list = Array.isArray(q) ? q : []
-    list.push({ ...entry, queuedAt: Date.now() })
-    window.localStorage.setItem(OFFLINE_COMPOSE_QUEUE_KEY, JSON.stringify(list.slice(-30)))
-  } catch {
-    /* ignore */
-  }
-}
-
 
 /** Rotating contextual suggestions — fills empty vertical space with gentle prompts */
 const COMPOSE_PROMPTS = [
@@ -76,13 +52,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [mode, setMode] = useState<ComposeMode>(initialMode)
   const [text, setText] = useState("")
   const [selectedImages, setSelectedImages] = useState<string[]>([])
-  const [imageAlts, setImageAlts] = useState<string[]>([])
-  const [linkPreview, setLinkPreview] = useState<{
-    url: string
-    title: string | null
-    description: string | null
-  } | null>(null)
-  const [linkPreviewLoading, setLinkPreviewLoading] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
   const [selectedDocName, setSelectedDocName] = useState<string | null>(null)
@@ -120,6 +89,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const d = (e as CustomEvent<{ text?: string; body?: string }>).detail || {}
+      const pre = String(d.text || d.body || "").trim()
+      if (pre) setText((prev) => (prev ? prev : pre))
+    }
+    window.addEventListener("ghc:compose-prefill", onPrefill)
+    return () => window.removeEventListener("ghc:compose-prefill", onPrefill)
+  }, [])
+
   useEffect(() => {
     if (!open) return
     const close = () => onOpenChange(false)
@@ -180,54 +159,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }, 400)
     return () => window.clearTimeout(tId)
   }, [text, audience, open, mode])
-  useEffect(() => {
-    if (!open || mode !== "post") return
-    const m = text.match(/https:\/\/[^\s<>"']{4,2000}/i)
-    if (!m) {
-      setLinkPreview(null)
-      return
-    }
-    const url = m[0]
-    let cancelled = false
-    const tmr = window.setTimeout(() => {
-      setLinkPreviewLoading(true)
-      void (async () => {
-        try {
-          const res = await fetch(`/api/social/link-preview?url=${encodeURIComponent(url)}`, {
-            credentials: "include",
-            cache: "no-store",
-          })
-          const data = await res.json().catch(() => ({}))
-          if (cancelled) return
-          if (data.ok) {
-            setLinkPreview({
-              url,
-              title: data.title || null,
-              description: data.description || null,
-            })
-          } else {
-            setLinkPreview(null)
-          }
-        } catch {
-          if (!cancelled) setLinkPreview(null)
-        } finally {
-          if (!cancelled) setLinkPreviewLoading(false)
-        }
-      })()
-    }, 600)
-    return () => {
-      cancelled = true
-      window.clearTimeout(tmr)
-    }
-  }, [text, open, mode])
-
 
   if (!open) return null
 
   const close = () => {
     onOpenChange(false)
     setText("")
-    setSelectedImages([]); setImageAlts([])
+    setSelectedImages([])
     setSelectedVideo(null)
     setStoryMedia(null)
     setAudience("public")
@@ -277,22 +215,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         } catch {
           setStoryMedia({ type: "image", url: dataUrl })
         }
-        setSelectedImages([]); setImageAlts([])
+        setSelectedImages([])
         setSelectedVideo(null)
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ Photo ready", "success")
       } else {
-        const validated = validateImageFiles(Array.from(files), MEDIA_LIMITS.maxImages)
-        if (!validated.length) {
-          addToast(
-            mediaUserMessage(
-              "UNSUPPORTED_TYPE",
-              "No supported photos in that selection. Try JPG, PNG, WebP, or HEIC.",
-            ),
-            "error",
-          )
-          return
-        }
+        const validated = validateImageFiles(Array.from(files), 10)
         const images: string[] = []
         for (const file of validated) {
           setUploadProgress(MEDIA_PROGRESS.compressing)
@@ -325,8 +253,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           }
         }
         if (images.length) {
-          setSelectedImages((prev) => [...prev, ...images].slice(0, MAX_POST_IMAGES))
-          setImageAlts((prev) => [...prev, ...images.map(() => "")].slice(0, MAX_POST_IMAGES))
+          setSelectedImages((prev) => [...prev, ...images].slice(0, 10))
           setSelectedVideo(null)
           setStoryMedia(null)
           setUploadProgress(MEDIA_PROGRESS.ready)
@@ -378,12 +305,11 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handleVideo = async (file: File | undefined) => {
     if (!file) return
-    const check = validateMediaFileSoft(file, "video")
-    if (!check.ok) {
-      addToast(check.error, "error")
+    const sizeMb = file.size / (1024 * 1024)
+    if (sizeMb > 80) {
+      addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
       return
     }
-    const sizeMb = file.size / (1024 * 1024)
     setUploadProgress(
       sizeMb > 8
         ? `${MEDIA_PROGRESS.preparingVideo} (${sizeMb.toFixed(0)} MB)`
@@ -408,7 +334,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           addToast(mediaUserMessage("STORAGE_ERROR"), "error")
           return
         }
-        setSelectedImages([]); setImageAlts([])
+        setSelectedImages([])
         setSelectedVideo(null)
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ Video ready for story", "success")
@@ -426,21 +352,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setStoryMedia(null)
         addToast("Video attached", "success")
       } else if (!up.ok) {
-        addToast(
-          mediaUserMessage(
-            up.error || "STORAGE_ERROR",
-            up.userMessage ||
-              (up.error === "MEDIA_STORAGE_UNAVAILABLE"
-                ? "Video needs cloud storage on this environment. Photos still work with on-device compression."
-                : undefined),
-          ),
-          "error",
-        )
+        addToast(mediaUserMessage(up.error || "FILE_TOO_LARGE", up.userMessage), "error")
       } else {
-        addToast(mediaUserMessage("STORAGE_ERROR"), "error")
+        addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
       }
     } catch {
-      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try MP4/MOV or a shorter clip"), "error")
+      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
     } finally {
       setUploadProgress(null)
     }
@@ -483,13 +400,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     try {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
           addToast("You are offline — we will post when you are back online", "info")
-          enqueueOfflineCompose({
-            kind: mode,
-            text: text.trim().slice(0, MAX_POST_TEXT),
-            audience,
-            images: selectedImages,
-            imageAlts,
-          })
         }
       if (mode === "post") {
         const community =
@@ -617,7 +527,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             aria-selected={mode === tab}
             onClick={() => {
               setMode(tab)
-              setSelectedImages([]); setImageAlts([])
+              setSelectedImages([])
               setSelectedVideo(null)
               setStoryMedia(null)
             }}
@@ -634,34 +544,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
       {/* Scrollable body — long-form first-class */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-
-        
-        {mode === "post" && selectedImages.length > 0 ? (
-          <div className="space-y-2 px-4 pb-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Image descriptions (accessibility)
-            </p>
-            {selectedImages.map((_, i) => (
-              <input
-                key={`alt-${i}`}
-                type="text"
-                value={imageAlts[i] || ""}
-                onChange={(e) => {
-                  const v = e.target.value.slice(0, 200)
-                  setImageAlts((prev) => {
-                    const next = [...prev]
-                    while (next.length < selectedImages.length) next.push("")
-                    next[i] = v
-                    return next
-                  })
-                }}
-                placeholder={`Alt text for image ${i + 1}`}
-                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground"
-                aria-label={`Alt text for image ${i + 1}`}
-              />
-            ))}
-          </div>
-        ) : null}
 
         {/* Optional community board target */}
         {mode === "post" && communityOptions.length > 0 && (
@@ -846,25 +728,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           <textarea
             ref={textareaRef}
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : MAX_POST_TEXT))}
-            maxLength={mode === "story" ? 500 : MAX_POST_TEXT}
+            onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : 5000))}
             placeholder={mode === "post" ? "What's on your mind?" : "Share a moment…"}
             className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-foreground placeholder-gray-400 focus:outline-none"
             rows={5}
           />
           <p className="text-right text-[11px] text-muted-foreground">
-            {text.length}/{mode === "story" ? 500 : MAX_POST_TEXT}
-            {linkPreviewLoading ? (
-              <p className="mt-1 text-[10px] text-muted-foreground">Fetching link preview…</p>
-            ) : linkPreview ? (
-              <div className="mt-2 rounded-[1.25rem] border border-border/60 bg-muted/30 px-3 py-2 text-left">
-                <p className="text-[11px] font-bold text-foreground">{linkPreview.title || "Link"}</p>
-                {linkPreview.description ? (
-                  <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{linkPreview.description}</p>
-                ) : null}
-                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{linkPreview.url}</p>
-              </div>
-            ) : null}
+            {text.length}/{mode === "story" ? 500 : 5000}
 
           {(hashSuggestions.length > 0 || mentionSuggestions.length > 0) && (
             <div className="mb-2 flex flex-wrap gap-1.5 rounded-xl border border-border bg-card p-2">
@@ -971,7 +841,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <input
           ref={imageInputRef}
           type="file"
-          accept="image/*,.heic,.heif,.avif,.bmp"
+          accept="image/*"
           multiple={mode === "post"}
           className="sr-only"
           onChange={(e) => {
@@ -982,7 +852,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <input
           ref={videoInputRef}
           type="file"
-          accept="video/*,.mp4,.m4v,.mov,.webm,.3gp"
+          accept="video/*"
           className="sr-only"
           onChange={(e) => {
             void handleVideo(e.target.files?.[0])

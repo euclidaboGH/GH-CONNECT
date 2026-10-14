@@ -17,12 +17,12 @@ import {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const ALLOWED_IMAGE = new Set(["image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp", "image/gif", "image/bmp", "image/avif", "image/heic", "image/heif"])
-const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/m4v", "video/3gpp", "video/3gpp2", "video/mpeg", "application/mp4"])
+const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
+const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
 const ALLOWED_FILE = new Set(["application/pdf", "application/x-pdf"])
-const MAX_IMAGE_BYTES = 50 * 1024 * 1024
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024
-const MAX_FILE_BYTES = 15 * 1024 * 1024
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_FILE_BYTES = 8 * 1024 * 1024
 
 function sniffKind(buf: Buffer): "image" | "video" | "file" | "unknown" {
   if (buf.length < 12) return "unknown"

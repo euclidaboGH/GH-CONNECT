@@ -2,12 +2,9 @@
  * IdentityService — single source of truth for session identity.
  *
  * Production chain:
- *   Pi access token (verified server-side via Pi /me)
- *     → durable mapping (gh_pi_identities) → internal GreenHaven user id (ghUserId)
- *     → Profile / GHC account / Wallet
- *
- * Never trust client-supplied userId/ghUserId on write APIs.
- * Server session or verified Pi token is the only identity authority.
+ *   Pi UID (verified access token on server)
+ *     → GreenHaven user ID (same string as Pi UID when linked)
+ *       → Profile / GHC account / Wallet
  *
  * Studio/local may use "current-user" only when no Pi UID is available.
  * Never treat "current-user" as a production wallet or transfer party.
