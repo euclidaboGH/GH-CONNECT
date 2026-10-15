@@ -151,14 +151,9 @@ export function NotificationBell({
     void (async () => {
       setListLoading(true)
       try {
-        let authHeaders: Record<string, string> = { Accept: "application/json" }
-        try {
-          const { IdentityService } = await import("@/lib/identity/identity-service")
-          authHeaders = { ...authHeaders, ...(IdentityService.getAuthHeaders?.() || {}) }
-        } catch { /* */ }
         const res = await fetch("/api/social/notifications?limit=40", {
           credentials: "include",
-          headers: authHeaders,
+          headers: { Accept: "application/json" },
         })
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean
@@ -228,7 +223,7 @@ export function NotificationBell({
         // Prefer server unread count when durable list loaded
         void fetch("/api/social/notifications?countOnly=1", {
           credentials: "include",
-          headers: authHeaders,
+          headers: { Accept: "application/json" },
         })
           .then((r) => r.json())
           .then((c: { ok?: boolean; unreadCount?: number }) => {
@@ -309,19 +304,12 @@ export function NotificationBell({
     setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
     setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
     if (n.data && (n.data as { durable?: boolean }).durable && n.id) {
-      void (async () => {
-        let h: Record<string, string> = { "Content-Type": "application/json" }
-        try {
-          const { IdentityService } = await import("@/lib/identity/identity-service")
-          h = { ...h, ...(IdentityService.getAuthHeaders?.() || {}) }
-        } catch { /* */ }
-        await fetch("/api/social/notifications", {
-          method: "POST",
-          credentials: "include",
-          headers: h,
-          body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
-        }).catch(() => null)
-      })()
+      void fetch("/api/social/notifications", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+      }).catch(() => null)
     }
     const link = resolveNotificationDeepLink(n)
     navigateNotificationDeepLink(link)
@@ -337,19 +325,12 @@ export function NotificationBell({
     } catch {
       /* */
     }
-    void (async () => {
-      let h: Record<string, string> = { "Content-Type": "application/json" }
-      try {
-        const { IdentityService } = await import("@/lib/identity/identity-service")
-        h = { ...h, ...(IdentityService.getAuthHeaders?.() || {}) }
-      } catch { /* */ }
-      await fetch("/api/social/notifications", {
-        method: "POST",
-        credentials: "include",
-        headers: h,
-        body: JSON.stringify({ markAll: true }),
-      }).catch(() => null)
-    })()
+    void fetch("/api/social/notifications", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAll: true }),
+    }).catch(() => null)
     setItems((prev) => prev.map((x) => ({ ...x, read: true })))
     setUnread(0)
     setStatusMsg("Marked all as read")

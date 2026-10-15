@@ -126,7 +126,7 @@ export function PostRewardPanel({
                   Community quality
                 </p>
                 <p className="text-sm font-semibold text-foreground">
-                  {loading ? "Loading…" : "Votes rank content · rewards when pool is funded"}
+                  {loading ? "Quality…" : "Quality"}
                 </p>
               </>
             )}

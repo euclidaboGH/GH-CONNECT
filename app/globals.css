@@ -1821,3 +1821,17 @@ body {
 .dark {
   --gh-modal-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), 0 8px 24px rgba(109, 40, 217, 0.10);
 }
+
+/* anti-overlay nav */
+.gh-bottom-nav {
+  box-shadow: none !important;
+  background: color-mix(in oklab, var(--card) 96%, transparent) !important;
+  backdrop-filter: blur(10px);
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+.gh-bottom-nav::before,
+.gh-bottom-nav::after {
+  display: none !important;
+  content: none !important;
+  box-shadow: none !important;
+}

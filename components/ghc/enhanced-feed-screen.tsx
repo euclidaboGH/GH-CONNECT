@@ -788,7 +788,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   }
                   onEdit={
                     isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && editPost
-                      ? (postId, content) => void editPost(postId, content)
+                      ? (postId, content, media) => void editPost(postId, content, media)
                       : undefined
                   }
                 />

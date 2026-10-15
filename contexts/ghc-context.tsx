@@ -218,7 +218,7 @@ interface GHCContextType {
   likePost: (postId: string) => Promise<void>
   reactToPost: (postId: string, reaction?: string) => Promise<void>
   deletePost: (postId: string) => Promise<void>
-  editPost: (postId: string, newContent: string) => Promise<void>
+  editPost: (postId: string, newContent: string, media?: { images?: string[]; video?: string | null; pdf?: string | null; pdfName?: string | null }) => Promise<void>
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
   addComment: (postId: string, text: string, replyToCommentId?: string) => Promise<void>
@@ -2021,7 +2021,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const editPost = async (postId: string, newContent: string) => {
+  const editPost = async (
+    postId: string,
+    newContent: string,
+    media?: { images?: string[]; video?: string | null; pdf?: string | null; pdfName?: string | null }
+  ) => {
     try {
       const result = await domains.posts.editPost(postId, newContent)
       if (!result.ok) {
@@ -2035,6 +2039,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             ? {
                 ...post,
                 content: result.data.content,
+                ...(media?.images !== undefined ? { images: media.images } : {}),
+                ...(media?.video !== undefined ? { video: media.video } : {}),
+                ...(media?.pdf !== undefined ? { pdf: media.pdf, pdfName: media.pdfName ?? null } : {}),
                 isDraft: false,
                 isEdited: true,
                 editedAt: Date.now(),
@@ -2044,13 +2051,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       try {
         const { socialEditPost } = await import("@/lib/social/client")
-        const durable = await socialEditPost(postId, result.data.content)
+        const durable = await socialEditPost(postId, result.data.content, media)
         if (durable && durable.ok === false) {
           addToast(
             durable.error || "Could not save post edit on the server",
             "error"
           )
           return
+        }
+        if (durable?.images || durable?.video !== undefined || durable?.pdf !== undefined) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    content: durable.content || post.content,
+                    ...(durable.images ? { images: durable.images } : {}),
+                    ...(durable.video !== undefined ? { video: durable.video } : {}),
+                    ...(durable.pdf !== undefined ? { pdf: durable.pdf } : {}),
+                  }
+                : post
+            ),
+          }))
         }
         addToast(
           durable?.durable === false
@@ -5558,3 +5581,4 @@ export function useGHCFeed() {
 export function useGHCCommunity() {
   return useGHCMessaging()
 }
+
