@@ -54,7 +54,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const hasVideo = Object.prototype.hasOwnProperty.call(body, "video")
   const rawImages = hasImages && Array.isArray(body.images) ? body.images.slice(0, 10) : []
   const images = rawImages.map(safeImage)
-  if (hasImages && (rawImages.length !== (body.images as unknown[]).length || images.some((x) => !x))) {
+  if (hasImages && (rawImages.length !== (body.images as unknown[]).length || images.some((x: string | null) => !x))) {
     return NextResponse.json({ ok: false, error: "INVALID_MEDIA" }, { status: 400 })
   }
   const video = hasVideo ? safeVideo(body.video) : null
