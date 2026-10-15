@@ -20,9 +20,10 @@ import {
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
 
-function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+})
 }
 
 export function RewardsJourneyHero({

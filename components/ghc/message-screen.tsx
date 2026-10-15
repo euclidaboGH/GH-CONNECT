@@ -380,7 +380,7 @@ export function MessageScreen() {
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40">
                 <MessageCircle size={28} className="text-emerald-600" />
               </div>
-              <p className="text-[14px] font-bold text-foreground">No messages yet</p>
+              <p className="text-[14px] font-bold text-foreground">No conversations yet</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
                 {isCommunity
                   ? "Be the first to say hello in this community chat."

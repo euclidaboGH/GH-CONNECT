@@ -6,23 +6,13 @@ import { defineConfig, globalIgnores } from "eslint/config"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
-
-// next/core-web-vitals must be expanded via FlatCompat — default export is not always iterable on Vercel.
 const nextConfigs = compat.extends("next/core-web-vitals")
 
 export default defineConfig([
   ...nextConfigs,
   globalIgnores([
-    ".next/**",
-    "node_modules/**",
-    "coverage/**",
-    "dist/**",
-    "public/**",
-    "scripts/**",
-    "supabase/**",
-    "docs/**",
-    "*.config.js",
-    "*.config.mjs",
+    ".next/**", "node_modules/**", "coverage/**", "dist/**", "public/**",
+    "scripts/**", "supabase/**", "docs/**", "*.config.js", "*.config.mjs",
   ]),
   {
     rules: {

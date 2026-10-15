@@ -54,9 +54,10 @@ type RewardsSnapshot = {
   }
 }
 
-function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+})
 }
 
 function formatWhen(ts: number) {

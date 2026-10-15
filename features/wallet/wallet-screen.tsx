@@ -56,11 +56,12 @@ import { AddGhcSheet } from "./add-ghc-sheet"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
 function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  })}`
+})
 }
 
 function formatWhen(ts: number) {

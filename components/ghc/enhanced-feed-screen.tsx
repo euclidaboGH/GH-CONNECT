@@ -519,15 +519,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(true)}
-              className="gh-standard-search mb-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-muted/55 px-4 py-2.5 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              aria-label="Search GreenHaven"
-            >
-              <Search size={19} aria-hidden="true" />
-              <span className="truncate">Search GreenHaven...</span>
-            </button>
+            {/* single header search */}
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input
@@ -679,7 +671,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       ? "Join communities to see discussions and shared posts here."
                       : activeFilter === "trending"
                         ? "Check back soon for rising posts across GreenHaven."
-                        : "Posts from people and communities you follow will show up here. Use Discover to grow your network, or the + button to share."
+                        : "Follow people and communities, or share something with +."
               }
               action={
                 activeFilter === "communities"
@@ -788,7 +780,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   }
                   onEdit={
                     isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && editPost
-                      ? (postId, content) => void editPost(postId, content)
+                      ? (postId, content, media) => void editPost(postId, content, media as never)
                       : undefined
                   }
                 />

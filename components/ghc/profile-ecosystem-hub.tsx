@@ -32,11 +32,9 @@ type WalletSummary = {
 }
 
 function formatGhc(n: number | null): string {
-  if (n == null || !Number.isFinite(n)) return "—"
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+  if (n == null || !Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+})
 }
 
 function formatExpiry(ts?: number): string {
