@@ -136,16 +136,13 @@ export function mapGhcUxError(raw?: string | null): GhcUxMessage {
 }
 
 /** Bank-style GHC amount — always two decimal places when finite */
-export const GHC_CURRENCY_SYMBOL = "₲"
-
-export function formatGhcAmount(n: number, hidden = false, prefix = true): string {
+export function formatGhcAmount(n: number, hidden = false): string {
   if (hidden) return "••••••"
-  if (!Number.isFinite(n)) return prefix ? `${GHC_CURRENCY_SYMBOL} 0.00` : "0.00"
-  const body = n.toLocaleString(undefined, {
+  if (!Number.isFinite(n)) return "0.00"
+  return n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return prefix ? `${GHC_CURRENCY_SYMBOL} ${body}` : body
 }
 
 export function formatGhcWhen(ts?: number | null): string {

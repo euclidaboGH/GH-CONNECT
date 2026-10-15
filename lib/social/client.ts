@@ -360,11 +360,15 @@ export async function socialConnectionDecline(
 
 export async function socialEditPost(
   postId: string,
-  content: string
+  content: string,
+  media?: { images?: string[]; video?: string | null }
 ): Promise<{ ok: boolean; durable: boolean; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(postId)}/edit`, {
     method: "PATCH",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content,
+      ...(media ? { images: media.images, video: media.video } : {}),
+    }),
   })
 }
 

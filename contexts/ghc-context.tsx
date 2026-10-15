@@ -218,7 +218,7 @@ interface GHCContextType {
   likePost: (postId: string) => Promise<void>
   reactToPost: (postId: string, reaction?: string) => Promise<void>
   deletePost: (postId: string) => Promise<void>
-  editPost: (postId: string, newContent: string) => Promise<void>
+  editPost: (postId: string, newContent: string, media?: { images?: string[]; video?: string | null }) => Promise<void>
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
   addComment: (postId: string, text: string, replyToCommentId?: string) => Promise<void>
@@ -2021,9 +2021,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const editPost = async (postId: string, newContent: string) => {
+  const editPost = async (
+    postId: string,
+    newContent: string,
+    media?: { images?: string[]; video?: string | null }
+  ) => {
     try {
-      const result = await domains.posts.editPost(postId, newContent)
+      const result = await domains.posts.editPost(postId, newContent, media)
       if (!result.ok) {
         addToast(result.error, "error")
         return
@@ -2035,6 +2039,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             ? {
                 ...post,
                 content: result.data.content,
+                ...(result.data.media
+                  ? {
+                      images: result.data.media.images ?? post.images,
+                      video: result.data.media.video !== undefined ? result.data.media.video : post.video,
+                    }
+                  : {}),
                 isDraft: false,
                 isEdited: true,
                 editedAt: Date.now(),
@@ -2044,7 +2054,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       try {
         const { socialEditPost } = await import("@/lib/social/client")
-        const durable = await socialEditPost(postId, result.data.content)
+        const durable = await socialEditPost(postId, result.data.content, result.data.media)
         if (durable && durable.ok === false) {
           addToast(
             durable.error || "Could not save post edit on the server",

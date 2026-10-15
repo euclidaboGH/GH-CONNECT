@@ -318,28 +318,22 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="gh-post-card overflow-hidden border-b border-border/40 bg-card text-card-foreground sm:rounded-2xl sm:border sm:border-border/50 sm:shadow-sm"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 pb-1.5 pt-3">
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <div className="flex flex-1 items-center gap-2.5">
           <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${post.authorName}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
               alt={post.authorName}
-              className="h-9 w-9 rounded-full object-cover bg-muted ring-1 ring-border/40"
+              className="h-11 w-11 rounded-full object-cover bg-muted ring-2 ring-background shadow-sm"
             />
             {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
             {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
           <div className="min-w-0 flex-1">
             <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{post.authorName}</button>
-              {(() => {
-                const rep = Number((post as { authorReputation?: number; reputation?: number }).authorReputation ?? (post as { reputation?: number }).reputation)
-                return Number.isFinite(rep) && rep > 0 ? (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground" title="Reputation">{Math.round(rep)}</span>
-                ) : null
-              })()}
             <div className="flex flex-wrap items-center gap-1">
               {(() => {
                 const p = post as Post & { authorProfession?: string; authorTitle?: string; communityName?: string }
@@ -616,7 +610,7 @@ function EnhancedPostCardInner({
 
       {/* Primary actions — curation · comments · save · share */}
       <div
-        className="flex items-center gap-0.5 border-t border-border/30 px-2 py-1"
+        className="flex items-center gap-1 border-t border-border/40 px-3 py-2.5"
         role="toolbar"
         aria-label="Content quality and post actions"
       >
@@ -639,10 +633,10 @@ function EnhancedPostCardInner({
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Downvote"
+          aria-label="Downvote content — lowers quality ranking and may reduce reward eligibility"
           aria-pressed={curationChoice === "downvote"}
           onClick={() => void handleCuration("downvote")}
-          title="Downvote"
+          title="Downvote weak content. Quality ranking and reward eligibility may fall — never client-minted penalties."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "downvote"
               ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
@@ -705,7 +699,26 @@ function EnhancedPostCardInner({
       />
 
       {/* Content quality strip — no profile-style like; matching lives on profiles */}
-      
+      <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3.5 py-1.5">
+        <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
+          {judgmentLabel
+            ? judgmentLabel
+            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
+        </p>
+        <span
+          className={`shrink-0 text-[10px] font-bold tabular-nums ${
+            netJudgment > 0
+              ? "text-emerald-700"
+              : netJudgment < 0
+                ? "text-rose-600"
+                : "text-muted-foreground"
+          }`}
+          title="Net content quality (upvotes minus downvotes)"
+        >
+          Net {netJudgment > 0 ? "+" : ""}
+          {netJudgment}
+        </span>
+      </div>
     </div>
   )
 }
@@ -722,7 +735,8 @@ export function ContributionHint({ post }: { post: Post }) {
   if (comments + saves < 3) return null
   return (
     <p className="gh-type-meta px-1 text-muted-foreground">
-            {comments > 0 && saves > 0 ? " · " : ""}
+      Quality signals: {comments > 0 ? `${comments} comments` : ""}
+      {comments > 0 && saves > 0 ? " · " : ""}
       {saves > 0 ? `${saves} saves` : ""}
     </p>
   )

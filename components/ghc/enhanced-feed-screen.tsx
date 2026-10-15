@@ -519,7 +519,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            {/* header search icon only */}
+            {/* header search only */}
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input
@@ -671,7 +671,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       ? "Join communities to see discussions and shared posts here."
                       : activeFilter === "trending"
                         ? "Check back soon for rising posts across GreenHaven."
-                        : "Follow people and communities, or share something with +."
+                        : "Posts from people and communities you follow will show up here. Use Discover to grow your network, or the + button to share."
               }
               action={
                 activeFilter === "communities"
@@ -780,7 +780,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   }
                   onEdit={
                     isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && editPost
-                      ? (postId, content, media) => void editPost(postId, content, media as never)
+                      ? (postId, content, media) => void editPost(postId, content, media)
                       : undefined
                   }
                 />

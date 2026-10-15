@@ -99,15 +99,12 @@ export function GhcAmount({
 }) {
   const formatted =
     typeof amount === "number"
-      ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ? amount.toLocaleString(undefined, { maximumFractionDigits: 2 })
       : amount
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       <GhcCoinIcon size={size} />
-      <span className={`font-bold tabular-nums ${amountClassName}`}>
-        <span className="mr-0.5 opacity-90" aria-hidden>₲</span>
-        {formatted}
-      </span>
+      <span className={`font-bold tabular-nums ${amountClassName}`}>{formatted}</span>
       {showLabel && <span className="text-[11px] font-semibold opacity-80">GHC</span>}
     </span>
   )

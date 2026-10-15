@@ -490,13 +490,13 @@ export function ProfileScreen({
             type="button"
             aria-expanded={dashboardPageOpen}
             onClick={() => setDashboardPageOpen(true)}
-            className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-4 py-3 text-left text-white shadow-md transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            className="flex min-h-12 w-full items-center justify-between rounded-[1.1rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="min-w-0">
-              <span className="block text-[13px] font-bold text-white">Dashboard</span>
+              <span className="block text-[13px] font-bold text-foreground">Dashboard</span>
               <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
             </span>
-            <span className="ml-3 shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold text-white">Open</span>
+            <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open</span>
           </button>
 
         </section>
@@ -515,7 +515,7 @@ export function ProfileScreen({
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-sm font-bold text-emerald-700" aria-hidden="true">
               {(name || "G").trim().slice(0, 1).toUpperCase()}
             </span>
-            <span className="min-w-0 flex-1 rounded-full bg-muted/70 px-4 py-2.5 text-[13px] text-muted-foreground">Share an update…</span>
+            <span className="min-w-0 flex-1 rounded-full bg-muted/70 px-4 py-2.5 text-[13px] text-muted-foreground">What would you like to share with GreenHaven?</span>
             <span className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Create</span>
           </button>
         </section>
@@ -553,7 +553,7 @@ export function ProfileScreen({
                         } catch { /* */ }
                       }}
                       onSave={(postId) => { void feed.savePost(postId).catch(() => ghc.addToast?.("Could not save post", "error")) }}
-                      onEdit={(postId, content, media) => { void feed.editPost(postId, content, media as never) }}
+                      onEdit={(postId, content, media) => { void feed.editPost(postId, content, media) }}
                       onArchive={(postId) => { void feed.archivePost(postId) }}
                       onInsights={(postId) => {
                         try {
