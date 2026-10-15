@@ -433,7 +433,7 @@ function UserCardInner({
 }
 
 
-/** Compact list row — “Discover People” sample style */
+/** Compact discovery list row */
 export function DiscoverListRow({
   candidate,
   onViewProfile,

@@ -902,7 +902,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-wallet-shell flex h-full min-h-0 flex-col bg-background text-foreground">
       <WalletHeader
         onBack={onBack}
         onRefresh={() => void refresh()}
@@ -917,8 +917,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             <div className="min-w-0 flex-1">
               <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-100">
                 {offline
-                  ? "You're offline. Showing the last known ledger — balances update after validation when you're back online."
-                  : "Couldn’t refresh balance. Showing local ledger — balances update after validation."}
+                  ? "You're offline. Showing your last available wallet information. Refresh when you're back online."
+                  : "Couldn’t refresh your wallet. Showing the last available information."}
               </p>
               {!offline && (
                 <button
@@ -1007,7 +1007,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold text-foreground">GHC (GreenHaven Coin)</p>
-                <p className="text-[11px] text-muted-foreground">Available on ledger</p>
+                <p className="text-[11px] text-muted-foreground">Available balance</p>
               </div>
               <div className="text-right">
                 <p className="text-[15px] font-bold tabular-nums text-foreground">
@@ -1032,10 +1032,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold text-foreground">Pi</p>
-                <p className="text-[11px] text-muted-foreground">Payments via Pi Browser · separate rail</p>
+                <p className="text-[11px] text-muted-foreground">Payments through Pi Browser</p>
               </div>
               <div className="text-right">
-                <p className="text-[12px] font-semibold text-muted-foreground">Open rail</p>
+                <p className="text-[12px] font-semibold text-muted-foreground">View activity</p>
               </div>
               <span className="text-muted-foreground" aria-hidden>›</span>
             </button>
@@ -1059,7 +1059,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 {formatGhc(displayPending)} GHC pending validation
               </span>
               <span className="block text-[11px] text-amber-800/80 dark:text-amber-200/80">
-                Not spendable yet · open details or claim in Rewards when ready
+                Not available to spend yet · open for details
               </span>
             </span>
             <ChevronRight size={18} className="shrink-0 text-amber-700" aria-hidden />
@@ -1646,7 +1646,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-[11px] text-muted-foreground">
                 <Clock size={12} />
-                Server-authoritative when backend is connected; local ledger used offline.
+                Your wallet keeps your available activity together here. Some updates may finish syncing after you reconnect.
               </div>
               <button
                 type="button"
@@ -1672,7 +1672,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </button>
             </div>
             <p className="mb-3 text-[12px] text-muted-foreground">
-              Only methods that work today are selectable. Cards and bank rails stay Coming soon.
+              Choose an available payment method. Additional payment options will appear here when supported.
             </p>
             <ul className="space-y-2">
               <li className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/40">

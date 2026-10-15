@@ -2,7 +2,7 @@
 
 /**
  * Get GHC — clear paths only:
- * Earn (rewards) · Receive (P2P) · Buy with Pi (server-only when enabled)
+ * Rewards · Receive (P2P) · Buy with Pi (server-only when enabled)
  * Never implies client-side Pi→GHC conversion.
  */
 import { X, Gift, ArrowDownLeft, Lock, Coins } from "lucide-react"
@@ -32,13 +32,13 @@ export function AddGhcSheet({
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center" role="dialog" aria-modal>
       <button type="button" className="absolute inset-0 bg-black/45" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[81] w-full max-w-md rounded-t-3xl border border-border bg-card p-4 shadow-2xl sm:rounded-3xl">
+      <div className="gh-sheet-panel relative z-[81] w-full max-w-md rounded-t-[1.5rem] border border-border/60 bg-card p-4 shadow-2xl sm:rounded-[1.5rem]">
         <div className="mb-3 flex items-center gap-2">
           <GhcCoinIcon size={28} />
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-foreground">Get GHC</h2>
             <p className="text-[11px] text-muted-foreground">
-              Choose how you want GreenHaven Coin · {ASSET_POLICY.walletCopy}
+              Choose an available way to add GreenHaven Coin
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted" aria-label="Close">
@@ -54,15 +54,15 @@ export function AddGhcSheet({
                 onEarn()
                 onClose()
               }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-background px-3 py-3 text-left transition hover:bg-muted/40"
+              className="gh-list-row flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-3 text-left transition hover:bg-muted/40"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/12 text-emerald-700">
                 <Gift size={18} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-bold">Earn GHC</span>
+                <span className="block text-[13px] font-bold">Rewards</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  Daily rewards, missions, activity — credited by the ledger after validation
+                  View eligible rewards and activity credits after they are validated
                 </span>
               </span>
             </button>
@@ -74,7 +74,7 @@ export function AddGhcSheet({
                 onReceive()
                 onClose()
               }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-background px-3 py-3 text-left transition hover:bg-muted/40"
+              className="gh-list-row flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-3 text-left transition hover:bg-muted/40"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-600/12 text-sky-700">
                 <ArrowDownLeft size={18} />
@@ -96,7 +96,7 @@ export function AddGhcSheet({
                 onBuy?.()
                 onClose()
               }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-background px-3 py-3 text-left transition hover:bg-muted/40 disabled:opacity-70"
+              className="gh-list-row flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-3 text-left transition hover:bg-muted/40 disabled:opacity-70"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600/12 text-violet-700">
                 {GHC_BUY_WITH_PI_ENABLED ? <Coins size={18} /> : <Lock size={18} />}

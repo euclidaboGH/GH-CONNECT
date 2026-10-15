@@ -962,3 +962,362 @@ body {
     transition: none !important;
   }
 }
+
+/* ================================================================
+   GreenHaven Product Maturity Pass — 2026-10-14
+   Presentation-only. No domain, payment, auth, or data contracts.
+   ================================================================ */
+:root {
+  --gh-content-max: 40rem;
+  --gh-radius-sm: 0.625rem;
+  --gh-radius-md: 0.875rem;
+  --gh-radius-lg: 1.125rem;
+  --gh-card-shadow: 0 1px 2px rgb(16 24 20 / 0.025), 0 8px 28px rgb(16 24 20 / 0.045);
+  --gh-card-shadow-lg: 0 14px 42px rgb(16 24 20 / 0.08), 0 2px 8px rgb(16 24 20 / 0.035);
+}
+
+/* A quieter, editorial canvas. Content—not chrome—owns the screen. */
+body {
+  background:
+    radial-gradient(circle at 50% -12rem, color-mix(in oklab, var(--gh-green) 5%, transparent), transparent 28rem),
+    var(--background);
+  letter-spacing: -0.006em;
+}
+
+.gh-card,
+.gh-card-surface {
+  border-color: color-mix(in oklab, var(--border) 48%, transparent) !important;
+  box-shadow: var(--gh-card-shadow);
+}
+
+.gh-card-outline {
+  border-color: color-mix(in oklab, var(--border) 62%, transparent);
+}
+
+/* Keep interactive chrome restrained; avoid the “dashboard of pills” look. */
+.gh-icon-btn {
+  border-radius: 0.75rem;
+}
+
+.gh-page-header-slim {
+  border-bottom-color: color-mix(in oklab, var(--border) 45%, transparent);
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+/* Primary navigation reads as application chrome rather than a floating toy dock. */
+.gh-bottom-nav {
+  border-top-color: color-mix(in oklab, var(--border) 55%, transparent) !important;
+  background: color-mix(in oklab, var(--background) 94%, transparent) !important;
+  backdrop-filter: blur(22px) saturate(1.2) !important;
+}
+
+.gh-create-fab {
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--gh-green) 20%, transparent) !important;
+}
+
+/* Media and feed surfaces should feel editorial and immersive. */
+[role="feed"] .gh-card,
+[role="feed"] .gh-card-surface {
+  box-shadow: 0 1px 0 color-mix(in oklab, var(--border) 55%, transparent);
+}
+
+[role="feed"] img,
+[role="feed"] video {
+  image-rendering: auto;
+}
+
+/* Desktop/tablet: retain a focused product column without looking phone-emulated. */
+@media (min-width: 720px) {
+  :root { --gh-content-max: 42rem; }
+  .gh-scroll-root { scrollbar-gutter: stable; }
+}
+
+@media (min-width: 1100px) {
+  :root { --gh-content-max: 46rem; }
+}
+
+/* Phones stay edge-efficient and native-feeling. */
+@media (max-width: 520px) {
+  :root {
+    --gh-content-max: 100%;
+    --gh-radius-md: 0.8125rem;
+    --gh-radius-lg: 1rem;
+  }
+  .gh-card,
+  .gh-card-surface {
+    box-shadow: 0 1px 0 color-mix(in oklab, var(--border) 48%, transparent);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   GreenHaven product maturity — composition pass 2
+   Content is the product: fewer floating cards, wider purposeful desktop
+   canvases, and strong mobile edge-to-edge social rhythm.
+   -------------------------------------------------------------------------- */
+.gh-feed-column {
+  width: min(100%, 42rem);
+  margin-inline: auto;
+}
+
+.gh-post-card {
+  border-block: 1px solid color-mix(in oklab, var(--border) 58%, transparent);
+  box-shadow: none;
+}
+
+.gh-marketplace-content {
+  width: 100%;
+  max-width: 76rem;
+  margin-inline: auto;
+}
+
+.gh-wallet-shell > :where(div:nth-child(2)) {
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 639px) {
+  .gh-feed-column {
+    width: 100%;
+  }
+
+  .gh-post-card {
+    border-inline: 0;
+    border-radius: 0;
+  }
+
+  .gh-feed-column > .cv-auto {
+    margin-inline: -0.25rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .gh-feed-scroll {
+    background:
+      linear-gradient(var(--background), var(--background)) padding-box,
+      var(--background);
+  }
+
+  .gh-post-card {
+    border: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+    border-radius: 1rem;
+    box-shadow: var(--gh-card-shadow);
+  }
+}
+
+@media (min-width: 900px) {
+  .gh-marketplace-shell > header {
+    padding-inline: max(1.5rem, calc((100vw - 76rem) / 2));
+  }
+
+  .gh-wallet-shell > :where(div:nth-child(2)) {
+    width: min(100%, 46rem);
+    margin-inline: auto;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Product maturity pass 3 — identity, discovery, membership, messaging,
+   communities. Keep domain/business logic untouched; mature composition only.
+   -------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  .gh-profile-shell > header,
+  .gh-discovery-shell > header,
+  .gh-membership-shell > header,
+  .gh-messages-shell > header {
+    padding-inline: max(1.5rem, calc((100vw - 72rem) / 2));
+  }
+
+  .gh-profile-shell .gh-scroll-root {
+    width: min(100%, 64rem);
+    margin-inline: auto;
+    border-inline: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  }
+
+  .gh-discovery-shell > :where(div:not(.sr-only)) {
+    width: min(100%, 72rem);
+    margin-inline: auto;
+  }
+
+  .gh-discovery-intro > div {
+    box-shadow: none;
+    background: transparent;
+    border-color: transparent;
+    padding-inline: 0;
+  }
+
+  .gh-membership-shell > :where(div:not(.sr-only)) {
+    width: min(100%, 64rem);
+    margin-inline: auto;
+  }
+
+  .gh-messages-shell > :where(div:not(.sr-only)),
+  .gh-messages-shell > header {
+    width: min(100%, 56rem);
+    margin-inline: auto;
+  }
+
+  .gh-communities-shell > :where(div) {
+    width: min(100%, 72rem);
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 639px) {
+  .gh-discovery-intro > div {
+    border-inline: 0;
+    border-radius: 0;
+    box-shadow: none;
+    margin-inline: -0.75rem;
+    padding-inline: 1rem;
+  }
+
+  .gh-profile-shell .gh-scroll-root > :where(section, div) {
+    box-shadow: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Product maturity pass 4 — commerce detail, profile navigation and final
+   surface refinement. Presentation only; domain contracts remain unchanged.
+   -------------------------------------------------------------------------- */
+.gh-listing-detail-grid { width: 100%; }
+.gh-profile-nav { scrollbar-width: none; }
+.gh-profile-nav::-webkit-scrollbar { display: none; }
+
+@media (max-width: 639px) {
+  .gh-marketplace-content { padding-inline: 0.75rem; }
+  .gh-listing-purchase-panel { border-inline: 0; border-radius: 1rem; box-shadow: none; }
+  .gh-profile-nav { margin-inline: 0; }
+}
+
+@media (min-width: 900px) {
+  .gh-listing-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(19rem, .75fr);
+    gap: 1.5rem;
+    align-items: start;
+    padding-block: 1rem;
+  }
+  .gh-listing-purchase-panel {
+    position: sticky;
+    top: 1rem;
+    margin-top: 0;
+  }
+  .gh-profile-shell .gh-scroll-root {
+    background: color-mix(in oklab, var(--background) 96%, var(--muted));
+  }
+  .gh-profile-shell .gh-scroll-root > section,
+  .gh-profile-shell .gh-scroll-root > nav,
+  .gh-profile-shell .gh-scroll-root > div:not(.fixed) {
+    max-width: 58rem;
+    margin-inline: auto;
+  }
+}
+
+
+/* --------------------------------------------------------------------------
+   Product maturity pass 5 — interaction quality, accessibility, empty states,
+   mobile viewport safety and visual restraint. Presentation only.
+   -------------------------------------------------------------------------- */
+.gh-empty-state {
+  min-height: 15rem;
+}
+.gh-empty-state-icon {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  ring: 0;
+}
+
+/* Native mobile viewport units prevent browser chrome from clipping full-screen states. */
+@supports (height: 100dvh) {
+  .gh-app-shell { min-height: 100dvh; }
+}
+
+/* Touch targets stay usable without making desktop controls visually oversized. */
+@media (pointer: coarse) {
+  .gh-app-shell :where(button, a, [role="button"]):not(.gh-compact-control) {
+    min-height: 2.75rem;
+  }
+}
+
+/* Keep hover effects for devices that actually have hover; avoid sticky mobile hover. */
+@media (hover: none) {
+  .gh-app-shell :where(.gh-btn, .gh-cta, .gh-icon-btn, .gh-chip, button, [role="button"]):hover {
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-app-shell *,
+  .gh-app-shell *::before,
+  .gh-app-shell *::after {
+    scroll-behavior: auto !important;
+  }
+  .gh-app-shell :where(.gh-btn, .gh-cta, .gh-icon-btn, .gh-chip, .gh-list-row, .gh-soft-panel) {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .gh-empty-state {
+    min-height: 18rem;
+    padding-block: 4.5rem;
+  }
+}
+
+/* Product maturity pass 6 — shared surface consistency */
+@media (max-width: 639px) {
+  [role="dialog"][aria-modal="true"] {
+    overscroll-behavior: contain;
+  }
+}
+
+:where(button, [role="button"], a, input, textarea, select):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--gh-green) 72%, transparent);
+  outline-offset: 2px;
+}
+
+:where(input, textarea, select) {
+  accent-color: var(--gh-green);
+}
+
+
+/* --------------------------------------------------------------------------
+   Product maturity pass 7 — premium interaction rhythm and financial/commerce
+   surface refinement. Presentation only; no domain or payment changes.
+   -------------------------------------------------------------------------- */
+.gh-sheet-panel {
+  max-height: min(88dvh, 46rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.gh-list-row {
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gh-list-row:hover {
+    border-color: color-mix(in srgb, var(--border) 72%, var(--gh-green));
+  }
+}
+
+.gh-wallet-shell,
+.gh-marketplace-shell {
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-wallet-shell :where(input, textarea, select),
+.gh-marketplace-shell :where(input, textarea, select) {
+  min-height: 2.75rem;
+}
+
+.gh-wallet-shell :where(input, textarea, select):focus,
+.gh-marketplace-shell :where(input, textarea, select):focus {
+  border-color: color-mix(in srgb, var(--gh-green) 45%, var(--border));
+}
+
+@media (max-width: 639px) {
+  .gh-sheet-panel {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}

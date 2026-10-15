@@ -240,9 +240,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
-      <div className="w-full bg-white rounded-t-lg max-h-screen overflow-hidden flex flex-col">
+      <div className="w-full bg-card text-foreground rounded-t-2xl max-h-[100dvh] overflow-hidden flex flex-col">
         {/* Header — always has a clear Back / Close control (Step 1 closes, later steps go previous) */}
-        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-border/70 bg-white z-10">
+        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-border/60 bg-card/95 backdrop-blur z-10">
           <button
             type="button"
             onClick={() => {
@@ -281,7 +281,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
-                className={`h-1 flex-1 rounded-full transition ${s <= step ? "bg-emerald-600" : "bg-gray-200"}`}
+                className={`h-1 flex-1 rounded-full transition ${s <= step ? "bg-emerald-600" : "bg-muted"}`}
               />
             ))}
           </div>
@@ -338,7 +338,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-background text-foreground"
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
@@ -616,14 +616,14 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         </div>
 
         {/* Footer with progress indicator and navigation buttons */}
-        <div className="sticky bottom-0 px-4 py-4 border-t border-border/70 bg-white">
+        <div className="sticky bottom-0 px-4 py-4 border-t border-border/60 bg-card/95 backdrop-blur">
           {/* Progress indicator */}
           <div className="flex gap-1.5 mb-3">
             {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
                 className={`flex-1 h-1.5 rounded-full transition ${
-                  s <= step ? "bg-emerald-600" : "bg-gray-200"
+                  s <= step ? "bg-emerald-600" : "bg-muted"
                 }`}
               />
             ))}

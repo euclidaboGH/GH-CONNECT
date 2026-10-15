@@ -72,7 +72,7 @@ export function CommunitiesSection({
   }, [load])
 
   return (
-    <section className="rounded-2xl bg-white px-4 py-5" aria-labelledby="communities-heading">
+    <section className="rounded-2xl bg-card px-4 py-5 text-card-foreground" aria-labelledby="communities-heading">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-[#7C3AED]" aria-hidden="true" />
@@ -106,7 +106,7 @@ export function CommunitiesSection({
         <p className="text-sm text-muted-foreground">
           {durable
             ? "No public communities yet. Create one from Community."
-            : "Communities will appear here when the server directory is available."}
+            : "Communities are temporarily unavailable. Please try again shortly."}
         </p>
       ) : null}
 

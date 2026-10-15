@@ -258,7 +258,7 @@ export function ProfilePreviewPage({
           )}
         </div>
 
-        {/* Circular action dock — sample-style */}
+        {/* Profile action dock */}
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 bg-gradient-to-t from-black/70 to-transparent px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-10">
           <button
             type="button"

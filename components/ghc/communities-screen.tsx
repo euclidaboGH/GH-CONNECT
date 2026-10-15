@@ -952,7 +952,7 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="gh-communities-shell flex h-full min-h-0 flex-col bg-background">
       <CollapsingAppHeader
         title="Communities"
         compact={headerCompact}

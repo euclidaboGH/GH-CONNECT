@@ -297,8 +297,7 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
 
         {inbox.dataSource === "session_graph" ? (
           <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
-            Showing session graph requests. Multi-device durable inbox activates after the
-            connection-intent migration is applied.
+            Some connection requests are available only on this device right now.
           </p>
         ) : null}
       </div>

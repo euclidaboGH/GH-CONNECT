@@ -29,8 +29,6 @@ import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
 import { PostComposer } from "./post-composer"
 import ProfileStorySection from "./profile-story-section"
-import { HomeCommandCentre } from "./home-command-centre"
-import { TrustDurabilityBanner } from "./trust-durability-banner"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
@@ -652,10 +650,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         role="feed"
         aria-label={`${activeFilter} feed`}
         aria-busy={isRefreshing || isLoadingMore}
-        className="gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background px-1 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
+        className="gh-feed-scroll gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
-        <div className="space-y-3.5 px-3 pb-6 pt-2 sm:px-4 sm:pt-3">
+        <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
           {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
 
@@ -799,15 +797,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             </div>
             ))
           )}
-
-          <div className="pt-2">
-            <HomeCommandCentre
-              onCompose={() => {
-                try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
-              }}
-            />
-            <TrustDurabilityBanner />
-          </div>
 
 {/* Loading indicator */}
           {isLoadingMore && (

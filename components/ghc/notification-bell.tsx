@@ -398,7 +398,7 @@ export function NotificationBell({
             ) : null}
             {durableOk === false && !isOffline ? (
               <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground" role="status">
-                Server notifications unavailable — local notifications only.
+                Some notifications are temporarily unavailable. Please try again shortly.
               </div>
             ) : null}
             <div

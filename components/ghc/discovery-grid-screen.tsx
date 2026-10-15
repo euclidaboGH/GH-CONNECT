@@ -336,7 +336,7 @@ export function DiscoveryGridScreen() {
   const error = ghc.error
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
+    <div className="gh-discovery-shell flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
       <header className="gh-page-header-slim border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -374,11 +374,11 @@ export function DiscoveryGridScreen() {
           </button>
         </div>
       </header>
-      <div className="px-3 pt-2.5">
+      <div className="gh-discovery-intro px-3 pt-2.5">
         <div className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-[var(--gh-card-shadow)]">
-          <p className="text-[13px] font-bold tracking-tight text-foreground">Discover with intent</p>
+          <p className="text-[13px] font-bold tracking-tight text-foreground">Find your people</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            Friendship, work, mentoring, and communities — this is not a dating-only platform. Like or pass for matching; connect when you are ready. Cards explain why they appear.
+            People, communities and opportunities shaped around what you are here to do.
           </p>
         </div>
       </div>
@@ -508,7 +508,7 @@ export function DiscoveryGridScreen() {
           />
         ) : (
           <div
-            className="mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col gap-2.5 pb-2"
+            className="mx-auto flex max-w-[72rem] flex-col gap-2.5 pb-2"
             role="list"
             aria-label="Discovery candidates"
           >

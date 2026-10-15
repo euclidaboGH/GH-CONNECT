@@ -324,7 +324,7 @@ export function MessageScreen() {
     const isCommunity = isCommunityConversation(selected)
 
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
+      <div className="gh-messages-shell flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
         <ChatHeader
           participantName={selected.groupName || selected.participantName || "Chat"}
           participantPhoto={selected.groupPhoto || selected.participantPhoto || ""}
@@ -465,7 +465,7 @@ export function MessageScreen() {
                 window.dispatchEvent(
                   new CustomEvent("ghc:toast", {
                     detail: {
-                      message: "Attachments are not enabled in this build (media storage gated).",
+                      message: "Attachments are not available yet.",
                       type: "info",
                     },
                   })
@@ -493,22 +493,14 @@ export function MessageScreen() {
           <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
             Offline — messages queue on this device and sync when you reconnect.
           </p>
-        ) : durablePreferred ? (
-          <p className="rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/60 px-3.5 py-2 text-[11px] leading-snug text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-            Durable messaging enabled — server confirms delivery when online.
-          </p>
-        ) : (
-          <p className="rounded-[1.25rem] border border-border/50 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
-            Hybrid messaging — server write attempted online; local copy kept if the network fails.
-          </p>
-        )}
+        ) : null}
       </div>
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
             <h1 className="text-[15px] font-bold tracking-tight text-foreground">Messages</h1>
             <p className="text-[11px] text-muted-foreground">
-              DMs · community chat · board lives under Communities
+              Conversations and community chats
             </p>
           </div>
           {unreadCount > 0 ? (
@@ -520,9 +512,7 @@ export function MessageScreen() {
         <div className="mt-2.5">
           <ConversationSearchBar searchQuery={query} onSearchChange={setQuery} />
         </div>
-        <p className="mt-1.5 text-[10px] text-muted-foreground">
-          Private messages stay separate from community boards.
-        </p>
+
         <div
           className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
           role="tablist"

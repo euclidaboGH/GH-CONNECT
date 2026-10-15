@@ -119,7 +119,8 @@ function ListingDetail({
   onBack: () => void
 }) {
   const chip = statusChip(listing.status)
-  const media = listing.media?.[0]
+  const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
+  const media = mediaItems[0]
   const canBuy = listing.status === "active"
 
   return (
@@ -139,7 +140,8 @@ function ListingDetail({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
+      <div className="gh-marketplace-content min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
+        <div className="gh-listing-detail-grid">
         <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-[var(--gh-card-shadow)]">
           <div className="relative aspect-[16/10] w-full bg-muted/40">
             {media ? (
@@ -150,6 +152,15 @@ function ListingDetail({
               </div>
             )}
           </div>
+          {mediaItems.length > 1 ? (
+            <div className="grid grid-cols-4 gap-1 border-t border-border/50 bg-muted/20 p-1.5" aria-label="Listing media">
+              {mediaItems.slice(1, 5).map((item, index) => (
+                <div key={`${item}-${index}`} className="aspect-square overflow-hidden rounded-lg bg-muted">
+                  <img src={item} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="space-y-3 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h2 className="text-lg font-bold leading-snug text-foreground">{listing.title}</h2>
@@ -184,7 +195,12 @@ function ListingDetail({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-2">
+        <aside className="gh-listing-purchase-panel mt-4 flex flex-col gap-2 rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+          <div className="mb-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Purchase</p>
+            <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{formatPrice(listing)}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Review the listing details before continuing to payment.</p>
+          </div>
           {canBuy ? (
             <button
               type="button"
@@ -217,12 +233,11 @@ function ListingDetail({
             <MessageCircle size={16} aria-hidden />
             Message seller
           </button>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            Price and availability are provided by the seller. Review the final payment details before confirming.
+          </p>
+        </aside>
         </div>
-
-        <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground">
-          Prices and availability come from the listing owner. Payments use existing GH Pay / wallet flows —
-          nothing is charged until you confirm.
-        </p>
       </div>
     </div>
   )
@@ -292,7 +307,7 @@ export function MarketplaceScreen({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-marketplace-shell flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 flex-col gap-2.5 border-b border-border/50 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
@@ -400,7 +415,7 @@ export function MarketplaceScreen({
         ) : null}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
+      <div className="gh-marketplace-content min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
         {bucket === "orders" ? (
           orders.length === 0 ? (
             <EmptyState
@@ -440,11 +455,11 @@ export function MarketplaceScreen({
           <div className="flex flex-col items-center px-2 pt-6">
             <EmptyState
               variant="search"
-              title={query || category ? "No matching listings" : "Marketplace is ready"}
+              title={query || category ? "No matching listings" : "No listings yet"}
               description={
                 query || category
                   ? "Try another search or category. Only real listings from sellers appear here."
-                  : "When members publish listings through the existing marketplace flow, they show up here with real prices and availability. Nothing is invented to fill the grid."
+                  : "Seller listings will appear here when they are published and available."
               }
               icon={ShoppingBag}
             />
@@ -457,7 +472,7 @@ export function MarketplaceScreen({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 min-[640px]:grid-cols-3 min-[960px]:grid-cols-4">
             {listings.map((l) => (
               <ListingCard key={l.id} listing={l} onOpen={setSelectedId} />
             ))}

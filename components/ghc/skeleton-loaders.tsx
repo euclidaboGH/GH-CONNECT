@@ -51,7 +51,7 @@ export function AvatarSkeleton({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
 
 export function DiscoverCardSkeleton() {
   return (
-    <div className="w-full space-y-3 rounded-2xl border border-border/50 bg-white p-3">
+    <div className="w-full space-y-3 rounded-2xl border border-border/50 bg-card p-3">
       <div className="aspect-[3/4] w-full animate-pulse rounded-xl bg-muted" />
       <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
       <div className="h-3 w-3/4 animate-pulse rounded bg-muted/60" />
@@ -118,7 +118,7 @@ export function ProfileSkeleton() {
     <div className="animate-pulse" aria-busy="true" aria-label="Loading profile">
       <div className="h-36 bg-muted sm:h-44" />
       <div className="relative mx-auto -mt-12 max-w-2xl px-4">
-        <div className="rounded-3xl border border-border/50 bg-white p-5 shadow-sm">
+        <div className="rounded-3xl border border-border/50 bg-card p-5 shadow-sm">
           <div className="flex items-end gap-4">
             <div className="h-20 w-20 rounded-full bg-muted ring-4 ring-background" />
             <div className="flex-1 space-y-2 pb-2">
@@ -139,7 +139,7 @@ export function ProfileSkeleton() {
 
 export function CommunityCardSkeleton() {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-white p-3">
+    <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-3">
       <div className="h-14 w-14 animate-pulse rounded-xl bg-muted" />
       <div className="flex-1 space-y-2">
         <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
@@ -155,7 +155,7 @@ export function FeedSkeletonList({ count = 4 }: { count?: number }) {
   return (
     <div className="space-y-3 p-3" aria-hidden>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-border/50 bg-white p-3 shadow-sm">
+        <div key={i} className="rounded-xl border border-border/50 bg-card p-3 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
             <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
             <div className="flex-1 space-y-2">

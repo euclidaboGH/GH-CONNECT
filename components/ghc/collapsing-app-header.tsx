@@ -78,7 +78,7 @@ export function CollapsingAppHeader({
 
       {/* Expanded header — part of scroll stream conceptually; hides on scroll-down */}
       <div
-        className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-white/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
+        className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
           hidden && compact
             ? "pointer-events-none max-h-0 -translate-y-2 overflow-hidden opacity-0 border-transparent"
             : "translate-y-0 opacity-100"

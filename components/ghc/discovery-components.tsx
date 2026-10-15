@@ -12,7 +12,7 @@ export { CommunitiesSection } from "./communities-section"
 // SearchBar lives in its own module for reliable named exports in App Studio.
 export { SearchBar } from "./search-bar"
 
-// FilterPanel lives in its own module to avoid re-export/circular issues in the demo runtime.
+// FilterPanel lives in its own module to avoid re-export/circular issues.
 export { FilterPanel } from "./filter-panel"
 export type { FilterPanelProps } from "./filter-panel"
 
@@ -670,14 +670,14 @@ export function BusinessesSection({ onViewBusiness }: { onViewBusiness: (name: s
       <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 text-center shadow-[var(--gh-card-shadow)]">
         <p className="text-sm font-semibold text-foreground">Local businesses</p>
         <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-          Real business listings are not enabled in this build. Nothing here is placeholder data.
+          Business discovery is not available yet. We’ll show verified listings here when it launches.
         </p>
         <button
           type="button"
           onClick={() => onViewBusiness("businesses")}
           className="mt-3 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
         >
-          Notify me later
+          Explore elsewhere
         </button>
       </div>
     </DiscoverySection>

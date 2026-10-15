@@ -472,7 +472,20 @@ export function ProfileScreen({
           </div>
         </div>
 
-        <section className="mt-4 w-full px-4" aria-label="Profile dashboard">
+        <nav className="gh-profile-nav sticky top-0 z-[2] mt-4 flex w-full gap-1 overflow-x-auto border-y border-border/50 bg-background/95 px-4 py-2 backdrop-blur-md" aria-label="Profile sections">
+          {[
+            ["Posts", "gh-profile-posts"],
+            ["Moments", "gh-profile-moments"],
+            ["About", "gh-profile-about"],
+            ["Tools", "gh-profile-tools"],
+          ].map(([label, target]) => (
+            <button key={target} type="button" onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="shrink-0 rounded-full px-4 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</button>
+          ))}
+        </nav>
+
+        <section id="gh-profile-about" className="sr-only" aria-label="Profile about">{p.bio || p.profession || locationLine || "Profile details"}</section>
+
+        <section id="gh-profile-tools" className="mt-3 w-full px-4" aria-label="Profile dashboard">
           <button
             type="button"
             aria-expanded={dashboardPageOpen}
@@ -489,7 +502,7 @@ export function ProfileScreen({
         </section>
 
         {/* Profile sequence: Dashboard → Moments → shared composer → owner timeline. */}
-        <section className="mt-3 w-full px-4" aria-label="Your stories and moments">
+        <section id="gh-profile-moments" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your stories and moments">
           <ProfileStorySection scope="profile" />
         </section>
 
@@ -507,7 +520,7 @@ export function ProfileScreen({
           </button>
         </section>
 
-        <section className="mt-3 w-full px-4" aria-label="Your posts timeline">
+        <section id="gh-profile-posts" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your posts timeline">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
               <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>

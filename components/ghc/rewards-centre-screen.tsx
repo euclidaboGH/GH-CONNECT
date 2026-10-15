@@ -232,7 +232,7 @@ export function RewardsCentreScreen({
         const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
           id: a.achievementId,
           title: a.achievementId.replace(/_/g, " "),
-          description: r.durable ? "Unlocked on this account" : undefined,
+          description: "Unlocked on this account",
           unlockedAt: a.unlockedAt,
         })) as UnlockedAchievementRow[]
         setServerAchievements(rows)

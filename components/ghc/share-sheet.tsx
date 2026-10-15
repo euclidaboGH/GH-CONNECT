@@ -169,7 +169,7 @@ export function ShareSheet({
       aria-label="Share post"
     >
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[min(92vh,36rem)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+      <div className="relative z-10 flex max-h-[min(92dvh,36rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-2xl sm:rounded-[1.25rem]">
         <div className="flex shrink-0 items-center justify-between border-b border-border/50 px-4 py-2.5">
           <h2 className="text-base font-bold text-foreground">Share</h2>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close">
@@ -178,7 +178,7 @@ export function ShareSheet({
         </div>
 
         {/* Original post preview */}
-        <div className="shrink-0 border-b border-gray-50 px-4 py-2.5">
+        <div className="shrink-0 border-b border-border/40 px-4 py-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sharing original post</p>
           <div className="mt-1.5 flex gap-2.5 rounded-xl border border-border/50 bg-muted/40 p-2">
             {post.images?.[0] ? (
@@ -197,7 +197,7 @@ export function ShareSheet({
 
         {/* Recent people — always visible for speed */}
         {recent.length > 0 && (
-          <div className="shrink-0 border-b border-gray-50 px-4 py-2">
+          <div className="shrink-0 border-b border-border/40 px-4 py-2">
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent</p>
             <div className="flex gap-2 overflow-x-auto pb-0.5">
               {recent.map((c) => {
@@ -392,7 +392,7 @@ export function ShareSheet({
           )}
 
           {error && (
-            <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700" role="alert">
+            <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive" role="alert">
               {error}
             </p>
           )}

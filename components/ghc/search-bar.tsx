@@ -126,7 +126,7 @@ export function SearchBar({
       )}
       {isFocused && visibleSearches.length > 0 && (
         <div
-          className="rounded-2xl border border-border/50 bg-white p-2 shadow-lg"
+          className="rounded-2xl border border-border/50 bg-popover p-2 text-popover-foreground shadow-lg"
           role="listbox"
           aria-label="Search suggestions"
         >

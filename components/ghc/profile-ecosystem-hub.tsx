@@ -241,7 +241,7 @@ export function ProfileEcosystemHub({
             <span className="text-sm font-semibold text-muted-foreground">GHC</span>
           </span>
           <span className="mt-0.5 text-[11px] text-muted-foreground">
-            {wallet.durable ? "Ledger balance" : "Open wallet for full ledger"}
+            {wallet.balance == null ? "Open wallet to view balance" : "Available wallet balance"}
           </span>
           <span className="mt-auto flex items-center gap-0.5 pt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
             Open wallet

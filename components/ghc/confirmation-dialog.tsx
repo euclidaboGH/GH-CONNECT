@@ -26,10 +26,10 @@ export function ConfirmationDialog({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
+    <div className="fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <div className="fixed inset-0 bg-black/45 backdrop-blur-[1px]" onClick={onCancel} />
 
-      <div className="relative bg-white rounded-lg shadow-lg max-w-sm w-full p-6 space-y-4">
+      <div className="relative w-full max-w-sm space-y-4 rounded-t-[1.25rem] border border-border/50 bg-card p-5 text-card-foreground shadow-2xl sm:rounded-[1.25rem]">
         <div className="flex items-center gap-3">
           {isDangerous && <AlertCircle size={24} className="text-destructive flex-shrink-0" />}
           <h2 className="text-lg font-semibold text-foreground">{title}</h2>
@@ -40,13 +40,13 @@ export function ConfirmationDialog({
         <div className="flex gap-3 pt-4">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 rounded-lg border border-border/80 text-foreground/90 font-medium hover:bg-muted/40 transition"
+            className="flex-1 min-h-11 rounded-xl border border-border/70 px-4 py-2 text-foreground/90 font-semibold hover:bg-muted/50 transition"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`flex-1 px-4 py-2 rounded-lg text-white font-medium transition ${
+            className={`flex-1 min-h-11 rounded-xl px-4 py-2 text-white font-semibold transition ${
               isDangerous ? "bg-destructive hover:bg-destructive/90" : "bg-primary hover:bg-primary/90"
             }`}
           >

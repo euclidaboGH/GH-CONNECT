@@ -318,7 +318,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)]"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pb-2 pt-4">

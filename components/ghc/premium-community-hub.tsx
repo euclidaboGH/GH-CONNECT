@@ -114,7 +114,7 @@ const ROLE_BADGE: Record<string, string> = {
 
 const HUB_TABS: { id: CommunityHubTab; label: string; icon: React.ReactNode; board?: boolean }[] = [
   { id: "board", label: "Board", icon: <Hash size={14} />, board: true },
-  { id: "announcements", label: "Announce", icon: <Megaphone size={14} />, board: true },
+  { id: "announcements", label: "Updates", icon: <Megaphone size={14} />, board: true },
   { id: "discussion", label: "Discussion", icon: <Pin size={14} />, board: true },
   { id: "events", label: "Events", icon: <Calendar size={14} />, board: true },
   { id: "chat", label: "Chat", icon: <MessageSquare size={14} /> },
@@ -1640,7 +1640,7 @@ export function PremiumCommunityHub({
               <section className="rounded-2xl border border-border bg-card p-4" aria-label="Safety queue">
                 <h2 className="text-xs font-bold text-foreground">Safety queue</h2>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Review reports. Session-scoped until durable audit is enabled.
+                  Review reports from members and take moderation action.
                 </p>
                 {openReports.length === 0 ? (
                   <p className="mt-2 text-[12px] text-muted-foreground">No open reports.</p>
@@ -1710,7 +1710,7 @@ export function PremiumCommunityHub({
                 )}
                 {allReports.filter((r) => r.status !== "open").length > 0 ? (
                   <p className="mt-2 text-[10px] text-muted-foreground">
-                    {allReports.filter((r) => r.status !== "open").length} closed in this session
+                    {allReports.filter((r) => r.status !== "open").length} closed reports
                   </p>
                 ) : null}
               </section>
@@ -1721,7 +1721,7 @@ export function PremiumCommunityHub({
                 <h2 className="text-xs font-bold text-foreground">Moderation log</h2>
                 <p className="mt-1 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Session audit trail (not multi-device durable yet).
+                  Recent moderation actions for this community.
                 </p>
                 {moderationLog.length === 0 ? (
                   <p className="mt-2 text-[12px] text-muted-foreground">No moderation actions yet.</p>

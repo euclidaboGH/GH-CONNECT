@@ -91,7 +91,7 @@ export function ReportChooser({
           aria-modal="true"
           aria-label={`Report ${TARGET_LABELS[targetType]}`}
         >
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-t-[1.25rem] border border-border/50 bg-card p-5 text-card-foreground shadow-2xl sm:rounded-[1.25rem]">
             {!submitted ? (
               <>
                 <div className="mb-4 flex items-center justify-between">

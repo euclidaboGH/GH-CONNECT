@@ -82,7 +82,7 @@ const PRESETS: Record<
   transactions: {
     icon: Inbox,
     title: "No transactions yet",
-    description: "Your GHC activity will appear here when you earn, send, or receive.",
+    description: "Your GHC activity will appear here when you receive, send, or use GHC.",
     gradient: "from-emerald-600 to-teal-500",
   },
   posts: {
@@ -94,13 +94,13 @@ const PRESETS: Record<
   wallet: {
     icon: Inbox,
     title: "Wallet is ready",
-    description: "Earn GHC from rewards or receive from friends. Activity shows up here.",
+    description: "Receive or use GHC when available. Your account activity appears here.",
     gradient: "from-emerald-700 to-teal-600",
   },
   notifications: {
     icon: Inbox,
     title: "You're all caught up",
-    description: "Likes, messages, rewards, and wallet alerts will land here.",
+    description: "Likes, messages, account activity, and other updates will appear here.",
     gradient: "from-slate-500 to-slate-600",
   },
   generic: {
@@ -133,11 +133,11 @@ export function EmptyState({
 
   return (
     <div
-      className={`flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
+      className={`gh-empty-state flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
       role="status"
     >
       <div
-        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white shadow-md shadow-emerald-600/15 ring-4 ring-emerald-600/10 dark:shadow-none`}
+        className={`gh-empty-state-icon relative mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white`}
       >
         <Icon size={28} strokeWidth={2} aria-hidden />
       </div>

@@ -598,7 +598,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           </div>
 
           {showAudience && mode === "post" && (
-            <div className="mb-3 overflow-hidden rounded-2xl border border-border/70 bg-white shadow-sm">
+            <div className="mb-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               {(
                 [
                   { id: "public" as const, label: "Public", desc: "Anyone on GreenHaven", Icon: Globe },
@@ -838,7 +838,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       </div>
 
       {/* Bottom tools — always visible like Facebook */}
-      <footer className="shrink-0 border-t border-border/70 bg-white px-3 py-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
+      <footer className="shrink-0 border-t border-border/60 bg-card px-3 py-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
         <input
           ref={imageInputRef}
           type="file"
