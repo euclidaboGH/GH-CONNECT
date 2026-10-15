@@ -1,12 +1,11 @@
 import type { PendingHold } from "./wallet-types"
 
-export function formatGhc(n: number) {
+export function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
   return `₲ ${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
-})
 }
 
 export function formatWhen(ts: number) {

@@ -494,7 +494,7 @@ export function ProfileScreen({
           >
             <span className="min-w-0">
               <span className="block text-[13px] font-bold text-white">Dashboard</span>
-              <span className="mt-0.5 block text-[11px] text-white/85">Wallet · Rewards · Communities · Tools</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
             </span>
             <span className="ml-3 shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold text-white">Open</span>
           </button>

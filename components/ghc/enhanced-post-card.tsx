@@ -660,10 +660,11 @@ function EnhancedPostCardInner({
           className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
         >
           <MessageCircle size={20} aria-hidden />
-          {(() => {
-            const c = Array.isArray(post.comments) ? post.comments.length : Number(post.engagement?.comments ?? 0)
-            return c > 0 ? <span className="tabular-nums text-xs font-semibold">{c}</span> : null
-          })()}
+          <span className="tabular-nums text-xs font-semibold">
+            {Array.isArray(post.comments)
+              ? post.comments.length
+              : Number(post.engagement?.comments ?? 0)}
+          </span>
         </button>
         <button
           type="button"

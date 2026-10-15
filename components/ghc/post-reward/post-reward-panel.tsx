@@ -1,8 +1,7 @@
 "use client"
 
 /**
- * Compact post reward control (Steem-density).
- * GHC only from server. No educational banners.
+ * Compact post reward control. Amounts only from server.
  */
 import { useCallback, useEffect, useState } from "react"
 import { X } from "lucide-react"
@@ -10,7 +9,10 @@ import type { ContentRewardPublic } from "@/lib/content-reward/public-types"
 
 function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
-  return `₲ ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `₲ ${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function num(v: unknown): number {
@@ -39,7 +41,9 @@ export function PostRewardPanel({
       try {
         const { IdentityService } = await import("@/lib/identity/identity-service")
         headers = { ...(IdentityService.getAuthHeaders?.() || {}) }
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
       try {
         const r = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/reward`, {
           credentials: "include",
@@ -56,10 +60,14 @@ export function PostRewardPanel({
         if (!cancelled) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [postId])
 
-  useEffect(() => load(), [load])
+  useEffect(() => {
+    return load()
+  }, [load])
 
   const up = reward?.upvoteCount ?? upvoteCount
   const down = reward?.downvoteCount ?? downvoteCount
@@ -71,7 +79,9 @@ export function PostRewardPanel({
     reward?.enabled === true &&
     Number.isFinite(total) &&
     total > 0 &&
-    (reward.status === "accruing" || reward.status === "finalized" || reward.status === "distributed")
+    (reward.status === "accruing" ||
+      reward.status === "finalized" ||
+      reward.status === "distributed")
 
   return (
     <>
@@ -91,11 +101,25 @@ export function PostRewardPanel({
         )}
       </button>
       {open ? (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center" role="dialog" aria-modal="true" aria-label="Post reward" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-md rounded-t-2xl border border-border/50 bg-card p-4 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Post reward"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl border border-border/50 bg-card p-4 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-bold">{showMoney ? "Reward" : "Votes"}</h2>
-              <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close" onClick={() => setOpen(false)}>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"
+                aria-label="Close"
+                onClick={() => setOpen(false)}
+              >
                 <X size={18} />
               </button>
             </div>
@@ -119,11 +143,14 @@ export function PostRewardPanel({
                   ) : null}
                 </div>
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  {up} up · {down} down{reward?.status ? ` · ${reward.status}` : ""}
+                  {up} up · {down} down
+                  {reward?.status ? ` · ${reward.status}` : ""}
                 </p>
               </div>
             ) : (
-              <p className="text-sm tabular-nums">{up} up · {down} down</p>
+              <p className="text-sm tabular-nums">
+                {up} up · {down} down
+              </p>
             )}
           </div>
         </div>

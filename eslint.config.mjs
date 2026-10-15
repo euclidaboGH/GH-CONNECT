@@ -11,8 +11,16 @@ const nextConfigs = compat.extends("next/core-web-vitals")
 export default defineConfig([
   ...nextConfigs,
   globalIgnores([
-    ".next/**", "node_modules/**", "coverage/**", "dist/**", "public/**",
-    "scripts/**", "supabase/**", "docs/**", "*.config.js", "*.config.mjs",
+    ".next/**",
+    "node_modules/**",
+    "coverage/**",
+    "dist/**",
+    "public/**",
+    "scripts/**",
+    "supabase/**",
+    "docs/**",
+    "*.config.js",
+    "*.config.mjs",
   ]),
   {
     rules: {

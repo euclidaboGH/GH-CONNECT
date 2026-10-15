@@ -30,9 +30,11 @@ import { collectSendRecipients, type SendRecipient } from "./send-ghc-flow"
 type Step = "payer" | "amount" | "review" | "sending" | "reconciling" | "success" | "error"
 
 function formatGhc(n: number): string {
-  if (!Number.isFinite(n as number)) return "₲ 0.00"
-  return `₲ ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-})
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function formatWhen(ts: number) {

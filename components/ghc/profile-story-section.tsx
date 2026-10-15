@@ -190,7 +190,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
     })
   }
 
-  // GreenHaven Moments: circular cards, own moment first, then the social circle.
+  // GreenHaven Moments: landscape oval cards, own moment first, then the social circle.
   if (scope === "feed") {
     return (
       <section className="-mx-0.5 px-1 py-1.5" aria-label="Stories and status updates">
@@ -207,10 +207,9 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
             aria-label={ownStory ? "View your story" : "Create your first story"}>
             <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
             <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/15" />
-            <span className="relative flex h-full w-full items-center justify-center">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/20"><Plus size={16} strokeWidth={2.5} /></span>
-            </span>
-            <span className="sr-only">{ownStory ? "Your story" : "Add"}</span>
+            <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/15 backdrop-blur-sm"><Plus size={18} strokeWidth={2.5} /></span>
+            <span className="absolute bottom-3 left-3 right-3 z-10 block truncate text-xs font-bold">{ownStory ? "Your story" : "Add a moment"}</span>
+            {ownStory ? <span className="absolute right-3 top-3 z-10 rounded-full bg-white/20 px-2 py-1 text-[9px] font-semibold backdrop-blur-sm">Your story</span> : null}
           </button>
           {otherStories.map((story) => (
             <button key={story.id} type="button" onClick={() => {

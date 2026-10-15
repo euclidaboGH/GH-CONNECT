@@ -519,7 +519,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            {/* single header search */}
+            {/* header search icon only */}
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input
