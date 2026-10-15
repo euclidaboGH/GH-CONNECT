@@ -116,6 +116,15 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     setBusy(true)
     try {
       await addComment(post.id, value, replyToId || undefined)
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:post-engagement", {
+            detail: { postId: post.id, kind: "comment", commentDelta: 1 },
+          })
+        )
+      } catch {
+        /* */
+      }
       setText("")
       setReplyToId(null)
       // Toast may also come from context — keep one friendly line if needed

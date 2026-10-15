@@ -2021,6 +2021,46 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
+
+  // Phase 1 — single engagement pipeline: curation/comments update shared posts[]
+  useEffect(() => {
+    const onEngagement = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as {
+        postId?: string
+        kind?: string
+        upvoteCount?: number
+        downvoteCount?: number
+        commentDelta?: number
+        choice?: string
+      } | null
+      if (!detail?.postId) return
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) => {
+          if (post.id !== detail.postId) return post
+          const next: typeof post = { ...post }
+          if (typeof detail.upvoteCount === "number") {
+            ;(next as { upvoteCount?: number }).upvoteCount = detail.upvoteCount
+            ;(next as { upvote_count?: number }).upvote_count = detail.upvoteCount
+          }
+          if (typeof detail.downvoteCount === "number") {
+            ;(next as { downvoteCount?: number }).downvoteCount = detail.downvoteCount
+            ;(next as { downvote_count?: number }).downvote_count = detail.downvoteCount
+          }
+          if (typeof detail.commentDelta === "number" && detail.commentDelta) {
+            const eng = { ...(next.engagement || {}) }
+            const prev = Number(eng.comments || 0)
+            eng.comments = Math.max(0, prev + detail.commentDelta)
+            next.engagement = eng
+          }
+          return next
+        }),
+      }))
+    }
+    window.addEventListener("ghc:post-engagement", onEngagement as EventListener)
+    return () => window.removeEventListener("ghc:post-engagement", onEngagement as EventListener)
+  }, [])
+
   const editPost = async (
     postId: string,
     newContent: string,

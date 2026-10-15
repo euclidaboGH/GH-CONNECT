@@ -11,6 +11,7 @@ import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal, calculateProfileCompletion, OwnPostCard } from "./profile-components"
+import { CommentSheet } from "./comment-sheet"
 import {
   Settings as SettingsIcon,
   Wallet,
@@ -73,6 +74,7 @@ export function ProfileScreen({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
+  const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -550,10 +552,7 @@ export function ProfileScreen({
                       onDelete={(postId) => { void feed.deletePost(postId) }}
                       onLike={(postId) => { void feed.likePost(postId) }}
                       onComment={(postId) => {
-                        try {
-                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
-                          window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId, action: "comment" } }))
-                        } catch { /* */ }
+                        setCommentingPostId(postId)
                       }}
                       onShare={(postId) => {
                         try {
@@ -577,6 +576,12 @@ export function ProfileScreen({
             )}
           </div>
         </section>
+
+      <CommentSheet
+        post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}
+        open={Boolean(commentingPostId)}
+        onClose={() => setCommentingPostId(null)}
+      />
       </div>
 
       {dashboardPageOpen ? (

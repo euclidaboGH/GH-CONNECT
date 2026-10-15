@@ -125,6 +125,18 @@ function EnhancedPostCardInner({
   const [curationBusy, setCurationBusy] = useState(false)
   const lastCurationAtRef = useRef(0)
   const [judgmentLabel, setJudgmentLabel] = useState<string | null>(null)
+  // Keep card in sync when the same post is updated from feed or profile
+  const propUpvote =
+    (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ??
+    (post as { upvote_count?: number }).upvote_count
+  const propDownvote =
+    (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ??
+    (post as { downvote_count?: number }).downvote_count
+  useEffect(() => {
+    if (typeof propUpvote === "number" && Number.isFinite(propUpvote)) setUpvoteCount(Math.max(0, propUpvote))
+    if (typeof propDownvote === "number" && Number.isFinite(propDownvote)) setDownvoteCount(Math.max(0, propDownvote))
+  }, [post.id, propUpvote, propDownvote])
+
   const netJudgment = upvoteCount - downvoteCount
 
   useEffect(() => {
@@ -172,8 +184,26 @@ function EnhancedPostCardInner({
       const res = await socialSetCuration(post.id, choice)
       if (res.ok && res.choice) {
         setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
+        const nextUp = typeof res.upvoteCount === "number" ? res.upvoteCount : upvoteCount
+        const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
+        // Phase 1: broadcast so feed + profile share the same engagement pipeline
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:post-engagement", {
+              detail: {
+                postId: post.id,
+                kind: "curation",
+                choice: res.choice,
+                upvoteCount: nextUp,
+                downvoteCount: nextDown,
+              },
+            })
+          )
+        } catch {
+          /* */
+        }
       }
     } finally {
       setCurationBusy(false)
