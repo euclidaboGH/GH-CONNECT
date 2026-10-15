@@ -19,7 +19,7 @@ export function PostInsightsSheet({
   return (
     <div className="fixed inset-0 z-[75] flex items-end bg-black/40 sm:items-center sm:justify-center" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-card p-5 shadow-2xl sm:rounded-2xl"
+        className="w-full max-w-sm rounded-t-[1.75rem] border border-border/50 bg-card p-5 shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -40,14 +40,14 @@ export function PostInsightsSheet({
             { icon: Share2, label: "Shares", value: i.shares },
             { icon: Bookmark, label: "Saves", value: i.saves },
           ].map((row) => (
-            <div key={row.label} className="rounded-2xl bg-muted/40 p-3 ring-1 ring-gray-100">
-              <row.icon size={16} className="mb-1 text-purple-600" />
+            <div key={row.label} className="rounded-[1.25rem] border border-border/50 bg-card p-3 shadow-[var(--gh-card-shadow)]">
+              <row.icon size={16} className="mb-1 text-violet-600" />
               <p className="text-lg font-bold text-foreground">{row.value}</p>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-between rounded-xl bg-purple-50 px-3 py-2 text-[11px] font-semibold text-purple-800">
+        <div className="mt-3 flex items-center justify-between rounded-[1.25rem] border border-violet-200/60 bg-violet-50/70 px-3 py-2 text-[11px] font-semibold text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
           <span>Audience: {String((i as any).audience || post.visibility || "public")}</span>
           <span>~{i.engagementRate}% eng.</span>
         </div>

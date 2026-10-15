@@ -1321,3 +1321,503 @@ body {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+
+/* --------------------------------------------------------------------------
+   GreenHaven reference-standard UI — 2026-10-15
+   Visual composition follows the user-approved reference: bright social shell,
+   green + violet identity, prominent search, substantial content cards and a
+   five-destination bottom bar with a raised gradient Create control.
+   Business logic and server authority are intentionally unchanged.
+   -------------------------------------------------------------------------- */
+:root {
+  --gh-standard-green: #079447;
+  --gh-standard-green-deep: #006b35;
+  --gh-standard-violet: #6d28d9;
+  --gh-standard-magenta: #d946ef;
+  --gh-standard-ink: #16133a;
+  --gh-standard-soft: #f7f7fc;
+  --gh-bottom-nav-height: 5.35rem;
+}
+
+.gh-app-shell {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--background) 96%, #ede9fe) 0%, var(--background) 28%);
+}
+
+.gh-page-header-slim {
+  background: color-mix(in oklab, var(--background) 97%, white) !important;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 48%, transparent) !important;
+  box-shadow: 0 2px 14px rgba(34, 24, 78, .045);
+}
+
+.gh-standard-search {
+  min-height: 2.8rem;
+  border-radius: 1.1rem;
+  background: linear-gradient(90deg, rgba(109,40,217,.055), rgba(217,70,239,.035));
+}
+
+.gh-feed-scroll { background: #f7f7fb; }
+.dark .gh-feed-scroll { background: var(--background); }
+
+.gh-feed-column {
+  width: min(100%, 46rem);
+  padding-inline: .65rem;
+}
+
+.gh-post-card {
+  border: 1px solid rgba(76, 62, 126, .10) !important;
+  border-radius: 1.45rem !important;
+  background: var(--card) !important;
+  box-shadow: 0 8px 28px rgba(38, 28, 78, .065) !important;
+}
+
+.gh-post-card img { border-radius: inherit; }
+
+.gh-bottom-nav {
+  min-height: var(--gh-bottom-nav-height) !important;
+  padding-top: .5rem !important;
+  background: color-mix(in oklab, var(--background) 97%, white) !important;
+  border-top: 1px solid rgba(72, 59, 118, .11) !important;
+  box-shadow: 0 -8px 28px rgba(38, 28, 78, .06) !important;
+  overflow: visible !important;
+}
+
+.gh-bottom-nav button { font-size: .75rem; }
+.gh-bottom-nav button[aria-current="page"] { color: var(--gh-standard-green) !important; }
+.gh-bottom-nav button[aria-current="page"] > span:first-child { background: var(--gh-standard-green) !important; }
+
+.gh-create-fab {
+  width: 3.7rem !important;
+  height: 3.7rem !important;
+  transform: translateY(-.72rem) !important;
+  background: linear-gradient(145deg, #00c96b 8%, #05b98b 38%, #7357e8 72%, #d946ef 100%) !important;
+  box-shadow: 0 9px 22px rgba(92, 54, 210, .28) !important;
+  border: 3px solid color-mix(in oklab, var(--background) 94%, white);
+}
+
+.gh-balance-hero {
+  background: linear-gradient(135deg, #006c3b 0%, #009b4f 54%, #12bf67 100%) !important;
+}
+
+.gh-wallet-shell { background: #f8faf9; }
+.dark .gh-wallet-shell { background: var(--background); }
+
+@media (max-width: 639px) {
+  .gh-feed-column { padding-inline: .55rem; }
+  .gh-feed-column > .cv-auto { margin-inline: 0 !important; }
+  .gh-post-card {
+    border-inline: 1px solid rgba(76, 62, 126, .10) !important;
+    border-radius: 1.3rem !important;
+  }
+}
+
+@media (min-width: 900px) {
+  .gh-feed-column { width: min(100%, 50rem); }
+}
+
+/* ========================================================================
+   GREENHAVEN WORLD-CLASS REFERENCE SYSTEM — LOCKED 2026-10-15
+   Approved visual samples are the source of truth for presentation.
+   ======================================================================== */
+:root {
+  --gh-ref-green-950: #043d24;
+  --gh-ref-green-900: #075b32;
+  --gh-ref-green-800: #08763e;
+  --gh-ref-green-700: #079447;
+  --gh-ref-green-600: #08ad55;
+  --gh-ref-green-500: #10c767;
+  --gh-ref-violet-800: #4c1d95;
+  --gh-ref-violet-700: #6d28d9;
+  --gh-ref-violet-600: #7c3aed;
+  --gh-ref-magenta-600: #c026d3;
+  --gh-ref-magenta-500: #d946ef;
+  --gh-ref-ink: #17133b;
+  --gh-ref-muted: #66627d;
+  --gh-ref-canvas: #f7f7fc;
+  --gh-ref-surface: #ffffff;
+  --gh-ref-line: rgba(63, 49, 109, .11);
+  --gh-ref-positive: #079447;
+  --gh-ref-negative: #df1662;
+  --gh-ref-radius-card: 1.45rem;
+  --gh-ref-radius-control: 1rem;
+  --gh-ref-shadow: 0 8px 30px rgba(38, 28, 78, .065);
+  --gh-ref-shadow-float: 0 12px 34px rgba(61, 34, 133, .18);
+  --gh-content-max: 76rem;
+}
+
+.gh-app-shell { max-width: 100% !important; background: var(--gh-ref-canvas) !important; }
+.dark .gh-app-shell { background: var(--background) !important; }
+
+/* A phone-first composition that grows into a real desktop product instead of a stretched phone. */
+.gh-feed-column { width: min(100%, 46rem); margin-inline: auto; }
+@media (min-width: 1024px) { .gh-feed-column { width: min(100%, 48rem); } }
+
+.gh-page-header-slim {
+  min-height: 4.5rem;
+  background: rgba(255,255,255,.96) !important;
+  border-color: var(--gh-ref-line) !important;
+  box-shadow: 0 2px 16px rgba(38,28,78,.055) !important;
+  backdrop-filter: blur(18px);
+}
+.dark .gh-page-header-slim { background: color-mix(in oklab,var(--background) 94%,transparent) !important; }
+
+.gh-standard-search {
+  min-height: 3rem;
+  border: 1px solid rgba(109,40,217,.06);
+  border-radius: 1.4rem;
+  background: linear-gradient(90deg,#f4f1fb 0%,#f8f4fc 100%) !important;
+  color: var(--gh-ref-ink);
+}
+
+.gh-post-card {
+  border: 1px solid var(--gh-ref-line) !important;
+  border-radius: var(--gh-ref-radius-card) !important;
+  box-shadow: var(--gh-ref-shadow) !important;
+}
+
+/* Reference-standard controls: emerald positive, pink negative, violet social utility. */
+.gh-post-card button { -webkit-tap-highlight-color: transparent; }
+.gh-post-card [data-vote="up"], .gh-vote-up { color: var(--gh-ref-positive) !important; }
+.gh-post-card [data-vote="down"], .gh-vote-down { color: var(--gh-ref-negative) !important; }
+
+.gh-bottom-nav {
+  min-height: 5.6rem !important;
+  background: rgba(255,255,255,.97) !important;
+  border-color: var(--gh-ref-line) !important;
+  box-shadow: 0 -8px 28px rgba(38,28,78,.07) !important;
+  backdrop-filter: blur(18px);
+}
+.dark .gh-bottom-nav { background: color-mix(in oklab,var(--background) 95%,transparent) !important; }
+.gh-bottom-nav button { font-size: .78rem !important; }
+.gh-bottom-nav button[aria-current="page"] { color: var(--gh-ref-green-700) !important; }
+.gh-bottom-nav button[aria-current="page"] > span:first-child { background: var(--gh-ref-green-700) !important; }
+.gh-create-fab {
+  width: 4.1rem !important;
+  height: 4.1rem !important;
+  transform: translateY(-.9rem) !important;
+  background: linear-gradient(145deg,#00cf72 4%,#00b982 34%,#7654e8 70%,#d946ef 100%) !important;
+  border: 4px solid rgba(255,255,255,.96) !important;
+  box-shadow: 0 10px 25px rgba(91,55,201,.30) !important;
+}
+
+.gh-balance-hero {
+  background: linear-gradient(135deg,var(--gh-ref-green-950) 0%,var(--gh-ref-green-800) 48%,var(--gh-ref-green-500) 100%) !important;
+}
+
+/* Approved samples use clean white panels with fine green/violet-tinted structure. */
+.gh-reference-panel {
+  border: 1px solid var(--gh-ref-line);
+  border-radius: var(--gh-ref-radius-card);
+  background: var(--card);
+  box-shadow: var(--gh-ref-shadow);
+}
+.gh-reference-soft-green { background: linear-gradient(135deg,rgba(16,199,103,.08),rgba(255,255,255,.96)); }
+.gh-reference-soft-violet { background: linear-gradient(135deg,rgba(109,40,217,.07),rgba(217,70,239,.045)); }
+.gh-reference-gradient-text {
+  background: linear-gradient(90deg,var(--gh-ref-green-700),var(--gh-ref-violet-700),var(--gh-ref-magenta-500));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+@media (max-width: 639px) {
+  :root { --gh-content-max: 100%; }
+  .gh-feed-scroll { background: var(--gh-ref-canvas); }
+  .gh-feed-column { padding-inline: .55rem; }
+  .gh-post-card { border-radius: 1.35rem !important; }
+}
+
+/* WORLD-CLASS PASS 2 — approved-sample composition applied to identity/discovery. */
+.gh-world-profile,
+.gh-world-discovery { background: var(--gh-ref-canvas) !important; }
+.dark .gh-world-profile,
+.dark .gh-world-discovery { background: var(--background) !important; }
+
+.gh-world-profile-header,
+.gh-world-discovery-header { padding-inline: clamp(1rem, 3vw, 1.5rem) !important; }
+
+.gh-world-profile .gh-scroll-root {
+  width: min(100%, 54rem);
+  margin-inline: auto;
+  background: var(--gh-ref-surface);
+  border-inline: 1px solid var(--gh-ref-line);
+}
+.dark .gh-world-profile .gh-scroll-root { background: var(--card); }
+.gh-world-profile-cover { min-height: 10rem; }
+.gh-world-profile-identity { padding-bottom: .35rem; }
+
+.gh-world-discovery-intro,
+.gh-world-discovery > [role="tablist"],
+.gh-world-discovery > .gh-world-discovery-results,
+.gh-world-discovery > :where(.sr-only + div) {
+  width: min(100%, 72rem);
+  margin-inline: auto;
+}
+.gh-world-discovery-intro .gh-reference-panel {
+  background: linear-gradient(125deg, rgba(7,148,71,.11), rgba(255,255,255,.97) 48%, rgba(109,40,217,.055));
+}
+.dark .gh-world-discovery-intro .gh-reference-panel {
+  background: linear-gradient(125deg, rgba(16,199,103,.12), color-mix(in oklab,var(--card) 96%,transparent) 48%, rgba(109,40,217,.12));
+}
+.gh-world-discovery-results [role="list"] > div:not(:first-child) {
+  border-radius: var(--gh-ref-radius-card);
+}
+
+@media (min-width: 760px) {
+  .gh-world-profile { padding-inline: 1rem; }
+  .gh-world-profile .gh-scroll-root {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--gh-ref-line);
+    border-radius: 1.7rem;
+    box-shadow: var(--gh-ref-shadow);
+    overflow: auto;
+  }
+  .gh-world-profile-cover { border-radius: 1.65rem 1.65rem 0 0; }
+  .gh-world-discovery-results [role="list"] {
+    display: grid !important;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: .9rem !important;
+    align-items: start;
+  }
+  .gh-world-discovery-results [role="list"] > div:first-child { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1120px) {
+  .gh-world-discovery-results [role="list"] { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+
+/* WORLD-CLASS PASS 3 — Messages, Communities, Membership.
+   The approved GreenHaven samples remain the visual authority. */
+.gh-world-messages,
+.gh-world-community,
+.gh-world-membership {
+  background: var(--gh-ref-canvas) !important;
+}
+.dark .gh-world-messages,
+.dark .gh-world-community,
+.dark .gh-world-membership { background: var(--background) !important; }
+
+/* Messages: calm premium inbox, generous identity rows, sample-standard green/violet hierarchy. */
+.gh-world-inbox > header {
+  background: color-mix(in oklab,var(--gh-ref-surface) 94%,transparent) !important;
+  border-color: var(--gh-ref-line) !important;
+  padding-inline: clamp(.9rem,3vw,1.4rem) !important;
+  padding-bottom: .85rem !important;
+}
+.gh-world-inbox > header h1 { font-size: 1.25rem !important; font-weight: 850 !important; letter-spacing: -.025em; }
+.gh-world-inbox > header [role="tablist"] {
+  border-color: var(--gh-ref-line) !important;
+  background: rgba(109,40,217,.045) !important;
+}
+.gh-world-inbox > :last-child { width: min(100%,54rem); margin-inline:auto; }
+.gh-world-messages [role="log"] { width:min(100%,54rem); margin-inline:auto; padding-inline:clamp(.75rem,2vw,1.25rem) !important; }
+.gh-world-messages > :last-child { border-color:var(--gh-ref-line) !important; background:color-mix(in oklab,var(--gh-ref-surface) 96%,transparent) !important; }
+
+/* Communities: turn the detail view into a branded destination instead of a utility panel. */
+.gh-world-community > header {
+  width:min(100%,72rem);
+  margin-inline:auto;
+  border:1px solid var(--gh-ref-line) !important;
+  background:var(--gh-ref-surface) !important;
+  box-shadow:var(--gh-ref-shadow);
+}
+.gh-world-community > header > div:first-child { min-height:10.5rem; }
+.gh-world-community > header h1 { font-size:clamp(1.1rem,2vw,1.4rem) !important; }
+.gh-world-community > :not(header) { width:min(100%,72rem); margin-inline:auto; }
+
+/* Membership: one premium product surface, not a stack of unrelated dashboard cards. */
+.gh-world-membership > header {
+  background:color-mix(in oklab,var(--gh-ref-surface) 94%,transparent) !important;
+  border-color:var(--gh-ref-line) !important;
+  padding-inline:clamp(.9rem,3vw,1.4rem) !important;
+}
+.gh-world-membership > header h1 { font-size:1.2rem !important; font-weight:850 !important; letter-spacing:-.025em; }
+.gh-world-membership > div:last-child { width:min(100%,68rem); margin-inline:auto; }
+.gh-world-membership .gh-card {
+  border-color:var(--gh-ref-line) !important;
+  border-radius:var(--gh-ref-radius-card) !important;
+  box-shadow:var(--gh-ref-shadow) !important;
+}
+
+@media (min-width:760px) {
+  .gh-world-inbox { padding-inline:1rem; }
+  .gh-world-inbox > header { width:min(100%,54rem); margin:1rem auto 0; border:1px solid var(--gh-ref-line) !important; border-radius:1.55rem 1.55rem 0 0; }
+  .gh-world-inbox > :last-child { margin-bottom:1rem; border:1px solid var(--gh-ref-line); border-top:0; border-radius:0 0 1.55rem 1.55rem; background:var(--gh-ref-surface); box-shadow:var(--gh-ref-shadow); }
+  .gh-world-community { padding:1rem; }
+  .gh-world-community > header { border-radius:1.75rem 1.75rem 1.2rem 1.2rem; overflow:hidden; }
+  .gh-world-community > :not(header) { background:var(--gh-ref-surface); border-inline:1px solid var(--gh-ref-line); }
+  .gh-world-membership { padding-inline:1rem; }
+  .gh-world-membership > header { width:min(100%,68rem); margin:1rem auto 0; border:1px solid var(--gh-ref-line) !important; border-radius:1.55rem; box-shadow:var(--gh-ref-shadow); }
+  .gh-world-membership > div:last-child { padding-inline:0 !important; padding-top:1rem !important; }
+}
+
+/* WORLD-CLASS PASS 4 — Marketplace, Wallet, GHC Journey.
+   Uses the approved sample composition without inventing balances, rewards or trust claims. */
+.gh-world-marketplace,
+.gh-world-wallet { background: var(--gh-ref-canvas) !important; }
+.dark .gh-world-marketplace,
+.dark .gh-world-wallet { background: var(--background) !important; }
+
+.gh-world-marketplace > header {
+  background: color-mix(in oklab,var(--gh-ref-surface) 96%,transparent) !important;
+  border-color: var(--gh-ref-line) !important;
+  backdrop-filter: blur(18px);
+}
+.gh-world-marketplace .gh-marketplace-content { width:min(100%,76rem); margin-inline:auto; }
+.gh-world-marketplace .gh-listing-detail-grid > :first-child,
+.gh-world-marketplace .gh-listing-purchase-panel {
+  border-color:var(--gh-ref-line) !important;
+  border-radius:var(--gh-ref-radius-card) !important;
+  box-shadow:var(--gh-ref-shadow) !important;
+}
+.gh-world-marketplace .gh-listing-purchase-panel { background:var(--gh-ref-surface); }
+.dark .gh-world-marketplace .gh-listing-purchase-panel { background:var(--card); }
+
+/* Wallet follows the approved phone sample: strong balance hero, action dock, assets, then activity. */
+.gh-world-wallet > header { border-color:var(--gh-ref-line) !important; }
+.gh-world-wallet > div:last-child { width:min(100%,68rem); margin-inline:auto; }
+.gh-world-wallet .gh-reference-panel,
+.gh-world-wallet [class*="rounded-[1.25rem]"] { border-color:var(--gh-ref-line); }
+.gh-world-wallet .gh-balance-hero { min-height:11.25rem; display:flex; flex-direction:column; justify-content:center; }
+
+/* Journey becomes a premium destination while preserving server-authoritative values. */
+.gh-world-journey { width:min(calc(100% - 1.5rem),68rem); margin-inline:auto !important; }
+.gh-world-journey > section { border-color:var(--gh-ref-line) !important; }
+.gh-world-journey > section:first-child { overflow:hidden; }
+
+@media (min-width:760px) {
+  .gh-world-marketplace { padding-inline:1rem; }
+  .gh-world-marketplace > header {
+    width:min(100%,76rem); margin:1rem auto 0; border:1px solid var(--gh-ref-line) !important;
+    border-radius:1.55rem; box-shadow:var(--gh-ref-shadow);
+  }
+  .gh-world-marketplace .gh-marketplace-content { padding-inline:0 !important; padding-top:1rem !important; }
+  .gh-world-wallet { padding-inline:1rem; }
+  .gh-world-wallet > header { width:min(100%,68rem); margin:1rem auto 0; border:1px solid var(--gh-ref-line) !important; border-radius:1.45rem; box-shadow:var(--gh-ref-shadow); }
+  .gh-world-wallet > div:last-child { padding-top:.35rem; }
+  .gh-world-journey { margin-top:1rem !important; }
+}
+
+@media (min-width:1024px) {
+  .gh-world-marketplace .gh-listing-detail-grid { grid-template-columns:minmax(0,1.65fr) minmax(20rem,.75fr); gap:1.15rem; align-items:start; }
+  .gh-world-marketplace .gh-listing-purchase-panel { position:sticky; top:1rem; margin-top:0 !important; }
+  .gh-world-wallet > div:last-child { display:block; }
+  .gh-world-journey { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(19rem,.65fr); gap:1rem; align-items:start; }
+  .gh-world-journey > section:first-child { grid-row:span 2; }
+}
+
+/* WORLD-CLASS PASS 5 — creation, media, activity and transaction surfaces.
+   Approved GreenHaven samples remain the visual authority. */
+.gh-world-compose { background:var(--gh-ref-canvas) !important; }
+.dark .gh-world-compose { background:var(--background) !important; }
+.gh-world-compose > header,
+.gh-world-compose > footer {
+  background:color-mix(in oklab,var(--gh-ref-surface) 96%,transparent) !important;
+  border-color:var(--gh-ref-line) !important;
+  backdrop-filter:blur(18px);
+}
+.gh-world-compose textarea { letter-spacing:-.012em; }
+.gh-world-compose img { background:var(--muted); }
+
+.gh-world-notifications > div:last-child {
+  border-color:var(--gh-ref-line) !important;
+  background:var(--gh-ref-surface) !important;
+  box-shadow:var(--gh-ref-shadow) !important;
+}
+.dark .gh-world-notifications > div:last-child { background:var(--card) !important; }
+.gh-world-notifications ul > li button { min-height:4.6rem; }
+
+.gh-world-transaction > div:last-child {
+  border-color:var(--gh-ref-line) !important;
+  box-shadow:var(--gh-ref-shadow) !important;
+}
+.gh-world-transaction dl > div { min-height:2.5rem; align-items:center; }
+
+.gh-world-media-viewer { background:rgba(5,5,12,.985) !important; }
+.gh-world-media-viewer > div:nth-child(2) { padding-inline:clamp(.5rem,2vw,1.25rem); }
+.gh-world-media-viewer img { border-radius:.65rem; box-shadow:0 20px 70px rgba(0,0,0,.42); }
+
+@media (min-width:760px) {
+  .gh-world-compose { padding:1rem; justify-content:center; }
+  .gh-world-compose > header,
+  .gh-world-compose > [role="tablist"],
+  .gh-world-compose > div,
+  .gh-world-compose > footer { width:min(100%,46rem); margin-inline:auto; }
+  .gh-world-compose > header { border:1px solid var(--gh-ref-line) !important; border-radius:1.55rem 1.55rem 0 0; }
+  .gh-world-compose > [role="tablist"] { border-inline:1px solid var(--gh-ref-line); background:var(--gh-ref-surface) !important; }
+  .gh-world-compose > div { border-inline:1px solid var(--gh-ref-line); background:var(--gh-ref-surface); }
+  .gh-world-compose > footer { border:1px solid var(--gh-ref-line) !important; border-radius:0 0 1.55rem 1.55rem; box-shadow:var(--gh-ref-shadow); }
+  .dark .gh-world-compose > [role="tablist"], .dark .gh-world-compose > div { background:var(--card) !important; }
+  .gh-world-notifications > div:last-child { top:1rem !important; border-radius:1.55rem !important; max-height:min(86vh,46rem) !important; }
+  .gh-world-media-viewer > div:nth-child(2) { padding:1.25rem 2rem; }
+}
+
+/* World-class pass 6 — approved reference consistency */
+.gh-premium-dialog,
+[role="dialog"] > .gh-premium-surface {
+  backdrop-filter: saturate(1.08);
+}
+
+@media (min-width: 768px) {
+  .gh-marketplace-content > ul,
+  .gh-marketplace-content > .space-y-2\.5 {
+    max-width: 54rem;
+    margin-inline: auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gh-btn, .gh-standard-search, .gh-premium-dialog {
+    transition-duration: 180ms;
+  }
+}
+
+/* WORLD-CLASS PASS 7 — final shared-surface conformity.
+   Keeps the four approved reference screens as the visual source of truth. */
+:root {
+  --gh-control-radius: 999px;
+  --gh-sheet-radius: 1.75rem;
+  --gh-touch: 44px;
+}
+
+/* Interactive controls: confident, soft and consistent with the reference. */
+.gh-world-shell button,
+.gh-world-shell [role="button"] { -webkit-tap-highlight-color: transparent; }
+.gh-world-shell input:not([type="checkbox"]):not([type="radio"]),
+.gh-world-shell select { min-height: var(--gh-touch); }
+
+/* Bottom sheets/dialogs should read as one product family rather than legacy utilities. */
+.gh-premium-dialog,
+.gh-premium-surface {
+  border-color: var(--gh-ref-line) !important;
+  box-shadow: var(--gh-ref-shadow) !important;
+}
+
+/* Skeletons inherit theme tokens; never expose old grey prototype blocks in dark mode. */
+.animate-pulse .bg-muted { background-color: color-mix(in oklab, var(--muted) 88%, var(--gh-ref-violet) 12%) !important; }
+
+/* Dense utility actions become compact pills, matching the approved samples. */
+.gh-world-shell .gh-utility-action {
+  min-height: 2.75rem;
+  border-radius: var(--gh-control-radius);
+  border: 1px solid var(--gh-ref-line);
+  background: var(--gh-ref-surface);
+}
+.dark .gh-world-shell .gh-utility-action { background: var(--card); }
+
+/* Keyboard accessibility remains visible without changing the brand palette. */
+.gh-world-shell :where(button,a,input,textarea,select,[tabindex]):focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--gh-ref-violet) 35%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .gh-premium-dialog,
+  .gh-premium-surface { border-radius: var(--gh-sheet-radius) var(--gh-sheet-radius) 0 0; }
+}
+
+/* GreenHaven approved-reference modal depth */
+:root {
+  --gh-modal-shadow: 0 24px 70px rgba(23, 19, 59, 0.18), 0 8px 24px rgba(109, 40, 217, 0.08);
+}
+.dark {
+  --gh-modal-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), 0 8px 24px rgba(109, 40, 217, 0.10);
+}

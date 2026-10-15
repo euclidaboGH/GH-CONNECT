@@ -29,13 +29,13 @@ export default function GlobalError({
           textAlign: "center",
           fontFamily: "system-ui, sans-serif",
           background: "#ffffff",
-          color: "#0a0a0a",
+          color: "#17133B",
         }}
       >
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#059669" }}>GreenHaven</p>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#079447" }}>GreenHaven</p>
         <h1 style={{ margin: 0, fontSize: 24 }}>Something went wrong</h1>
-        <p style={{ margin: 0, maxWidth: 360, fontSize: 14, color: "#525252" }}>
-          The app failed to load. Your data is safe. Please try again.
+        <p style={{ margin: 0, maxWidth: 360, fontSize: 14, color: "#6B6880" }}>
+          GreenHaven could not finish loading. Please try again.
         </p>
         <button
           type="button"
@@ -45,7 +45,7 @@ export default function GlobalError({
             padding: "0 20px",
             border: 0,
             borderRadius: 999,
-            background: "#059669",
+            background: "#079447",
             color: "#fff",
             fontWeight: 700,
             fontSize: 14,

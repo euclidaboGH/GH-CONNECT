@@ -19,7 +19,7 @@ export default function Error({
       <p className="text-sm font-semibold tracking-wide text-emerald-600">GreenHaven</p>
       <h1 className="text-2xl font-bold">Something went wrong</h1>
       <p className="max-w-sm text-sm text-muted-foreground">
-        We hit an unexpected problem. Your data is safe. Try again, or reload the app.
+        We hit an unexpected problem. We hit an unexpected problem. Try again, or return to GreenHaven.
       </p>
       <div className="mt-2 flex gap-3">
         <button

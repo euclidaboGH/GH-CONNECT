@@ -336,8 +336,8 @@ export function DiscoveryGridScreen() {
   const error = ghc.error
 
   return (
-    <div className="gh-discovery-shell flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
-      <header className="gh-page-header-slim border-b border-border/50 bg-card/95 backdrop-blur-md">
+    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
+      <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">Discover</h1>
@@ -374,8 +374,8 @@ export function DiscoveryGridScreen() {
           </button>
         </div>
       </header>
-      <div className="gh-discovery-intro px-3 pt-2.5">
-        <div className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-[var(--gh-card-shadow)]">
+      <div className="gh-discovery-intro gh-world-discovery-intro px-3 pt-2.5">
+        <div className="gh-reference-panel gh-reference-soft-green px-4 py-3">
           <p className="text-[13px] font-bold tracking-tight text-foreground">Find your people</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
             People, communities and opportunities shaped around what you are here to do.
@@ -443,7 +443,7 @@ export function DiscoveryGridScreen() {
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 gh-scroll-root overflow-y-auto px-3 pb-24 pt-1">
+      <div className="gh-world-discovery-results min-h-0 flex-1 gh-scroll-root overflow-y-auto px-3 pb-24 pt-1">
         {loading ? (
           <div className="space-y-3" aria-busy="true" aria-label="Loading discovery">
             {[1, 2, 3].map((i) => (

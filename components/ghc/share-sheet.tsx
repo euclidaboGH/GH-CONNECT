@@ -169,7 +169,7 @@ export function ShareSheet({
       aria-label="Share post"
     >
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[min(92dvh,36rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-2xl sm:rounded-[1.25rem]">
+      <div className="relative z-10 flex max-h-[min(92dvh,36rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]">
         <div className="flex shrink-0 items-center justify-between border-b border-border/50 px-4 py-2.5">
           <h2 className="text-base font-bold text-foreground">Share</h2>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close">

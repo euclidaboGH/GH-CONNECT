@@ -351,30 +351,30 @@ export function GhPayPanel({
       <div className="mt-2 flex items-center gap-2 rounded-xl border border-dashed border-border/80 px-3 py-2">
         <ShoppingBag size={14} className="shrink-0 text-muted-foreground" />
         <p className="text-[11px] text-muted-foreground">
-          Marketplace checkout uses the same GH Pay intents when you pay a listing with π.
+          Marketplace purchases can be completed with π through GH Pay.
         </p>
       </div>
 
-      {/* Optional pipeline check — secondary */}
+      {/* First-time payment readiness check */}
       {!verified ? (
         <div className="mt-3 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
           <p className="text-[11px] font-semibold text-foreground">First-time Pi setup</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Optional 0.01 π check confirms the payment pipeline. It does not change GHC.
+            A small 0.01 π check can confirm that Pi payments are ready on this device. It does not change GHC.
           </p>
           <button
             type="button"
             disabled={Boolean(busy)}
-            onClick={() => void runProduct("pipeline_verification", "Pipeline check")}
+            onClick={() => void runProduct("pipeline_verification", "Payment check")}
             className="mt-2 inline-flex min-h-9 w-full items-center justify-center rounded-full border border-border bg-background text-[12px] font-bold text-foreground disabled:opacity-60"
           >
-            {busy === "pipeline_verification" ? "Waiting for Pi…" : "Run 0.01 π check"}
+            {busy === "pipeline_verification" ? "Waiting for Pi…" : "Confirm with 0.01 π"}
           </button>
         </div>
       ) : (
         <p className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 size={14} />
-          Pi payment pipeline verified on this device
+          Pi payments ready on this device
         </p>
       )}
 
@@ -459,8 +459,7 @@ export function GhPayPanel({
 
       <p className="mt-3 flex items-start gap-1 text-[10px] leading-snug text-muted-foreground">
         <ExternalLink size={10} className="mt-0.5 shrink-0" />
-        Server payment intents bind each Pi payment to your account, purpose, and order before
-        approve/complete.
+        Payments are authorized in Pi Wallet and matched to the GreenHaven purchase you selected.
       </p>
     </section>
   )

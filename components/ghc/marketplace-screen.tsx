@@ -124,7 +124,7 @@ function ListingDetail({
   const canBuy = listing.status === "active"
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="gh-world-marketplace flex h-full min-h-0 flex-col bg-background">
       <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
         <button
           type="button"
@@ -370,7 +370,7 @@ export function MarketplaceScreen({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search listings…"
-                className="h-11 w-full rounded-xl border border-border/70 bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                className="gh-standard-search h-11 w-full border border-border/70 pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {query ? (
                 <button
@@ -421,7 +421,7 @@ export function MarketplaceScreen({
             <EmptyState
               variant="transactions"
               title="No orders yet"
-              description="When you buy or sell on Marketplace, order status will appear here from the existing order flow."
+              description="Your Marketplace purchases and sales will appear here with their latest status."
               icon={Package}
             />
           ) : (
@@ -429,12 +429,12 @@ export function MarketplaceScreen({
               {orders.map((o) => (
                 <li
                   key={o.id}
-                  className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]"
+                  className="rounded-[1.5rem] border border-violet-200/35 bg-card p-4 shadow-[var(--gh-card-shadow)]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">
-                        Order · {o.listingId}
+                        Marketplace order
                       </p>
                       <p className="mt-0.5 text-[12px] text-muted-foreground">
                         {o.quantity} × {o.unitPrice} {o.currency}

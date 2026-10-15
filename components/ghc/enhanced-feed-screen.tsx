@@ -519,7 +519,16 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            {isSearchOpen && (
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className="gh-standard-search mb-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-muted/55 px-4 py-2.5 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Search GreenHaven"
+            >
+              <Search size={19} aria-hidden="true" />
+              <span className="truncate">Search GreenHaven...</span>
+            </button>
+            {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input
                   type="text"
@@ -529,16 +538,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   className="flex-1 rounded-full border border-border/70 bg-muted/40 px-4 py-2 text-sm outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
                   autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSearchOpen(false)
-                    setSearchQuery("")
-                  }}
-                  className="rounded-full px-3 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-muted"
-                >
-                  Cancel
-                </button>
               </div>
             )}
             <div

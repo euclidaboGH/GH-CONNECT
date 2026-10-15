@@ -152,7 +152,7 @@ export function RewardsJourneyHero({
     {
       id: "profile",
       label: "Complete your profile",
-      ghc: 5,
+      ghc: null,
       done: Boolean(ghc.profile?.bio) && Boolean((ghc.profile as { photos?: string[] })?.photos?.[0]),
       action: () => {
         try {
@@ -166,7 +166,7 @@ export function RewardsJourneyHero({
     {
       id: "post",
       label: "Share a thoughtful post",
-      ghc: 2,
+      ghc: null,
       done: false,
       action: () => {
         try {
@@ -180,7 +180,7 @@ export function RewardsJourneyHero({
     {
       id: "interact",
       label: "Meaningful interaction",
-      ghc: 1,
+      ghc: null,
       done: false,
       action: () => {
         try {
@@ -198,13 +198,13 @@ export function RewardsJourneyHero({
     prog.nextAt != null ? Math.max(0, prog.nextAt - xp) : 0
 
   return (
-    <div className="mx-3 mt-3 space-y-4">
+    <div className="gh-world-journey mx-3 mt-3 space-y-4">
       {/* Journey hero — real XP / balance / level only */}
       <section
-        className="overflow-hidden rounded-[1.5rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow-lg)]"
+        className="gh-reference-panel overflow-hidden"
         aria-label="Your GHC journey"
       >
-        <div className="border-b border-border/50 bg-gradient-to-br from-emerald-50/90 via-card to-card px-4 pb-4 pt-4 dark:from-emerald-950/30 dark:via-card dark:to-card">
+        <div className="gh-reference-soft-green border-b border-border/50 px-4 pb-4 pt-4 dark:from-emerald-950/30 dark:via-card dark:to-card">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">
@@ -371,9 +371,13 @@ export function RewardsJourneyHero({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-semibold text-foreground">{op.label}</span>
-                <span className="text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
-                  +{formatGhc(op.ghc)} GHC
-                </span>
+                {typeof op.ghc === "number" ? (
+                  <span className="text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+                    +{formatGhc(op.ghc)} GHC
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-muted-foreground">Quality activity</span>
+                )}
               </span>
               {op.done ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-[11px] font-bold text-muted-foreground">

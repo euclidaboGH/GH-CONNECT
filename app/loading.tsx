@@ -6,8 +6,11 @@ export default function Loading() {
       role="status"
       aria-live="polite"
     >
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" aria-hidden />
-      <p className="text-sm text-muted-foreground">Loading GreenHaven…</p>
+      <div className="flex h-16 w-16 items-center justify-center rounded-[1.35rem] bg-gradient-to-br from-emerald-500 via-emerald-600 to-violet-600 shadow-[0_18px_45px_rgba(7,148,71,0.22)]" aria-hidden>
+        <div className="h-7 w-7 animate-spin rounded-full border-[3px] border-white/40 border-t-white" />
+      </div>
+      <p className="text-base font-extrabold tracking-tight">GreenHaven</p>
+      <p className="text-sm text-muted-foreground">Preparing your experience…</p>
     </main>
   )
 }

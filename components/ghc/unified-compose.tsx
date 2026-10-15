@@ -489,7 +489,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-background text-foreground"
+      className="gh-world-compose fixed inset-0 z-[70] flex flex-col bg-background text-foreground"
       role="dialog"
       aria-modal="true"
       aria-labelledby="unified-compose-title"

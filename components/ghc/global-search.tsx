@@ -354,7 +354,7 @@ export function GlobalSearchModal({
   return (
     <div className="fixed inset-0 z-[80] flex flex-col bg-black/40" role="dialog" aria-modal="true" aria-label="Search">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close search" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[90dvh] flex-col rounded-b-2xl bg-card text-foreground shadow-2xl sm:mx-auto sm:mt-8 sm:w-full sm:max-w-lg sm:rounded-2xl">
+      <div className="relative z-10 flex max-h-[90dvh] flex-col rounded-b-[1.75rem] bg-card text-foreground shadow-2xl sm:mx-auto sm:mt-8 sm:w-full sm:max-w-lg sm:rounded-[1.75rem]">
         <div className="flex items-center gap-2 border-b border-border px-3 py-3">
           <Search size={18} className="shrink-0 text-muted-foreground" />
           <input

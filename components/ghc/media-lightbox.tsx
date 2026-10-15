@@ -36,7 +36,7 @@ export function MediaLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex flex-col bg-black"
+      className="gh-world-media-viewer fixed inset-0 z-[90] flex flex-col bg-black"
       role="dialog"
       aria-modal="true"
       aria-label="Media viewer"

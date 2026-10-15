@@ -67,7 +67,7 @@ export function SoftPanel({
 }) {
   return (
     <Tag
-      className={`rounded-2xl border border-border/80 bg-card/95 p-4 shadow-sm shadow-black/[0.03] dark:shadow-none ${className}`}
+      className={`rounded-[1.45rem] border border-border/60 bg-card/95 p-4 shadow-[var(--gh-card-shadow)] ${className}`}
     >
       {children}
     </Tag>

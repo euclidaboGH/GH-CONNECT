@@ -39,7 +39,7 @@ export function WalletBalanceCard({
 
   return (
     <section
-      className="mx-3 mt-3 overflow-hidden rounded-[1.5rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow-lg)]"
+      className="gh-reference-panel mx-3 mt-3 overflow-hidden"
       aria-label="GHC wallet balance"
     >
       {/* Premium balance hero — restrained gradient, strong hierarchy */}
@@ -98,9 +98,9 @@ export function WalletBalanceCard({
         <div className="relative mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/65">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/15 px-2.5 py-0.5 font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-200" aria-hidden />
-            Ledger secured
+            Available balance
           </span>
-          {synced && <span>Synced {synced}</span>}
+          {synced && <span>Updated {synced}</span>}
         </div>
       </div>
 

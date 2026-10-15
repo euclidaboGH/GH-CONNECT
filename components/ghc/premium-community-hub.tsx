@@ -394,7 +394,7 @@ export function PremiumCommunityHub({
   }, [community.isJoined])
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-world-community flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Cover + identity kit */}
       <header className="shrink-0 border-b border-border/50 bg-card">
         <div

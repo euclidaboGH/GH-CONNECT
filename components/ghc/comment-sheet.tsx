@@ -364,13 +364,13 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+        className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-modal-shadow)] sm:mx-auto sm:max-w-2xl sm:rounded-[1.75rem]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-sheet-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
           <div>
             <h3 id="comment-sheet-title" className="flex items-center gap-1.5 text-base font-bold text-foreground">
               <MessageCircle size={16} className="text-emerald-600" />
@@ -385,7 +385,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
             <button
               type="button"
               onClick={() => setSortMode((m) => (m === "newest" ? "oldest" : "newest"))}
-              className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-bold text-stone-600"
+              className="rounded-full bg-muted/70 px-2.5 py-1 text-[10px] font-bold text-muted-foreground"
               aria-label={`Sort by ${sortMode}`}
             >
               {sortMode === "newest" ? "Newest" : "Oldest"}
@@ -407,8 +407,8 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <MessageCircle size={22} />
               </div>
-              <p className="text-sm font-semibold text-stone-800">No comments yet</p>
-              <p className="mt-1 max-w-xs text-xs text-stone-500">
+              <p className="text-sm font-semibold text-foreground">No comments yet</p>
+              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
                 Be the first with a thoughtful reply. Quality comments help the conversation — spam does not.
               </p>
             </div>
@@ -428,7 +428,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           )}
         </div>
 
-        <div className="border-t border-stone-100 bg-white px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+        <div className="border-t border-border/50 bg-card px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
           {replyParent && (
             <div className="mb-2 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2">
               <div className="min-w-0 flex-1">

@@ -29,24 +29,24 @@ export function ConfirmationDialog({
     <div className="fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div className="fixed inset-0 bg-black/45 backdrop-blur-[1px]" onClick={onCancel} />
 
-      <div className="relative w-full max-w-sm space-y-4 rounded-t-[1.25rem] border border-border/50 bg-card p-5 text-card-foreground shadow-2xl sm:rounded-[1.25rem]">
+      <div className="gh-premium-dialog relative w-full max-w-md space-y-4 rounded-t-[1.75rem] border border-violet-200/45 bg-card p-5 text-card-foreground shadow-[0_24px_70px_rgba(23,19,59,0.18)] sm:rounded-[1.75rem] sm:p-6">
         <div className="flex items-center gap-3">
           {isDangerous && <AlertCircle size={24} className="text-destructive flex-shrink-0" />}
-          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
         </div>
 
-        <p className="text-muted-foreground text-sm">{message}</p>
+        <p className="text-muted-foreground text-sm leading-relaxed">{message}</p>
 
         <div className="flex gap-3 pt-4">
           <button
             onClick={onCancel}
-            className="flex-1 min-h-11 rounded-xl border border-border/70 px-4 py-2 text-foreground/90 font-semibold hover:bg-muted/50 transition"
+            className="gh-btn gh-btn-secondary flex-1 min-h-12 rounded-full px-4 py-2 font-bold"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`flex-1 min-h-11 rounded-xl px-4 py-2 text-white font-semibold transition ${
+            className={`flex-1 min-h-12 rounded-full px-4 py-2 text-white font-bold shadow-sm transition active:scale-[0.99] ${
               isDangerous ? "bg-destructive hover:bg-destructive/90" : "bg-primary hover:bg-primary/90"
             }`}
           >

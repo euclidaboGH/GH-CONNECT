@@ -147,7 +147,7 @@ export function ActionSheet({
       />
       <div
         ref={panelRef}
-        className="relative z-[201] flex w-full max-w-md flex-col rounded-t-[1.25rem] border border-border/50 bg-card shadow-2xl sm:mb-6 sm:rounded-[1.25rem]"
+        className="relative z-[201] flex w-full max-w-md flex-col rounded-t-[1.75rem] border border-violet-200/45 bg-card shadow-[0_24px_70px_rgba(23,19,59,0.20)] sm:mb-6 sm:rounded-[1.75rem]"
         style={{
           marginBottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
           maxHeight: "min(72vh, 32rem)",
@@ -157,7 +157,7 @@ export function ActionSheet({
         <div className="flex shrink-0 items-center justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
         </div>
-        <p className="shrink-0 px-4 pb-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        <p className="shrink-0 px-5 pb-2 pt-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
           {title}
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2">
@@ -167,7 +167,7 @@ export function ActionSheet({
           <button
             type="button"
             onClick={close}
-            className="min-h-11 w-full rounded-2xl bg-muted py-3 text-sm font-bold text-foreground transition active:scale-[0.99]"
+            className="min-h-12 w-full rounded-full border border-border/60 bg-muted/70 py-3 text-sm font-bold text-foreground transition active:scale-[0.99]"
           >
             Close
           </button>

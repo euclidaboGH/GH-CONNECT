@@ -273,8 +273,8 @@ export function ProfileScreen({
   }
 
   return (
-    <div className="gh-profile-shell flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
-      <header className="flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
+    <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
+      <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-4 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
         <div className="flex items-center gap-1">
           <PremiumSurfaceActions />
@@ -317,7 +317,7 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="relative block h-40 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-48"
+          className="gh-world-profile-cover relative block h-40 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-52"
           aria-label="Change cover photo"
         >
           {cover ? (
@@ -330,7 +330,7 @@ export function ProfileScreen({
         </button>
 
         {/* AVATAR row — overlaps cover; content is full width below */}
-        <div className="relative z-[1] w-full px-4">
+        <div className="gh-world-profile-identity relative z-[1] w-full px-4">
           <div className="-mt-12 flex items-end justify-between">
             <button
               type="button"

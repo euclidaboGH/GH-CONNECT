@@ -18,31 +18,31 @@ import { openListing, messageListingSeller } from "@/lib/marketplace/commerce-ac
 // Skeleton loader for posts
 export function PostSkeleton() {
   return (
-    <div className="bg-card border border-border/70 rounded-lg overflow-hidden shadow-sm animate-pulse">
+    <div className="bg-card border border-border/60 rounded-[1.45rem] overflow-hidden shadow-sm animate-pulse">
       {/* Header skeleton */}
       <div className="p-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-gray-300"></div>
+          <div className="w-9 h-9 rounded-full bg-muted"></div>
           <div className="space-y-1">
-            <div className="h-3 w-24 bg-gray-300 rounded"></div>
-            <div className="h-2 w-16 bg-gray-200 rounded"></div>
+            <div className="h-3 w-24 bg-muted rounded"></div>
+            <div className="h-2 w-16 bg-muted/70 rounded"></div>
           </div>
         </div>
-        <div className="w-5 h-5 bg-gray-300 rounded"></div>
+        <div className="w-5 h-5 bg-muted rounded"></div>
       </div>
 
       {/* Content skeleton */}
       <div className="p-3 space-y-2">
-        <div className="h-3 bg-gray-300 rounded w-full"></div>
-        <div className="h-3 bg-gray-300 rounded w-5/6"></div>
-        <div className="h-32 bg-gray-300 rounded mt-2"></div>
+        <div className="h-3 bg-muted rounded w-full"></div>
+        <div className="h-3 bg-muted rounded w-5/6"></div>
+        <div className="h-32 bg-muted rounded mt-2"></div>
       </div>
 
       {/* Actions skeleton */}
       <div className="px-3 py-2 bg-muted/40 border-t border-border/50 flex justify-around">
-        <div className="h-6 w-12 bg-gray-300 rounded"></div>
-        <div className="h-6 w-12 bg-gray-300 rounded"></div>
-        <div className="h-6 w-12 bg-gray-300 rounded"></div>
+        <div className="h-6 w-12 bg-muted rounded"></div>
+        <div className="h-6 w-12 bg-muted rounded"></div>
+        <div className="h-6 w-12 bg-muted rounded"></div>
       </div>
     </div>
   )
@@ -253,7 +253,7 @@ export const PostCard = memo(function PostCard({
             {post.images.slice(0, 4).map((image, idx) => (
               <div
                 key={idx}
-                className={`relative bg-gray-200 cursor-pointer hover:opacity-90 transition-opacity ${post.images.length === 1 ? "aspect-[4/3]" : "aspect-square"}`}
+                className={`relative bg-muted/70 cursor-pointer hover:opacity-90 transition-opacity ${post.images.length === 1 ? "aspect-[4/3]" : "aspect-square"}`}
               >
                 <LazyImage
                   src={image || `/avatars/post-${idx + 1}.svg`}
@@ -272,13 +272,13 @@ export const PostCard = memo(function PostCard({
 
       {/* Video/PDF indicators */}
       {post.video && (
-        <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/45 px-3 py-2 text-xs font-medium text-muted-foreground">
           <Video size={15} aria-hidden="true" />
           <span>Video attached</span>
         </div>
       )}
       {post.pdf && (
-        <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/45 px-3 py-2 text-xs font-medium text-muted-foreground">
           <FileText size={15} aria-hidden="true" />
           <span>{post.pdfName || "Attached document"}</span>
         </div>
@@ -300,7 +300,7 @@ export const PostCard = memo(function PostCard({
       <div className="px-3 py-2 bg-card border-t border-border/50 flex items-center justify-around text-xs">
         <button
           onClick={() => onLike(post.id)}
-          className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 ${
+          className={`flex items-center gap-1 py-2 px-3 rounded-full font-semibold transition-all active:scale-95 ${
             isLiked
               ? "text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40"
               : "text-muted-foreground hover:bg-pink-50 hover:text-pink-500"
@@ -312,7 +312,7 @@ export const PostCard = memo(function PostCard({
 
         <button
           onClick={() => onComment(post.id)}
-          className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 text-muted-foreground ${
+          className={`flex items-center gap-1 py-2 px-3 rounded-full font-semibold transition-all active:scale-95 text-muted-foreground ${
             isCommentingPostId ? "bg-sky-50 text-sky-600" : "hover:bg-sky-50 hover:text-sky-600"
           }`}
         >
@@ -323,7 +323,7 @@ export const PostCard = memo(function PostCard({
         <div className="relative">
           <button
             onClick={() => setShowShareMenu(!showShareMenu)}
-            className="flex items-center gap-1 py-2 px-3 rounded-lg font-semibold text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 transition-all active:scale-95"
+            className="flex items-center gap-1 py-2 px-3 rounded-full font-semibold text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 transition-all active:scale-95"
           >
             <Share2 size={14} />
             Share
@@ -340,7 +340,7 @@ export const PostCard = memo(function PostCard({
 
         <button
           onClick={() => onBookmark?.(post.id)}
-          className={`flex items-center gap-1 py-2 px-3 rounded-lg font-semibold transition-all active:scale-95 ${
+          className={`flex items-center gap-1 py-2 px-3 rounded-full font-semibold transition-all active:scale-95 ${
             isBookmarked
               ? "text-blue-600 bg-blue-50"
               : "text-muted-foreground hover:bg-blue-50 hover:text-blue-600"

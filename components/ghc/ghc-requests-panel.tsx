@@ -176,7 +176,7 @@ export function GhcRequestsPanel({ open, onClose, availableBalance, onChanged }:
       aria-label="GHC requests"
     >
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-2xl">
+      <div className="relative z-[1] flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border bg-card shadow-xl sm:rounded-[1.75rem]">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <button
             type="button"
