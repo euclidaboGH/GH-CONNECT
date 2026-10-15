@@ -89,7 +89,6 @@ export function PollComposer({
           const res = await fetch("/api/social/polls", {
             method: "POST",
             credentials: "include",
-          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) },
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               question: question.trim(),
@@ -153,7 +152,7 @@ export function PollComposer({
         </button>
       </header>
 
-      <div className="mx-auto w-full max-w-[var(--gh-content-max,100%)] flex-1 overflow-y-auto px-4 py-4">
+      <div className="mx-auto w-full max-w-[var(--gh-content-max,28rem)] flex-1 overflow-y-auto px-4 py-4">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
             <BarChart3 size={22} />

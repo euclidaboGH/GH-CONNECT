@@ -1941,4 +1941,3 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     </div>
   )
 }
-

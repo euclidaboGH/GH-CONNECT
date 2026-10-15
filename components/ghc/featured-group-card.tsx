@@ -126,4 +126,3 @@ function FeaturedGroupCardContent({
 
 export const FeaturedGroupCard = memo(FeaturedGroupCardContent)
 FeaturedGroupCard.displayName = "FeaturedGroupCard"
-

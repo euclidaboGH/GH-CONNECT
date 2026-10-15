@@ -214,11 +214,6 @@ interface GHCContextType {
     pdfName: string | null,
     audience?: "public" | "followers" | "mutuals" | "private",
     community?: { id: string; name: string } | null,
-    spotlight?: {
-      communities?: Array<{ id: string; name: string }>
-      profiles?: Array<{ id: string; username: string; displayName?: string; photo?: string }>
-      hashtags?: string[]
-    } | null,
   ) => Promise<boolean>
   likePost: (postId: string) => Promise<void>
   reactToPost: (postId: string, reaction?: string) => Promise<void>
@@ -1409,11 +1404,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     pdfName: string | null,
     audience: "public" | "followers" | "mutuals" | "private" = "public",
     community?: { id: string; name: string } | null,
-    spotlight?: {
-      communities?: Array<{ id: string; name: string }>
-      profiles?: Array<{ id: string; username: string; displayName?: string; photo?: string }>
-      hashtags?: string[]
-    } | null,
   ): Promise<boolean> => {
     try {
       // Rate limit check
@@ -1462,21 +1452,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(domainResult.error || "Failed to create post", "error")
         return false
       }
-      let newPost = domainResult.data
-      try {
-        const { sanitizeSpotlightCommunities, sanitizeSpotlightProfiles, mergeHashtags } = await import("@/lib/spotlight-tags")
-        const spotlightCommunities = sanitizeSpotlightCommunities(spotlight?.communities)
-        const spotlightProfiles = sanitizeSpotlightProfiles(spotlight?.profiles)
-        const hashtags = mergeHashtags(sanitizedContent, spotlight?.hashtags)
-        const mentions = spotlightProfiles.map((p) => p.username)
-        newPost = {
-          ...newPost,
-          hashtags: hashtags.length ? hashtags : newPost.hashtags,
-          mentions: mentions.length ? mentions : newPost.mentions,
-          spotlightCommunities: spotlightCommunities.length ? spotlightCommunities : undefined,
-          spotlightProfiles: spotlightProfiles.length ? spotlightProfiles : undefined,
-        }
-      } catch { /* optional */ }
+      const newPost = domainResult.data
 
       setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
 
@@ -1499,10 +1475,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           contentType: newPost.contentType,
           listingId: newPost.listingId,
           listingKind: newPost.listingKind,
-          hashtags: newPost.hashtags,
-          mentions: newPost.mentions,
-          spotlightCommunities: newPost.spotlightCommunities,
-          spotlightProfiles: newPost.spotlightProfiles,
         })
         if (remote.ok === false) {
           durableStatus = "unconfirmed"
@@ -5586,4 +5558,3 @@ export function useGHCFeed() {
 export function useGHCCommunity() {
   return useGHCMessaging()
 }
-

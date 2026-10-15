@@ -196,4 +196,3 @@ const SuggestedGroupsCardComponent = ({
 
 export const SuggestedGroupsCard = memo(SuggestedGroupsCardComponent)
 SuggestedGroupsCard.displayName = "SuggestedGroupsCard"
-

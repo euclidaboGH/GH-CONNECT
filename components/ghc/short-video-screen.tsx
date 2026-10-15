@@ -53,7 +53,6 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
     try {
       const res = await fetch("/api/social/short-video?limit=24", {
         credentials: "include",
-          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) },
         headers: { Accept: "application/json" },
       })
       const data = (await res.json().catch(() => ({}))) as {

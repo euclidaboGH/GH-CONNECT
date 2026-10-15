@@ -317,7 +317,7 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="gh-world-profile-cover relative block h-36 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-44"
+          className="gh-world-profile-cover relative block h-40 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-52"
           aria-label="Change cover photo"
         >
           {cover ? (

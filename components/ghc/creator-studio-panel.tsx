@@ -36,8 +36,7 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/social/creator", { credentials: "include",
-          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) }, cache: "no-store" })
+      const res = await fetch("/api/social/creator", { credentials: "include", cache: "no-store" })
       const data = await res.json()
       if (data?.ok) {
         setCreator(data.creator || {})

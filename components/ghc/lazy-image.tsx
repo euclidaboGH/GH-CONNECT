@@ -62,4 +62,3 @@ function LazyImageInner({ src, alt, className = "", onLoad, onError, onClick, on
 
 export const LazyImage = memo(LazyImageInner)
 LazyImage.displayName = "LazyImage"
-

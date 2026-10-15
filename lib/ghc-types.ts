@@ -203,10 +203,8 @@ export interface Post {
   scheduledFor?: number // timestamp for scheduled posts
   isScheduled?: boolean
   quoteOf?: string // id of quoted post
-  hashtags?: string[]
-  mentions?: string[]
-  spotlightCommunities?: Array<{ id: string; name: string; slug?: string }>
-  spotlightProfiles?: Array<{ id: string; username: string; displayName?: string; photo?: string }>
+  hashtags?: string[] // #hashtag references
+  mentions?: string[] // @username references
   linkPreview?: LinkPreview | null
   bookmarkedBy?: string[] // user ids who bookmarked
   collections?: string[] // collection names (e.g., "Read Later", "Favorites")

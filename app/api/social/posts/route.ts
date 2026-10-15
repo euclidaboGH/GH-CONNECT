@@ -206,14 +206,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const { sanitizeSpotlightCommunities, sanitizeSpotlightProfiles, mergeHashtags } = await import("@/lib/spotlight-tags")
-  const spotlightCommunities = sanitizeSpotlightCommunities(body.spotlightCommunities)
-  const spotlightProfiles = sanitizeSpotlightProfiles(body.spotlightProfiles)
-  const hashtags = mergeHashtags(content, Array.isArray(body.hashtags) ? body.hashtags.map(String) : [])
-  const mentions = Array.isArray(body.mentions)
-    ? body.mentions.map((m) => String(m).replace(/^@/, "").slice(0, 40)).filter(Boolean).slice(0, 10)
-    : []
-
   const row = {
     id,
     authorId: auth.userId,
@@ -231,10 +223,6 @@ export async function POST(request: Request) {
     communityName: body.communityName ? String(body.communityName) : null,
     contentType,
     createdAt: Date.now(),
-    hashtags,
-    mentions,
-    spotlightCommunities: spotlightCommunities.length ? spotlightCommunities : undefined,
-    spotlightProfiles: spotlightProfiles.length ? spotlightProfiles : undefined,
     ...(quoteOf ? { quoteOf } : {}),
   }
 

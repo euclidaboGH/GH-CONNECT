@@ -324,4 +324,3 @@ const EnhancedGroupMessageComponent = ({
 // Export memoized version for performance
 export const EnhancedGroupMessage = memo(EnhancedGroupMessageComponent)
 EnhancedGroupMessage.displayName = "EnhancedGroupMessage"
-

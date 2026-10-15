@@ -158,8 +158,7 @@ export function ProfileContentLibrary({
         const params = new URLSearchParams({ limit: "30", kind: mediaKindForApi(kind) })
         if (query.trim()) params.set("q", query.trim().slice(0, 120))
         const response = await fetch(`/api/social/profile/${encodeURIComponent(profileId)}/posts?${params.toString()}`, {
-          credentials: "include",
-          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) }, cache: "no-store", signal: controller.signal,
+          credentials: "include", cache: "no-store", signal: controller.signal,
         })
         const data = await response.json().catch(() => ({})) as { ok?: boolean; posts?: LibraryPost[]; hasMore?: boolean; nextBefore?: number | null; nextBeforeId?: string | null; error?: string; message?: string }
         if (!response.ok || !data.ok) throw new Error(data.message || (data.error === "PROFILE_CONTENT_MIGRATION_REQUIRED" ? "Profile library is awaiting its Testnet database migration." : data.error) || `Content could not be loaded (${response.status})`)

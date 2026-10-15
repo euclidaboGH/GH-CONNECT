@@ -66,9 +66,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [storyAudience, setStoryAudience] = useState<"everyone" | "followers" | "friends" | "private">("followers")
   const [isPublishing, setIsPublishing] = useState(false)
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>("")
-  const [spotlightCommunityIds, setSpotlightCommunityIds] = useState<string[]>([])
-  const [spotlightProfileIds, setSpotlightProfileIds] = useState<string[]>([])
-  const [spotlightPanel, setSpotlightPanel] = useState<"off" | "communities" | "people">("off")
   const [promptHint, setPromptHint] = useState(pickComposePrompt)
 
 
@@ -410,20 +407,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           selectedCommunityId
             ? communityOptions.find((c) => c.id === selectedCommunityId) || null
             : null
-        const spotlightCommunities = spotlightCommunityIds
-          .map((id) => communityOptions.find((c) => c.id === id))
-          .filter((c): c is { id: string; name: string } => Boolean(c))
-          .slice(0, 5)
-        const spotlightProfiles = ((candidates || []) as Array<{ id?: string; username?: string; displayName?: string; photos?: string[] }>)
-          .filter((c) => spotlightProfileIds.includes(String(c.id || "")))
-          .map((c) => ({
-            id: String(c.id),
-            username: String(c.username || c.displayName || "").replace(/^@/, ""),
-            displayName: c.displayName,
-            photo: c.photos?.[0],
-          }))
-          .filter((c) => c.id && c.username)
-          .slice(0, 10)
         const created = await createPost(
           text.trim(),
           selectedImages,
@@ -432,7 +415,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           selectedDocName,
           audience,
           community,
-          { communities: spotlightCommunities, profiles: spotlightProfiles },
         )
         if (created) {
           try { void piLocalRemove("post-draft-v1"); window.localStorage.removeItem("ghc-post-draft-v1") } catch { /* ignore */ }
@@ -588,40 +570,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 Also shares to the community board. Still respects your visibility setting.
               </p>
             ) : null}
-          </div>
-        )}
-
-
-        {mode === "post" && (
-          <div className="border-b border-border/40 px-3 pb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Spotlight tags</p>
-              <p className="text-[10px] text-muted-foreground">{spotlightCommunityIds.length}/5 communities · {spotlightProfileIds.length}/10 people</p>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" onClick={() => setSpotlightPanel((v) => v === "communities" ? "off" : "communities")} className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${spotlightPanel==="communities"?"border-emerald-500 bg-emerald-50 text-emerald-800":"border-border bg-card"}`}>Communities</button>
-              <button type="button" onClick={() => setSpotlightPanel((v) => v === "people" ? "off" : "people")} className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${spotlightPanel==="people"?"border-violet-500 bg-violet-50 text-violet-800":"border-border bg-card"}`}>People</button>
-              {spotlightCommunityIds.map((id) => { const c=communityOptions.find(x=>x.id===id); return c?(<button key={id} type="button" onClick={()=>setSpotlightCommunityIds(p=>p.filter(x=>x!==id))} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">#{c.name} ×</button>):null })}
-              {spotlightProfileIds.map((id) => { const person=(candidates||[]).find((c:any)=>String(c.id)===id) as any; const label=person?String(person.username||person.displayName||"member"):"member"; return (<button key={id} type="button" onClick={()=>setSpotlightProfileIds(p=>p.filter(x=>x!==id))} className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">@{label.replace(/^@/,"")} ×</button>) })}
-            </div>
-            {spotlightPanel==="communities" && (
-              <div className="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border/50 bg-muted/20 p-2">
-                {communityOptions.length===0?<p className="text-[11px] text-muted-foreground">Join communities to tag them.</p>:communityOptions.map(c=>{
-                  const on=spotlightCommunityIds.includes(c.id)
-                  return <button key={c.id} type="button" disabled={!on&&spotlightCommunityIds.length>=5} onClick={()=>setSpotlightCommunityIds(p=>on?p.filter(x=>x!==c.id):p.length>=5?p:[...p,c.id])} className={`flex w-full justify-between rounded-lg px-2 py-1.5 text-sm ${on?"bg-emerald-100 font-semibold":"hover:bg-muted"}`}>#{c.name}<span className="text-[10px] text-muted-foreground">{on?"Tagged":"Tag"}</span></button>
-                })}
-              </div>
-            )}
-            {spotlightPanel==="people" && (
-              <div className="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border/50 bg-muted/20 p-2">
-                {((candidates||[]) as any[]).slice(0,40).map((person)=>{
-                  const id=String(person.id||""); if(!id) return null
-                  const label=String(person.username||person.displayName||"member").replace(/^@/,"")
-                  const on=spotlightProfileIds.includes(id)
-                  return <button key={id} type="button" disabled={!on&&spotlightProfileIds.length>=10} onClick={()=>setSpotlightProfileIds(p=>on?p.filter(x=>x!==id):p.length>=10?p:[...p,id])} className={`flex w-full justify-between rounded-lg px-2 py-1.5 text-sm ${on?"bg-violet-100 font-semibold":"hover:bg-muted"}`}>@{label}<span className="text-[10px] text-muted-foreground">{on?"Tagged":"Tag"}</span></button>
-                })}
-              </div>
-            )}
           </div>
         )}
 
