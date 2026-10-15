@@ -477,7 +477,7 @@ export function ProfileScreen({
             ["Posts", "gh-profile-posts"],
             ["Moments", "gh-profile-moments"],
             ["About", "gh-profile-about"],
-            ["Tools", "gh-profile-tools"],
+            ["About", "gh-profile-about"],
           ].map(([label, target]) => (
             <button key={target} type="button" onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="shrink-0 rounded-full px-4 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</button>
           ))}
@@ -490,17 +490,13 @@ export function ProfileScreen({
             type="button"
             aria-expanded={dashboardPageOpen}
             onClick={() => setDashboardPageOpen(true)}
-            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-emerald-600/15 bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-4 py-3.5 text-left text-white shadow-md shadow-emerald-900/15 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-emerald-600/15 bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-4 py-3 text-left text-white shadow-md"
           >
-            <span className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10 blur-2xl" aria-hidden />
-            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
-              <span className="text-sm font-bold">GH</span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-bold text-foreground">Dashboard</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
             </span>
-            <span className="relative min-w-0 flex-1">
-              <span className="block text-[13px] font-bold tracking-tight">Dashboard</span>
-              <span className="mt-0.5 block text-[11px] text-white/80">Wallet · Rewards · Communities · Tools</span>
-            </span>
-            <span className="relative shrink-0 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold backdrop-blur-sm">Open</span>
+            <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open</span>
           </button>
 
         </section>
