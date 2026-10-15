@@ -1115,7 +1115,7 @@ export function createEconomyDomain(deps: {
             /* cache best-effort */
           }
         }
-        const wallet = wallet()
+        const walletSnapshot = wallet()
         const rewards = repo.listRewards(userId)
         const reward =
           rewards.find((r) => r.id === holdOrRewardId) ||
@@ -1136,7 +1136,7 @@ export function createEconomyDomain(deps: {
         }
         return {
           ok: true,
-          data: { reward: { ...reward, validationStatus: "paid" }, wallet },
+          data: { reward: { ...reward, validationStatus: "paid" }, wallet: walletSnapshot },
           requestId: "server",
         }
       }
