@@ -54,7 +54,7 @@ export function CollapsingAppHeader({
         }`}
         aria-hidden={!compact}
       >
-        <div className="flex items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-1.5 sm:px-4">
+        <div className="flex items-center gap-2 border-b border-border/40 bg-background/95 px-3 py-1 sm:px-4">
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
@@ -84,7 +84,7 @@ export function CollapsingAppHeader({
             : "translate-y-0 opacity-100"
         } ${className}`}
       >
-        <div className="px-3 py-1 sm:px-4 sm:py-1.5">
+        <div className="px-3 py-0.5 sm:px-4 sm:py-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               {leading}

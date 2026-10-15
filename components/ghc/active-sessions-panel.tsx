@@ -108,6 +108,7 @@ export function ActiveSessionsPanel() {
       const res = await fetch("/api/auth/sessions/revoke-others", {
         method: "POST",
         credentials: "include",
+          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) },
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) {

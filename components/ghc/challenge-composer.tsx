@@ -145,7 +145,7 @@ export function ChallengeComposer({
         </button>
       </header>
 
-      <div className="mx-auto w-full max-w-[var(--gh-content-max,28rem)] flex-1 overflow-y-auto px-4 py-4">
+      <div className="mx-auto w-full max-w-[var(--gh-content-max,100%)] flex-1 overflow-y-auto px-4 py-4">
         <div className="mb-4 overflow-hidden rounded-3xl bg-gradient-to-br from-rose-600 via-rose-500 to-amber-500 p-4 text-white shadow-lg">
           <div className="flex items-center gap-2">
             <Trophy size={22} />

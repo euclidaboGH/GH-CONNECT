@@ -294,7 +294,8 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
       }
 
       // 11. Community association (soft)
-      if (context.communityIds?.length && (post as any).communityId && context.communityIds.includes((post as any).communityId)) {
+      const postCommunityIds = [(post as any).communityId, ...(((post as any).spotlightCommunities || []) as Array<{ id?: string }>).map((c) => c.id)].filter(Boolean)
+      if (context.communityIds?.length && postCommunityIds.some((id) => context.communityIds!.includes(String(id)))) {
         score += 24
         reason = {
           reason: "From a community you belong to",

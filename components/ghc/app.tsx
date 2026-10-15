@@ -82,7 +82,7 @@ function TabScreenFallback({ label }: { label: string }) {
       aria-live="polite"
       aria-label={`Loading ${label}`}
     >
-      <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
+      <div className="mx-auto flex w-full max-w-[var(--gh-shell-max,100%)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
           <div className="flex-1 space-y-1.5">
@@ -740,7 +740,7 @@ export function GHConnectApp() {
       <>
         {themeLayer}
         <ConsentGate>
-          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-shell-max,100%)] mx-auto relative w-full">
             <ScreenBoundary
               label="GHC Wallet"
               onReset={() => setScreenResetKeys((c) => ({ ...c, wallet: (c.wallet || 0) + 1 }))}
@@ -764,7 +764,7 @@ export function GHConnectApp() {
         {themeLayer}
         <ConsentGate>
           {/* Full-viewport shell so h-full children (Wallet / Rewards / Membership / Settings) size correctly */}
-          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-shell-max,100%)] mx-auto relative w-full">
             <ScreenBoundary
               label="Settings"
               onReset={() => setScreenResetKeys((c) => ({ ...c, settings: (c.settings || 0) + 1 }))}
@@ -787,7 +787,7 @@ export function GHConnectApp() {
       <>
         {themeLayer}
         <ConsentGate>
-          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-shell-max,100%)] mx-auto relative w-full">
             <ScreenBoundary
               label="Marketplace"
               onDismiss={() => {
@@ -819,7 +819,7 @@ export function GHConnectApp() {
       <>
         {themeLayer}
         <ConsentGate>
-          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-shell-max,100%)] mx-auto relative w-full">
             <ScreenBoundary
               label="GreenHaven Ecosystem"
               onDismiss={() => {
@@ -850,7 +850,7 @@ export function GHConnectApp() {
     {themeLayer}
     <ConsentGate>
     <div
-      className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full"
+      className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-shell-max,100%)] mx-auto relative w-full"
       data-nav-hidden={bottomNavHidden ? "true" : "false"}
       data-nav-in-flow="true"
     >
@@ -1135,7 +1135,7 @@ export function GHConnectApp() {
 
       <CreatorStudioOverlay />
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-shell-max,100%)] flex-col items-center gap-2 px-3">
         {visibleToasts.map((toast) => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}

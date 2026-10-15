@@ -62,7 +62,7 @@
   --gh-gold: oklch(0.78 0.14 85);
   --gh-surface: #ffffff;
   --gh-surface-elevated: #ffffff;
-  --gh-content-max: 28rem;
+  --gh-content-max: 100%;
   --gh-card-shadow: 0 1px 2px oklch(0.3 0.02 150 / 0.04), 0 4px 16px oklch(0.3 0.02 150 / 0.06);
   --gh-card-shadow-lg: 0 4px 12px oklch(0.3 0.02 150 / 0.06), 0 12px 32px oklch(0.3 0.02 150 / 0.08);
 
@@ -88,12 +88,12 @@
   --gh-bottom-content-inset: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   --gh-nav-height: 3.5rem;
   --gh-screen-bottom-inset: calc(var(--gh-nav-height) + env(safe-area-inset-bottom, 0px) + 1.25rem);
-  --gh-content-max: 28rem;
+  --gh-content-max: 100%;
   --gh-header-slim: 3rem;
   /* Legacy alias for overlays that still sit above a fixed nav */
   --gh-fixed-nav-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem);
   /* Content column — wider than classic max-w-md on phones */
-  --gh-content-max: 28rem; /* 448px — between md and lg */
+  --gh-content-max: 100%;
   
   /* Sidebar */
   --sidebar: oklch(0.98 0 0);
@@ -1441,8 +1441,15 @@ body {
   --gh-ref-radius-control: 1rem;
   --gh-ref-shadow: 0 8px 30px rgba(38, 28, 78, .065);
   --gh-ref-shadow-float: 0 12px 34px rgba(61, 34, 133, .18);
-  --gh-content-max: 76rem;
+  --gh-content-max: 48rem;
+  --gh-shell-max: 100%;
 }
+.gh-app-shell { width: 100% !important; max-width: var(--gh-shell-max, 100%) !important; margin-inline: auto; }
+@media (min-width: 640px) { :root { --gh-content-max: 36rem; --gh-shell-max: 100%; } }
+@media (min-width: 768px) { :root { --gh-content-max: 42rem; --gh-shell-max: 100%; } }
+@media (min-width: 1024px) { :root { --gh-content-max: 48rem; --gh-shell-max: 100%; } .gh-feed-column { width: min(100%, 48rem); } }
+@media (min-width: 1280px) { :root { --gh-content-max: 52rem; } .gh-feed-column { width: min(100%, 52rem); } }
+
 
 .gh-app-shell { max-width: 100% !important; background: var(--gh-ref-canvas) !important; }
 .dark .gh-app-shell { background: var(--background) !important; }

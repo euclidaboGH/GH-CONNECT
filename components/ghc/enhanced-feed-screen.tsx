@@ -519,15 +519,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(true)}
-              className="gh-standard-search mb-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-muted/55 px-4 py-2.5 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              aria-label="Search GreenHaven"
-            >
-              <Search size={19} aria-hidden="true" />
-              <span className="truncate">Search GreenHaven...</span>
-            </button>
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input
@@ -652,7 +643,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         className="gh-feed-scroll gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
       >
-        <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
+        <div className="gh-feed-column space-y-2.5 pb-6 pt-1.5 sm:pt-2">
           {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
 

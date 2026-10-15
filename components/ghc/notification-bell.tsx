@@ -153,6 +153,7 @@ export function NotificationBell({
       try {
         const res = await fetch("/api/social/notifications?limit=40", {
           credentials: "include",
+          headers: { ...(((await import("@/lib/identity/identity-service")).IdentityService.getAuthHeaders?.()) || {}) },
           headers: { Accept: "application/json" },
         })
         const data = (await res.json().catch(() => ({}))) as {

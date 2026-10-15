@@ -176,7 +176,8 @@ function EnhancedPostCardInner({
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
       }
     } finally {
-      setCurationBusy(false)
+      try { window.dispatchEvent(new CustomEvent("ghc:curation-updated", { detail: { postId: post.id } })) } catch { /* */ }
+        setCurationBusy(false)
     }
   }
 
@@ -510,6 +511,18 @@ function EnhancedPostCardInner({
           </>
         )}
 
+
+        {((post.spotlightCommunities && post.spotlightCommunities.length > 0) || (post.spotlightProfiles && post.spotlightProfiles.length > 0)) && (
+          <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Spotlight tags">
+            {(post.spotlightCommunities || []).slice(0, 5).map((c) => (
+              <button key={c.id} type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-community", { detail: { communityId: c.id } })) } catch {} }} className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80">#{c.name}</button>
+            ))}
+            {(post.spotlightProfiles || []).slice(0, 10).map((pr) => (
+              <button key={pr.id} type="button" onClick={() => onOpenProfile?.(pr.username || pr.id)} className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-800 ring-1 ring-violet-200/80">@{pr.username}</button>
+            ))}
+          </div>
+        )}
+
         {/* Link preview */}
         {post.linkPreview && (
           <a
@@ -620,7 +633,7 @@ function EnhancedPostCardInner({
           aria-label="Upvote content — improves quality ranking and reward eligibility"
           aria-pressed={curationChoice === "upvote"}
           onClick={() => void handleCuration("upvote")}
-          title="Upvote content quality. Server ranking and reward eligibility may improve — votes never mint GHC on the client."
+          title="Upvote quality"
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "upvote"
               ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -636,7 +649,7 @@ function EnhancedPostCardInner({
           aria-label="Downvote content — lowers quality ranking and may reduce reward eligibility"
           aria-pressed={curationChoice === "downvote"}
           onClick={() => void handleCuration("downvote")}
-          title="Downvote weak content. Quality ranking and reward eligibility may fall — never client-minted penalties."
+          title="Downvote quality"
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "downvote"
               ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
@@ -699,27 +712,7 @@ function EnhancedPostCardInner({
       />
 
       {/* Content quality strip — no profile-style like; matching lives on profiles */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3.5 py-1.5">
-        <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
-          {judgmentLabel
-            ? judgmentLabel
-            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
-        </p>
-        <span
-          className={`shrink-0 text-[10px] font-bold tabular-nums ${
-            netJudgment > 0
-              ? "text-emerald-700"
-              : netJudgment < 0
-                ? "text-rose-600"
-                : "text-muted-foreground"
-          }`}
-          title="Net content quality (upvotes minus downvotes)"
-        >
-          Net {netJudgment > 0 ? "+" : ""}
-          {netJudgment}
-        </span>
-      </div>
-    </div>
+          </div>
   )
 }
 

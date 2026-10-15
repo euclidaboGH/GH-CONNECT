@@ -122,7 +122,7 @@ export function CreateHubSheet({
         aria-label="Close create"
         onClick={onClose}
       />
-      <div className="relative z-[81] w-full max-w-[var(--gh-content-max,28rem)] rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl">
+      <div className="relative z-[81] w-full max-w-[var(--gh-content-max,100%)] rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl">
         <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
           <div>
             <p className="text-[15px] font-bold text-foreground">Create</p>
