@@ -570,7 +570,7 @@ export function OwnPostCard({
   onComment?: (postId: string) => void
   onShare?: (postId: string) => void
   onSave?: (postId: string) => void
-  onEdit?: (postId: string, content: string) => void
+  onEdit?: (postId: string, content: string, media?: { images?: string[]; video?: string | null; pdf?: string | null; pdfName?: string | null }) => void
   onArchive?: (postId: string) => void
   onInsights?: (postId: string) => void
   onShowVisibilityReason?: (postId: string) => void

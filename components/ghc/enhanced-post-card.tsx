@@ -478,7 +478,6 @@ function EnhancedPostCardInner({
                 <div className="flex flex-wrap gap-2">
                   {draftImages.map((src, i) => (
                     <div key={`${src.slice(0, 24)}-${i}`} className="relative h-16 w-16 overflow-hidden rounded-xl border border-border/50">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={src} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
@@ -567,7 +566,7 @@ function EnhancedPostCardInner({
                   />
                 </label>
               </div>
-              <p className="text-[10px] text-muted-foreground">Photos and video use the durable media pipeline. Blob URLs are rejected.</p>
+              <p className="text-[10px] text-muted-foreground">Photos and video use the durable media pipeline.</p>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button>

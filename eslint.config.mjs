@@ -3,33 +3,17 @@ import { fileURLToPath } from "node:url"
 import { FlatCompat } from "@eslint/eslintrc"
 import { defineConfig, globalIgnores } from "eslint/config"
 
-/**
- * Flat config for Next 15. Prefer FlatCompat so `next/core-web-vitals` is always
- * a spreadable array — avoids "nextVitals is not iterable" when the package
- * export shape differs across installs.
- */
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-})
-
+const compat = new FlatCompat({ baseDirectory: __dirname })
 const nextConfigs = compat.extends("next/core-web-vitals")
 
 export default defineConfig([
   ...nextConfigs,
   globalIgnores([
-    ".next/**",
-    "node_modules/**",
-    "coverage/**",
-    "dist/**",
-    "public/**",
-    "scripts/**",
-    "supabase/**",
-    "docs/**",
-    "*.config.js",
-    "*.config.mjs",
+    ".next/**", "node_modules/**", "coverage/**", "dist/**",
+    "public/**", "scripts/**", "supabase/**", "docs/**",
+    "*.config.js", "*.config.mjs",
   ]),
   {
     rules: {

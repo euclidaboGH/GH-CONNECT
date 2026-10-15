@@ -1,6 +1,5 @@
 /**
  * PATCH /api/social/posts/[id]/edit — edit own post content + optional media.
- * POST is accepted as an alias (same handler) so older clients do not get 405.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
@@ -58,10 +57,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     const raw = Array.isArray(body.images) ? body.images.map(String).slice(0, 10) : []
     images = raw.filter(isSafeImageRef)
     if (raw.length > 0 && images.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "INVALID_MEDIA", message: "Images must be durable https or data:image URLs." },
-        { status: 400 }
-      )
+      return NextResponse.json({ ok: false, error: "INVALID_MEDIA" }, { status: 400 })
     }
   }
 
