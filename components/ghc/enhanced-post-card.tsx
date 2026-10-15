@@ -53,7 +53,7 @@ interface EnhancedPostCardProps {
   onShare: (postId: string) => void
   onSave: (postId: string) => void
   onDelete?: (postId: string) => void
-  onEdit?: (postId: string, content: string, media?: { images?: string[]; video?: string | null; pdf?: string | null; pdfName?: string | null }) => void
+  onEdit?: (postId: string, content: string) => void
   onPin?: (postId: string) => void
   onHide?: (postId: string) => void
   onArchive?: (postId: string) => void
@@ -102,11 +102,6 @@ function EnhancedPostCardInner({
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
-  const [draftImages, setDraftImages] = useState<string[]>(() => Array.isArray(post.images) ? [...post.images] : [])
-  const [draftVideo, setDraftVideo] = useState<string | null>(post.video ?? null)
-  const [draftPdf, setDraftPdf] = useState<string | null>(post.pdf ?? null)
-  const [draftPdfName, setDraftPdfName] = useState<string | null>(post.pdfName ?? null)
-  const [editUploading, setEditUploading] = useState(false)
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -407,7 +402,7 @@ function EnhancedPostCardInner({
         title={isOwn ? "Your post" : "Post options"}
       >
         {isOwn && onEdit && (
-          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => { setDraftContent(post.content ?? ""); setDraftContent(post.content ?? ""); setDraftImages(Array.isArray(post.images) ? [...post.images] : []); setDraftVideo(post.video ?? null); setDraftPdf(post.pdf ?? null); setDraftPdfName(post.pdfName ?? null); setEditingPost(true); setShowMenu(false) }}>
+          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => { setDraftContent(post.content ?? ""); setEditingPost(true); setShowMenu(false) }}>
             Edit post
           </ActionSheetItem>
         )}
@@ -460,136 +455,7 @@ function EnhancedPostCardInner({
         )}
       </ActionSheet>
 
-      {editingPost && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Edit post">
-          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl sm:rounded-[1.25rem]">
-            <h2 className="text-lg font-bold text-foreground">Edit Post</h2>
-            <textarea
-              autoFocus
-              value={draftContent}
-              onChange={(event) => setDraftContent(event.target.value)}
-              className="mt-4 min-h-28 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
-              maxLength={5000}
-              placeholder="Update your post…"
-            />
-            <div className="mt-3 space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Media</p>
-              {draftImages.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {draftImages.map((src, i) => (
-                    <div key={`${src.slice(0, 24)}-${i}`} className="relative h-16 w-16 overflow-hidden rounded-xl border border-border/50">
-                      <img src={src} alt="" className="h-full w-full object-cover" />
-                      <button
-                        type="button"
-                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white"
-                        aria-label="Remove image"
-                        onClick={() => setDraftImages((prev) => prev.filter((_, idx) => idx !== i))}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {draftVideo && (
-                <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-xs">
-                  <span className="truncate text-muted-foreground">Video attached</span>
-                  <button type="button" className="font-semibold text-rose-600" onClick={() => setDraftVideo(null)}>Remove</button>
-                </div>
-              )}
-              {draftPdf && (
-                <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-xs">
-                  <span className="truncate text-muted-foreground">{draftPdfName || "Attachment"}</span>
-                  <button type="button" className="font-semibold text-rose-600" onClick={() => { setDraftPdf(null); setDraftPdfName(null) }}>Remove</button>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted">
-                  {editUploading ? "Uploading…" : "Add photos"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    disabled={editUploading || draftImages.length >= 10}
-                    onChange={async (e) => {
-                      const files = e.target.files
-                      if (!files?.length) return
-                      setEditUploading(true)
-                      try {
-                        const { uploadDurableMedia } = await import("@/lib/media/upload-client")
-                        const next = [...draftImages]
-                        for (const file of Array.from(files).slice(0, 10 - next.length)) {
-                          const res = await uploadDurableMedia(file, {
-                            fileName: file instanceof File ? file.name : undefined,
-                          })
-                          if (res.ok && res.url && !String(res.url).startsWith("blob:")) {
-                            next.push(String(res.url))
-                          }
-                        }
-                        setDraftImages(next)
-                      } catch {
-                        /* fail-soft */
-                      } finally {
-                        setEditUploading(false)
-                        e.target.value = ""
-                      }
-                    }}
-                  />
-                </label>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted">
-                  {draftVideo ? "Replace video" : "Add video"}
-                  <input
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    disabled={editUploading}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      setEditUploading(true)
-                      try {
-                        const { uploadDurableMedia } = await import("@/lib/media/upload-client")
-                        const res = await uploadDurableMedia(file, {
-                          fileName: file instanceof File ? file.name : undefined,
-                        })
-                        if (res.ok && res.url && !String(res.url).startsWith("blob:")) {
-                          setDraftVideo(String(res.url))
-                        }
-                      } catch {
-                        /* fail-soft */
-                      } finally {
-                        setEditUploading(false)
-                        e.target.value = ""
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="text-[10px] text-muted-foreground">Photos and video use the durable media pipeline.</p>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button>
-              <button
-                type="button"
-                disabled={!draftContent.trim() || editUploading}
-                onClick={() => {
-                  onEdit?.(post.id, draftContent.trim(), {
-                    images: draftImages,
-                    video: draftVideo,
-                    pdf: draftPdf,
-                    pdfName: draftPdfName,
-                  })
-                  setEditingPost(false)
-                }}
-                className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Save changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl"><h2 className="text-lg font-bold text-foreground">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
 
       {/* Content with rich formatting */}
       <div className="px-4 pb-3 pt-1">
@@ -837,7 +703,7 @@ function EnhancedPostCardInner({
         <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
           {judgmentLabel
             ? judgmentLabel
-            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
+            : ""}
         </p>
         <span
           className={`shrink-0 text-[10px] font-bold tabular-nums ${

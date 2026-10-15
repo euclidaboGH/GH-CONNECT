@@ -360,22 +360,11 @@ export async function socialConnectionDecline(
 
 export async function socialEditPost(
   postId: string,
-  content: string,
-  media?: {
-    images?: string[]
-    video?: string | null
-    pdf?: string | null
-    pdfName?: string | null
-  }
-): Promise<{ ok: boolean; durable: boolean; error?: string; content?: string; images?: string[]; video?: string | null; pdf?: string | null }> {
+  content: string
+): Promise<{ ok: boolean; durable: boolean; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(postId)}/edit`, {
     method: "PATCH",
-    body: JSON.stringify({
-      content,
-      ...(media?.images !== undefined ? { images: media.images } : {}),
-      ...(media?.video !== undefined ? { video: media.video } : {}),
-      ...(media?.pdf !== undefined ? { pdf: media.pdf, pdfName: media.pdfName } : {}),
-    }),
+    body: JSON.stringify({ content }),
   })
 }
 

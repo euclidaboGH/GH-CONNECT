@@ -1,32 +1,17 @@
 /**
- * PATCH /api/social/posts/[id]/edit — edit own post content + optional media.
+ * PATCH /api/social/posts/[id]/edit — edit own post content only.
+ * POST is accepted as an alias (same handler) so older clients do not get 405.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Ctx = { params: Promise<{ id: string }> }
-
-function isSafeImageRef(url: string): boolean {
-  if (!url || typeof url !== "string") return false
-  if (url.startsWith("blob:")) return false
-  if (url.startsWith("data:image/")) return url.length < 2_500_000
-  if (url.startsWith("https://")) return url.length < 2000
-  return false
-}
-
-function isSafeVideoRef(url: string): boolean {
-  if (!url || typeof url !== "string") return false
-  if (url.startsWith("blob:")) return false
-  if (url.startsWith("data:video/")) return url.length < 8_000_000
-  if (url.startsWith("https://")) return url.length < 2000
-  return false
-}
 
 export async function POST(request: Request, ctx: Ctx) {
   return PATCH(request, ctx)
@@ -42,65 +27,15 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!postId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+  const body = await request.json().catch(() => ({}))
   const content = String(body.content || "").trim()
   if (!content || content.length > 5000) {
     return NextResponse.json({ ok: false, error: "INVALID_CONTENT" }, { status: 400 })
   }
 
-  const hasImagesKey = Object.prototype.hasOwnProperty.call(body, "images")
-  const hasVideoKey = Object.prototype.hasOwnProperty.call(body, "video")
-  const hasPdfKey = Object.prototype.hasOwnProperty.call(body, "pdf")
-
-  let images: string[] | undefined
-  if (hasImagesKey) {
-    const raw = Array.isArray(body.images) ? body.images.map(String).slice(0, 10) : []
-    images = raw.filter(isSafeImageRef)
-    if (raw.length > 0 && images.length === 0) {
-      return NextResponse.json({ ok: false, error: "INVALID_MEDIA" }, { status: 400 })
-    }
-  }
-
-  let video: string | null | undefined
-  if (hasVideoKey) {
-    if (body.video == null || body.video === "") video = null
-    else {
-      const v = String(body.video)
-      if (!isSafeVideoRef(v)) {
-        return NextResponse.json({ ok: false, error: "INVALID_VIDEO" }, { status: 400 })
-      }
-      video = v
-    }
-  }
-
-  let pdf: string | null | undefined
-  let pdfName: string | null | undefined
-  if (hasPdfKey) {
-    if (body.pdf == null || body.pdf === "") {
-      pdf = null
-      pdfName = null
-    } else {
-      const p = String(body.pdf)
-      if (p.startsWith("blob:") || p.length > 2_500_000) {
-        return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENT" }, { status: 400 })
-      }
-      pdf = p
-      pdfName = body.pdfName ? String(body.pdfName).slice(0, 200) : null
-    }
-  }
-
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Post edit")
-    return NextResponse.json(
-      {
-        ...nd.body,
-        content,
-        ...(images !== undefined ? { images } : {}),
-        ...(video !== undefined ? { video } : {}),
-        ...(pdf !== undefined ? { pdf, pdfName } : {}),
-      },
-      { status: nd.status }
-    )
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const env = readGhcServerEnv()
@@ -129,21 +64,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
 
-  const patchBody: Record<string, unknown> = {
-    content,
-    is_edited: true,
-    edited_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
-  if (images !== undefined) patchBody.images = images
-  if (video !== undefined) patchBody.video = video
-  if (pdf !== undefined) {
-    patchBody.pdf = pdf
-    patchBody.pdf_name = pdfName
-  }
-
   const patchRes = await fetch(
-    `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(postId)}`,
+    `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(postId)}&author_id=eq.${encodeURIComponent(auth.userId)}`,
     {
       method: "PATCH",
       headers: {
@@ -152,19 +74,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         Prefer: "return=minimal",
       },
-      body: JSON.stringify(patchBody),
-      cache: "no-store",
+      body: JSON.stringify({
+        content,
+        is_edited: true,
+        edited_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
     }
   )
   if (!patchRes.ok) {
     return NextResponse.json({ ok: false, error: "EDIT_FAILED" }, { status: 503 })
   }
-  return NextResponse.json({
-    ok: true,
-    durable: true,
-    content,
-    ...(images !== undefined ? { images } : {}),
-    ...(video !== undefined ? { video } : {}),
-    ...(pdf !== undefined ? { pdf, pdfName } : {}),
-  })
+  return NextResponse.json({ ok: true, durable: true, content })
 }

@@ -81,7 +81,7 @@ export function PostRewardPanel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-stretch gap-0 border-t border-border/40 bg-card px-3 py-2.5 text-left transition hover:bg-muted/30 dark:hover:bg-muted/20"
+        className="flex w-full items-center gap-2 border-t border-border/30 bg-transparent px-3 py-1.5 text-left transition hover:bg-muted/20"
         aria-label={showMoney ? "View post reward details" : "View community quality details"}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -108,31 +108,16 @@ export function PostRewardPanel({
                       Accruing
                     </span>
                   )}
-                  {reward.status === "finalized" && (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
-                      Finalized
-                    </span>
-                  )}
-                  {reward.status === "distributed" && (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-800">
-                      Distributed
-                    </span>
-                  )}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  {up}↑ · {down}↓
                 </p>
               </>
             ) : (
-              <>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-violet-600/90 dark:text-violet-300">
-                  Community quality
-                </p>
-                <p className="text-sm font-semibold text-foreground">
-                  {loading ? "Loading…" : "Votes rank content · rewards when pool is funded"}
-                </p>
-              </>
+              <p className="text-[12px] font-medium text-muted-foreground tabular-nums">
+                Quality · {up}↑ · {down}↓
+              </p>
             )}
-            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-              {up} upvotes · {down} downvotes
-            </p>
           </div>
         </div>
         <div className="flex shrink-0 items-center text-muted-foreground">
