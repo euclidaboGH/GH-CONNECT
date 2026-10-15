@@ -95,13 +95,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Post edit")
-    return NextResponse.json({
-      ...nd.body,
-      content,
-      ...(images !== undefined ? { images } : {}),
-      ...(video !== undefined ? { video } : {}),
-      ...(pdf !== undefined ? { pdf, pdfName } : {}),
-    }, { status: nd.status })
+    return NextResponse.json(
+      {
+        ...nd.body,
+        content,
+        ...(images !== undefined ? { images } : {}),
+        ...(video !== undefined ? { video } : {}),
+        ...(pdf !== undefined ? { pdf, pdfName } : {}),
+      },
+      { status: nd.status }
+    )
   }
 
   const env = readGhcServerEnv()

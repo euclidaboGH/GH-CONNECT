@@ -472,7 +472,6 @@ function EnhancedPostCardInner({
               maxLength={5000}
               placeholder="Update your post…"
             />
-            {/* Existing / draft media */}
             <div className="mt-3 space-y-2">
               <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Media</p>
               {draftImages.length > 0 && (
@@ -522,9 +521,12 @@ function EnhancedPostCardInner({
                         const { uploadDurableMedia } = await import("@/lib/media/upload-client")
                         const next = [...draftImages]
                         for (const file of Array.from(files).slice(0, 10 - next.length)) {
-                          const res = await uploadDurableMedia(file, "image")
-                          const url = (res as { url?: string; publicUrl?: string })?.url || (res as { publicUrl?: string })?.publicUrl
-                          if (url && !String(url).startsWith("blob:")) next.push(String(url))
+                          const res = await uploadDurableMedia(file, {
+                            fileName: file instanceof File ? file.name : undefined,
+                          })
+                          if (res.ok && res.url && !String(res.url).startsWith("blob:")) {
+                            next.push(String(res.url))
+                          }
                         }
                         setDraftImages(next)
                       } catch {
@@ -549,9 +551,12 @@ function EnhancedPostCardInner({
                       setEditUploading(true)
                       try {
                         const { uploadDurableMedia } = await import("@/lib/media/upload-client")
-                        const res = await uploadDurableMedia(file, "video")
-                        const url = (res as { url?: string; publicUrl?: string })?.url || (res as { publicUrl?: string })?.publicUrl
-                        if (url && !String(url).startsWith("blob:")) setDraftVideo(String(url))
+                        const res = await uploadDurableMedia(file, {
+                          fileName: file instanceof File ? file.name : undefined,
+                        })
+                        if (res.ok && res.url && !String(res.url).startsWith("blob:")) {
+                          setDraftVideo(String(res.url))
+                        }
                       } catch {
                         /* fail-soft */
                       } finally {
@@ -562,7 +567,7 @@ function EnhancedPostCardInner({
                   />
                 </label>
               </div>
-              <p className="text-[10px] text-muted-foreground">Photos and video are re-uploaded through the durable media pipeline. Blob URLs are rejected.</p>
+              <p className="text-[10px] text-muted-foreground">Photos and video use the durable media pipeline. Blob URLs are rejected.</p>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button>
@@ -829,7 +834,27 @@ function EnhancedPostCardInner({
       />
 
       {/* Content quality strip — no profile-style like; matching lives on profiles */}
-          </div>
+      <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3.5 py-1.5">
+        <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
+          {judgmentLabel
+            ? judgmentLabel
+            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
+        </p>
+        <span
+          className={`shrink-0 text-[10px] font-bold tabular-nums ${
+            netJudgment > 0
+              ? "text-emerald-700"
+              : netJudgment < 0
+                ? "text-rose-600"
+                : "text-muted-foreground"
+          }`}
+          title="Net content quality (upvotes minus downvotes)"
+        >
+          Net {netJudgment > 0 ? "+" : ""}
+          {netJudgment}
+        </span>
+      </div>
+    </div>
   )
 }
 

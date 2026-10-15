@@ -1220,12 +1220,23 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        <p className="mx-3 mt-2 mb-1 text-center text-[11px] leading-relaxed text-muted-foreground">
-          GHC is in-app utility — not Pi, not an investment.{" "}
+        <div className="mx-3 mt-3 space-y-2">
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+            <Info size={14} className="mt-0.5 shrink-0 text-amber-700" />
+            <p className="text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+              GHC is an <strong>in-app utility</strong> for rewards, transfers, and features.
+              It is <strong>not Pi</strong> and not an investment product. Balances are private and ledger-backed.
+            </p>
+          </div>
+          <GhcSocialFuelNote />
+        <p className="mx-3 mt-2 pb-2 text-center text-[11px] leading-relaxed text-muted-foreground">
+          GHC is for <strong className="text-foreground">in-app utility only</strong> — transfers, rewards, and features.
+          It is not Pi and not an investment product.{" "}
           <button type="button" className="font-semibold text-emerald-700 underline-offset-2 hover:underline" onClick={() => setShowUtilityHelp(true)}>
             Learn more
           </button>
         </p>
+        </div>
 
         {/* ZONE: ACTIVITY */}
         <div id="ghc-wallet-activity" className="scroll-mt-3">

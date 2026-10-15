@@ -97,13 +97,6 @@ export function RewardsJourneyHero({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        // Server may return already-claimed as non-ok; still mirror local day if indicated
-        if (data.alreadyClaimed || data.idempotent) {
-          try { claimDailyStreak(userId, membershipTier) } catch { /* */ }
-          setTick((t) => t + 1)
-          ghc.addToast?.(data.message || "Already claimed today", "info")
-          return
-        }
         ghc.addToast?.(data.error || data.message || "Claim failed", "error")
         setTick((t) => t + 1)
         return
@@ -124,10 +117,6 @@ export function RewardsJourneyHero({
       } catch {
         /* keep last known balance */
       }
-      // Mirror server claim into local streak so UI leaves green Claim state
-      try {
-        claimDailyStreak(userId, membershipTier)
-      } catch { /* local mirror optional */ }
       ghc.addToast?.(
         data.alreadyClaimed || data.idempotent
           ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`

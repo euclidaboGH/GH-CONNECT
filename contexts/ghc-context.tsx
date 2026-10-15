@@ -2059,22 +2059,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           )
           return
         }
-        if (durable?.images || durable?.video !== undefined || durable?.pdf !== undefined) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    content: durable.content || post.content,
-                    ...(durable.images ? { images: durable.images } : {}),
-                    ...(durable.video !== undefined ? { video: durable.video } : {}),
-                    ...(durable.pdf !== undefined ? { pdf: durable.pdf } : {}),
-                  }
-                : post
-            ),
-          }))
-        }
         addToast(
           durable?.durable === false
             ? "Post updated on this device"
