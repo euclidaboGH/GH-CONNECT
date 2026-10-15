@@ -131,6 +131,8 @@ export async function GET(
       snapshot = {
         userId: full.userId,
         balance: full.balance,
+        ledgerBalance: full.ledgerBalance,
+        locked: full.locked,
         pending: full.pending,
         lifetimeEarned: full.lifetimeEarned,
         lifetimeSpent: full.lifetimeSpent,

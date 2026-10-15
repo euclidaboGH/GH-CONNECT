@@ -159,6 +159,8 @@ export async function rpcWalletSnapshot(
 ): Promise<{
   userId: string
   balance: number
+  ledgerBalance: number
+  locked: number
   pending: number
   lifetimeEarned: number
   lifetimeSpent: number
@@ -184,6 +186,8 @@ export async function rpcWalletSnapshot(
     return {
       userId: String(data.userId || userId),
       balance: Number(data.balance) || 0,
+      ledgerBalance: Number(data.ledgerBalance ?? data.balance) || 0,
+      locked: Math.max(0, Number(data.locked) || 0),
       pending: Number(data.pending) || 0,
       lifetimeEarned: Number(data.lifetimeEarned) || 0,
       lifetimeSpent: Number(data.lifetimeSpent) || 0,

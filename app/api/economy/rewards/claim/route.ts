@@ -4,7 +4,7 @@
  * Server is authoritative when DB or memory server is configured.
  */
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { rpcClaimPending } from "@/lib/server/economy/db"
+import { rpcClaimPending, rpcWalletSnapshot } from "@/lib/server/economy/db"
 import {
   allowMemoryServer,
   isDatabaseConfigured,
@@ -52,11 +52,13 @@ export async function POST(request: Request) {
         status
       )
     }
+    const wallet = await rpcWalletSnapshot(auth.userId)
     return jsonOk({
       ok: true,
       alreadyClaimed: result.alreadyClaimed,
       transactionId: result.transactionId,
       amount: result.amount,
+      wallet,
     })
   }
 

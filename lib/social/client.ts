@@ -37,16 +37,20 @@ async function json<T>(
 export async function socialFetchFeed(opts?: {
   limit?: number
   before?: number
-}): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; error?: string }> {
+  beforeId?: string
+}): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; stableCursor?: boolean; error?: string }> {
   const q = new URLSearchParams()
   if (opts?.limit) q.set("limit", String(opts.limit))
   if (opts?.before) q.set("before", String(opts.before))
+  if (opts?.beforeId) q.set("beforeId", opts.beforeId)
   const path = `/api/social/feed${q.toString() ? `?${q}` : ""}`
   const data = await json<{ posts?: Partial<Post>[] }>(path)
   return {
     ok: data.ok !== false,
     durable: Boolean(data.durable),
     posts: Array.isArray(data.posts) ? data.posts : [],
+    nextCursor: (data as any).nextCursor || null,
+    stableCursor: Boolean((data as any).stableCursor),
     error: data.error,
   }
 }
@@ -110,16 +114,18 @@ export async function socialAddComment(
 }
 
 export async function socialListComments(
-  postId: string
-): Promise<{ ok: boolean; durable: boolean; comments: Partial<PostComment>[] }> {
+  postId: string,
+  opts?: { limit?: number; before?: number; beforeId?: string }
+): Promise<{ ok: boolean; durable: boolean; comments: Partial<PostComment>[]; nextCursor?: { before: number; beforeId: string } | null; stableCursor?: boolean; error?: string }> {
+  const q = new URLSearchParams()
+  if (opts?.limit) q.set("limit", String(opts.limit))
+  if (opts?.before) q.set("before", String(opts.before))
+  if (opts?.beforeId) q.set("beforeId", opts.beforeId)
   const data = await json<{ comments?: Partial<PostComment>[] }>(
-    `/api/social/posts/${encodeURIComponent(postId)}/comments`
+    `/api/social/posts/${encodeURIComponent(postId)}/comments${q.toString() ? `?${q}` : ""}`
   )
-  return {
-    ok: data.ok !== false,
-    durable: Boolean(data.durable),
-    comments: Array.isArray(data.comments) ? data.comments : [],
-  }
+  return { ok: data.ok !== false, durable: Boolean(data.durable), comments: Array.isArray(data.comments) ? data.comments : [],
+    nextCursor: (data as any).nextCursor || null, stableCursor: Boolean((data as any).stableCursor), error: data.error }
 }
 
 export async function socialFollow(

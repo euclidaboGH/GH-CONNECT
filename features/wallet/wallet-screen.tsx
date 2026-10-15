@@ -383,6 +383,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const wallet = data?.wallet
   const balance = wallet?.balance ?? 0
   const pending = wallet?.pending ?? 0
+  const locked = wallet?.locked ?? 0
   const earned = wallet?.lifetimeEarned ?? (wallet as { earned?: number })?.earned ?? 0
   const spent = wallet?.lifetimeSpent ?? (wallet as { spent?: number })?.spent ?? 0
   const txs = data?.txs ?? []
@@ -689,6 +690,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const lines = [
       `GreenHaven — GHC statement (${month})`,
       `Available: ${formatGhc(balance)} GHC`,
+      `Reserved: ${formatGhc(locked)} GHC`,
       `Pending: ${formatGhc(displayPending)} GHC`,
       `Lifetime activity credit: ${formatGhc(earned)} · spent: ${formatGhc(spent)}`,
       `This month: +${formatGhc(monthInsight.monthEarned)} / −${formatGhc(monthInsight.monthSpent)}`,
@@ -712,7 +714,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       "Balances are private and ledger-backed."
     )
     return lines.join("\n")
-  }, [balance, displayPending, earned, spent, monthInsight, txs])
+  }, [balance, locked, displayPending, earned, spent, monthInsight, txs])
 
   const buildCsvStatement = useCallback(() => {
     if (assetRail === "pi") {
@@ -942,6 +944,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             refreshing={refreshing}
             lastSynced={lastSynced}
             pending={displayPending}
+            locked={locked}
             monthEarned={monthInsight.monthEarned}
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}

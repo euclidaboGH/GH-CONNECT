@@ -35,6 +35,7 @@ import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 import ProfileStorySection from "./profile-story-section"
@@ -167,13 +168,21 @@ export function ProfileScreen({
             ghc.addToast?.("Choose a valid image file", "error")
             return
           }
-          if (file.size > 4 * 1024 * 1024) {
-            ghc.addToast?.("Image must be under 4 MB", "error")
+          if (file.size > 25 * 1024 * 1024) {
+            ghc.addToast?.("Image must be under 25 MB", "error")
             return
           }
           void (async () => {
             let imageUrl = ""
-            const uploaded = offline ? null : await uploadDurableMedia(file, { fileName: file.name })
+            // Accept high-resolution source images, then compress before the Vercel
+            // proxy upload so profile media stays below the durable-upload ceiling.
+            const compressedDataUrl = await compressImageFile(file, {
+              purpose: kind === "photo" ? "avatar" : "cover",
+              preferWebp: true,
+              maxInputBytes: 25 * 1024 * 1024,
+            })
+            const compressedBlob = await fetch(compressedDataUrl).then((r) => r.blob())
+            const uploaded = offline ? null : await uploadDurableMedia(compressedBlob, { fileName: `${kind}-${Date.now()}.${compressedBlob.type === "image/webp" ? "webp" : "jpg"}` })
             if (uploaded?.ok && uploaded.kind === "image") {
               imageUrl = uploaded.url
             } else if (offline || (uploaded && !uploaded.ok && uploaded.error === "MEDIA_STORAGE_UNAVAILABLE")) {
@@ -186,7 +195,7 @@ export function ProfileScreen({
                   if (!value.startsWith("data:image/")) reject(new Error("The selected image could not be processed."))
                   else resolve(value)
                 }
-                reader.readAsDataURL(file)
+                reader.readAsDataURL(compressedBlob)
               })
             } else {
               throw new Error(uploaded && !uploaded.ok ? uploaded.userMessage : "This upload was not recognized as an image.")
@@ -553,7 +562,7 @@ export function ProfileScreen({
                         } catch { /* */ }
                       }}
                       onSave={(postId) => { void feed.savePost(postId).catch(() => ghc.addToast?.("Could not save post", "error")) }}
-                      onEdit={(postId, content) => { void feed.editPost(postId, content) }}
+                      onEdit={(postId, content, media) => { void feed.editPost(postId, content, media) }}
                       onArchive={(postId) => { void feed.archivePost(postId) }}
                       onInsights={(postId) => {
                         try {

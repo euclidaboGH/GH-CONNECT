@@ -243,6 +243,9 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const [refreshing, setRefreshing] = useState(false)
   /** Authoritative status from /api/membership/status */
   const [serverStatus, setServerStatus] = useState<MembershipStatus | null>(null)
+  const [serverStatusState, setServerStatusState] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading")
 
   // Prefer server entitlement over local-only cache
   useEffect(() => {
@@ -272,11 +275,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }, [tick])
 
   // Server authority wins when present; never invent paid tier from local alone
-  const currentTier = (
-    serverStatus?.tier ||
-    status?.tier ||
-    "free"
-  ) as MembershipTierId
+  // Production membership display is fail-closed: only an authoritative server
+  // entitlement may display VIP/VVIP. Local domain state is cache, never authority.
+  const currentTier = (serverStatus?.tier || "free") as MembershipTierId
+  const membershipAuthorityReady = serverStatusState === "ready" && serverStatus !== null
   const mapEntitlementToStatus = (
     e: Record<string, unknown>
   ): MembershipStatus => {
@@ -323,9 +325,15 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         cache: "no-store",
         credentials: "include",
       })
-      if (!res.ok) return null
+      if (!res.ok) {
+        setServerStatusState("unavailable")
+        return null
+      }
       const data = await res.json().catch(() => ({}))
-      if (!data?.ok || !data?.entitlement) return null
+      if (!data?.ok || !data?.entitlement) {
+        setServerStatusState("unavailable")
+        return null
+      }
       const e = data.entitlement as Record<string, unknown>
       const mapped = mapEntitlementToStatus(e)
       const mem = getBoundDomainServices()?.membership as {
@@ -346,9 +354,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         })
       }
       setServerStatus(mapped)
+      setServerStatusState("ready")
       setTick((x) => x + 1)
       return mapped
     } catch {
+      setServerStatusState("unavailable")
       return null
     }
   }
@@ -366,16 +376,25 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           "success"
         )
       } else {
-        addToast("Could not refresh membership status", "error")
+        addToast("Membership status is temporarily unavailable", "error")
       }
     } finally {
       setRefreshing(false)
-      setStatusMsg("Status refreshed")
+      setStatusMsg(
+        serverStatusState === "unavailable"
+          ? "Membership status unavailable"
+          : "Status refreshed"
+      )
       window.setTimeout(() => setStatusMsg(null), 1500)
     }
   }
 
   const purchaseWithPiCoin = async (tier: MembershipTierId) => {
+    if (!membershipAuthorityReady) {
+      addToast("Confirm membership status before purchasing to prevent a duplicate charge.", "info")
+      void handleRefreshMembership()
+      return
+    }
     if (tier === "free" || tier === currentTier) return
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       addToast("You are offline. Membership activation needs a connection.", "info")
@@ -413,6 +432,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }
 
   const purchaseWithGhcCoin = async (tier: MembershipTierId) => {
+    if (!membershipAuthorityReady) {
+      addToast("Confirm membership status before purchasing to prevent a duplicate charge.", "info")
+      void handleRefreshMembership()
+      return
+    }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       addToast("You are offline. Membership activation needs a connection.", "info")
       return
@@ -463,6 +487,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }
 
   const purchase = async (tier: MembershipTierId, method: "pi" | "ghc" = "ghc") => {
+    if (!membershipAuthorityReady) {
+      addToast("Confirm membership status before purchasing to prevent a duplicate charge.", "info")
+      void handleRefreshMembership()
+      return
+    }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       addToast("You are offline. Membership activation needs a connection.", "info")
       return
@@ -520,16 +549,14 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           <p className="text-[11px] text-muted-foreground">
             Current:{" "}
             <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-              {MEMBERSHIP_PLANS[currentTier].label}
+              {serverStatusState === "loading"
+                ? "Checking…"
+                : serverStatusState === "unavailable"
+                  ? "Status unavailable"
+                  : MEMBERSHIP_PLANS[currentTier].label}
             </span>
-            {status?.source === "trial" || (status as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
-              <span className="text-muted-foreground">
-                {" "}
-                · welcome trial
-                {status?.expiresAt ? ` · ends ${formatUntil(status.expiresAt)}` : ""}
-              </span>
-            ) : status?.expiresAt ? (
-              <span className="text-muted-foreground"> · {formatUntil(status.expiresAt)}</span>
+            {serverStatusState === "ready" && serverStatus?.expiresAt ? (
+              <span className="text-muted-foreground"> · {formatUntil(serverStatus.expiresAt)}</span>
             ) : null}
           </p>
         </div>

@@ -37,8 +37,6 @@ export type EvaluateRewardInput = {
   /** Optional target of the action (followee, post author, group id) */
   targetId?: string
   metadata?: Record<string, unknown>
-  /** Client-suggested amount is IGNORED for credit size */
-  clientSuggestedAmount?: number
 }
 
 export type EvaluateRewardResult =
@@ -261,7 +259,7 @@ export async function evaluateRewardAuthoritative(
     return { ok: false, error: "NO_RULE", deniedReasons: ["UNKNOWN_SOURCE_EVENT"] }
   }
 
-  // Server base amount only — ignore clientSuggestedAmount for credit size.
+  // Server base amount only — client requests never supply credit size.
   // ECONOMY_VERSION 1.2: activity-style rewards pass through cap + m × g.
   const baseAmount = Number(rule.amount)
   if (!Number.isFinite(baseAmount) || baseAmount <= 0) {

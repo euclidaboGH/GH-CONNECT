@@ -11,6 +11,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { resolveMediaAssets } from "@/lib/server/media/asset-store"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { getServerProfile } from "@/lib/server/identity/profile-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -206,11 +207,17 @@ export async function POST(request: Request) {
     }
   }
 
+  // Presentation identity is server-derived. Never let a post creation request
+  // impersonate another display name/avatar via client-supplied snapshot fields.
+  const serverProfile = await getServerProfile(auth.userId).catch(() => null)
+  const authorName = String(serverProfile?.displayName || serverProfile?.username || auth.username || "Member").slice(0, 120)
+  const authorPhoto = String(serverProfile?.photos?.[0] || "").slice(0, 2000)
+
   const row = {
     id,
     authorId: auth.userId,
-    authorName: String(body.authorName || auth.username || "Member").slice(0, 120),
-    authorPhoto: String(body.authorPhoto || "").slice(0, 2000),
+    authorName,
+    authorPhoto,
     content,
     images,
     video,

@@ -18,7 +18,7 @@ import {
   Archive,
   Copy,
 } from "lucide-react"
-import type { Post, PostReaction, LinkPreview } from "@/lib/ghc-types"
+import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
@@ -53,7 +53,7 @@ interface EnhancedPostCardProps {
   onShare: (postId: string) => void
   onSave: (postId: string) => void
   onDelete?: (postId: string) => void
-  onEdit?: (postId: string, content: string, media?: { images?: string[]; video?: string | null }) => void
+  onEdit?: (postId: string, content: string, media?: PostEditMedia) => void
   onPin?: (postId: string) => void
   onHide?: (postId: string) => void
   onArchive?: (postId: string) => void

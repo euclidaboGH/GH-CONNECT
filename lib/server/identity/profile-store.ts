@@ -115,6 +115,17 @@ export function sanitizeProfileInput(
     "entitlement",
     "pendingBalance",
     "lifetimeEarned",
+    // Canonical identity/profile fields must never be shadowed through profilePayload.
+    "id",
+    "userId",
+    "ghUserId",
+    "displayName",
+    "username",
+    "photos",
+    "coverPhoto",
+    "onboarded",
+    "createdAt",
+    "updatedAt",
   ])
   const profilePayload: Record<string, unknown> = {
     ...(existing?.profilePayload || {}),
@@ -357,6 +368,9 @@ export function serverProfileToClientPartial(
   rec: ServerProfileRecord
 ): Record<string, unknown> {
   return {
+    // Extensible presentation fields come first; canonical server-owned fields below
+    // intentionally win if an older payload contains colliding keys.
+    ...rec.profilePayload,
     id: rec.ghUserId,
     displayName: rec.displayName || "",
     username: rec.username,
@@ -377,7 +391,6 @@ export function serverProfileToClientPartial(
     coverPhoto: rec.coverPhoto,
     onboarded: rec.onboarded,
     createdAt: rec.createdAt,
-    ...rec.profilePayload,
   }
 }
 

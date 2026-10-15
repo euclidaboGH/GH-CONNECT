@@ -48,8 +48,12 @@ export interface GhcTransaction {
 
 export interface GhcWalletSnapshot {
   userId: string
-  /** Posted, spendable balance — never negative under current rules */
+  /** Spendable GHC available for send/spend. */
   balance: number
+  /** Posted ledger total before active reservations. */
+  ledgerBalance?: number
+  /** GHC reserved by server-side holds (currently pending withdrawals). */
+  locked?: number
   pending: number
   lifetimeEarned: number
   lifetimeSpent: number

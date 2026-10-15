@@ -181,6 +181,11 @@ export interface Settings {
   notifyMarketing?: boolean
 }
 
+export type PostEditMedia = {
+  images?: string[]
+  video?: string | null
+}
+
 export interface Post {
   id: string
   authorId: string

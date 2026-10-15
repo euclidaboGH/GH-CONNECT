@@ -18,6 +18,7 @@ export interface WalletReadSnapshot {
   /** Available GHC — only when status === "ready" */
   availableGhc: number | null
   pendingGhc: number | null
+  lockedGhc: number | null
   currency: "GHC"
   /** Display-only membership tier if economy exposes it */
   membershipTier: string | null
@@ -47,6 +48,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
             available?: number
             pending?: number
             pendingBalance?: number
+            locked?: number
           }
           getPremiumStatus?: () => { tier?: string; plan?: string } | null
         }
@@ -57,6 +59,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         status: "unavailable",
         availableGhc: null,
         pendingGhc: null,
+        lockedGhc: null,
         currency: "GHC",
         membershipTier: null,
         message: "Wallet services are not bound yet.",
@@ -74,6 +77,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         status: "unavailable",
         availableGhc: null,
         pendingGhc: null,
+        lockedGhc: null,
         currency: "GHC",
         membershipTier: null,
         message: "Balance unavailable from authoritative wallet.",
@@ -96,6 +100,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       status: "ready",
       availableGhc: available,
       pendingGhc: pending,
+      lockedGhc: numOrNull(w?.locked) ?? 0,
       currency: "GHC",
       membershipTier,
       source: "session",
@@ -106,6 +111,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       status: "error",
       availableGhc: null,
       pendingGhc: null,
+      lockedGhc: null,
       currency: "GHC",
       membershipTier: null,
       message: e instanceof Error ? e.message : "Wallet read failed",

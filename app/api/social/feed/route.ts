@@ -45,13 +45,30 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 40), 1), 50)
   const before = url.searchParams.get("before")
+  const beforeIdRaw = (url.searchParams.get("beforeId") || "").trim()
   const beforeMs = before ? Number(before) : null
+  const hasCursor = before !== null || beforeIdRaw !== ""
+  if (hasCursor && (!beforeMs || !Number.isSafeInteger(beforeMs) || beforeMs <= 0 || !beforeIdRaw || beforeIdRaw.length > 160)) {
+    return NextResponse.json({ ok: false, error: "INVALID_FEED_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
 
-  const result = await socialRpc("gh_post_list_feed", {
+  // V2 uses a stable (createdAt,id) cursor so equal-timestamp posts cannot be skipped.
+  // Fall back to the legacy RPC until the additive V2 migration is applied.
+  let result = await socialRpc("gh_post_list_feed_v2", {
     p_viewer_id: auth.userId,
     p_limit: limit,
-    p_before_ms: beforeMs && Number.isFinite(beforeMs) ? beforeMs : null,
+    p_before_ms: hasCursor ? beforeMs : null,
+    p_before_id: hasCursor ? beforeIdRaw : null,
   })
+  let stableCursor = result.ok
+  if (!result.ok) {
+    result = await socialRpc("gh_post_list_feed", {
+      p_viewer_id: auth.userId,
+      p_limit: limit,
+      p_before_ms: hasCursor ? beforeMs : null,
+    })
+    stableCursor = false
+  }
 
   if (!result.ok) {
     return NextResponse.json(
@@ -81,8 +98,13 @@ export async function GET(request: Request) {
     })
   }
 
+  const last = posts.length ? (posts[posts.length - 1] as { id?: string; createdAt?: number }) : null
+  const nextCursor = last?.id && Number.isFinite(Number(last?.createdAt))
+    ? { before: Number(last.createdAt), beforeId: String(last.id) }
+    : null
+
   return NextResponse.json(
-    { ok: true, durable: true, posts, mutedFiltered: muted.size },
+    { ok: true, durable: true, posts, mutedFiltered: muted.size, nextCursor, stableCursor },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

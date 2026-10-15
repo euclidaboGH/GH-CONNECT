@@ -17,6 +17,7 @@ export function WalletBalanceCard({
   refreshing,
   lastSynced,
   pending,
+  locked,
   monthEarned,
   monthSpent,
   onOpenPending,
@@ -27,6 +28,7 @@ export function WalletBalanceCard({
   refreshing: boolean
   lastSynced?: number | null
   pending: number
+  locked: number
   monthEarned: number
   monthSpent: number
   onOpenPending: () => void
@@ -106,7 +108,7 @@ export function WalletBalanceCard({
 
       {/* Summary strip */}
       <div
-        className="grid grid-cols-3 divide-x divide-border/70 bg-card"
+        className="grid grid-cols-4 divide-x divide-border/70 bg-card"
         role="group"
         aria-label="Balance summary"
       >
@@ -131,6 +133,15 @@ export function WalletBalanceCard({
             </span>
           )}
         </button>
+        <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Reserved
+          </span>
+          <span className="text-[15px] font-bold tabular-nums text-foreground">
+            {mask(locked)}
+          </span>
+          {locked > 0 && <span className="text-[9px] text-muted-foreground">Not spendable</span>}
+        </div>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
             Earned

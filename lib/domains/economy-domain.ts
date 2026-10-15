@@ -64,6 +64,8 @@ export interface EconomyRepository {
   /** local = Studio localStorage; server = API is authority (never fall back silently) */
   mode?: EconomyPersistenceMode
   listTransactions(userId: string): GhcTransaction[]
+  /** Authoritative full-ledger snapshot when supplied by the server repository. */
+  getWalletSnapshot?: (userId: string) => GhcWalletSnapshot | null
   appendTransaction(tx: GhcTransaction): void
   /**
    * LOCAL ONLY atomic double-entry when both legs are built in-domain.
@@ -111,13 +113,14 @@ export interface EconomyRepository {
   }>
   /** Server-mode only: stage pending via POST /economy/rewards/evaluate */
   evaluateRewardServer?: (input: {
-    amount: number
     referenceId: string
-    reason: string
-    sourceEvent?: string
+    sourceEvent: string
+    targetId?: string
+    metadata?: Record<string, unknown>
   }) => Promise<{
     ok: boolean
     holdId?: string
+    amount?: number
     transaction?: GhcTransaction
     idempotent?: boolean
     error?: string
@@ -268,6 +271,12 @@ export function createEconomyDomain(deps: {
   const recentAwards = new Map<string, number[]>()
 
   function wallet(): GhcWalletSnapshot {
+    // In server mode, never recompute a financial balance from the bounded activity list.
+    // The wallet endpoint supplies a full-ledger authoritative snapshot.
+    if (repo.mode === "server" && typeof repo.getWalletSnapshot === "function") {
+      const authoritative = repo.getWalletSnapshot(userId)
+      if (authoritative) return authoritative
+    }
     return computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
   }
 
@@ -819,10 +828,10 @@ export function createEconomyDomain(deps: {
             (input.referenceId || "").trim() ||
             `${rule.id}_${input.sourceEvent}_${userId}_${Date.now()}`
           const remote = await repo.evaluateRewardServer({
-            amount: rule.amount,
             referenceId: ref,
-            reason: rule.description,
             sourceEvent: rule.sourceEvent,
+            targetId: input.targetId,
+            metadata: input.metadata,
           })
           if (!remote.ok) continue
           if (remote.transaction) repo.appendTransaction(remote.transaction)
@@ -832,7 +841,7 @@ export function createEconomyDomain(deps: {
             ruleId: rule.id,
             category: rule.category,
             sourceEvent: rule.sourceEvent,
-            amount: rule.amount,
+            amount: Math.max(0, Number(remote.amount ?? remote.transaction?.amount) || 0),
             validationStatus: "pending_validation",
             referenceId: ref,
             reason: rule.description,
@@ -1106,11 +1115,7 @@ export function createEconomyDomain(deps: {
             /* cache best-effort */
           }
         }
-        const wallet = computeWalletFromLedger(
-          userId,
-          repo.listTransactions(userId),
-          limits
-        )
+        const wallet = wallet()
         const rewards = repo.listRewards(userId)
         const reward =
           rewards.find((r) => r.id === holdOrRewardId) ||

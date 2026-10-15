@@ -10,9 +10,30 @@ import {
   bindProviderPayment,
 } from "@/lib/server/payments/intent-store"
 import { piGetPayment, amountsMatch } from "@/lib/server/payments/pi-api"
+import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+async function ensureRecoveredMembership(userId: string, intent: NonNullable<Awaited<ReturnType<typeof loadPaymentIntent>>>) {
+  try {
+    return await tryGrantMembershipFromCompletedIntent({
+      userId,
+      intent: {
+        id: intent.id,
+        userId: intent.userId,
+        purpose: intent.purpose,
+        status: intent.status,
+        amount: intent.amount,
+        currency: intent.currency,
+        providerPaymentId: intent.providerPaymentId,
+        metadata: intent.metadata,
+      },
+    })
+  } catch (e) {
+    return { granted: false, error: e instanceof Error ? e.message : "GRANT_FAILED" }
+  }
+}
 
 export async function POST(
   request: Request,
@@ -30,7 +51,14 @@ export async function POST(
   }
 
   if (intent.status === "COMPLETED" || intent.status === "FULFILLED") {
-    return NextResponse.json({ ok: true, intent, recovered: false, message: "Already completed" })
+    const membership = await ensureRecoveredMembership(auth.userId, intent)
+    return NextResponse.json({
+      ok: true,
+      intent,
+      recovered: false,
+      message: "Already completed",
+      membership,
+    })
   }
 
   const body = await request.json().catch(() => ({}))
@@ -86,7 +114,14 @@ export async function POST(
       txid: txid || undefined,
       providerPaymentId: paymentId,
     })
-    return NextResponse.json({ ok: true, intent: getPaymentIntent(intentId), recovered: true })
+    const recoveredIntent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId) || intent
+    const membership = await ensureRecoveredMembership(auth.userId, recoveredIntent)
+    return NextResponse.json({
+      ok: true,
+      intent: recoveredIntent,
+      recovered: true,
+      membership,
+    })
   }
 
   if (st.developer_approved) {

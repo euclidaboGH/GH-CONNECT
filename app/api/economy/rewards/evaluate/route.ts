@@ -51,8 +51,16 @@ export async function POST(request: Request) {
       ? (body.metadata as Record<string, unknown>)
       : undefined
 
-  // Explicitly reject client-dictated bulk credits
-  const clientAmount = body.amount != null ? Number(body.amount) : undefined
+  // The public evaluation contract never accepts a client-supplied credit amount.
+  // Amount is selected by the server rule catalog + emission governor.
+  if (Object.prototype.hasOwnProperty.call(body, "amount")) {
+    return jsonErr(
+      "CLIENT_AMOUNT_FORBIDDEN",
+      "Reward amount is server-determined and must not be supplied by the client",
+      400
+    )
+  }
+
   const bulk = Number(metadata?.count || metadata?.followCount || 0)
   if (bulk > 1) {
     return jsonErr(
@@ -81,7 +89,6 @@ export async function POST(request: Request) {
     referenceId,
     targetId,
     metadata,
-    clientSuggestedAmount: clientAmount,
   })
 
   if (!result.ok) {
@@ -115,7 +122,5 @@ export async function POST(request: Request) {
     requiresValidation: result.requiresValidation,
     idempotent: result.idempotent,
     transaction: result.transaction,
-    /** Client-suggested amount is recorded for audit only — never applied */
-    clientSuggestedAmountIgnored: clientAmount,
   })
 }

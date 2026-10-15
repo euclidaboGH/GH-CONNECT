@@ -160,12 +160,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     if (isLoadingMore) return
     try {
       setIsLoadingMore(true)
-      const sorted = [...(posts || [])].sort(
-        (a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-      )
-      const oldest = sorted.length ? Number(sorted[sorted.length - 1]?.createdAt) || 0 : 0
-      if (oldest > 0 && typeof refreshFeed === "function") {
-        const page = await refreshFeed({ before: oldest, append: true, limit: 20 })
+      const sorted = [...(posts || [])].sort((a, b) => {
+        const timeDelta = (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+        return timeDelta || String(b.id).localeCompare(String(a.id))
+      })
+      const oldestPost = sorted.length ? sorted[sorted.length - 1] : null
+      const oldest = oldestPost ? Number(oldestPost.createdAt) || 0 : 0
+      if (oldest > 0 && oldestPost?.id && typeof refreshFeed === "function") {
+        const page = await refreshFeed({ before: oldest, beforeId: String(oldestPost.id), append: true, limit: 20 })
         if (page.ok && (page.appended || 0) > 0) {
           setDisplayedPostsCount((prev) => prev + Math.min(20, page.appended || 20))
           return

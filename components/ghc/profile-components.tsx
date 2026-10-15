@@ -2,7 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from "react"
 import { Camera,  Share2, MoreVertical, X, Edit2, Lock, HelpCircle, Eye, EyeOff, Heart, MessageCircle } from "lucide-react"
-import type { Post, Profile } from "@/lib/ghc-types"
+import type { Post, PostEditMedia, Profile } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { EnhancedPostCard } from "./enhanced-post-card"
@@ -570,7 +570,7 @@ export function OwnPostCard({
   onComment?: (postId: string) => void
   onShare?: (postId: string) => void
   onSave?: (postId: string) => void
-  onEdit?: (postId: string, content: string) => void
+  onEdit?: (postId: string, content: string, media?: PostEditMedia) => void
   onArchive?: (postId: string) => void
   onInsights?: (postId: string) => void
   onShowVisibilityReason?: (postId: string) => void

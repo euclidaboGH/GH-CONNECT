@@ -329,6 +329,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
   let premium: import("./economy-types").PremiumMembership | null = null
   /** Max createdAt seen from last successful hydrate — avoid stale overwrite */
   let ledgerWatermark = 0
+  let authoritativeWallet: import("./economy-types").GhcWalletSnapshot | null = null
   const transferRequests: import("./economy-types").GhcTransferRequest[] = []
 
   return {
@@ -336,6 +337,10 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
 
     listTransactions(userId) {
       return localTx.filter((t) => t.userId === userId)
+    },
+
+    getWalletSnapshot(userId) {
+      return authoritativeWallet?.userId === userId ? { ...authoritativeWallet } : null
     },
 
     appendTransaction(tx) {
@@ -385,6 +390,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
         // Merge cache only after confirmed server result
         if (!localTx.some((t) => t.id === debitTx.id)) localTx.push(debitTx)
         if (!localTx.some((t) => t.id === creditTx.id)) localTx.push(creditTx)
+        if (data.wallet) authoritativeWallet = { ...data.wallet }
         return {
           ok: true,
           idempotent: Boolean(data.idempotent),
@@ -504,6 +510,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
           amount?: number
           transactionId?: string
           transaction?: import("./economy-types").GhcTransaction
+          wallet?: import("./economy-types").GhcWalletSnapshot
           alreadyClaimed?: boolean
           error?: string
         }>(cfg, "/economy/rewards/claim", {
@@ -513,6 +520,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
         if (data.transaction && !localTx.some((t) => t.id === data.transaction!.id)) {
           localTx.push(data.transaction)
         }
+        if (data.wallet) authoritativeWallet = { ...data.wallet }
         return {
           ok: true as const,
           amount: data.amount,
@@ -530,15 +538,16 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
 
     /** Stage pending reward on server */
     async evaluateRewardServer(input: {
-      amount: number
       referenceId: string
-      reason: string
-      sourceEvent?: string
+      sourceEvent: string
+      targetId?: string
+      metadata?: Record<string, unknown>
     }) {
       try {
         const data = await req<{
           ok?: boolean
           holdId?: string
+          amount?: number
           transaction?: import("./economy-types").GhcTransaction
           idempotent?: boolean
         }>(cfg, "/economy/rewards/evaluate", {
@@ -548,7 +557,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
         if (data.transaction && !localTx.some((t) => t.id === data.transaction!.id)) {
           localTx.push(data.transaction)
         }
-        return { ok: true as const, holdId: data.holdId, transaction: data.transaction, idempotent: data.idempotent }
+        return { ok: true as const, holdId: data.holdId, amount: data.amount, transaction: data.transaction, idempotent: data.idempotent }
       } catch (e) {
         return { ok: false as const, error: e instanceof Error ? e.message : "EVALUATE_FAILED" }
       }
@@ -588,6 +597,7 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
           premium?: import("./economy-types").PremiumMembership | null
           transferRequests?: import("./economy-types").GhcTransferRequest[]
           updatedAt?: number
+          snapshot?: import("./economy-types").GhcWalletSnapshot
         }>(cfg, `/economy/wallet/${userId}`)
         const serverMax = Math.max(
           0,
@@ -600,6 +610,9 @@ export function createHttpEconomyRepository(cfg: HttpRepoConfig): import("./econ
             console.warn("[http-economy] hydrate skipped — local watermark newer than server")
           }
           return
+        }
+        if (data.snapshot && data.snapshot.userId === userId) {
+          authoritativeWallet = { ...data.snapshot }
         }
         if (data.transactions) {
           // Merge by id: prefer server rows, keep local-only newer ids if any

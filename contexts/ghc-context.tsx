@@ -172,7 +172,7 @@ interface GHCContextType {
   stories: StoryItem[]
   publishStory: (story: StoryItem) => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   /** Canonical durable feed refresh (server when online; preserves local feed on failure) */
-  refreshFeed: (opts?: { before?: number; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
   /** Opens/creates private chat with story owner via Messaging domain */
   replyToStory: (storyId: string) => Promise<string | null>
   tab: Tab
@@ -458,7 +458,7 @@ const GHCFeedContext = createContext<{
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
-  refreshFeed: (opts?: { before?: number; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
   followUser: GHCContextType["followUser"]
   unfollowFromPost: GHCContextType["unfollowFromPost"]
   muteUser: GHCContextType["muteUser"]
@@ -4985,6 +4985,7 @@ const dismissMatchCelebration = useCallback(() => {
 
   const refreshFeed = useCallback(async (opts?: {
     before?: number
+    beforeId?: string
     append?: boolean
     limit?: number
   }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
@@ -4993,6 +4994,7 @@ const dismissMatchCelebration = useCallback(() => {
       const feed = await socialFetchFeed({
         limit: opts?.limit ?? 40,
         before: opts?.before,
+        beforeId: opts?.beforeId,
       })
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
