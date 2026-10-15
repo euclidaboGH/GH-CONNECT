@@ -477,7 +477,7 @@ export function ProfileScreen({
             ["Posts", "gh-profile-posts"],
             ["Moments", "gh-profile-moments"],
             ["About", "gh-profile-about"],
-            ["About", "gh-profile-about"],
+            ["Tools", "gh-profile-tools"],
           ].map(([label, target]) => (
             <button key={target} type="button" onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="shrink-0 rounded-full px-4 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</button>
           ))}
@@ -490,7 +490,7 @@ export function ProfileScreen({
             type="button"
             aria-expanded={dashboardPageOpen}
             onClick={() => setDashboardPageOpen(true)}
-            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-emerald-600/15 bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-4 py-3 text-left text-white shadow-md"
+            className="flex min-h-12 w-full items-center justify-between rounded-[1.1rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="min-w-0">
               <span className="block text-[13px] font-bold text-foreground">Dashboard</span>

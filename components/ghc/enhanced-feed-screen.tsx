@@ -519,7 +519,15 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            {/* header search icon is the single entry point */}
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className="gh-standard-search mb-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-muted/55 px-4 py-2.5 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Search GreenHaven"
+            >
+              <Search size={19} aria-hidden="true" />
+              <span className="truncate">Search GreenHaven...</span>
+            </button>
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
                 <input

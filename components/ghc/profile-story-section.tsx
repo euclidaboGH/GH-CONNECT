@@ -190,10 +190,10 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
     })
   }
 
-  // GreenHaven Moments: circular rail, own moment first, then the social circle.
+  // GreenHaven Moments: landscape oval cards, own moment first, then the social circle.
   if (scope === "feed") {
     return (
-      <section className="-mx-1 px-1 py-2" aria-label="Stories and status updates">
+      <section className="-mx-1 rounded-[1.35rem] border border-border/60 bg-card/80 px-3 py-3 shadow-sm" aria-label="Stories and status updates">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-sm font-bold tracking-tight text-foreground">Moments</h2>
@@ -203,7 +203,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         </div>
         <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
           <button type="button" onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
-            className="relative h-16 w-16 shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-emerald-600/20 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-900 p-3 text-left text-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-emerald-600/20 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-900 p-3 text-left text-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             aria-label={ownStory ? "View your story" : "Create your first story"}>
             <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
             <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/15" />
@@ -222,7 +222,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                   try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}
                   return next
                 })
-              }} className="relative h-16 w-16 shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-border/60 bg-muted text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name}'s story`}>
+              }} className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-border/60 bg-muted text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name}'s story`}>
               <LazyImage src={story.photo || `/avatars/${story.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`} alt="" className="absolute inset-0 h-full w-full object-cover" />
               <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/10" />
               <span className={`absolute left-2.5 top-2.5 h-8 w-8 overflow-hidden rounded-full border-2 p-0.5 ${seenStoryIds.includes(story.id) ? "border-white/60" : "border-emerald-300"}`}>
