@@ -562,7 +562,7 @@ export function ProfileScreen({
                         } catch { /* */ }
                       }}
                       onSave={(postId) => { void feed.savePost(postId).catch(() => ghc.addToast?.("Could not save post", "error")) }}
-                      onEdit={(postId, content, media) => { void feed.editPost(postId, content, media) }}
+                      onEdit={(postId, content, media?) => { void feed.editPost(postId, content, media) }}
                       onArchive={(postId) => { void feed.archivePost(postId) }}
                       onInsights={(postId) => {
                         try {
