@@ -6,6 +6,7 @@ import type { Candidate, MatchIntention } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "@/components/ghc/lazy-image"
 import type { ConnectionUiState } from "@/lib/domains/adapters/connection-graph-adapter"
+import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 
 export const MATCH_INTENTION_META: Record<
   MatchIntention,
@@ -90,10 +91,8 @@ export function EmptyMatchesState({ onStartSwiping }: { onStartSwiping: () => vo
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-950/40">
           <Heart size={32} className="text-rose-500" />
         </div>
-        <h2 className="mb-1.5 text-xl font-bold text-foreground">No matches yet</h2>
-        <p className="mb-1 text-sm text-muted-foreground">
-          Mutual interest — not automatic friendship.
-        </p>
+        <h2 className="mb-1.5 text-xl font-bold text-foreground">No mutual matches yet</h2>
+        <p className="mb-1 text-sm text-muted-foreground">{MATCH_CLARITY.matchesIntro}</p>
         <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
           Dating · Friendship · Pro · Mentor (and more) are mutual interest types — they do not
           auto-create friends.

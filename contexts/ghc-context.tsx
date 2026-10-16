@@ -1,4 +1,6 @@
 "use client"
+
+import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
 import {
   fetchServerProfile,
   persistServerProfile,
@@ -41,6 +43,9 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import {
   findCompletedLocalProfileForUser,
   isCompletedProfileShape,
+  hasLocalOnboardingStampForUser,
+  stampLocalOnboardingComplete,
+  isStrongCompletedProfileShape,
 } from "@/lib/onboarding-local"
 import { validation } from "@/lib/validation"
 import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
@@ -608,7 +613,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ) {
             profile.onboarded = true
           } else if (d.onboardingStatus === "required" || d.needsOnboarding === true) {
-            let alreadyLocal =
+            // Phase 4 — never re-force registration when this device already finished setup
+            let alreadyLocal = false
+            try {
+              if (
+                hasLocalOnboardingStampForUser({
+                  userId: String(d.uid || profile.id || ""),
+                  username: d.username || (profile.username as string) || null,
+                  candidateUserIds: [d.uid, (d as { piUid?: string }).piUid, profile.id],
+                })
+              ) {
+                alreadyLocal = true
+                profile.onboarded = true
+              }
+            } catch {
+              /* */
+            }
+            alreadyLocal =
+              alreadyLocal ||
               profile.onboarded === true ||
               (typeof profile.displayName === "string" &&
                 profile.displayName.trim().length > 0 &&
@@ -621,17 +643,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 const found = findCompletedLocalProfileForUser({
                   userId: String(d.uid || profile.id || ""),
                   username: d.username || (profile.username as string) || null,
+                  candidateUserIds: [d.uid, profile.id],
                 })
                 if (found) {
                   alreadyLocal = true
+                  profile.onboarded = true
                   // Merge stable fields so UI is not empty
                   if (!profile.displayName && found.displayName) profile.displayName = found.displayName
                   if ((!profile.photos || profile.photos.length === 0) && found.photos) {
                     profile.photos = found.photos
                   }
-                  if (!profile.interests && found.interests) profile.interests = found.interests
+                  if ((!profile.interests || !(profile.interests as unknown[]).length) && found.interests) {
+                    profile.interests = found.interests
+                  }
                   if (!profile.city && found.city) profile.city = found.city
                   if (!profile.primaryMode && found.primaryMode) profile.primaryMode = found.primaryMode
+                  if (!profile.bio && found.bio) profile.bio = found.bio
+                  if (!profile.coverPhoto && found.coverPhoto) profile.coverPhoto = found.coverPhoto
                 }
               } catch {
                 /* */
@@ -1286,6 +1314,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      try {
+        window.localStorage.setItem("ghc.profile", JSON.stringify(result.data))
+        const { stampLocalOnboardingComplete, isStrongCompletedProfileShape } = await import("@/lib/onboarding-local")
+        if (isStrongCompletedProfileShape(result.data as never) || (result.data as { onboarded?: boolean }).onboarded) {
+          stampLocalOnboardingComplete({
+            userId: (result.data as { id?: string }).id || null,
+            username:
+              (result.data as { username?: string }).username ||
+              (result.data as { displayName?: string }).displayName ||
+              null,
+            altUserIds: [(result.data as { id?: string }).id].filter(Boolean) as string[],
+          })
+        }
+      } catch {
+        /* */
+      }
       analytics.trackEvent("profile_update", { fields: Object.keys(updates) }, state.profile.displayName)
       addToast("Profile updated", "success")
     } catch (error) {
@@ -1339,9 +1383,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
           const { stampLocalOnboardingComplete } = await import("@/lib/onboarding-local")
           stampLocalOnboardingComplete({
-            userId: profile?.id || null,
+            userId: profile?.id || IdentityService.getUserId?.() || null,
             username: profile?.username || profile?.displayName || null,
-            altUserIds: [profile?.id],
+            altUserIds: [
+              profile?.id,
+              IdentityService.getUserId?.(),
+              (IdentityService as { getPiUid?: () => string | null }).getPiUid?.(),
+            ].filter(Boolean) as string[],
           })
         }
       } catch {
@@ -1961,19 +2009,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           )
           if (duplicate) return post
           // Flat list only — buildCommentTree nests via replyTo (no dual-write)
+          const nextComments = [
+            ...existing,
+            {
+              ...newComment,
+              replyTo: replyToCommentId || newComment.replyTo,
+              replies: [],
+            },
+          ]
           return {
             ...post,
-            comments: [
-              ...existing,
-              {
-                ...newComment,
-                replyTo: replyToCommentId || newComment.replyTo,
-                replies: [],
-              },
-            ],
+            comments: nextComments,
+            engagement: normalizeEngagementMetrics(post.engagement, {
+              comments: nextComments.length,
+            }),
           }
         }),
       }))
+      broadcastPostEngagement({
+        postId,
+        kind: "comment",
+        commentDelta: 1,
+        commentCount: (state.posts.find((p) => p.id === postId)?.comments?.length ?? 0) + 1,
+      })
       try {
         const { socialAddComment } = await import("@/lib/social/client")
         const remote = await socialAddComment(postId, {
@@ -2029,6 +2087,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         upvoteCount?: number
         downvoteCount?: number
         commentDelta?: number
+        commentCount?: number
       }>).detail
       if (!detail?.postId) return
       setState((s) => ({
@@ -2036,33 +2095,30 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         posts: s.posts.map((post) => {
           if (post.id !== detail.postId) return post
           const next = { ...post } as typeof post
-          if (typeof detail.upvoteCount === "number") {
-            ;(next as { upvoteCount?: number }).upvoteCount = detail.upvoteCount
+          if (typeof detail.upvoteCount === "number" && Number.isFinite(detail.upvoteCount)) {
+            ;(next as { upvoteCount?: number }).upvoteCount = Math.max(0, detail.upvoteCount)
           }
-          if (typeof detail.downvoteCount === "number") {
-            ;(next as { downvoteCount?: number }).downvoteCount = detail.downvoteCount
+          if (typeof detail.downvoteCount === "number" && Number.isFinite(detail.downvoteCount)) {
+            ;(next as { downvoteCount?: number }).downvoteCount = Math.max(0, detail.downvoteCount)
           }
-          if (typeof detail.commentDelta === "number" && detail.commentDelta) {
-            const prev = post.engagement
+          if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
+            next.engagement = normalizeEngagementMetrics(post.engagement, {
+              comments: Math.max(0, detail.commentCount),
+            })
+          } else if (typeof detail.commentDelta === "number" && detail.commentDelta) {
             const base = Array.isArray(post.comments)
               ? post.comments.length
-              : Number(prev?.comments ?? 0)
-            next.engagement = {
-              likes: Number(prev?.likes ?? 0),
+              : Number(post.engagement?.comments ?? 0)
+            next.engagement = normalizeEngagementMetrics(post.engagement, {
               comments: Math.max(0, base + detail.commentDelta),
-              shares: Number(prev?.shares ?? 0),
-              views: Number(prev?.views ?? 0),
-              saves: Number(prev?.saves ?? 0),
-              clicks: Number(prev?.clicks ?? 0),
-              avgEngagementTime: Number(prev?.avgEngagementTime ?? 0),
-            }
+            })
           }
           return next
         }),
       }))
     }
-    window.addEventListener("ghc:post-engagement", onEngagement as EventListener)
-    return () => window.removeEventListener("ghc:post-engagement", onEngagement as EventListener)
+    window.addEventListener(POST_ENGAGEMENT_EVENT, onEngagement as EventListener)
+    return () => window.removeEventListener(POST_ENGAGEMENT_EVENT, onEngagement as EventListener)
   }, [])
 
   const editPost = async (
@@ -2112,6 +2168,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : "Post updated",
           "success"
         )
+        try {
+          const { broadcastPostEngagement } = await import("@/lib/engagement/post-engagement")
+          broadcastPostEngagement({ postId, kind: "edit" })
+        } catch {
+          /* */
+        }
       } catch {
         addToast("Could not save post edit on the server", "error")
       }
@@ -3178,11 +3240,94 @@ const dismissMatchCelebration = useCallback(() => {
           }
         }),
       }))
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:new-message", {
+            detail: { conversationId, messageId: uiMessage.id, outbound: true },
+          }),
+        )
+      } catch {
+        /* */
+      }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Failed to send message", "error")
     }
   }, [domains, state.isOnline, state.profile.displayName, addToast])
+
+  // Phase 6 — flush queued messages when back online
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const flush = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return
+      try {
+        const { flushQueuedMessages } = await import("@/lib/messaging/offline-message-flush")
+        const result = await flushQueuedMessages(async ({ conversationId, text }) => {
+          const res = await domains.messaging.sendMessage({
+            conversationId,
+            text,
+            offline: false,
+          })
+          if (!res.ok) return { ok: false, error: res.error }
+          // Merge into UI if missing
+          const uiMessage = (res.data as { uiMessage?: { id: string; text: string; createdAt?: number; senderId?: string }; id?: string; createdAt?: number; senderId?: string }).uiMessage || {
+            id: (res.data as { id?: string }).id || `msg-${Date.now()}`,
+            senderId: "current-user",
+            text,
+            createdAt: (res.data as { createdAt?: number }).createdAt || Date.now(),
+            status: "delivered" as const,
+          }
+          setState((s) => ({
+            ...s,
+            conversations: (s.conversations || []).map((conv) => {
+              if (conv.id !== conversationId) return conv
+              const existing = Array.isArray(conv.messages) ? conv.messages : []
+              if (existing.some((m) => m.id === uiMessage.id || (m.text === text && m.status === "sending"))) {
+                return {
+                  ...conv,
+                  messages: existing.map((m) =>
+                    m.id === uiMessage.id || (m.text === text && (m.status === "sending" || m.status === "failed"))
+                      ? { ...m, ...uiMessage, status: "delivered" as const }
+                      : m,
+                  ),
+                  lastMessage: text,
+                  lastMessageTime: uiMessage.createdAt || Date.now(),
+                }
+              }
+              return {
+                ...conv,
+                messages: [...existing, { ...uiMessage, status: "delivered" as const }],
+                lastMessage: text,
+                lastMessageTime: uiMessage.createdAt || Date.now(),
+              }
+            }),
+          }))
+          return { ok: true }
+        })
+        if (result.succeeded > 0) {
+          addToast(
+            result.succeeded === 1
+              ? "Queued message sent"
+              : `${result.succeeded} queued messages sent`,
+            "success",
+          )
+        }
+      } catch {
+        /* fail-soft */
+      }
+    }
+
+    const onOnline = () => {
+      void flush()
+    }
+    window.addEventListener("online", onOnline)
+    // Cold start with pending queue
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      window.setTimeout(() => void flush(), 1500)
+    }
+    return () => window.removeEventListener("online", onOnline)
+  }, [domains, addToast])
 
   const markConversationRead = useCallback(
     async (conversationId: string) => {

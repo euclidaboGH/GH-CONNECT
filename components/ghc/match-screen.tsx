@@ -31,6 +31,7 @@ import {
   resolveMatchIntention,
 } from "./matches-components"
 import { EmptyState } from "./empty-state"
+import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -333,6 +334,9 @@ export function MatchScreen() {
         }
       />
 
+      <div className="px-3 pt-2">
+        <p className="text-[11px] leading-snug text-muted-foreground">{MATCH_CLARITY.matchesIntro}</p>
+      </div>
       <div className="sr-only" role="status" aria-live="polite">
         {statusMsg || (isLoading ? "Loading matches" : "")}
       </div>

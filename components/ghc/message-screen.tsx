@@ -355,7 +355,7 @@ export function MessageScreen() {
             className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
             role="status"
           >
-            You are offline. You can still draft a message — send when you reconnect so delivery can be confirmed.
+            You are offline. Messages will queue and send automatically when you reconnect.
           </div>
         ) : null}
 
@@ -414,11 +414,22 @@ export function MessageScreen() {
                 onRetry={
                   msg.status === "failed"
                     ? () => {
-                        if (msg.text) {
-                          setDraft(msg.text)
-                          setStatusMsg("Edit and send again")
-                          window.setTimeout(() => setStatusMsg(null), 2000)
-                        }
+                        if (!msg.text || !selectedId || sending) return
+                        void (async () => {
+                          setSending(true)
+                          setStatusMsg("Retrying…")
+                          try {
+                            await sendMessage?.(selectedId, msg.text)
+                            setStatusMsg("Sent")
+                            window.setTimeout(() => setStatusMsg(null), 1500)
+                          } catch {
+                            setDraft(msg.text)
+                            setStatusMsg("Retry failed — edit and send again")
+                            window.setTimeout(() => setStatusMsg(null), 2500)
+                          } finally {
+                            setSending(false)
+                          }
+                        })()
                       }
                     : undefined
                 }
@@ -472,7 +483,7 @@ export function MessageScreen() {
                 )
               } catch { /* */ }
             }}
-            disabled={sending || isOffline}
+            disabled={sending}
           />
         </div>
       </div>

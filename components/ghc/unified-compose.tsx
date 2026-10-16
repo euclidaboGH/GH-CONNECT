@@ -7,7 +7,9 @@ import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
+import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
@@ -207,17 +209,23 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             fileName: file.name,
             onProgress: (label) => setUploadProgress(label),
           })
-          if (up.ok && up.url) {
+          if (up.ok && up.url && isDurableMediaUrl(up.url)) {
             setStoryMedia({ type: "image", url: up.url })
-          } else if (dataUrl.length <= 180_000) {
-            // Small compatibility fallback only; avoid storing large inline payloads in story JSON.
+          } else if (isSmallDataUrl(dataUrl)) {
             setStoryMedia({ type: "image", url: dataUrl })
+            addToast("Photo saved for this device only — reconnect to upload durably", "info")
           } else {
             addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
             return
           }
         } catch {
-          setStoryMedia({ type: "image", url: dataUrl })
+          if (isSmallDataUrl(dataUrl)) {
+            setStoryMedia({ type: "image", url: dataUrl })
+            addToast("Photo saved for this device only — reconnect to upload durably", "info")
+          } else {
+            addToast(mediaUserMessage("NETWORK"), "error")
+            return
+          }
         }
         setSelectedImages([])
         setSelectedVideo(null)
@@ -242,18 +250,25 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               fileName: file.name,
               onProgress: (label) => setUploadProgress(label),
             })
-            if (up.ok && up.url) {
+            if (up.ok && up.url && isDurableMediaUrl(up.url)) {
               images.push(up.url)
             } else if (!up.ok && (up.error === "FILE_TOO_LARGE" || up.error === "INLINE_TOO_LARGE")) {
               addToast(mediaUserMessage(up.error), "error")
             } else if (!up.ok) {
-              // Prefer durable; compact data URL only as last resort for small previews
-              if (dataUrl.length < 180_000) images.push(dataUrl)
-              else addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
+              if (isSmallDataUrl(dataUrl)) {
+                images.push(dataUrl)
+                addToast("Photo on this device only — reconnect to upload for everyone", "info")
+              } else {
+                addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
+              }
             }
           } catch {
-            if (dataUrl.length < 180_000) images.push(dataUrl)
-            else addToast(mediaUserMessage("NETWORK"), "error")
+            if (isSmallDataUrl(dataUrl)) {
+              images.push(dataUrl)
+              addToast("Photo on this device only — reconnect to upload for everyone", "info")
+            } else {
+              addToast(mediaUserMessage("NETWORK"), "error")
+            }
           }
         }
         if (images.length) {
@@ -288,7 +303,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         fileName: file.name,
         onProgress: (label) => setUploadProgress(label),
       })
-      if (up.ok && up.url) {
+      if (up.ok && up.url && isDurableMediaUrl(up.url)) {
         setSelectedDoc(up.url)
         setSelectedDocName(file.name || "attachment")
         setUploadProgress(MEDIA_PROGRESS.ready)
@@ -348,7 +363,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         addToast("✓ Video ready for story", "success")
         return
       }
-      if (up.ok && up.url) {
+      if (up.ok && up.url && isDurableMediaUrl(up.url)) {
         setSelectedVideo(up.url)
         setStoryMedia(null)
         setUploadProgress(MEDIA_PROGRESS.ready)
@@ -398,6 +413,26 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     if (publishingRef.current || isPublishing || !canPublish) return
     publishingRef.current = true
     setIsPublishing(true)
+    // Phase 2 — never publish blob: media
+    const dirtyImages = selectedImages.filter((u) => isBlobUrl(u) || !u)
+    if (dirtyImages.length) {
+      addToast("Media still uploading — wait until Ready, then share", "error")
+      publishingRef.current = false
+      setIsPublishing(false)
+      return
+    }
+    if (selectedVideo && isBlobUrl(selectedVideo)) {
+      addToast("Video still uploading — wait until Ready, then share", "error")
+      publishingRef.current = false
+      setIsPublishing(false)
+      return
+    }
+    if (storyMedia?.url && isBlobUrl(storyMedia.url)) {
+      addToast("Moment media still uploading — wait until Ready", "error")
+      publishingRef.current = false
+      setIsPublishing(false)
+      return
+    }
     try {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
           addToast("You are offline — we will post when you are back online", "info")
@@ -661,7 +696,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 <button
                   type="button"
                   onClick={() => {
-                    try { void piLocalSet("post-draft-v1", JSON.stringify({ text, audience, at: Date.now() })) } catch {}
+                    try {
+                      void piLocalSet("post-draft-v1", JSON.stringify({ text, audience, at: Date.now() }))
+                    } catch { /* */ }
+                    try {
+                      upsertPostDraft({
+                        content: text,
+                        images: selectedImages.filter((x) => typeof x === "string"),
+                        video: selectedVideo || null,
+                      })
+                    } catch { /* */ }
                     addToast("Draft saved on this device", "success")
                   }}
                   className="rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"

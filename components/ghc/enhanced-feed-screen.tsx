@@ -4,6 +4,7 @@ import { closeAllActionSheets } from "./action-sheet"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import type { Post, FeedFilter, PostDraft, SavedPost } from "@/lib/ghc-types"
+import { listPostDrafts, removePostDraft } from "@/lib/creator/post-drafts"
 import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
@@ -155,6 +156,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // Infinite scroll detection
   const observerTargetRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        setDraftPosts(listPostDrafts())
+      } catch {
+        setDraftPosts([])
+      }
+    }
+    load()
+    const onChange = () => load()
+    window.addEventListener("ghc:post-drafts-changed", onChange as EventListener)
+    return () => window.removeEventListener("ghc:post-drafts-changed", onChange as EventListener)
+  }, [])
+
 
   const loadMorePosts = useCallback(async () => {
     if (isLoadingMore) return
@@ -649,6 +665,47 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
           {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
+
+      {draftPosts.length > 0 ? (
+        <div className="mx-3 mb-2 rounded-2xl border border-border/50 bg-card/80 px-3 py-2.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Drafts</p>
+            <span className="text-[10px] text-muted-foreground">{draftPosts.length}</span>
+          </div>
+          <ul className="space-y-1.5">
+            {draftPosts.slice(0, 3).map((d) => (
+              <li key={d.id} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left text-[13px] text-foreground"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:open-compose", {
+                          detail: { mode: "post", draftId: d.id, text: d.content },
+                        }),
+                      )
+                    } catch { /* */ }
+                  }}
+                >
+                  {d.content.trim() || "Untitled draft"}
+                </button>
+                <button
+                  type="button"
+                  className="shrink-0 text-[11px] font-semibold text-muted-foreground"
+                  onClick={() => {
+                    removePostDraft(d.id)
+                    setDraftPosts((prev) => prev.filter((x) => x.id !== d.id))
+                  }}
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
 
           {displayPosts.length === 0 ? (
             <EmptyState

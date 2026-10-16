@@ -15,6 +15,8 @@ export function PostInsightsSheet({
 }) {
   if (!open || !post) return null
   const i = computePostInsights(post)
+  const up = Number((post as { upvotes?: number }).upvotes ?? (post as { voteUp?: number }).voteUp ?? 0)
+  const down = Number((post as { downvotes?: number }).downvotes ?? (post as { voteDown?: number }).voteDown ?? 0)
 
   return (
     <div className="fixed inset-0 z-[75] flex items-end bg-black/40 sm:items-center sm:justify-center" onClick={onClose}>
@@ -31,7 +33,10 @@ export function PostInsightsSheet({
             <X size={18} />
           </button>
         </div>
-        <p className="mb-4 line-clamp-2 text-xs text-muted-foreground">{post.content}</p>
+        <p className="mb-1 line-clamp-2 text-xs text-muted-foreground">{post.content}</p>
+        <p className="mb-4 text-[10px] text-muted-foreground">
+          Counts come from this post&apos;s engagement data only — nothing is invented.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {[
             { icon: Eye, label: "Reach", value: i.reach },
@@ -39,6 +44,12 @@ export function PostInsightsSheet({
             { icon: MessageCircle, label: "Comments", value: i.comments },
             { icon: Share2, label: "Shares", value: i.shares },
             { icon: Bookmark, label: "Saves", value: i.saves },
+            ...(up > 0 || down > 0
+              ? [
+                  { icon: Heart, label: "Up votes", value: up },
+                  { icon: Heart, label: "Down votes", value: down },
+                ]
+              : []),
           ].map((row) => (
             <div key={row.label} className="rounded-[1.25rem] border border-border/50 bg-card p-3 shadow-[var(--gh-card-shadow)]">
               <row.icon size={16} className="mb-1 text-violet-600" />

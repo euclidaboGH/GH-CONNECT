@@ -48,6 +48,7 @@ import type { GhcTransaction, RewardRecord } from "@/lib/domains/economy-types"
 import { DEFAULT_ECONOMY_LIMITS } from "@/lib/domains/economy-types"
 import { QuickChip, TxRow, EmptyBlock } from "./wallet-activity"
 import { WalletHeader } from "./wallet-header"
+import { formatGhc as formatGhcShared, formatWhen as formatWhenShared } from "./wallet-format"
 import { WalletBalanceCard } from "./wallet-balance"
 import { WithdrawGhcPanel } from "./withdraw-ghc-panel"
 import { WalletPrimaryActions } from "./wallet-actions"
@@ -55,13 +56,8 @@ import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
-function formatGhc(n: number): string {
-  if (!Number.isFinite(n)) return "₲ 0.00"
-  return `₲ ${n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
+const formatGhc = formatGhcShared
+
 
 function formatWhen(ts: number) {
   try {
@@ -511,7 +507,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         setClaimReceipt({ amount: amt, ref })
         setClaimFeedback(
           amt > 0
-            ? `+${amt} GHC available${ref ? ` · ref ${ref}` : ""}`
+            ? `+${formatGhc(Number(amt))} available${ref ? ` · ref ${ref}` : ""}`
             : claimed > 1
               ? `Claimed ${claimed} items — added to available balance`
               : "Claimed — added to available balance"
@@ -689,10 +685,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const month = new Date().toLocaleString(undefined, { month: "long", year: "numeric" })
     const lines = [
       `GreenHaven — GHC statement (${month})`,
-      `Available: ${formatGhc(balance)} GHC`,
-      `Reserved: ${formatGhc(locked)} GHC`,
-      `Pending: ${formatGhc(displayPending)} GHC`,
-      `Lifetime activity credit: ${formatGhc(earned)} · spent: ${formatGhc(spent)}`,
+      `Available: ${formatGhc(balance)}`,
+      `Reserved: ${formatGhc(locked)}`,
+      `Pending: ${formatGhc(displayPending)}`,
+      `Lifetime credit: ${formatGhc(earned)} · spent: ${formatGhc(spent)}`,
       `This month: +${formatGhc(monthInsight.monthEarned)} / −${formatGhc(monthInsight.monthSpent)}`,
       "",
       "Recent Transactions:",

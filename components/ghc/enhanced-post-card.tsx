@@ -17,13 +17,20 @@ import {
   Pin,
   Archive,
   Copy,
+  ImagePlus,
+  Loader2,
 } from "lucide-react"
 import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
+import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
+import { isDurableMediaUrl } from "@/lib/media/durable-url"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
 import { SpecialPostBody, detectSpecialPost } from "./feed-special-blocks"
 import { resolveAvatarUrl } from "@/lib/avatar"
+import { AuthorRepChip } from "./author-rep-chip"
+import { authorReputationFromPost } from "@/lib/reputation/display"
 import { isOwnAuthor } from "@/lib/ownership"
 import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
@@ -104,18 +111,20 @@ function EnhancedPostCardInner({
     if (raw && raw.toLowerCase() !== "user" && raw.toLowerCase() !== "unknown") return raw
     return isOwn ? "You" : "Member"
   })()
-
   const realImages = (Array.isArray(post.images) ? post.images : []).filter(
-    (u): u is string =>
-      typeof u === "string" &&
-      u.trim().length > 0 &&
-      !u.includes("placeholder") &&
-      !u.startsWith("blob:") &&
-      !u.startsWith("data:image/svg")
+    (u): u is string => isDurableMediaUrl(u) || (typeof u === "string" && u.startsWith("data:image/") && u.length < 180_000 && !u.includes("svg"))
   )
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
+  const [draftImages, setDraftImages] = useState<string[]>(() =>
+    Array.isArray(post.images) ? post.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u)) : [],
+  )
+  const [draftVideo, setDraftVideo] = useState<string | null>(
+    typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null,
+  )
+  const [editMediaBusy, setEditMediaBusy] = useState(false)
+  const editImageInputRef = useRef<HTMLInputElement>(null)
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -190,17 +199,27 @@ function EnhancedPostCardInner({
     setCurationBusy(true)
     try {
       const res = await socialSetCuration(post.id, choice)
+      if (!res.ok) {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:toast", {
+            detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : (res.error || "Could not record vote"), type: "error" },
+          }))
+        } catch { /* */ }
+        return
+      }
       if (res.ok && res.choice) {
         setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
         const nextUp = typeof res.upvoteCount === "number" ? res.upvoteCount : upvoteCount
         const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
-        try {
-          window.dispatchEvent(new CustomEvent("ghc:post-engagement", {
-            detail: { postId: post.id, kind: "curation", choice: res.choice, upvoteCount: nextUp, downvoteCount: nextDown },
-          }))
-        } catch { /* */ }
+        broadcastPostEngagement({
+          postId: post.id,
+          kind: "curation",
+          choice: res.choice as "upvote" | "downvote" | "neutral",
+          upvoteCount: nextUp,
+          downvoteCount: nextDown,
+        })
       }
     } finally {
       setCurationBusy(false)
@@ -362,6 +381,7 @@ function EnhancedPostCardInner({
           <div className="min-w-0 flex-1">
             <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{displayAuthor}</button>
             <div className="flex flex-wrap items-center gap-1">
+              <AuthorRepChip data={authorReputationFromPost(post as never)} />
               {(() => {
                 const p = post as Post & { authorProfession?: string; authorTitle?: string; communityName?: string }
                 const ctx = p.authorProfession || p.authorTitle || p.communityName
@@ -429,7 +449,19 @@ function EnhancedPostCardInner({
         title={isOwn ? "Your post" : "Post options"}
       >
         {isOwn && onEdit && (
-          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => { setDraftContent(post.content ?? ""); setEditingPost(true); setShowMenu(false) }}>
+          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => {
+              setDraftContent(post.content ?? "")
+              setDraftImages(
+                Array.isArray(post.images)
+                  ? post.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u))
+                  : [],
+              )
+              setDraftVideo(
+                typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null,
+              )
+              setEditingPost(true)
+              setShowMenu(false)
+            }}>
             Edit post
           </ActionSheetItem>
         )}
@@ -482,7 +514,122 @@ function EnhancedPostCardInner({
         )}
       </ActionSheet>
 
-      {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl"><h2 className="text-lg font-bold text-foreground">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
+      {editingPost && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl">
+            <h2 className="text-lg font-bold text-foreground">Edit post</h2>
+            <textarea
+              autoFocus
+              value={draftContent}
+              onChange={(event) => setDraftContent(event.target.value)}
+              className="mt-4 min-h-28 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              maxLength={5000}
+              placeholder="Update your post…"
+            />
+            <div className="mt-3">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Media</p>
+              {draftImages.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {draftImages.map((url) => (
+                    <div key={url} className="relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border/60">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                        aria-label="Remove image"
+                        onClick={() => setDraftImages((prev) => prev.filter((u) => u !== url))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {draftVideo ? (
+                <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-[12px]">
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">Video attached</span>
+                  <button type="button" className="font-semibold text-rose-600" onClick={() => setDraftVideo(null)}>
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+              <input
+                ref={editImageInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                multiple
+                onChange={(e) => {
+                  const files = e.target.files
+                  e.target.value = ""
+                  if (!files?.length) return
+                  void (async () => {
+                    setEditMediaBusy(true)
+                    try {
+                      for (const file of Array.from(files).slice(0, 10 - draftImages.length)) {
+                        if (file.type.startsWith("video/")) {
+                          const res = await uploadDurableMedia(file, { fileName: file.name })
+                          const url =
+                            (res as { url?: string; publicUrl?: string })?.url ||
+                            (res as { publicUrl?: string })?.publicUrl
+                          if (url && isDurableMediaUrl(String(url))) setDraftVideo(String(url))
+                          continue
+                        }
+                        if (!file.type.startsWith("image/")) continue
+                        const res = await uploadDurableMedia(file, { fileName: file.name })
+                        const url =
+                          (res as { url?: string; publicUrl?: string })?.url ||
+                          (res as { publicUrl?: string })?.publicUrl
+                        if (url && isDurableMediaUrl(String(url))) {
+                          setDraftImages((prev) => [...prev, String(url)].slice(0, 10))
+                        }
+                      }
+                    } catch {
+                      /* fail-soft — keep existing media */
+                    } finally {
+                      setEditMediaBusy(false)
+                    }
+                  })()
+                }}
+              />
+              <button
+                type="button"
+                disabled={editMediaBusy || draftImages.length >= 10}
+                onClick={() => editImageInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+              >
+                {editMediaBusy ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+                {editMediaBusy ? "Uploading…" : "Add photo or video"}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingPost(false)}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!draftContent.trim() || editMediaBusy}
+                onClick={() => {
+                  const media: PostEditMedia = {
+                    images: draftImages,
+                    video: draftVideo,
+                  }
+                  onEdit?.(post.id, draftContent.trim(), media)
+                  setEditingPost(false)
+                }}
+                className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content with rich formatting */}
       <div className="px-4 pb-3 pt-1">
@@ -562,7 +709,7 @@ function EnhancedPostCardInner({
         )}
 
         {/* Media gallery with improved viewing */}
-        {Array.isArray(post.images) && realImages.length > 0 && (
+        {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
           <div
             className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-[1.15rem] sm:aspect-video bg-muted/50 group cursor-pointer"
             onClick={handleImageTap}
@@ -572,7 +719,7 @@ function EnhancedPostCardInner({
             onTouchEnd={handlePressEnd}
           >
             <LazyImage
-              src={realImages[Math.min(imageIndex, Math.max(0, realImages.length - 1))] || realImages[0]}
+              src={(post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))[Math.min(imageIndex, post.images.length - 1)] || post.images[0])}
               alt={`Post image ${imageIndex + 1}`}
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -724,8 +871,6 @@ function EnhancedPostCardInner({
         upvoteCount={upvoteCount}
         downvoteCount={downvoteCount}
       />
-
-
     </div>
   )
 }

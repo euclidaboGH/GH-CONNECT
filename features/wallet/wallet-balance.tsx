@@ -88,11 +88,6 @@ export function WalletBalanceCard({
           ) : (
             <>
               <span className="text-white">{mask(balance)}</span>
-              {balanceVisible && (
-                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[0.85rem] font-bold tracking-wide text-white/95">
-                  GHC
-                </span>
-              )}
             </>
           )}
         </p>

@@ -138,11 +138,11 @@ export function mapGhcUxError(raw?: string | null): GhcUxMessage {
 /** Bank-style GHC amount — always two decimal places when finite */
 export function formatGhcAmount(n: number, hidden = false): string {
   if (hidden) return "••••••"
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  })}`
 }
 
 export function formatGhcWhen(ts?: number | null): string {

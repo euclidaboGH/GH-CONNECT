@@ -3,6 +3,7 @@
 import { useState, useEffect, type ReactNode } from "react"
 import { Camera,  Share2, MoreVertical, X, Edit2, Lock, HelpCircle, Eye, EyeOff, Heart, MessageCircle } from "lucide-react"
 import type { Post, PostEditMedia, Profile } from "@/lib/ghc-types"
+import { INTERESTS } from "@/lib/ghc-data"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { EnhancedPostCard } from "./enhanced-post-card"
@@ -831,45 +832,84 @@ export function EditProfileModal({
           </div>
         </div>
 
-        {/* Interests */}
+        {/* Interests — catalog chips + optional custom */}
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-foreground">Interests</label>
-          <div className="mb-3 flex gap-2">
+          <p className="mb-2 text-[11px] text-muted-foreground">Tap to select (saved with your profile)</p>
+          <div className="mb-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-border/50 bg-muted/20 p-2">
+            {Object.entries(INTERESTS).map(([category, items]) => (
+              <div key={category}>
+                <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{category}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(items as string[]).map((interest) => {
+                    const selected = interests.includes(interest)
+                    return (
+                      <button
+                        key={interest}
+                        type="button"
+                        onClick={() =>
+                          setInterests(
+                            selected
+                              ? interests.filter((i) => i !== interest)
+                              : [...interests, interest].slice(0, 24),
+                          )
+                        }
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                          selected
+                            ? "bg-[var(--gh-green)] text-white"
+                            : "bg-card text-foreground ring-1 ring-border/60"
+                        }`}
+                      >
+                        {interest}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mb-2 flex gap-2">
             <input
               type="text"
               value={newInterest}
               onChange={(e) => setNewInterest(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleAddInterest()}
-              className="flex-1 rounded-lg border border-border/70 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-              placeholder="Add an interest"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  handleAddInterest()
+                }
+              }}
+              className="flex-1 rounded-lg border border-border/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              placeholder="Custom interest"
               maxLength={30}
             />
             <button
               type="button"
               onClick={handleAddInterest}
-              className="rounded-lg bg-[var(--gh-green)] px-4 py-2 font-semibold text-white transition hover:brightness-105 active:scale-90"
+              className="rounded-lg bg-[var(--gh-green)] px-3 py-2 text-sm font-semibold text-white"
             >
               Add
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {interests.map((interest) => (
-              <button
-                key={interest}
-                type="button"
-                onClick={() => setInterests(interests.filter((i) => i !== interest))}
-                className="flex items-center gap-1 rounded-full bg-pink-100 px-3 py-1 text-sm font-semibold text-pink-700 transition hover:bg-pink-200 active:scale-90"
-              >
-                {interest}
-                <X size={14} />
-              </button>
-            ))}
-          </div>
+          {interests.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {interests.map((interest) => (
+                <button
+                  key={interest}
+                  type="button"
+                  onClick={() => setInterests(interests.filter((i) => i !== interest))}
+                  className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-200"
+                >
+                  {interest}
+                  <X size={12} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">No interests selected yet</p>
+          )}
         </div>
-
-        {saveError ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</p> : null}
-
-        {/* Buttons */}
+{/* Buttons */}
         <div className="flex gap-3 pt-2 pb-2">
           <button
             type="button"

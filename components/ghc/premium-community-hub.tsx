@@ -6,6 +6,7 @@
  * Chat: realtime member conversation (Messaging domain, community type).
  */
 
+import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
 import { useMemo, useState, useEffect } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import {

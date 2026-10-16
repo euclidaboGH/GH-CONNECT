@@ -28,6 +28,7 @@ import { useScrollHeader } from "@/lib/use-scroll-header"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { GroupCard } from "./group-card"
 import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
+import { privacyJoinHint, formatCommunityRole } from "@/lib/community/role-labels"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -612,8 +613,13 @@ export function CommunitiesScreen() {
         // Open hub so Board/Chat are one step away after membership
         setSelectedCommunityId(row.id)
         setDirectory("my")
-        setStatusMsg("Membership updated")
-        window.setTimeout(() => setStatusMsg(null), 2500)
+        setStatusMsg("You're in — open Board or Chat to participate")
+        window.setTimeout(() => setStatusMsg(null), 2800)
+        try {
+          addToast("Welcome to the community", "success")
+        } catch {
+          /* */
+        }
         return true
       }
       setJoinError(userFacingJoinError("join_failed"))
@@ -1370,6 +1376,9 @@ export function CommunitiesScreen() {
             <p className="text-[13px] leading-relaxed text-foreground/90">
               {joinGate.description || "A space for posts, events, and member chat."}
             </p>
+            <p className="mt-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+              {privacyJoinHint(joinGate.privacy)}
+            </p>
             {normalizeRules(joinGate.rules).length > 0 ? (
               <div className="mt-4 rounded-2xl border border-border bg-muted/40 p-3">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -1408,7 +1417,9 @@ export function CommunitiesScreen() {
               >
                 {joinBusy
                   ? "Working…"
-                  : joinGate.privacy === "invite-only"
+                  : ["invite-only", "invite", "private", "approval", "request"].includes(
+                        String(joinGate.privacy || "").toLowerCase(),
+                      )
                     ? "Request to join"
                     : "Join community"}
               </button>

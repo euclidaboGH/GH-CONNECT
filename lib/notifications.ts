@@ -28,6 +28,8 @@ export interface Notification {
   data?: Record<string, any>
 }
 
+export const NOTIFICATIONS_CHANGED_EVENT = "ghc:notifications-changed" as const
+
 const NOTIFICATIONS_KEY = "ghc_notifications"
 const MAX_NOTIFICATIONS = 100
 
@@ -77,6 +79,10 @@ export const notificationSystem = {
       // Keep only last MAX_NOTIFICATIONS
       const trimmed = notifs.slice(-MAX_NOTIFICATIONS)
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(trimmed))
+
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "add", type } }))
+      } catch { /* */ }
 
       // Try to show browser notification if allowed
       if ("Notification" in window && Notification.permission === "granted") {
@@ -155,6 +161,9 @@ export const notificationSystem = {
       const updated = notifs.map((n) => (n.id === notifId ? { ...n, read: true } : n))
 
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read" } }))
+      } catch { /* */ }
     } catch (e) {
       console.warn("[v0] Failed to mark as read:", e)
     }
@@ -170,6 +179,9 @@ export const notificationSystem = {
       const updated = notifs.map((n) => ({ ...n, read: true }))
 
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read-all" } }))
+      } catch { /* */ }
     } catch (e) {
       console.warn("[v0] Failed to mark all as read:", e)
     }
@@ -201,4 +213,48 @@ export const notificationSystem = {
     }
     return false
   },
+}
+
+
+/** Phase 5 — in-app reward notification (no balance invention). */
+export function notifyRewardClaimed(input: {
+  title?: string
+  message: string
+  amountLabel?: string
+}): void {
+  notificationSystem.addNotification(
+    "reward",
+    input.title || "Daily reward",
+    input.message,
+    "🎁",
+    { kind: "daily_claim", amountLabel: input.amountLabel },
+  )
+}
+
+/** Local mirror when you receive engagement on your content (author-only). */
+export function notifyContentEngagement(input: {
+  kind: "comment" | "like" | "curation"
+  title: string
+  message: string
+  postId?: string
+  fromUserId?: string
+}): void {
+  const type =
+    input.kind === "comment" ? "comment" : input.kind === "like" ? "like" : "system"
+  notificationSystem.addNotification(type, input.title, input.message, "🔔", {
+    postId: input.postId,
+    fromUserId: input.fromUserId,
+    kind: input.kind,
+  })
+}
+
+/** Soft-request browser notification permission once (fail-soft). */
+export function requestBrowserNotificationPermission(): void {
+  if (typeof window === "undefined" || !("Notification" in window)) return
+  if (Notification.permission !== "default") return
+  try {
+    void Notification.requestPermission()
+  } catch {
+    /* */
+  }
 }

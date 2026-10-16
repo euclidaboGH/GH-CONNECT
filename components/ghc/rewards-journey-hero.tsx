@@ -16,9 +16,13 @@ import {
   getDailyStreak,
   claimDailyStreak,
   DAILY_STREAK_GHC,
+  msUntilNextLagosMidnight,
+  formatCountdown,
+  markDailyClaimedForUi,
 } from "@/lib/domains/reward-level-domain"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
+import { notifyRewardClaimed } from "@/lib/notifications"
 
 function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
@@ -41,6 +45,7 @@ export function RewardsJourneyHero({
   const [tick, setTick] = useState<number>(0)
   const [claimingDaily, setClaimingDaily] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
 
   const membershipTier = useMemo(() => {
     // Re-read membership status when tick advances after claim/refresh
@@ -84,6 +89,20 @@ export function RewardsJourneyHero({
     }
   }, [])
 
+  // Phase 3 — live countdown to next Lagos reward day
+  useEffect(() => {
+    const tickCd = () => setCountdownLabel(formatCountdown(msUntilNextLagosMidnight()))
+    tickCd()
+    const id = window.setInterval(tickCd, 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const onClaimed = () => setTick((x) => x + 1)
+    window.addEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
+    return () => window.removeEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
+  }, [])
+
   const claimDaily = useCallback(async () => {
     // Server-authoritative daily claim only — no local GHC mint
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -101,7 +120,13 @@ export function RewardsJourneyHero({
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
         ghc.addToast?.(data.error || data.message || "Claim failed", "error")
-        setTick((t) => t + 1)
+        try { markDailyClaimedForUi(userId) } catch { /* */ }
+      try {
+        notifyRewardClaimed({
+          message: "Daily reward recorded · open Wallet for ledger balance",
+        })
+      } catch { /* */ }
+      setTick((t) => t + 1)
         return
       }
       const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
@@ -347,12 +372,16 @@ export function RewardsJourneyHero({
                 ? "Claiming…"
                 : isOffline
                   ? "Offline — reconnect to claim"
-                  : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)} GHC`}
+                  : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)}`}
             </button>
           ) : (
-            <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">
-              Today claimed · next reward after midnight (Africa/Lagos)
-            </p>
+            <div className="mt-4 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3.5 text-center">
+              <p className="text-[13px] font-bold text-foreground">Claimed today</p>
+              <p className="mt-1 text-[12px] tabular-nums text-muted-foreground">
+                Next claim in <span className="font-semibold text-foreground">{countdownLabel}</span>
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">Resets at midnight · Africa/Lagos</p>
+            </div>
           )}
         </div>
       </section>

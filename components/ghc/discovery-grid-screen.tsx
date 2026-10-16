@@ -37,6 +37,7 @@ import {
   declineUnifiedConnectionRequest,
 } from "@/lib/domains/adapters/unified-connection-request"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
+import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 import {
   submitConnectionFromPicker,
   userFacingConnectError,
@@ -103,7 +104,7 @@ export function DiscoveryGridScreen() {
   const [connectBusy, setConnectBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const userInterests = useMemo(
@@ -376,9 +377,9 @@ export function DiscoveryGridScreen() {
       </header>
       <div className="gh-discovery-intro gh-world-discovery-intro px-3 pt-2.5">
         <div className="gh-reference-panel gh-reference-soft-green px-4 py-3">
-          <p className="text-[13px] font-bold tracking-tight text-foreground">Find your people</p>
+          <p className="text-[13px] font-bold tracking-tight text-foreground">{MATCH_CLARITY.discoverIntroTitle}</p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            People, communities and opportunities shaped around what you are here to do.
+            {MATCH_CLARITY.discoverIntroBody}
           </p>
         </div>
       </div>
@@ -405,6 +406,32 @@ export function DiscoveryGridScreen() {
           selectedIntents={selectedIntents}
           onIntentsChange={(ids) => onIntentsChange(ids as ConnectionIntentId[])}
         />
+      ) : selectedIntents.length > 0 ? (
+        <div className="flex items-center gap-2 overflow-x-auto px-3 pb-1.5">
+          <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Intents
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {selectedIntents.slice(0, 4).map((id) => (
+              <span
+                key={id}
+                className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+              >
+                {String(id).replace(/_/g, " ")}
+              </span>
+            ))}
+            {selectedIntents.length > 4 ? (
+              <span className="text-[10px] text-muted-foreground">+{selectedIntents.length - 4}</span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="ml-auto shrink-0 text-[11px] font-semibold text-primary"
+            onClick={() => setFiltersOpen(true)}
+          >
+            Edit
+          </button>
+        </div>
       ) : null}
 
       <div
@@ -476,11 +503,15 @@ export function DiscoveryGridScreen() {
         ) : (adapted.list.length === 0) ? (
           <EmptyState
             variant="discover"
-            title={emptyCopy.title}
+            title={
+              query.trim()
+                ? MATCH_CLARITY.emptySearchTitle
+                : emptyCopy.title || MATCH_CLARITY.emptyPeopleTitle
+            }
             description={
-              query
-                ? "No members match this search. Try different keywords or intents."
-                : emptyCopy.description
+              query.trim()
+                ? MATCH_CLARITY.emptySearchBody
+                : emptyCopy.description || MATCH_CLARITY.emptyPeopleBody
             }
             action={{
               label: emptyCopy.primaryAction?.label || "Update connection goals",
@@ -497,12 +528,15 @@ export function DiscoveryGridScreen() {
               },
             }}
             secondaryAction={{
-              label: query.trim() ? "Clear search" : "Clear filters",
+              label: query.trim() ? "Clear search" : "Show filters",
               onClick: () => {
-                onIntentsChange([])
-                setQuery("")
-                setCategory("people")
-                setFiltersOpen(true)
+                if (query.trim()) {
+                  setQuery("")
+                } else {
+                  onIntentsChange([])
+                  setCategory("people")
+                  setFiltersOpen(true)
+                }
               },
             }}
           />

@@ -7,6 +7,7 @@
 import { useState, useEffect, memo } from "react"
 import { Users, MessageSquare, LayoutGrid, ChevronRight } from "lucide-react"
 import { LazyImage } from "./lazy-image"
+import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
 
 interface GroupCardProps {
   id: string
@@ -151,14 +152,11 @@ function GroupCardContent({
                 </span>
                 <span aria-hidden>·</span>
                 <span>{timeAgo || "—"}</span>
-                {role && role !== "guest" && role !== "member" && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span className="font-semibold capitalize text-emerald-700 dark:text-emerald-400">
-                      {role}
-                    </span>
-                  </>
-                )}
+                {role && role !== "guest" ? (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${communityRoleBadgeClass(role)}`}>
+                    {formatCommunityRole(role)}
+                  </span>
+                ) : null}
               </p>
             </div>
             <ChevronRight size={18} className="mt-0.5 shrink-0 text-muted-foreground/60" aria-hidden />

@@ -104,7 +104,7 @@ export function ConnectionCard({
         <div className="mt-2 flex flex-wrap gap-1">
           {selectedIntent ? (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              Intent: {selectedIntent}
+              Intent: {formatIntentChip(String(selectedIntent))}
             </span>
           ) : null}
           {candidate.kind === "person"
@@ -136,11 +136,11 @@ export function ConnectionCard({
             }
             title={
               action === "like"
-                ? "Like for matching — mutual interest is an opportunity, not auto-connect"
+                ? MATCH_CLARITY.likeHint
                 : action === "pass"
-                  ? "Pass — not interested for matching"
+                  ? MATCH_CLARITY.passHint
                   : action === "connect"
-                    ? "Send a connection request"
+                    ? MATCH_CLARITY.connectHint
                     : undefined
             }
           >
@@ -155,7 +155,11 @@ export function ConnectionCard({
 function labelForAction(action: ConnectionCardAction): string {
   switch (action) {
     case "connect":
-      return "Connect"
+      return MATCH_CLARITY.connectLabel
+    case "like":
+      return MATCH_CLARITY.likeLabel
+    case "pass":
+      return MATCH_CLARITY.passLabel
     case "accept":
       return "Accept"
     case "decline":

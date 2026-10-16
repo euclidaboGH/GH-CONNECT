@@ -27,6 +27,8 @@ import {
   notificationSystem,
   type Notification,
   type NotificationType,
+  NOTIFICATIONS_CHANGED_EVENT,
+  requestBrowserNotificationPermission,
 } from "@/lib/notifications"
 import {
   NOTIFICATION_CENTER_BUCKETS,
@@ -182,8 +184,8 @@ export function NotificationBell({
               ? "like"
               : n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention"
                 ? "comment"
-              : n.type === "curation"
-                ? "system"
+              : n.type === "curation" || n.type === "post_curation"
+                ? "like"
               : n.type === "reputation_level_up"
                 ? "system"
               : n.type === "share"
@@ -249,6 +251,23 @@ export function NotificationBell({
     return () => window.clearInterval(id)
   }, [refresh])
 
+  // Phase 5 — live refresh when local or product events fire
+  useEffect(() => {
+    const onChange = () => refresh()
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onChange as EventListener)
+    window.addEventListener("ghc:daily-reward-claimed", onChange as EventListener)
+    window.addEventListener("ghc:post-engagement", onChange as EventListener)
+    window.addEventListener("ghc:new-message", onChange as EventListener)
+    window.addEventListener("ghc:notification", onChange as EventListener)
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChange as EventListener)
+      window.removeEventListener("ghc:daily-reward-claimed", onChange as EventListener)
+      window.removeEventListener("ghc:post-engagement", onChange as EventListener)
+      window.removeEventListener("ghc:new-message", onChange as EventListener)
+      window.removeEventListener("ghc:notification", onChange as EventListener)
+    }
+  }, [refresh])
+
   useEffect(() => {
     return onCloseTransientUI(() => setOpen(false))
   }, [])
@@ -286,6 +305,11 @@ export function NotificationBell({
 
   const openPanel = () => {
     setOpen(true)
+    try {
+      requestBrowserNotificationPermission()
+    } catch {
+      /* */
+    }
     refresh()
   }
 

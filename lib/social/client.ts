@@ -467,7 +467,8 @@ export async function socialSetCuration(
       body: JSON.stringify({ choice }),
     })
   } catch {
-    return { ok: true, durable: false, choice, reason: "NETWORK" }
+    // Phase 1: do not invent success or vote totals offline
+    return { ok: false, durable: false, error: "NETWORK", reason: "NETWORK" }
   }
 }
 

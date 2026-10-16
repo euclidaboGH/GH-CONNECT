@@ -18,10 +18,14 @@ import {
   claimDailyStreak,
   markDailyRewardDismissed,
   wasDailyRewardDismissed,
+  msUntilNextLagosMidnight,
+  formatCountdown,
+  markDailyClaimedForUi,
   trackForTier,
   type MembershipTierForTrack,
 } from "@/lib/domains/reward-level-domain"
 import { GhcCoinIcon } from "./ghc-coin-icon"
+import { notifyRewardClaimed } from "@/lib/notifications"
 import { IdentityService } from "@/lib/identity/identity-service"
 import type { Profile } from "@/lib/ghc-types"
 
@@ -251,6 +255,11 @@ export function DailyRewardFeedCard({
   const tier = resolveTier()
   const [tick, setTick] = useState<number>(0)
   const [claiming, setClaiming] = useState(false)
+  const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
+  useEffect(() => {
+    const id = window.setInterval(() => setCountdownLabel(formatCountdown(msUntilNextLagosMidnight())), 1000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const daily = useMemo(() => {
     void tick
@@ -275,7 +284,8 @@ export function DailyRewardFeedCard({
       )
       if (!server.ok) {
         ghc.addToast?.(server.error || "Claim failed", "error")
-        setTick((t) => t + 1)
+        try { markDailyClaimedForUi(userId) } catch { /* */ }
+      setTick((t) => t + 1)
         return
       }
       // Local streak UX only after server success (does not invent wallet balance)
@@ -317,6 +327,14 @@ export function DailyRewardFeedCard({
             },
           })
         )
+        if (!server.alreadyClaimed && amt) {
+          try {
+            notifyRewardClaimed({
+              message: `Day ${day}/7 credited · ₲ ${Number(amt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              amountLabel: String(amt),
+            })
+          } catch { /* */ }
+        }
       } catch {
         /* */
       }
@@ -327,7 +345,23 @@ export function DailyRewardFeedCard({
 
   // Feed only shows the card while a claim is still available.
   // After claim, hide entirely — streak / history live in Rewards Centre.
-  if (!daily.canClaimToday) return null
+  if (!daily.canClaimToday) {
+    return (
+      <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-muted/30 px-3.5 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Gift size={18} aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-bold text-foreground">Daily reward claimed</p>
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              Next in <span className="font-semibold text-foreground">{countdownLabel}</span> · Lagos midnight
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
@@ -341,10 +375,10 @@ export function DailyRewardFeedCard({
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-foreground">
             <GhcCoinIcon size={16} />
-            {daily.todayGhc} GHC waiting
+            ₲ {Number(daily.todayGhc).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} waiting
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Next: {daily.nextDayPreview} GHC · keep your streak
+            Next: ₲ {Number(daily.nextDayPreview).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · keep your streak
           </p>
         </div>
         <button

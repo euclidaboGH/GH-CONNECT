@@ -336,6 +336,20 @@ export function resolveUiOnboardingGate(input: {
     return "complete"
   }
 
+  // Phase 4 — sole-device stamp: if onboarding was finished here and profile has a name,
+  // do not force registration while auth ids are still reconciling (Pi uid vs GH id).
+  const stamp = readLocalOnboardingStamp()
+  if (stamp && stamp.at > 0) {
+    const name =
+      (typeof input.profile?.displayName === "string" && input.profile.displayName.trim()) ||
+      (typeof un === "string" && un.trim()) ||
+      ""
+    if (name.length > 1) return "complete"
+    // Stamp exists with no conflicting identity yet
+    const anyId = candidates.some((c) => normId(c).length > 0)
+    if (!anyId) return "complete"
+  }
+
   // Device-local completed profile for this same user
   if (pi === "required" || input.serverVerified) {
     const local = findCompletedLocalProfileForUser({
