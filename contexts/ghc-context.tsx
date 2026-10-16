@@ -3271,12 +3271,22 @@ const dismissMatchCelebration = useCallback(() => {
           })
           if (!res.ok) return { ok: false, error: res.error }
           // Merge into UI if missing
-          const uiMessage = (res.data as { uiMessage?: { id: string; text: string; createdAt?: number; senderId?: string }; id?: string; createdAt?: number; senderId?: string }).uiMessage || {
-            id: (res.data as { id?: string }).id || `msg-${Date.now()}`,
-            senderId: "current-user",
-            text,
-            createdAt: (res.data as { createdAt?: number }).createdAt || Date.now(),
-            status: "delivered" as const,
+          const responseData = res.data as {
+            uiMessage?: Partial<Message> & Pick<Message, "id" | "text">
+            id?: string
+            createdAt?: number
+            senderId?: string
+          }
+          const rawUiMessage = responseData.uiMessage
+          // Normalize server responses before inserting them into the strongly typed UI state.
+          // Message.senderId and Message.createdAt are required by the canonical Message type.
+          const uiMessage: Message = {
+            ...rawUiMessage,
+            id: rawUiMessage?.id || responseData.id || `msg-${Date.now()}`,
+            senderId: rawUiMessage?.senderId || responseData.senderId || "current-user",
+            text: rawUiMessage?.text ?? text,
+            createdAt: rawUiMessage?.createdAt ?? responseData.createdAt ?? Date.now(),
+            status: "delivered",
           }
           setState((s) => ({
             ...s,
