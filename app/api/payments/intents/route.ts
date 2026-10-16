@@ -1,0 +1,134 @@
+/**
+ * POST /api/payments/intents — create server-side payment intent before Pi createPayment.
+ * GET  /api/payments/intents — list intents for authenticated user.
+ */
+import { NextResponse } from "next/server"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { getRequestContext } from "@/lib/server/foundation/request-context"
+import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
+import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
+import { ASSET_POLICY } from "@/lib/asset-separation"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+const PURPOSES = new Set([
+  "membership",
+  "marketplace",
+  "boost",
+  "donation",
+  "sponsored_listing",
+  "digital_product",
+  "premium_feature",
+  "service",
+  "verification",
+  "seller_payout",
+  "creator_earning",
+  "refund",
+  "reward_payout",
+  "other",
+])
+
+export async function POST(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const purpose = String(body.purpose || "other") as PaymentPurpose
+  if (!PURPOSES.has(purpose)) {
+    return NextResponse.json({ ok: false, error: "Invalid purpose" }, { status: 400 })
+  }
+
+  const amount = Number(body.amount)
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000) {
+    return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
+  }
+
+  const referenceId = String(body.referenceId || body.orderId || "").trim()
+  if (!referenceId) {
+    return NextResponse.json({ ok: false, error: "referenceId required" }, { status: 400 })
+  }
+
+  // Pi payment intents are π only — GHC uses ledger spend, never this engine
+  if (body.currency === "GHC") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GHC_NOT_ON_PI_RAILS",
+        message: ASSET_POLICY.payCopy,
+      },
+      { status: 400 }
+    )
+  }
+
+  const intent = await createPaymentIntent({
+    userId: auth.userId,
+    purpose,
+    amount,
+    currency: "PI",
+    referenceId,
+    metadata: typeof body.metadata === "object" && body.metadata ? body.metadata : {},
+    idempotencyKey:
+      typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : undefined,
+    provider: "pi",
+  })
+
+  // Production must persist intent before client may create Pi payment
+  const { assertDurableWrite } = await import("@/lib/server/payments/intent-store")
+  const durable = await assertDurableWrite(intent)
+  if (!durable.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "SERVER_UNAVAILABLE",
+        message:
+          durable.error ||
+          "Payment intents require SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY with pi_payment_intents migration applied.",
+      },
+      { status: 503 }
+    )
+  }
+
+  return NextResponse.json({ ok: true, intent })
+}
+
+export async function GET(request: Request) {
+  const reqCtx = getRequestContext(request.headers)
+
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json(
+      { ok: false, error: "AUTH_REQUIRED" },
+      { status: 401, headers: { "x-request-id": reqCtx.requestId } }
+    )
+  }
+  // Durable when Supabase configured — survives Vercel cold start / multi-instance
+  // Scoped to authenticated user only — never accept client userId override
+  try {
+    const intents = await listIntentsForUserAsync(auth.userId)
+    return NextResponse.json(
+      { ok: true, intents },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+          "x-request-id": reqCtx.requestId,
+        },
+      }
+    )
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "PAYMENT_INTENT_STORE_UNAVAILABLE"
+    const code = msg.includes("PAYMENT_INTENT") ? msg : "PAYMENT_INTENT_STORE_UNAVAILABLE"
+    return NextResponse.json(
+      { ok: false, error: code },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "x-request-id": reqCtx.requestId,
+        },
+      }
+    )
+  }
+}
