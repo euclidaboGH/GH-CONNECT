@@ -112,7 +112,10 @@ function EnhancedPostCardInner({
     return isOwn ? "You" : "Member"
   })()
   const realImages = (Array.isArray(post.images) ? post.images : []).filter(
-    (u): u is string => isDurableMediaUrl(u) || (typeof u === "string" && u.startsWith("data:image/") && u.length < 180_000 && !u.includes("svg"))
+    (u) =>
+      typeof u === "string" &&
+      ((u.startsWith("data:image/") && u.length < 180_000 && !u.toLowerCase().includes("svg")) ||
+        isDurableMediaUrl(u)),
   )
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
