@@ -310,7 +310,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         rows={3}
         className="w-full resize-none rounded-xl border border-border/70 bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
       />
-      {media?.url && (isDurableMediaUrl(media.url) || media.url.startsWith("data:")) ? (
+      {media?.url && typeof media.url === "string" && (isDurableMediaUrl(media.url) || media.url.startsWith("data:")) ? (
         <div className="relative mt-2 overflow-hidden rounded-lg">
           {media.type === "image" ? (
             <LazyImage src={media.url} alt="" className="max-h-40 w-full object-cover" />

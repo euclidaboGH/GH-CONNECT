@@ -3,7 +3,7 @@
  * blob: and empty strings must never be persisted on posts/stories for other clients.
  */
 
-export function isDurableMediaUrl(url: unknown): url is string {
+export function isDurableMediaUrl(url: unknown): boolean {
   if (typeof url !== "string") return false
   const u = url.trim()
   if (!u) return false
@@ -17,7 +17,7 @@ export function isDurableMediaUrl(url: unknown): url is string {
 /** Keep only non-blob, non-empty media URLs (http(s), app media paths, etc.). */
 export function filterDurableUrls(urls: unknown): string[] {
   if (!Array.isArray(urls)) return []
-  return urls.filter(isDurableMediaUrl)
+  return urls.filter((u): u is string => typeof u === "string" && isDurableMediaUrl(u))
 }
 
 export function isBlobUrl(url: unknown): boolean {

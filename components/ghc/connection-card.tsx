@@ -13,8 +13,8 @@ import {
   type ConnectionCardAction,
 } from "@/lib/domains/adapters/connection-graph-adapter"
 import type { ConnectionIntentId } from "@/lib/connection-intents"
-import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
 import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
+import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
 
 
 /** Safe media/location accessors for the DiscoveryCandidate discriminated union */
@@ -173,10 +173,6 @@ function labelForAction(action: ConnectionCardAction): string {
       return "Invite"
     case "save":
       return "Save"
-    case "like":
-      return "Like"
-    case "pass":
-      return "Pass"
     default:
       return action
   }

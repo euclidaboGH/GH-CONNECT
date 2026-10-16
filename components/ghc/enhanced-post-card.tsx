@@ -111,12 +111,12 @@ function EnhancedPostCardInner({
     if (raw && raw.toLowerCase() !== "user" && raw.toLowerCase() !== "unknown") return raw
     return isOwn ? "You" : "Member"
   })()
-  const realImages = (Array.isArray(post.images) ? post.images : []).filter(
-    (u): u is string =>
-      typeof u === "string" &&
-      ((u.startsWith("data:image/") && u.length < 180_000 && !u.toLowerCase().includes("svg")) ||
-        isDurableMediaUrl(u)),
-  )
+  const realImages = (Array.isArray(post.images) ? post.images : []).filter((u): u is string => {
+    if (typeof u !== "string" || !u.trim()) return false
+    // Allow small inline data images for offline/emergency; durable URLs otherwise
+    if (u.startsWith("data:image/") && u.length < 180_000 && !u.includes("svg")) return true
+    return isDurableMediaUrl(u)
+  })
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
