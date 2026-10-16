@@ -2021,6 +2021,50 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
+
+  useEffect(() => {
+    const onEngagement = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        postId?: string
+        upvoteCount?: number
+        downvoteCount?: number
+        commentDelta?: number
+      }>).detail
+      if (!detail?.postId) return
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) => {
+          if (post.id !== detail.postId) return post
+          const next = { ...post } as typeof post
+          if (typeof detail.upvoteCount === "number") {
+            ;(next as { upvoteCount?: number }).upvoteCount = detail.upvoteCount
+          }
+          if (typeof detail.downvoteCount === "number") {
+            ;(next as { downvoteCount?: number }).downvoteCount = detail.downvoteCount
+          }
+          if (typeof detail.commentDelta === "number" && detail.commentDelta) {
+            const prev = post.engagement
+            const base = Array.isArray(post.comments)
+              ? post.comments.length
+              : Number(prev?.comments ?? 0)
+            next.engagement = {
+              likes: Number(prev?.likes ?? 0),
+              comments: Math.max(0, base + detail.commentDelta),
+              shares: Number(prev?.shares ?? 0),
+              views: Number(prev?.views ?? 0),
+              saves: Number(prev?.saves ?? 0),
+              clicks: Number(prev?.clicks ?? 0),
+              avgEngagementTime: Number(prev?.avgEngagementTime ?? 0),
+            }
+          }
+          return next
+        }),
+      }))
+    }
+    window.addEventListener("ghc:post-engagement", onEngagement as EventListener)
+    return () => window.removeEventListener("ghc:post-engagement", onEngagement as EventListener)
+  }, [])
+
   const editPost = async (
     postId: string,
     newContent: string,

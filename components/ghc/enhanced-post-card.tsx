@@ -99,6 +99,20 @@ function EnhancedPostCardInner({
   const [lastTapTime, setLastTapTime] = useState<number>(0)
   const [tapCount, setTapCount] = useState<number>(0)
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
+  const displayAuthor = (() => {
+    const raw = String(post.authorName || "").trim()
+    if (raw && raw.toLowerCase() !== "user" && raw.toLowerCase() !== "unknown") return raw
+    return isOwn ? "You" : "Member"
+  })()
+
+  const realImages = (Array.isArray(post.images) ? post.images : []).filter(
+    (u): u is string =>
+      typeof u === "string" &&
+      u.trim().length > 0 &&
+      !u.includes("placeholder") &&
+      !u.startsWith("blob:") &&
+      !u.startsWith("data:image/svg")
+  )
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
@@ -125,6 +139,12 @@ function EnhancedPostCardInner({
   const [curationBusy, setCurationBusy] = useState(false)
   const lastCurationAtRef = useRef(0)
   const [judgmentLabel, setJudgmentLabel] = useState<string | null>(null)
+  const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
+  const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
+  useEffect(() => {
+    if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
+    if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
+  }, [post.id, propUp, propDown])
   const netJudgment = upvoteCount - downvoteCount
 
   useEffect(() => {
@@ -172,8 +192,15 @@ function EnhancedPostCardInner({
       const res = await socialSetCuration(post.id, choice)
       if (res.ok && res.choice) {
         setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
+        const nextUp = typeof res.upvoteCount === "number" ? res.upvoteCount : upvoteCount
+        const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:post-engagement", {
+            detail: { postId: post.id, kind: "curation", choice: res.choice, upvoteCount: nextUp, downvoteCount: nextDown },
+          }))
+        } catch { /* */ }
       }
     } finally {
       setCurationBusy(false)
@@ -318,22 +345,22 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${post.authorName}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <div className="flex flex-1 items-center gap-2.5">
-          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${post.authorName}'s profile`}>
+          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${displayAuthor}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
-              alt={post.authorName}
+              alt={displayAuthor}
               className="h-11 w-11 rounded-full object-cover bg-muted ring-2 ring-background shadow-sm"
             />
             {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
             {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
           <div className="min-w-0 flex-1">
-            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{post.authorName}</button>
+            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{displayAuthor}</button>
             <div className="flex flex-wrap items-center gap-1">
               {(() => {
                 const p = post as Post & { authorProfession?: string; authorTitle?: string; communityName?: string }
@@ -535,7 +562,7 @@ function EnhancedPostCardInner({
         )}
 
         {/* Media gallery with improved viewing */}
-        {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
+        {Array.isArray(post.images) && realImages.length > 0 && (
           <div
             className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-[1.15rem] sm:aspect-video bg-muted/50 group cursor-pointer"
             onClick={handleImageTap}
@@ -545,7 +572,7 @@ function EnhancedPostCardInner({
             onTouchEnd={handlePressEnd}
           >
             <LazyImage
-              src={(post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))[Math.min(imageIndex, post.images.length - 1)] || post.images[0])}
+              src={realImages[Math.min(imageIndex, Math.max(0, realImages.length - 1))] || realImages[0]}
               alt={`Post image ${imageIndex + 1}`}
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -698,27 +725,7 @@ function EnhancedPostCardInner({
         downvoteCount={downvoteCount}
       />
 
-      {/* Content quality strip — no profile-style like; matching lives on profiles */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/30 px-3.5 py-1.5">
-        <p className="min-w-0 flex-1 truncate text-[10px] font-medium text-muted-foreground">
-          {judgmentLabel
-            ? judgmentLabel
-            : "Up/down votes rate this post. Like & pass people on their profile for matching."}
-        </p>
-        <span
-          className={`shrink-0 text-[10px] font-bold tabular-nums ${
-            netJudgment > 0
-              ? "text-emerald-700"
-              : netJudgment < 0
-                ? "text-rose-600"
-                : "text-muted-foreground"
-          }`}
-          title="Net content quality (upvotes minus downvotes)"
-        >
-          Net {netJudgment > 0 ? "+" : ""}
-          {netJudgment}
-        </span>
-      </div>
+
     </div>
   )
 }

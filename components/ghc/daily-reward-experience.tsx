@@ -16,9 +16,6 @@ import { getBoundDomainServices } from "@/lib/domains/compat"
 import {
   getDailyStreak,
   claimDailyStreak,
-  msUntilNextLagosMidnight,
-  formatLagosCountdown,
-  markDailyClaimedForUi,
   markDailyRewardDismissed,
   wasDailyRewardDismissed,
   trackForTier,
@@ -242,25 +239,6 @@ function StreakProgressStrip({
   )
 }
 
-
-function useLagosClaimCountdown(active: boolean) {
-  const [label, setLabel] = useState("—")
-  useEffect(() => {
-    if (!active) return
-    const tick = () => {
-      try {
-        setLabel(formatLagosCountdown(msUntilNextLagosMidnight()))
-      } catch {
-        setLabel("—")
-      }
-    }
-    tick()
-    const id = window.setInterval(tick, 1000)
-    return () => window.clearInterval(id)
-  }, [active])
-  return label
-}
-
 export function DailyRewardFeedCard({
   onOpenFull,
   refreshKey = 0,
@@ -279,12 +257,6 @@ export function DailyRewardFeedCard({
     void refreshKey
     return getDailyStreak(userId, tier)
   }, [userId, tier, tick, refreshKey])
-
-  useEffect(() => {
-    const onClaimed = () => setTick((x) => x + 1)
-    window.addEventListener("ghc:daily-reward-claimed", onClaimed)
-    return () => window.removeEventListener("ghc:daily-reward-claimed", onClaimed)
-  }, [])
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
@@ -305,9 +277,6 @@ export function DailyRewardFeedCard({
         ghc.addToast?.(server.error || "Claim failed", "error")
         setTick((t) => t + 1)
         return
-      }
-      if (server.alreadyClaimed) {
-        markDailyClaimedForUi(userId, server.cycleDay)
       }
       // Local streak UX only after server success (does not invent wallet balance)
       const res = claimDailyStreak(userId, tier)
@@ -330,8 +299,8 @@ export function DailyRewardFeedCard({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ₲ ${amt}`
-          : `+₲ ${amt} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? `Already claimed · ${amt} GHC`
+          : `+${amt} GHC · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       setTick((t) => t + 1)
@@ -358,25 +327,7 @@ export function DailyRewardFeedCard({
 
   // Feed only shows the card while a claim is still available.
   // After claim, hide entirely — streak / history live in Rewards Centre.
-  const nextIn = useLagosClaimCountdown(!daily.canClaimToday)
-
-  if (!daily.canClaimToday) {
-    return (
-      <div className="mx-3 mb-2 flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/50 px-3.5 py-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-lg text-muted-foreground" aria-hidden>
-          ✓
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-bold text-foreground">Daily reward claimed</p>
-          <p className="text-[11px] text-muted-foreground">
-            Next claim in{" "}
-            <span className="font-semibold tabular-nums text-foreground">{nextIn}</span>
-            <span className="text-muted-foreground"> · Africa/Lagos</span>
-          </p>
-        </div>
-      </div>
-    )
-  }
+  if (!daily.canClaimToday) return null
 
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
@@ -390,10 +341,10 @@ export function DailyRewardFeedCard({
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-foreground">
             <GhcCoinIcon size={16} />
-            ₲ {daily.todayGhc} waiting
+            {daily.todayGhc} GHC waiting
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Next: ₲ {daily.nextDayPreview} · keep your streak
+            Next: {daily.nextDayPreview} GHC · keep your streak
           </p>
         </div>
         <button
@@ -408,7 +359,7 @@ export function DailyRewardFeedCard({
       <div className="border-t border-border/50 px-3 py-2.5">
         <StreakProgressStrip
           cycleDay={daily.displayCycleDay}
-          claimedToday={!daily.canClaimToday}
+          claimedToday={false}
           tier={tier}
         />
       </div>
@@ -443,8 +394,6 @@ export function DailyRewardSheet({
     void open
     return getDailyStreak(userId, tier)
   }, [userId, tier, open])
-
-  const sheetCountdown = useLagosClaimCountdown(!daily.canClaimToday)
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
@@ -483,7 +432,7 @@ export function DailyRewardSheet({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ₲ ${amt}`
+          ? `Already claimed · ${amt} GHC`
           : `+${amt} GHC added · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
@@ -573,7 +522,7 @@ export function DailyRewardSheet({
 
           <StreakProgressStrip
             cycleDay={daily.displayCycleDay}
-            claimedToday={!daily.canClaimToday}
+            claimedToday={false}
             tier={tier}
           />
 
@@ -585,37 +534,24 @@ export function DailyRewardSheet({
             </p>
           ) : null}
 
-          {daily.canClaimToday ? (
-            <button
-              type="button"
-              disabled={claiming}
-              onClick={() => void handleClaim()}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:bg-emerald-800 disabled:opacity-60"
-            >
-              <Gift size={18} />
-              {claiming ? "Claiming…" : `Claim daily · ₲ ${daily.todayGhc}`}
-            </button>
-          ) : (
-            <div className="rounded-2xl border border-border/60 bg-muted/50 px-4 py-3.5 text-center">
-              <p className="text-[14px] font-bold text-foreground">Claimed for today</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                Next claim in{" "}
-                <span className="font-semibold tabular-nums text-foreground">{sheetCountdown}</span>
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">Resets 00:00 Africa/Lagos</p>
-            </div>
-          )}
-          {daily.canClaimToday ? (
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="w-full py-2 text-center text-[12px] font-semibold text-muted-foreground"
-            >
-              Maybe later
-            </button>
-          ) : null}
+          <button
+            type="button"
+            disabled={claiming || !daily.canClaimToday}
+            onClick={() => void handleClaim()}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:bg-emerald-800 disabled:opacity-60"
+          >
+            <Gift size={18} />
+            {claiming ? "Claiming…" : `Claim Daily Reward · ${daily.todayGhc} GHC`}
+          </button>
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="w-full py-2 text-center text-[12px] font-semibold text-muted-foreground"
+          >
+            Maybe later
+          </button>
           <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-            One claim per reward day · GHC is in-app utility, not Pi
+            One claim per day · resets 00:00 Africa/Lagos · GHC is in-app utility, not Pi
           </p>
         </div>
         <div className="h-[env(safe-area-inset-bottom,0px)]" />

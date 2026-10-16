@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
     "typecheck": "tsc --noEmit",
-    "vercel-build": "ESLINT_USE_FLAT_CONFIG=false next build",
+    "vercel-build": "npm run build",
     "ci": "npm ci --legacy-peer-deps",
     "check:jsx": "node scripts/check-jsx-safety.mjs",
     "prebuild": "node scripts/check-jsx-safety.mjs",

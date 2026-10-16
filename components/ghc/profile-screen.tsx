@@ -11,6 +11,7 @@ import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
 import { SetupChecklist } from "./setup-checklist"
 import { EditProfileModal, calculateProfileCompletion, OwnPostCard } from "./profile-components"
+import { CommentSheet } from "./comment-sheet"
 import {
   Settings as SettingsIcon,
   Wallet,
@@ -73,6 +74,7 @@ export function ProfileScreen({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
+  const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -486,7 +488,6 @@ export function ProfileScreen({
             ["Posts", "gh-profile-posts"],
             ["Moments", "gh-profile-moments"],
             ["About", "gh-profile-about"],
-            ["Tools", "gh-profile-tools"],
           ].map(([label, target]) => (
             <button key={target} type="button" onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="shrink-0 rounded-full px-4 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</button>
           ))}
@@ -579,6 +580,11 @@ export function ProfileScreen({
         </section>
       </div>
 
+      <CommentSheet
+        post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}
+        open={Boolean(commentingPostId)}
+        onClose={() => setCommentingPostId(null)}
+      />
       {dashboardPageOpen ? (
         <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
           <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">

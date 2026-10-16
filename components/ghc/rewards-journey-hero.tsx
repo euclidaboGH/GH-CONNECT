@@ -16,9 +16,6 @@ import {
   getDailyStreak,
   claimDailyStreak,
   DAILY_STREAK_GHC,
-  msUntilNextLagosMidnight,
-  formatLagosCountdown,
-  markDailyClaimedForUi,
 } from "@/lib/domains/reward-level-domain"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
@@ -123,12 +120,10 @@ export function RewardsJourneyHero({
       } catch {
         /* keep last known balance */
       }
-      markDailyClaimedForUi(userId, Number(day) || undefined)
-      const already = Boolean(data.alreadyClaimed || data.idempotent)
       ghc.addToast?.(
-        already
-          ? `Already claimed${amt != null && amt !== "" ? ` · ₲ ${amt}` : ""}`
-          : `+₲ ${amt}${day ? ` · Day ${day}/7` : ""}`,
+        data.alreadyClaimed || data.idempotent
+          ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`
+          : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
         "success"
       )
       try {
@@ -148,21 +143,6 @@ export function RewardsJourneyHero({
     }
   }, [userId, ghc, onClaimed, claimingDaily])
 
-  const [nextClaimIn, setNextClaimIn] = useState("—")
-  useEffect(() => {
-    if (daily.canClaimToday) return
-    const tick = () => {
-      try {
-        setNextClaimIn(formatLagosCountdown(msUntilNextLagosMidnight()))
-      } catch {
-        setNextClaimIn("—")
-      }
-    }
-    tick()
-    const id = window.setInterval(tick, 1000)
-    return () => window.clearInterval(id)
-  }, [daily.canClaimToday, daily.rewardDayKey])
-
   const opportunities = [
     {
       id: "daily",
@@ -170,7 +150,7 @@ export function RewardsJourneyHero({
       ghc: daily.todayGhc || DAILY_STREAK_GHC[daily.displayCycleDay] || 10,
       done: !daily.canClaimToday,
       action: daily.canClaimToday ? () => void claimDaily() : undefined,
-      cta: daily.canClaimToday ? "Claim" : "Claimed today",
+      cta: daily.canClaimToday ? "Claim" : "Done",
     },
     {
       id: "profile",
@@ -370,14 +350,9 @@ export function RewardsJourneyHero({
                   : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)} GHC`}
             </button>
           ) : (
-            <div className="mt-3 rounded-2xl border border-border/60 bg-muted/40 px-3 py-3 text-center">
-              <p className="text-[12px] font-bold text-foreground">Claimed today</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Next claim in{" "}
-                <span className="font-semibold tabular-nums text-foreground">{nextClaimIn}</span>
-                <span> · Africa/Lagos day boundary</span>
-              </p>
-            </div>
+            <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">
+              Today claimed · next reward after midnight (Africa/Lagos)
+            </p>
           )}
         </div>
       </section>
@@ -408,13 +383,8 @@ export function RewardsJourneyHero({
                 )}
               </span>
               {op.done ? (
-                <span className="inline-flex flex-col items-end gap-0.5">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/80 px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
-                    <Check size={12} aria-hidden /> {op.id === "daily" ? "Claimed today" : "Done"}
-                  </span>
-                  {op.id === "daily" ? (
-                    <span className="text-[10px] tabular-nums text-muted-foreground">{nextClaimIn}</span>
-                  ) : null}
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+                  <Check size={12} aria-hidden /> Done
                 </span>
               ) : (
                 <button

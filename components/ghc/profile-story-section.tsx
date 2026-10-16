@@ -190,211 +190,113 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
     })
   }
 
-  // GreenHaven Moments: landscape oval cards, own moment first, then the social circle.
+  // GreenHaven Moments — circular rings (feed)
   if (scope === "feed") {
     return (
-      <section className="-mx-1 rounded-[1.35rem] border border-border/60 bg-card/80 px-3 py-3 shadow-sm" aria-label="Stories and status updates">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-bold tracking-tight text-foreground">Moments</h2>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Fresh updates from your GreenHaven circle</p>
-          </div>
-          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">24 hours</span>
-        </div>
-        <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
-          <button type="button" onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
-            className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-emerald-600/20 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-900 p-3 text-left text-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-            aria-label={ownStory ? "View your story" : "Create your first story"}>
-            <LazyImage src={profile.photos?.[0] || "/avatars/user.svg"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
-            <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/15" />
-            <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/15 backdrop-blur-sm"><Plus size={18} strokeWidth={2.5} /></span>
-            <span className="absolute bottom-3 left-3 right-3 z-10 block truncate text-xs font-bold">{ownStory ? "Your moment" : "Add a moment"}</span>
-            {ownStory ? <span className="absolute right-3 top-3 z-10 rounded-full bg-white/20 px-2 py-1 text-[9px] font-semibold backdrop-blur-sm">Your story</span> : null}
+      <section className="px-1 py-2" aria-label="Moments">
+        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            type="button"
+            onClick={() => (ownStory ? setViewing(ownStory) : setComposerOpen(true))}
+            className="flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={ownStory ? "View your moment" : "Add a moment"}
+          >
+            <span className={`relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 ${ownStory ? "border-emerald-500" : "border-dashed border-emerald-600/50 bg-emerald-50 dark:bg-emerald-950/40"}`}>
+              {ownStory?.media?.url ? (
+                <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" />
+              ) : profile.photos?.[0] ? (
+                <LazyImage src={profile.photos[0]} alt="" className="h-full w-full object-cover opacity-90" />
+              ) : (
+                <Plus size={22} className="text-emerald-800" />
+              )}
+              {!ownStory ? (
+                <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">+</span>
+              ) : null}
+            </span>
+            <span className="max-w-[4.25rem] truncate text-[10px] font-semibold text-muted-foreground">{ownStory ? "Yours" : "Add"}</span>
           </button>
-          {otherStories.map((story) => (
-            <button key={story.id} type="button" onClick={() => {
-                setViewing(story)
-                setStoryReaction(null)
-                try { void socialViewStory(String(story.id)).catch(() => {}) } catch { /* fail-soft */ }
-                setSeenStoryIds((prev) => {
-                  if (prev.includes(story.id)) return prev
-                  const next = [...prev, story.id].slice(-80)
-                  try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch {}
-                  return next
-                })
-              }} className="relative h-[112px] w-[142px] shrink-0 snap-start overflow-hidden rounded-[1.4rem] border border-border/60 bg-muted text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name}'s story`}>
-              <LazyImage src={story.photo || `/avatars/${story.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/10" />
-              <span className={`absolute left-2.5 top-2.5 h-8 w-8 overflow-hidden rounded-full border-2 p-0.5 ${seenStoryIds.includes(story.id) ? "border-white/60" : "border-emerald-300"}`}>
-                <LazyImage src={story.photo || "/avatars/user.svg"} alt="" className="h-full w-full rounded-full object-cover" />
-              </span>
-              <span className="absolute bottom-3 left-3 right-3 z-10 truncate text-xs font-bold text-white">{story.name}</span>
-              {seenStoryIds.includes(story.id) ? <span className="absolute right-2.5 top-3 z-10 rounded-full bg-black/30 px-1.5 py-0.5 text-[9px] text-white">Seen</span> : <span className="absolute right-2.5 top-3 z-10 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">New</span>}
-            </button>
-          ))}
-          {otherStories.length === 0 ? <div className="flex min-h-[112px] min-w-[150px] items-center rounded-[1.4rem] border border-dashed border-border/70 px-4 text-xs leading-relaxed text-muted-foreground">Follow people to see their moments here.</div> : null}
+          {otherStories.map((story) => {
+            const seen = seenStoryIds.includes(story.id)
+            return (
+              <button
+                key={story.id}
+                type="button"
+                onClick={() => {
+                  setViewing(story)
+                  setStoryReaction(null)
+                  try { void socialViewStory(String(story.id)).catch(() => {}) } catch { /* */ }
+                  setSeenStoryIds((prev) => {
+                    if (prev.includes(story.id)) return prev
+                    const next = [...prev, story.id].slice(-80)
+                    try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch { /* */ }
+                    return next
+                  })
+                }}
+                className="flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                aria-label={`View ${story.name || "member"}'s moment`}
+              >
+                <span className={`flex h-16 w-16 overflow-hidden rounded-full border-2 p-0.5 ${seen ? "border-muted-foreground/40" : "border-emerald-500"}`}>
+                  <LazyImage
+                    src={story.photo || story.media?.url || "/avatars/user.svg"}
+                    alt=""
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                </span>
+                <span className="max-w-[4.25rem] truncate text-[10px] font-semibold text-foreground">{story.name || "Member"}</span>
+              </button>
+            )
+          })}
+          {otherStories.length === 0 ? (
+            <p className="flex min-h-16 max-w-[9rem] items-center text-[11px] leading-snug text-muted-foreground">Follow people to see their moments.</p>
+          ) : null}
         </div>
         {composerOpen && (
-          <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-foreground">New story</p>
-              <button type="button" onClick={() => setComposerOpen(false)} aria-label="Close">
-                <X size={16} />
-              </button>
+          <div className="mt-2 rounded-xl border border-border/60 bg-card p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-bold">New moment</p>
+              <button type="button" onClick={() => setComposerOpen(false)} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="mb-2 flex flex-wrap gap-1.5">
-                {([
-                  { id: "everyone" as const, label: "Public" },
-                  { id: "followers" as const, label: "Followers" },
-                  { id: "friends" as const, label: "Friends" },
-                  { id: "private" as const, label: "Only me" },
-                ]).map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setStoryAudience(a.id)}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                      storyAudience === a.id ? "bg-teal-600 text-white" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mb-2 text-[10px] text-muted-foreground">Visible for 24 hours · Replies become private messages</p>
-<textarea
-              value={text}
-              onChange={(e) => setText(e.target.value.slice(0, 500))}
-              placeholder="Share a status…"
-              className="mt-2 min-h-16 w-full resize-none rounded-lg border border-border/70 bg-card p-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-            />
+              {([
+                { id: "everyone" as const, label: "Public" },
+                { id: "followers" as const, label: "Followers" },
+                { id: "friends" as const, label: "Friends" },
+                { id: "private" as const, label: "Only me" },
+              ]).map((a) => (
+                <button key={a.id} type="button" onClick={() => setStoryAudience(a.id)} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${storyAudience === a.id ? "bg-teal-600 text-white" : "bg-muted text-muted-foreground"}`}>{a.label}</button>
+              ))}
+            </div>
+            <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} placeholder="Share a moment…" className="min-h-16 w-full resize-none rounded-lg border border-border/70 bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
             <div className="mt-2 flex gap-2">
               <input ref={imageRef} type="file" accept="image/*" className="sr-only" onChange={(e) => { void readMedia(e.target.files?.[0], "image"); e.currentTarget.value = "" }} />
               <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={(e) => { void readMedia(e.target.files?.[0], "video"); e.currentTarget.value = "" }} />
-              <button type="button" onClick={() => imageRef.current?.click()} className="rounded-lg border border-border/70 bg-card px-2.5 py-1.5 text-[11px] font-semibold">Photo</button>
-              <button type="button" onClick={() => videoRef.current?.click()} className="rounded-lg border border-border/70 bg-card px-2.5 py-1.5 text-[11px] font-semibold">Video</button>
-              <button type="button" onClick={() => void publish()} disabled={publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white disabled:bg-muted disabled:text-muted-foreground">
-                {publishing ? "…" : "Share"}
-              </button>
+              <button type="button" onClick={() => imageRef.current?.click()} className="rounded-lg border border-border/70 px-2.5 py-1.5 text-[11px] font-semibold">Photo</button>
+              <button type="button" onClick={() => videoRef.current?.click()} className="rounded-lg border border-border/70 px-2.5 py-1.5 text-[11px] font-semibold">Video</button>
+              <button type="button" onClick={() => void publish()} disabled={publishing || (!text.trim() && !media)} className="ml-auto rounded-lg bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50">{publishing ? "…" : "Share"}</button>
             </div>
           </div>
         )}
         {viewing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={() => setViewing(null)}>
-            <div className="w-full max-w-sm rounded-[1.25rem] bg-card p-5 shadow-2xl border border-border/50" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-sm rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <p className="font-bold text-foreground">{viewing.name}&apos;s story</p>
-                <button type="button" onClick={() => setViewing(null)} aria-label="Close story"><X size={20} /></button>
+                <p className="font-bold text-foreground">{viewing.name || "Moment"}</p>
+                <button type="button" onClick={() => setViewing(null)} aria-label="Close"><X size={20} /></button>
               </div>
-              {viewing.media?.type === "image" && <LazyImage src={viewing.media.url} alt="Story" className="mt-4 max-h-[45vh] w-full rounded-2xl object-cover" />}
-              <p className="mt-2 text-center text-[11px] text-white/70">
-                {viewing.audience ? `${viewing.audience} · ` : ""}Expires in ~{hoursLeft(viewing)}h
-                {viewing.ownerId === "current-user" && (
-                  <span className="block text-[10px] text-white/60">
-                    Insights: ~{(viewing.viewIds?.length ?? 0) || "—"} views · {viewing.replyCount ?? 0} replies (private to you)
-                  </span>
-                )}
-                {viewing.ownerId === "current-user" && (
-                  <>
-                    {" · "}
-                    <button type="button" className="underline" onClick={() => toggleHighlight(viewing.id)}>
-                      {highlights.includes(viewing.id) ? "In highlights" : "Add to highlights"}
-                    </button>
-                  </>
-                )}
-              </p>
-              {viewing.media?.type === "video" && <video src={viewing.media.url} controls className="mt-4 max-h-[45vh] w-full rounded-2xl" />}
-              {viewing.text && <p className="mt-4 whitespace-pre-wrap text-sm text-foreground/90">{viewing.text}</p>}
-              {viewing.ownerId && viewing.ownerId !== "current-user" && (
-                <div className="mt-4 border-t border-border/50 pt-3">
-                  <div className="mb-3 flex gap-2">
-                    {["👏", "🔥", "💚", "🙌"].map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => {
-                          setStoryReaction(emoji)
-                          addToast(`Reacted ${emoji}`, "success")
-                        }}
-                        className={`flex h-10 w-10 items-center justify-center rounded-full text-lg transition ${
-                          storyReaction === emoji ? "bg-emerald-100 ring-2 ring-emerald-500" : "bg-muted"
-                        }`}
-                        aria-label={`React ${emoji}`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reply as private message</p>
-                  <div className="mb-2 flex items-center gap-2 rounded-xl bg-emerald-50 px-2.5 py-2">
-                    <LazyImage
-                      src={viewing.photo || viewing.media?.url || "/placeholder.svg?width=40&height=40"}
-                      alt=""
-                      className="h-9 w-9 rounded-lg object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-bold text-emerald-900">Story from {viewing.name}</p>
-                      <p className="truncate text-[10px] text-emerald-700">
-                        {viewing.text?.slice(0, 60) || "Photo/video story"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value.slice(0, 300))}
-                      placeholder="Reply to this story…"
-                      className="min-w-0 flex-1 rounded-xl border border-border/70 px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                      aria-label="Story reply"
-                    />
-                    <button
-                      type="button"
-                      disabled={!replyText.trim() || replying}
-                      className="rounded-xl bg-[var(--gh-green)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
-                      onClick={async () => {
-                        const text = replyText.trim()
-                        if (!text || !viewing.ownerId) return
-                        const blocked = new Set([...(blockedUsers || []), ...((settings as { blockedUsers?: string[] })?.blockedUsers || [])])
-                        if (blocked.has(viewing.ownerId)) {
-                          addToast("You cannot reply — this user is blocked", "error")
-                          return
-                        }
-                        setReplying(true)
-                        try {
-                          const preview = viewing.text?.slice(0, 80) || (viewing.media ? "Photo/video story" : "Story")
-                          const body = `📷 Story reply\n> ${preview}\n\n${text}`
-                          const convId = await startConversation?.(
-                            viewing.ownerId,
-                            viewing.name || "Member",
-                            viewing.photo || "/placeholder.svg?width=40&height=40",
-                          )
-                          if (convId && sendMessage) {
-                            await sendMessage(convId, body)
-                            addToast("Reply sent as a private message", "success")
-                            setReplyText("")
-                            setViewing(null)
-                            setTab?.("messages")
-                          } else if (!convId) {
-                            addToast("Could not open conversation", "error")
-                          }
-                        } catch {
-                          addToast("Could not send story reply", "error")
-                        } finally {
-                          setReplying(false)
-                        }
-                      }}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
+              {viewing.media?.type === "image" && viewing.media.url && !String(viewing.media.url).startsWith("blob:") ? (
+                <LazyImage src={viewing.media.url} alt="" className="mt-4 max-h-[45vh] w-full rounded-2xl object-cover" />
+              ) : null}
+              {viewing.media?.type === "video" && viewing.media.url ? (
+                <video src={viewing.media.url} controls className="mt-4 max-h-[45vh] w-full rounded-2xl" />
+              ) : null}
+              {viewing.text ? <p className="mt-4 whitespace-pre-wrap text-sm">{viewing.text}</p> : null}
             </div>
           </div>
         )}
       </section>
     )
   }
+
 
   return (
     <section className="border-t border-border/50 bg-card px-4 py-4 sm:px-6" aria-label="Your stories">

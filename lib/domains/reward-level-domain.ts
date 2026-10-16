@@ -348,53 +348,6 @@ function ensureShields(userId: string, tier?: string | null): DailyStreakState {
   return next
 }
 
-
-/** Milliseconds until next Africa/Lagos reward-day boundary (00:00 Lagos). */
-export function msUntilNextLagosMidnight(now = new Date()): number {
-  const todayKey = lagosDayKey(now)
-  // Step one minute at a time until the Lagos calendar day changes (max 48h safety)
-  for (let i = 1; i <= 48 * 60; i++) {
-    const t = new Date(now.getTime() + i * 60 * 1000)
-    if (lagosDayKey(t) !== todayKey) {
-      // Align to the start of that minute window
-      return Math.max(0, t.getTime() - now.getTime())
-    }
-  }
-  return 24 * 60 * 60 * 1000
-}
-
-/** HH:MM:SS until next claim window */
-export function formatLagosCountdown(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-}
-
-/**
- * Align local streak UX with server "already claimed today".
- * Does not credit GHC — only prevents a green Claim CTA after server 409/idempotent.
- */
-export function markDailyClaimedForUi(userId: string, cycleDay?: number): void {
-  if (!userId) return
-  const s = readStreak(userId)
-  const today = dayKey()
-  if (s.lastClaimDayKey === today) return
-  writeStreak(userId, {
-    ...s,
-    lastClaimDayKey: today,
-    cycleDay:
-      typeof cycleDay === "number" && cycleDay > 0
-        ? Math.min(7, Math.floor(cycleDay))
-        : s.cycleDay > 0
-          ? s.cycleDay
-          : 1,
-    streakDays: Math.max(s.streakDays || 0, 1),
-  })
-}
-
-
 export function getDailyStreak(
   userId: string,
   membershipTier?: string | null
