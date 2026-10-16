@@ -1383,12 +1383,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           window.localStorage.setItem("ghc.profile", JSON.stringify(profile))
           const { stampLocalOnboardingComplete } = await import("@/lib/onboarding-local")
           stampLocalOnboardingComplete({
-            userId: profile?.id || IdentityService.getUserId?.() || null,
+            userId: profile?.id || IdentityService.getCurrentUserId() || null,
             username: profile?.username || profile?.displayName || null,
             altUserIds: [
               profile?.id,
-              IdentityService.getUserId?.(),
-              (IdentityService as { getPiUid?: () => string | null }).getPiUid?.(),
+              IdentityService.getCurrentUserId(),
+              IdentityService.getPiUserId(),
             ].filter(Boolean) as string[],
           })
         }
