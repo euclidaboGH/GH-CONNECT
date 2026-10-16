@@ -14,6 +14,7 @@ import {
 } from "@/lib/domains/adapters/connection-graph-adapter"
 import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
+import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
 
 
 /** Safe media/location accessors for the DiscoveryCandidate discriminated union */
