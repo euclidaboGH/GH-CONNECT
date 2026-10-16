@@ -7,7 +7,7 @@
 
 export type PostEngagementDetail = {
   postId: string
-  kind: "curation" | "comment" | "save" | "share" | "view"
+  kind: "curation" | "comment" | "save" | "share" | "view" | "edit"
   choice?: "upvote" | "downvote" | "neutral"
   upvoteCount?: number
   downvoteCount?: number
