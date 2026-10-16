@@ -458,7 +458,7 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
                     try {
                       const preview = viewing.text?.slice(0, 80) || (viewing.media ? "Photo/video moment" : "Moment")
                       const msg = `📷 Moment reply\n> ${preview}\n\n${body}`
-                      const convId = await startConversation?.(viewing.ownerId, viewing.name || "Member")
+                      const convId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
                       if (convId && sendMessage) await sendMessage(convId, msg)
                       setReplyText("")
                       setViewing(null)
