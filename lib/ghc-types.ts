@@ -309,6 +309,9 @@ export interface Candidate {
   verified: boolean
   online: boolean
   lastSeen: number
+  /** Optional discovery metadata used by local/demo candidate ranking. */
+  distance?: number | null
+  isSample?: boolean
   /** Optional media fields when the public-profile adapter supplies them. */
   photos?: string[]
   coverPhoto?: string | null
