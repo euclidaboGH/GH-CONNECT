@@ -1185,24 +1185,26 @@ export function MarketplaceScreen({
             </button>
           </div>
         ) : (
-          <div className="mb-3 flex items-end justify-between gap-2">
-            <div>
-              <h2 className="text-[15px] font-bold text-foreground">Today&apos;s picks</h2>
-              <p className="text-[11px] text-muted-foreground">
-                {listings.length} listing{listings.length === 1 ? "" : "s"}
-                {category ? ` · ${category}` : ""}
-                {query.trim() ? ` · “${query.trim()}”` : ""}
-              </p>
+          <>
+            <div className="mb-3 flex items-end justify-between gap-2">
+              <div>
+                <h2 className="text-[15px] font-bold text-foreground">Today&apos;s picks</h2>
+                <p className="text-[11px] text-muted-foreground">
+                  {listings.length} listing{listings.length === 1 ? "" : "s"}
+                  {category ? ` · ${category}` : ""}
+                  {query.trim() ? ` · “${query.trim()}”` : ""}
+                </p>
+              </div>
+              <button type="button" onClick={refresh} className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
+                Refresh
+              </button>
             </div>
-            <button type="button" onClick={refresh} className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
-              Refresh
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[960px]:grid-cols-4">
-            {listings.map((l) => (
-              <ListingCard key={l.id} listing={l} onOpen={setSelectedId} />
-            ))}
-          </div>
+            <div className="grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[960px]:grid-cols-4">
+              {listings.map((l) => (
+                <ListingCard key={l.id} listing={l} onOpen={setSelectedId} />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
