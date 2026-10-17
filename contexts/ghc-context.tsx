@@ -422,6 +422,7 @@ const GHCDiscoveryContext = createContext<{
 const GHCMessagingContext = createContext<{
   conversations: Conversation[]
   sendMessage: GHCContextType["sendMessage"]
+  loadConversationMessages: GHCContextType["loadConversationMessages"]
   markConversationRead: GHCContextType["markConversationRead"]
   pinConversation: GHCContextType["pinConversation"]
   archiveConversation: GHCContextType["archiveConversation"]
