@@ -2647,21 +2647,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         likeCount?: number
         likedByMe?: boolean
       }>).detail
-      if (!detail?.postId) return
+      const postId = detail?.postId
+      if (typeof postId !== "string" || postId.trim().length === 0) return
+      // Capture the validated ID before entering the state updater. TypeScript
+      // cannot preserve property narrowing on `detail.postId` inside a closure.
       setState((s) => {
         let nextLiked = s.likedPostIds || []
         if (typeof detail.likedByMe === "boolean") {
-          if (detail.likedByMe && !nextLiked.includes(detail.postId)) {
-            nextLiked = [...nextLiked, detail.postId]
+          if (detail.likedByMe && !nextLiked.includes(postId)) {
+            nextLiked = [...nextLiked, postId]
           } else if (!detail.likedByMe) {
-            nextLiked = nextLiked.filter((id) => id !== detail.postId)
+            nextLiked = nextLiked.filter((id) => id !== postId)
           }
         }
         return {
           ...s,
           likedPostIds: nextLiked,
           posts: s.posts.map((post) => {
-            if (post.id !== detail.postId) return post
+            if (post.id !== postId) return post
             const next = { ...post } as typeof post
             if (typeof detail.upvoteCount === "number" && Number.isFinite(detail.upvoteCount)) {
               ;(next as { upvoteCount?: number }).upvoteCount = Math.max(0, detail.upvoteCount)
