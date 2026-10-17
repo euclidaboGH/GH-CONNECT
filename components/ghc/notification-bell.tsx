@@ -251,6 +251,26 @@ export function NotificationBell({
     return () => window.clearInterval(id)
   }, [refresh])
 
+  // Phase 8: refresh when app returns to foreground
+  useEffect(() => {
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refresh()
+      }
+    }
+    const onFocus = () => refresh()
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVis)
+    }
+    window.addEventListener("focus", onFocus)
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis)
+      }
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [refresh])
+
   // Phase 5 — live refresh when local or product events fire
   useEffect(() => {
     const onChange = () => refresh()
@@ -258,12 +278,14 @@ export function NotificationBell({
     window.addEventListener("ghc:daily-reward-claimed", onChange as EventListener)
     window.addEventListener("ghc:post-engagement", onChange as EventListener)
     window.addEventListener("ghc:new-message", onChange as EventListener)
+    window.addEventListener("ghc:connection-updated", onChange as EventListener)
     window.addEventListener("ghc:notification", onChange as EventListener)
     return () => {
       window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChange as EventListener)
       window.removeEventListener("ghc:daily-reward-claimed", onChange as EventListener)
       window.removeEventListener("ghc:post-engagement", onChange as EventListener)
       window.removeEventListener("ghc:new-message", onChange as EventListener)
+      window.removeEventListener("ghc:connection-updated", onChange as EventListener)
       window.removeEventListener("ghc:notification", onChange as EventListener)
     }
   }, [refresh])

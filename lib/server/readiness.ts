@@ -16,6 +16,7 @@ import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
 import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
 import { isMessagingStoreDurable } from "@/lib/server/messaging/message-store"
+import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export type CheckStatus = "pass" | "fail" | "warn" | "info"
@@ -89,6 +90,7 @@ export type ReadinessReport = {
     membership: "configured_unverified" | "missing"
     marketplace: "configured_unverified" | "missing"
     socialCommunity: "configured_unverified" | "missing"
+    multiUser: "configured_unverified" | "missing"
   }
   ts: string
 }
@@ -413,6 +415,9 @@ export function evaluateReadiness(opts?: {
         ? ("configured_unverified" as const)
         : ("missing" as const),
       socialCommunity: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      multiUser: socialDbConfigured()
         ? ("configured_unverified" as const)
         : ("missing" as const),
     },

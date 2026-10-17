@@ -37,7 +37,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     reportContent,
     blockUser,
     addToast,
-  } = useGHC()
+    loadPostComments,} = useGHC()
   const [text, setText] = useState("")
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -64,7 +64,24 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     return sorted.filter((c) => c.authorId && !blockedSet.has(c.authorId))
   }, [post, sortMode, blockedUsers])
 
+  
   useEffect(() => {
+    if (!open || !post?.id) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadPostComments?.(post.id)
+      } catch {
+        /* */
+      }
+      if (cancelled) return
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, post?.id, loadPostComments])
+
+useEffect(() => {
     if (!open) return
     return onCloseTransientUI(() => onClose())
   }, [open, onClose])

@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main, testnet, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install
+        run: npm ci --legacy-peer-deps
+      - name: JSX safety
+        run: npm run check:jsx
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Safety
+        run: npm run test:safety
+      - name: Economy unit
+        run: npm run test:economy
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+  e2e-preview:
+    runs-on: ubuntu-latest
+    needs: static
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/testnet'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+      - name: E2E against explicit base URL
+        env:
+          GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
+        run: |
+          if [ -z "$GHC_E2E_BASE_URL" ]; then
+            echo "GHC_E2E_BASE_URL secret not set — skipping browser E2E"
+            exit 0
+          fi
+          npx playwright test --project=chromium
+      - name: Operator HTTP smoke
+        env:
+          GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
+        run: |
+          if [ -z "$GHC_E2E_BASE_URL" ]; then
+            echo "skip operator:live-e2e"
+            exit 0
+          fi
+          npm run operator:live-e2e
+
+  e2e-production-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx playwright install chromium --with-deps
+      - name: Production smoke
+        env:
+          GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_PRODUCTION_URL }}
+          GHC_E2E_ALLOW_PRODUCTION: "1"
+          GHC_E2E_TARGET: production
+        run: |
+          if [ -z "$GHC_E2E_BASE_URL" ]; then
+            echo "GHC_E2E_PRODUCTION_URL secret required"
+            exit 1
+          fi
+          npx playwright test --project=chromium
+          npm run operator:live-e2e

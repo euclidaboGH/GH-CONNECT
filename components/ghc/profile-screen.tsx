@@ -186,7 +186,13 @@ export function ProfileScreen({
             if (uploaded?.ok && uploaded.kind === "image") {
               imageUrl = uploaded.url
             } else if (offline || (uploaded && !uploaded.ok && uploaded.error === "MEDIA_STORAGE_UNAVAILABLE")) {
-              // Offline/local fallback, or compatibility fallback when durable media storage is not configured.
+              // Offline/local fallback — not visible on other devices until durable upload succeeds.
+              ghc.addToast?.(
+                offline
+                  ? "Photo saved on this device only until you are online"
+                  : "Photo stored locally — durable storage not available yet",
+                "info"
+              )
               imageUrl = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader()
                 reader.onerror = () => reject(new Error("Could not read this image. Try another file."))

@@ -57,6 +57,22 @@ function now() {
   return Date.now()
 }
 
+
+/** Profile media must be durable https (or empty). Reject blob:/data: so other devices never see dead URLs. */
+function isPersistableMediaUrl(url: string): boolean {
+  const u = String(url || "").trim()
+  if (!u) return false
+  if (u.startsWith("blob:") || u.startsWith("data:")) return false
+  if (u.startsWith("https://") || u.startsWith("http://")) return true
+  // Allow relative public paths already hosted by the app
+  if (u.startsWith("/")) return true
+  return false
+}
+
+function filterPersistableUrls(urls: string[], max: number): string[] {
+  return urls.filter(isPersistableMediaUrl).slice(0, max)
+}
+
 function asStringArray(v: unknown, max: number): string[] {
   if (!Array.isArray(v)) return []
   return v
@@ -85,7 +101,7 @@ export function sanitizeProfileInput(
     20
   )
   const skills = asStringArray(input.skills, 30)
-  const photos = asStringArray(input.photos, MAX_PHOTOS)
+  const photos = filterPersistableUrls(asStringArray(input.photos, MAX_PHOTOS), MAX_PHOTOS)
 
   let age: number | null = null
   if (typeof input.age === "number" && Number.isFinite(input.age)) {
@@ -185,9 +201,17 @@ export function sanitizeProfileInput(
     coverPhoto:
       input.coverPhoto === null || input.cover_photo === null
         ? null
-        : clipStr(input.coverPhoto ?? input.cover_photo, 2000) ??
-          existing?.coverPhoto ??
-          null,
+        : (() => {
+            const raw = clipStr(input.coverPhoto ?? input.cover_photo, 2000)
+            if (raw && isPersistableMediaUrl(raw)) return raw
+            if (raw && (raw.startsWith("blob:") || raw.startsWith("data:"))) {
+              // Drop non-durable; keep existing durable cover if any
+              return existing?.coverPhoto && isPersistableMediaUrl(existing.coverPhoto)
+                ? existing.coverPhoto
+                : null
+            }
+            return existing?.coverPhoto ?? null
+          })(),
     profilePayload,
     onboarded,
     schemaVersion: 1,

@@ -28,8 +28,19 @@ async function json<T>(
     error?: string
     durable?: boolean
   }
+  if (res.status === 401) {
+    return { ...data, ok: false, error: data.error || "AUTH_REQUIRED", durable: false }
+  }
+  if (res.status === 503) {
+    return {
+      ...data,
+      ok: false,
+      durable: false,
+      error: data.error || "STORE_UNAVAILABLE",
+    }
+  }
   if (!res.ok && data.ok !== true) {
-    return { ...data, ok: false, error: data.error || `HTTP_${res.status}` }
+    return { ...data, ok: false, error: data.error || `HTTP_${res.status}`, durable: Boolean(data.durable) }
   }
   return data
 }
@@ -524,5 +535,200 @@ export async function socialFetchContentReward(postId: string): Promise<{
     return await json(`/api/social/posts/${encodeURIComponent(postId)}/reward`)
   } catch {
     return { ok: false, error: "NETWORK" }
+  }
+}
+
+
+export async function socialFetchConnectionInbox(): Promise<{
+  ok: boolean
+  durable: boolean
+  incoming: Array<{
+    id?: string
+    fromUserId: string
+    toUserId: string
+    intents?: string[]
+    note?: string
+    source?: string
+    createdAt?: number
+  }>
+  outgoing: Array<{
+    id?: string
+    fromUserId: string
+    toUserId: string
+    intents?: string[]
+    note?: string
+    source?: string
+    createdAt?: number
+  }>
+  error?: string
+}> {
+  const data = await json<{
+    incoming?: unknown[]
+    outgoing?: unknown[]
+  }>("/api/connections/request")
+  const map = (rows: unknown[] | undefined) =>
+    (Array.isArray(rows) ? rows : []).map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        id: row.id ? String(row.id) : undefined,
+        fromUserId: String(row.fromUserId || ""),
+        toUserId: String(row.toUserId || ""),
+        intents: Array.isArray(row.intents) ? row.intents.map(String) : [],
+        note: row.note ? String(row.note) : undefined,
+        source: row.source ? String(row.source) : undefined,
+        createdAt: Number(row.createdAt) || Date.now(),
+      }
+    }).filter((r) => r.fromUserId && r.toUserId)
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    incoming: map(data.incoming as unknown[]),
+    outgoing: map(data.outgoing as unknown[]),
+    error: data.error,
+  }
+}
+
+
+/** Phase 5 — durable match interest (like / pass / superlike). */
+export async function socialMatchSignal(
+  targetUserId: string,
+  signal: "like" | "pass" | "superlike"
+): Promise<{
+  ok: boolean
+  durable?: boolean
+  mutual?: boolean
+  error?: string
+}> {
+  return json("/api/matching/signal", {
+    method: "POST",
+    body: JSON.stringify({ targetUserId, signal }),
+  })
+}
+
+export async function socialFetchMatchInbox(): Promise<{
+  ok: boolean
+  durable: boolean
+  outgoingLikes: Array<{ toUserId: string; signal: string; createdAt?: number }>
+  incomingLikes: Array<{ fromUserId: string; signal: string; createdAt?: number }>
+  matches: Array<{ userId: string; createdAt?: number }>
+  passes: string[]
+  error?: string
+}> {
+  const data = await json<{
+    outgoingLikes?: unknown[]
+    incomingLikes?: unknown[]
+    matches?: unknown[]
+    passes?: unknown[]
+  }>("/api/matching/inbox")
+  const out = Array.isArray(data.outgoingLikes) ? data.outgoingLikes : []
+  const inn = Array.isArray(data.incomingLikes) ? data.incomingLikes : []
+  const matches = Array.isArray(data.matches) ? data.matches : []
+  const passes = Array.isArray(data.passes) ? data.passes.map(String) : []
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    outgoingLikes: out.map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        toUserId: String(row.toUserId || ""),
+        signal: String(row.signal || "like"),
+        createdAt: Number(row.createdAt) || Date.now(),
+      }
+    }).filter((r) => r.toUserId),
+    incomingLikes: inn.map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        fromUserId: String(row.fromUserId || ""),
+        signal: String(row.signal || "like"),
+        createdAt: Number(row.createdAt) || Date.now(),
+      }
+    }).filter((r) => r.fromUserId),
+    matches: matches.map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        userId: String(row.userId || ""),
+        createdAt: Number(row.createdAt) || Date.now(),
+      }
+    }).filter((r) => r.userId),
+    passes,
+    error: data.error,
+  }
+}
+
+
+/** Phase 9 — durable marketplace listings (public or mine). */
+export async function socialFetchMarketplaceListings(opts?: {
+  scope?: "public" | "mine"
+  limit?: number
+}): Promise<{
+  ok: boolean
+  durable: boolean
+  listings: Array<Record<string, unknown>>
+  error?: string
+}> {
+  const scope = opts?.scope || "public"
+  const limit = opts?.limit ?? 50
+  const data = await json<{ listings?: unknown[] }>(
+    `/api/marketplace/listings?scope=${encodeURIComponent(scope)}&limit=${limit}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    listings: Array.isArray(data.listings)
+      ? (data.listings as Array<Record<string, unknown>>)
+      : [],
+    error: data.error,
+  }
+}
+
+export async function socialCreateMarketplaceListing(input: {
+  id?: string
+  title: string
+  description?: string
+  price: number
+  currency?: string
+  availability?: number
+  status?: string
+  kind?: string
+}): Promise<{ ok: boolean; durable?: boolean; listing?: Record<string, unknown>; error?: string }> {
+  return json("/api/marketplace/listings", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+
+/** Server-backed people for multi-user discovery (canonical gh_user_id). */
+export async function socialDiscoverPeople(limit = 30): Promise<{
+  ok: boolean
+  durable: boolean
+  people: Array<{
+    userId: string
+    displayName: string
+    username?: string
+    bio?: string
+    avatarUrl?: string
+    city?: string
+    country?: string
+  }>
+  error?: string
+}> {
+  const data = await json<{
+    people?: Array<Record<string, unknown>>
+  }>(`/api/social/people/discover?limit=${limit}`)
+  const people = (Array.isArray(data.people) ? data.people : []).map((p) => ({
+    userId: String(p.userId || ""),
+    displayName: String(p.displayName || "Member"),
+    username: p.username ? String(p.username) : undefined,
+    bio: p.bio ? String(p.bio) : undefined,
+    avatarUrl: p.avatarUrl ? String(p.avatarUrl) : undefined,
+    city: p.city ? String(p.city) : undefined,
+    country: p.country ? String(p.country) : undefined,
+  })).filter((p) => p.userId)
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    people,
+    error: data.error,
   }
 }

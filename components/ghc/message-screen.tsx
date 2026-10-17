@@ -40,7 +40,8 @@ function isCommunityConversation(c: Conversation): boolean {
 
 export function MessageScreen() {
   const messaging = useGHCMessaging()
-  const { conversations: rawConversations, sendMessage, markConversationRead } = messaging
+  const { conversations: rawConversations, sendMessage,
+    loadConversationMessages, markConversationRead } = messaging
   const { deleteMessage, replyToMessage } = useGHC()
   const ghc = {
     pinConversation: messaging.pinConversation,
@@ -104,6 +105,22 @@ export function MessageScreen() {
     document.addEventListener("visibilitychange", onVis)
     return () => document.removeEventListener("visibilitychange", onVis)
   }, [selectedId, markConversationRead])
+
+  useEffect(() => {
+    if (!selectedId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadConversationMessages?.(selectedId)
+      } catch {
+        /* */
+      }
+      if (cancelled) return
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, loadConversationMessages])
 
   useEffect(() => {
     const handle = window.setTimeout(() => setQueryDebounced(query), 180)

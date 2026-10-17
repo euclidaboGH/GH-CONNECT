@@ -26,7 +26,16 @@
     "test:idor-static": "node scripts/test-idor-static.mjs",
     "audit:profile": "node scripts/audit-profile-production.mjs",
     "audit:profile-connected": "node scripts/audit-profile-connected-production.mjs",
-    "audit:profile-connected-v2": "node scripts/audit-profile-connected-v2.mjs"
+    "audit:profile-connected-v2": "node scripts/audit-profile-connected-v2.mjs",
+    "operator:multiuser-migrations": "node scripts/operator-multiuser-migrations.mjs",
+    "operator:live-e2e": "node scripts/operator-live-e2e.mjs",
+    "operator:infra": "node scripts/operator-multiuser-migrations.mjs && node scripts/print-migration-checklist.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:prod": "node -e \"if(process.env.GHC_E2E_ALLOW_PRODUCTION!=='1'){console.error('Set GHC_E2E_ALLOW_PRODUCTION=1');process.exit(2)}\" && playwright test --project=chromium",
+    "test:e2e:validate": "node -e \"import('./lib/e2e/resolve-base-url.mjs').then(m=>m.requireE2eBaseUrl())\"",
+    "operator:live-e2e-social": "node scripts/operator-live-e2e-social.mjs",
+    "operator:verify-migration-defs": "node scripts/operator-verify-migration-defs.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",
@@ -53,6 +62,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@next/eslint-plugin-next": "15.5.26",
+    "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/qrcode": "^1.5.5",

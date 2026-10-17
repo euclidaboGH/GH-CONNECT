@@ -7,7 +7,7 @@
 
 export type PostEngagementDetail = {
   postId: string
-  kind: "curation" | "comment" | "save" | "share" | "view" | "edit"
+  kind: "curation" | "comment" | "save" | "share" | "view" | "edit" | "reaction"
   choice?: "upvote" | "downvote" | "neutral"
   upvoteCount?: number
   downvoteCount?: number
@@ -15,6 +15,9 @@ export type PostEngagementDetail = {
   commentDelta?: number
   commentCount?: number
   saved?: boolean
+  /** Authoritative like/reaction total when server returns it */
+  likeCount?: number
+  likedByMe?: boolean
 }
 
 export const POST_ENGAGEMENT_EVENT = "ghc:post-engagement" as const

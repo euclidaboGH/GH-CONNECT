@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { emitSocialNotification } from "@/lib/server/social/notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,6 +40,18 @@ export async function POST(req: Request) {
       return NextResponse.json(nd.body, { status: nd.status })
     }
     const row = await res.json().catch(() => null)
+    // Phase 8: notify original requester that request was accepted
+    void emitSocialNotification({
+      recipientUserId: fromUserId,
+      actorUserId: auth.userId,
+      type: "follow",
+      entityType: "user",
+      entityId: auth.userId,
+      title: "Connected",
+      body: "Your connection request was accepted",
+      dedupeKey: `connection_accept:${fromUserId}:${auth.userId}`,
+      metadata: { kind: "connection_accept" },
+    })
     return NextResponse.json({ ok: true, durable: true, request: row })
   } catch (e) {
     return NextResponse.json(

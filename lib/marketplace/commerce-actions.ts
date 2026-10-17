@@ -11,6 +11,8 @@ export type ListingRef = {
   sellerName?: string | null
   sellerPhoto?: string | null
   title?: string | null
+  /** Optional message body for compose prefill */
+  messageTemplate?: string | null
 }
 
 /** Open marketplace surface focused on a listing (ecosystem until dedicated tab exists). */
@@ -31,11 +33,14 @@ export function messageListingSeller(listing: ListingRef) {
     return
   }
   const title = listing.title ? String(listing.title) : "your listing"
+  const text =
+    (listing.messageTemplate && String(listing.messageTemplate).trim()) ||
+    `Hi — I'm interested in “${title}” on GreenHaven Marketplace. Is this still available?`
   try {
     window.dispatchEvent(
       new CustomEvent("ghc:compose-prefill", {
         detail: {
-          text: `Hi — I'm interested in “${title}” on GreenHaven Marketplace.`,
+          text,
           listingId: listing.listingId,
         },
       }),

@@ -212,6 +212,7 @@ export async function acceptUnifiedConnectionRequest(
   if (typeof window !== "undefined") {
     try {
       await postJson("/api/connections/accept", { fromUserId })
+      window.dispatchEvent(new CustomEvent("ghc:connection-updated", { detail: { action: "accept", fromUserId } }))
     } catch { /* */ }
   }
   return { ok: true, intents: prior?.intents || [] }

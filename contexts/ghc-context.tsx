@@ -1,10 +1,13 @@
 "use client"
 
 import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
+import { emitSocialMutation, SOCIAL_MUTATION_EVENT } from "@/lib/social/social-events"
+import { isLikelyServerUserId } from "@/lib/social/is-server-user-id"
 import {
   fetchServerProfile,
   persistServerProfile,
 } from "@/lib/profile/server-profile-sync"
+import { sanitizeProfileMediaPartial } from "@/lib/profile/sanitize-profile-media"
 
 import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, startTransition } from "react"
 import type { Profile, Settings, Post, StoryItem, Tab, Toast, Candidate, MatchEntry, Conversation, Like, FriendRequest, Message } from "@/lib/ghc-types"
@@ -227,6 +230,7 @@ interface GHCContextType {
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
   addComment: (postId: string, text: string, replyToCommentId?: string) => Promise<void>
+  loadPostComments: (postId: string) => Promise<{ ok: boolean; count: number; durable?: boolean; error?: string }>
   editComment: (postId: string, commentId: string, newText: string) => Promise<void>
   deleteComment: (postId: string, commentId: string) => Promise<void>
   addCommentReaction: (postId: string, commentId: string, emoji: string) => Promise<void>
@@ -277,6 +281,7 @@ interface GHCContextType {
 
   // Messages - unified for both private chats and group chats
   sendMessage: (conversationId: string, text: string) => Promise<void>
+  loadConversationMessages: (conversationId: string) => Promise<{ ok: boolean; count: number; durable?: boolean }>
   editMessage: (conversationId: string, messageId: string, newText: string) => Promise<void>
   deleteMessage: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
   replyToMessage: (conversationId: string, replyToMessageId: string, text: string) => Promise<void>
@@ -550,6 +555,68 @@ function createDefaultExtendedState(
     ...overrides,
   }
 }
+
+
+/** Phase 2: map API feed rows → Post (snake_case + camelCase tolerant). */
+function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>[]): Post[] {
+  return (feedPosts || []).map((raw) => {
+    const p = raw as Record<string, unknown>
+    const id = String(p.id || p.post_id || "")
+    const authorId = String(p.authorId || p.author_id || "")
+    const imagesRaw = p.images ?? p.image_urls ?? p.media
+    const images = Array.isArray(imagesRaw)
+      ? imagesRaw.map(String).filter(Boolean)
+      : typeof imagesRaw === "string" && imagesRaw
+        ? [imagesRaw]
+        : []
+    const commentsRaw = p.comments
+    const comments = Array.isArray(commentsRaw) ? (commentsRaw as Post["comments"]) : []
+    const visibilityRaw = String(p.visibility || p.visible_to || "public").toLowerCase()
+    const visibility = (
+      ["public", "followers", "mutuals", "private"].includes(visibilityRaw)
+        ? visibilityRaw
+        : "public"
+    ) as Post["visibility"]
+    const likes = Number(p.likes ?? p.like_count ?? p.likeCount ?? 0) || 0
+    const shares = Number(p.shares ?? p.share_count ?? 0) || 0
+    const viewCount = Number(p.viewCount ?? p.view_count ?? 0) || 0
+    const createdAt = Number(p.createdAt ?? p.created_at ?? Date.now()) || Date.now()
+    const deletedAtRaw = p.deletedAt ?? p.deleted_at
+    const deletedAt =
+      deletedAtRaw != null && deletedAtRaw !== ""
+        ? Number(deletedAtRaw)
+        : null
+    return {
+      id,
+      authorId,
+      authorName: String(p.authorName || p.author_name || "Member"),
+      authorPhoto: String(p.authorPhoto || p.author_photo || ""),
+      content: String(p.content || p.body || ""),
+      images,
+      video: (p.video as string | null) ?? (p.video_url as string | null) ?? null,
+      pdf: (p.pdf as string | null) ?? null,
+      pdfName: (p.pdfName as string | null) ?? (p.pdf_name as string | null) ?? null,
+      likes,
+      comments,
+      createdAt,
+      visibility,
+      deletedAt: Number.isFinite(deletedAt as number) ? (deletedAt as number) : null,
+      isEdited: Boolean(p.isEdited ?? p.is_edited),
+      editedAt: p.editedAt || p.edited_at ? Number(p.editedAt || p.edited_at) : undefined,
+      hashtags: Array.isArray(p.hashtags) ? p.hashtags.map(String) : undefined,
+      mentions: Array.isArray(p.mentions) ? p.mentions.map(String) : undefined,
+      communityId: p.communityId || p.community_id ? String(p.communityId || p.community_id) : undefined,
+      communityName: p.communityName || p.community_name ? String(p.communityName || p.community_name) : undefined,
+      listingId: p.listingId || p.listing_id ? String(p.listingId || p.listing_id) : undefined,
+      listingKind: (p.listingKind || p.listing_kind) as Post["listingKind"],
+      contentType: (p.contentType || p.content_type) as Post["contentType"],
+      shares: shares || undefined,
+      viewCount: viewCount || undefined,
+      quoteOf: p.quoteOf || p.quote_of_post_id ? String(p.quoteOf || p.quote_of_post_id) : undefined,
+    } as Post
+  }).filter((p) => Boolean(p.id))
+}
+
 
 export function GHCProvider({ children }: { children: ReactNode }) {
   const { sdk } = usePiAuth()
@@ -961,28 +1028,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         setState((s) => {
           const next = { ...s }
-          if (feed.ok && feed.durable && Array.isArray(feed.posts) && feed.posts.length > 0) {
-            const remotePosts = feed.posts.map((p) => ({
-              id: String(p.id),
-              authorId: String(p.authorId || ""),
-              authorName: String(p.authorName || "Member"),
-              authorPhoto: String(p.authorPhoto || ""),
-              content: String(p.content || ""),
-              images: Array.isArray(p.images) ? (p.images as string[]) : [],
-              video: (p.video as string | null) ?? null,
-              pdf: (p.pdf as string | null) ?? null,
-              pdfName: (p.pdfName as string | null) ?? null,
-              likes: Number(p.likes) || 0,
-              comments: Array.isArray(p.comments) ? p.comments : [],
-              createdAt: Number(p.createdAt) || Date.now(),
-              visibility: (p.visibility as Post["visibility"]) || "public",
-              deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
-            })) as Post[]
-            // Prefer durable remote; keep local-only posts not yet synced
+          // Phase 1 multi-user: merge any successful feed payload.
+          // Prefer durable remote posts; still merge non-durable remote when present
+          // so multi-device sessions share whatever the API returned.
+          if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+            const remotePosts = mapRemoteFeedPosts(feed.posts)
             const remoteIds = new Set(remotePosts.map((p) => p.id))
             const localOnly = s.posts.filter(
               (p) => !remoteIds.has(p.id) && !p.deletedAt
             )
+            // Durable remote is authoritative ordering; local-only kept for offline drafts
             next.posts = [...remotePosts, ...localOnly].sort(
               (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
             )
@@ -994,8 +1049,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 new Set([...(s.likedPostIds || []), ...liked])
               )
             }
+          } else if (feed.ok === false && feed.error) {
+            try {
+              console.warn("[ghc] social feed hydrate failed", feed.error)
+            } catch {
+              /* */
+            }
           }
-          if (stories.ok && stories.durable && Array.isArray(stories.stories)) {
+          if (stories.ok && Array.isArray(stories.stories) && stories.stories.length > 0) {
             next.stories = stories.stories.map((st) => ({
               id: String(st.id),
               ownerId: st.ownerId ? String(st.ownerId) : undefined,
@@ -1009,14 +1070,360 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               status: (st.status as StoryItem["status"]) || "published",
             }))
           }
-          if (follows.ok && follows.durable) {
-            if (Array.isArray(follows.following)) next.following = follows.following
-            if (Array.isArray(follows.followers)) next.followers = follows.followers
+          // Phase 1: accept follow graph whenever API succeeds (durable preferred)
+          if (follows.ok) {
+            if (Array.isArray(follows.following) && (follows.durable || follows.following.length > 0)) {
+              next.following = follows.following.map(String)
+            }
+            if (Array.isArray(follows.followers) && (follows.durable || follows.followers.length > 0)) {
+              next.followers = follows.followers.map(String)
+            }
           }
           return next
         })
       } catch {
         /* studio / offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready])
+
+
+
+  // Social repair: after any durable social write, re-pull shared lists (feed, connections, notifs)
+  useEffect(() => {
+    if (!state.ready || typeof window === "undefined") return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const onMut = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as { durable?: boolean; kind?: string } | undefined
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        void (async () => {
+          try {
+            const { socialFetchFeed, socialFetchConnectionInbox } = await import("@/lib/social/client")
+            const [feed, inbox] = await Promise.all([
+              socialFetchFeed({ limit: 40 }),
+              socialFetchConnectionInbox(),
+            ])
+            setState((s) => {
+              let next = { ...s }
+              if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+                const mapped = feed.posts.map((p) => {
+                  const id = String(p.id || "")
+                  const existing = s.posts.find((x) => x.id === id)
+                  return {
+                    ...(existing || {}),
+                    ...p,
+                    id,
+                    likes: typeof p.likes === "number" ? p.likes : existing?.likes ?? 0,
+                    comments: Array.isArray((p as { comments?: unknown }).comments)
+                      ? (p as { comments: Post["comments"] }).comments
+                      : existing?.comments,
+                  } as Post
+                })
+                const remoteIds = new Set(mapped.map((p) => p.id))
+                const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+                next.posts = [...mapped, ...localOnly].sort(
+                  (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+                )
+              }
+              if (inbox.ok && inbox.durable) {
+                const incoming = (inbox.incoming || []).map((r) => ({
+                  id: String(r.id || generateId()),
+                  fromUserId: String(r.fromUserId || ""),
+                  fromUserName: "Member",
+                  fromUserPhoto: "/placeholder.svg?width=40&height=40",
+                  toUserId: String(r.toUserId || s.profile?.id || ""),
+                  createdAt: Number(r.createdAt) || Date.now(),
+                }))
+                // Merge server incoming with any local-only outgoing
+                const localOutgoing = (s.friendRequests || []).filter(
+                  (r) => r.fromUserId === s.profile?.id || r.fromUserId === "current-user"
+                )
+                next.friendRequests = [...incoming, ...localOutgoing]
+              }
+              return next
+            })
+            if (detail?.durable) {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:notification"))
+              } catch {
+                /* */
+              }
+            }
+          } catch {
+            /* offline */
+          }
+        })()
+      }, 400)
+    }
+    window.addEventListener(SOCIAL_MUTATION_EVENT, onMut as EventListener)
+    return () => {
+      if (timer) clearTimeout(timer)
+      window.removeEventListener(SOCIAL_MUTATION_EVENT, onMut as EventListener)
+    }
+  }, [state.ready])
+
+  // Phase 2: soft feed revalidate when app returns to foreground
+  useEffect(() => {
+    if (!state.ready) return
+    let last = 0
+    const MIN_MS = 45_000
+    const revalidate = () => {
+      const now = Date.now()
+      if (now - last < MIN_MS) return
+      last = now
+      void (async () => {
+        try {
+          const { socialFetchFeed } = await import("@/lib/social/client")
+          const feed = await socialFetchFeed({ limit: 40 })
+          if (!feed.ok || !Array.isArray(feed.posts) || feed.posts.length === 0) return
+          const remotePosts = mapRemoteFeedPosts(feed.posts)
+          setState((s) => {
+            const remoteIds = new Set(remotePosts.map((p) => p.id))
+            const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+            return {
+              ...s,
+              posts: [...remotePosts, ...localOnly].sort(
+                (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+              ),
+            }
+          })
+        } catch {
+          /* offline */
+        }
+      })()
+    }
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") revalidate()
+    }
+    const onFocus = () => revalidate()
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVis)
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onFocus)
+    }
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis)
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onFocus)
+      }
+    }
+  }, [state.ready])
+
+
+
+  // Phase 5: hydrate durable match signals (likes / mutual matches)
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialFetchMatchInbox } = await import("@/lib/social/client")
+        const inbox = await socialFetchMatchInbox()
+        if (cancelled || !inbox.ok) return
+        if (!inbox.durable) return
+        const myId =
+          String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim() ||
+          "current-user"
+        setState((s) => {
+          const likeKey = (from: string, to: string) => `${from}→${to}`
+          const likeMap = new Map<string, Like>()
+          for (const l of s.likes || []) {
+            likeMap.set(likeKey(l.fromUserId, l.toUserId), l)
+          }
+          for (const o of inbox.outgoingLikes) {
+            const k = likeKey(myId, o.toUserId)
+            likeMap.set(k, {
+              id: `like_${myId}_${o.toUserId}`,
+              fromUserId: myId,
+              toUserId: o.toUserId,
+              createdAt: o.createdAt || Date.now(),
+            })
+          }
+          for (const i of inbox.incomingLikes) {
+            const k = likeKey(i.fromUserId, myId)
+            likeMap.set(k, {
+              id: `like_${i.fromUserId}_${myId}`,
+              fromUserId: i.fromUserId,
+              toUserId: myId,
+              createdAt: i.createdAt || Date.now(),
+            })
+          }
+          const matchMap = new Map(s.matches.map((m) => [m.userId, m]))
+          for (const m of inbox.matches) {
+            if (!matchMap.has(m.userId)) {
+              matchMap.set(m.userId, {
+                id: `match_${m.userId}`,
+                userId: m.userId,
+                userName: "Match",
+                userPhoto: "",
+                matchedAt: m.createdAt || Date.now(),
+                online: false,
+              })
+            }
+          }
+          return {
+            ...s,
+            likes: Array.from(likeMap.values()),
+            matches: Array.from(matchMap.values()),
+          }
+        })
+      } catch {
+        /* offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready, state.profile?.id])
+
+  // Phase 4: hydrate pending connection requests from durable API
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialFetchConnectionInbox } = await import("@/lib/social/client")
+        const inbox = await socialFetchConnectionInbox()
+        if (cancelled || !inbox.ok) return
+        if (!inbox.durable && inbox.incoming.length === 0 && inbox.outgoing.length === 0) return
+        const myId = String(state.profile?.id || "").trim()
+        const mapped: FriendRequest[] = []
+        for (const row of inbox.incoming) {
+          mapped.push({
+            id: row.id || `in_${row.fromUserId}`,
+            fromUserId: row.fromUserId,
+            fromUserName: "Member",
+            fromUserPhoto: "",
+            toUserId: row.toUserId || myId,
+            createdAt: row.createdAt || Date.now(),
+          })
+        }
+        for (const row of inbox.outgoing) {
+          mapped.push({
+            id: row.id || `out_${row.toUserId}`,
+            fromUserId: row.fromUserId || myId,
+            fromUserName: state.profile?.displayName || "You",
+            fromUserPhoto: state.profile?.photos?.[0] || "",
+            toUserId: row.toUserId,
+            createdAt: row.createdAt || Date.now(),
+          })
+        }
+        setState((s) => {
+          // Merge by pair key; prefer server rows
+          const key = (r: FriendRequest) => `${r.fromUserId}→${r.toUserId}`
+          const byKey = new Map<string, FriendRequest>()
+          for (const r of s.friendRequests || []) byKey.set(key(r), r)
+          for (const r of mapped) byKey.set(key(r), r)
+          return { ...s, friendRequests: Array.from(byKey.values()) }
+        })
+      } catch {
+        /* offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready, state.profile?.id])
+
+
+
+  // Cross-account discovery: merge server profiles into candidates (real gh_user_id)
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialDiscoverPeople } = await import("@/lib/social/client")
+        const remote = await socialDiscoverPeople(40)
+        if (cancelled || !remote.ok || !remote.people.length) return
+        setState((s) => {
+          const byId = new Map(s.candidates.map((c) => [c.id, c]))
+          for (const p of remote.people) {
+            if (!p.userId || p.userId === s.profile?.id) continue
+            const existing = byId.get(p.userId)
+            byId.set(p.userId, {
+              id: p.userId,
+              name: p.displayName || existing?.name || "Member",
+              age: existing?.age || 0,
+              photo: p.avatarUrl || existing?.photo || "/placeholder.svg?width=80&height=80",
+              photos: p.avatarUrl ? [p.avatarUrl] : existing?.photos,
+              bio: p.bio || existing?.bio || "",
+              location: [p.city, p.country].filter(Boolean).join(", ") || existing?.location,
+              interests: existing?.interests || [],
+              distance: existing?.distance,
+              isSample: false,
+            } as Candidate)
+          }
+          // Drop demo seeds when we have real people (production multi-user)
+          const merged = Array.from(byId.values()).filter((c) => {
+            if (remote.durable && remote.people.length > 0) {
+              return isLikelyServerUserId(c.id)
+            }
+            return true
+          })
+          return { ...s, candidates: merged }
+        })
+      } catch {
+        /* offline */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.ready])
+
+  // Phase 9: hydrate public communities from durable API into conversations[]
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialListCommunities } = await import("@/lib/social/client")
+        const remote = await socialListCommunities(50)
+        if (cancelled || !remote.ok || !Array.isArray(remote.communities)) return
+        if (!remote.communities.length) return
+        setState((s) => {
+          const byId = new Map(s.conversations.map((c) => [c.id, c]))
+          for (const raw of remote.communities) {
+            const row = raw as Record<string, unknown>
+            const id = String(row.id || row.community_id || "")
+            if (!id) continue
+            const existing = byId.get(id)
+            const name = String(row.name || row.title || existing?.participantName || "Community")
+            const next: Conversation = {
+              ...(existing || {
+                id,
+                participantId: id,
+                participantName: name,
+                participantPhoto: String(row.coverImage || row.cover_image || ""),
+                messages: [],
+                lastMessage: String(row.description || row.purpose || "").slice(0, 120),
+                lastMessageTime: Number(row.createdAt || row.created_at || Date.now()),
+                unread: false,
+                online: false,
+                conversationType: "group",
+              }),
+              id,
+              participantName: name,
+              conversationType: "group" as const,
+              privacy: (String(row.privacy || existing?.privacy || "public") as Conversation["privacy"]) || "public",
+              members: Array.isArray(row.members)
+                ? (row.members as string[])
+                : existing?.members || [],
+            }
+            byId.set(id, next)
+          }
+          return { ...s, conversations: Array.from(byId.values()) }
+        })
+      } catch {
+        /* offline */
       }
     })()
     return () => {
@@ -1184,6 +1591,66 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [])
 
 
+
+  // Phase 7: soft profile rehydrate when app returns to foreground
+  useEffect(() => {
+    if (!state.ready) return
+    let last = 0
+    const MIN_MS = 60_000
+    const rehydrate = () => {
+      const now = Date.now()
+      if (now - last < MIN_MS) return
+      last = now
+      void (async () => {
+        try {
+          const result = await fetchServerProfile()
+          if (!result.ok || !result.profile) return
+          if (!(result.durable && result.exists)) return
+          setState((s) => {
+            const server = result.profile as Partial<Profile>
+            const photos = Array.isArray(server.photos) ? server.photos : s.profile.photos
+            const coverPhoto =
+              server.coverPhoto === null || server.coverPhoto === ""
+                ? ""
+                : typeof server.coverPhoto === "string" && server.coverPhoto
+                  ? server.coverPhoto
+                  : s.profile.coverPhoto
+            return {
+              ...s,
+              profile: {
+                ...s.profile,
+                ...server,
+                id: (server.id as string) || s.profile.id,
+                photos,
+                coverPhoto,
+                onboarded: Boolean(server.onboarded),
+              },
+            }
+          })
+        } catch {
+          /* offline */
+        }
+      })()
+    }
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") rehydrate()
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVis)
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", rehydrate)
+    }
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis)
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", rehydrate)
+      }
+    }
+  }, [state.ready])
+
   // Cross-device profile hydrate — server is authoritative when durable row exists.
   // Must run after Pi/server session is ready; early calls before auth return empty.
   useEffect(() => {
@@ -1270,10 +1737,17 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const sanitized: Partial<Profile> = {
+      const sanitized: Partial<Profile> = sanitizeProfileMediaPartial({
         ...updates,
         displayName: updates.displayName ? sanitizeDisplayName(updates.displayName) : undefined,
         bio: updates.bio ? sanitizeText(updates.bio, 500) : undefined,
+      } as Record<string, unknown>) as Partial<Profile>
+
+      // Drop blob/data media that cannot cross devices (Phase 7)
+      if (Array.isArray(updates.photos) && Array.isArray(sanitized.photos)) {
+        if (sanitized.photos.length < updates.photos.length && updates.photos.some((u) => String(u).startsWith("blob:") || String(u).startsWith("data:"))) {
+          addToast("Local-only image skipped — upload needs network for other devices", "info")
+        }
       }
 
       // Canonical Identity domain mutation
@@ -1388,7 +1862,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             altUserIds: [
               profile?.id,
               IdentityService.getCurrentUserId(),
-              IdentityService.getPiUserId(),
+              (IdentityService as { getPiUid?: () => string | null }).getPiUid?.(),
             ].filter(Boolean) as string[],
           })
         }
@@ -1565,6 +2039,26 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       notificationSystem.addNotification("share", "Posted", "Your post is live on Feed", "✓", { open: "feed", section: "post" })
       if (durableStatus === "ok") {
         addToast("Post published", "success")
+        // Phase 2: revalidate feed so other sessions/devices converge faster
+        try {
+          const { socialFetchFeed } = await import("@/lib/social/client")
+          const feed = await socialFetchFeed({ limit: 40 })
+          if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+            const remotePosts = mapRemoteFeedPosts(feed.posts)
+            setState((s) => {
+              const remoteIds = new Set(remotePosts.map((p) => p.id))
+              const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+              return {
+                ...s,
+                posts: [...remotePosts, ...localOnly].sort(
+                  (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+                ),
+              }
+            })
+          }
+        } catch {
+          /* non-fatal */
+        }
       } else if (durableStatus === "unconfirmed") {
         addToast("Saved on this device — server publish not confirmed", "info")
       } else {
@@ -1640,19 +2134,45 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(remote.error || "Could not update reaction", "error")
         return
       }
-      if (remote.ok && remote.durable && isLike && typeof remote.likeCount === "number") {
-        setState((s) => ({
-          ...s,
-          posts: s.posts.map((post) =>
-            post.id === postId ? { ...post, likes: remote.likeCount as number } : post
-          ),
-          likedPostIds:
-            remote.liked === false || remote.active === false
-              ? s.likedPostIds.filter((id) => id !== postId)
-              : s.likedPostIds.includes(postId)
-                ? s.likedPostIds
-                : [...s.likedPostIds, postId],
-        }))
+      emitSocialMutation({
+        kind: "reaction",
+        durable: Boolean(remote.durable),
+        postId,
+        error: remote.ok === false ? remote.error : undefined,
+      })
+      if (remote.ok && isLike) {
+        if (typeof remote.likeCount === "number") {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    likes: remote.likeCount as number,
+                    engagement: normalizeEngagementMetrics(post.engagement, {
+                      likes: remote.likeCount as number,
+                    }),
+                  }
+                : post
+            ),
+            likedPostIds:
+              remote.liked === false || remote.active === false
+                ? s.likedPostIds.filter((id) => id !== postId)
+                : s.likedPostIds.includes(postId)
+                  ? s.likedPostIds
+                  : [...s.likedPostIds, postId],
+          }))
+        }
+        const likeCount =
+          typeof remote.likeCount === "number"
+            ? remote.likeCount
+            : undefined
+        broadcastPostEngagement({
+          postId,
+          kind: "reaction",
+          ...(likeCount != null ? { likeCount } : {}),
+          likedByMe: remote.liked !== false && remote.active !== false,
+        })
       }
     } catch {
       /* local-only — keep optimistic state when network unavailable */
@@ -1680,15 +2200,25 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     friends: state.friends || [],
     outgoingFriendRequestIds: (state.friendRequests || [])
       .filter((r: any) => {
-        const me = IdentityService.getCurrentUserId()
-        return r.fromUserId === me || r.fromUserId === "current-user" || r.toUserId
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
+        const from = String(r.fromUserId || "")
+        return from === me || from === "current-user"
       })
-      .map((r: any) => r.toUserId || r.fromUserId)
+      .map((r: any) => r.toUserId)
       .filter(Boolean),
     incomingFriendRequestIds: (state.friendRequests || [])
-      .map((r) => r.fromUserId)
-      .filter((id) => {
-        const me = IdentityService.getCurrentUserId()
+      .filter((r: any) => {
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
+        const to = String(r.toUserId || "")
+        const from = String(r.fromUserId || "")
+        // Incoming: addressed to me (or legacy rows without toUserId from others)
+        if (to && me && to === me) return true
+        if (!to && from && from !== me && from !== "current-user") return true
+        return false
+      })
+      .map((r: any) => r.fromUserId)
+      .filter((id: string) => {
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
         return id && id !== me && id !== "current-user"
       }),
     candidates: state.candidates || [],
@@ -2051,15 +2581,35 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           )
           return
         }
+        const remoteId = remote.comment?.id ? String(remote.comment.id) : ""
+        if (remoteId && remoteId !== newComment.id) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) => {
+              if (post.id !== postId) return post
+              return {
+                ...post,
+                comments: (post.comments || []).map((c) =>
+                  c.id === newComment.id ? { ...c, id: remoteId } : c
+                ),
+              }
+            }),
+          }))
+        }
+        emitSocialMutation({
+          kind: "comment",
+          durable: Boolean(remote.durable),
+          postId,
+        })
         addToast(
           remote.durable
             ? replyToCommentId
               ? "Reply posted"
               : "Comment posted"
             : replyToCommentId
-              ? "Reply saved on this device"
-              : "Comment saved on this device",
-          "success"
+              ? "Reply saved on this device — not visible to others yet"
+              : "Comment saved on this device — not visible to others yet",
+          remote.durable ? "success" : "info"
         )
       } catch {
         addToast(
@@ -2088,37 +2638,115 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         downvoteCount?: number
         commentDelta?: number
         commentCount?: number
+        likeCount?: number
+        likedByMe?: boolean
       }>).detail
       if (!detail?.postId) return
-      setState((s) => ({
-        ...s,
-        posts: s.posts.map((post) => {
-          if (post.id !== detail.postId) return post
-          const next = { ...post } as typeof post
-          if (typeof detail.upvoteCount === "number" && Number.isFinite(detail.upvoteCount)) {
-            ;(next as { upvoteCount?: number }).upvoteCount = Math.max(0, detail.upvoteCount)
+      setState((s) => {
+        let nextLiked = s.likedPostIds || []
+        if (typeof detail.likedByMe === "boolean") {
+          if (detail.likedByMe && !nextLiked.includes(detail.postId)) {
+            nextLiked = [...nextLiked, detail.postId]
+          } else if (!detail.likedByMe) {
+            nextLiked = nextLiked.filter((id) => id !== detail.postId)
           }
-          if (typeof detail.downvoteCount === "number" && Number.isFinite(detail.downvoteCount)) {
-            ;(next as { downvoteCount?: number }).downvoteCount = Math.max(0, detail.downvoteCount)
-          }
-          if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
-            next.engagement = normalizeEngagementMetrics(post.engagement, {
-              comments: Math.max(0, detail.commentCount),
-            })
-          } else if (typeof detail.commentDelta === "number" && detail.commentDelta) {
-            const base = Array.isArray(post.comments)
-              ? post.comments.length
-              : Number(post.engagement?.comments ?? 0)
-            next.engagement = normalizeEngagementMetrics(post.engagement, {
-              comments: Math.max(0, base + detail.commentDelta),
-            })
-          }
-          return next
-        }),
-      }))
+        }
+        return {
+          ...s,
+          likedPostIds: nextLiked,
+          posts: s.posts.map((post) => {
+            if (post.id !== detail.postId) return post
+            const next = { ...post } as typeof post
+            if (typeof detail.upvoteCount === "number" && Number.isFinite(detail.upvoteCount)) {
+              ;(next as { upvoteCount?: number }).upvoteCount = Math.max(0, detail.upvoteCount)
+            }
+            if (typeof detail.downvoteCount === "number" && Number.isFinite(detail.downvoteCount)) {
+              ;(next as { downvoteCount?: number }).downvoteCount = Math.max(0, detail.downvoteCount)
+            }
+            if (typeof detail.likeCount === "number" && Number.isFinite(detail.likeCount)) {
+              next.likes = Math.max(0, detail.likeCount)
+              next.engagement = normalizeEngagementMetrics(post.engagement, {
+                likes: Math.max(0, detail.likeCount),
+              })
+            }
+            if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
+              next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, {
+                comments: Math.max(0, detail.commentCount),
+              })
+            } else if (typeof detail.commentDelta === "number" && detail.commentDelta) {
+              const base = Array.isArray(post.comments)
+                ? post.comments.length
+                : Number(post.engagement?.comments ?? 0)
+              next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, {
+                comments: Math.max(0, base + detail.commentDelta),
+              })
+            }
+            return next
+          }),
+        }
+      })
     }
     window.addEventListener(POST_ENGAGEMENT_EVENT, onEngagement as EventListener)
     return () => window.removeEventListener(POST_ENGAGEMENT_EVENT, onEngagement as EventListener)
+  }, [])
+
+
+  /** Phase 3: hydrate comments from durable API into the shared posts array (feed + profile). */
+  const loadPostComments = useCallback(async (postId: string) => {
+    const id = String(postId || "").trim()
+    if (!id) return { ok: false as const, count: 0 }
+    try {
+      const { socialListComments } = await import("@/lib/social/client")
+      const remote = await socialListComments(id, { limit: 80 })
+      if (!remote.ok || !Array.isArray(remote.comments)) {
+        return { ok: false as const, count: 0, error: remote.error }
+      }
+      const mapped = remote.comments.map((c) => ({
+        id: String(c.id || ""),
+        authorId: String((c as { authorId?: string }).authorId || ""),
+        authorName: String((c as { authorName?: string }).authorName || "Member"),
+        authorPhoto: String((c as { authorPhoto?: string }).authorPhoto || ""),
+        text: String((c as { text?: string }).text || ""),
+        createdAt: Number((c as { createdAt?: number }).createdAt) || Date.now(),
+        replyTo: (c as { parentId?: string; replyTo?: string }).parentId
+          || (c as { replyTo?: string }).replyTo
+          || undefined,
+        replies: [] as [],
+      })).filter((c) => c.id)
+      if (mapped.length === 0 && !remote.durable) {
+        return { ok: true as const, count: 0, durable: false }
+      }
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) => {
+          if (post.id !== id) return post
+          // Prefer remote when durable; merge by id with local optimistic
+          const byId = new Map<string, (typeof mapped)[0]>()
+          for (const c of mapped) byId.set(c.id, c)
+          for (const c of post.comments || []) {
+            if (!byId.has(c.id)) byId.set(c.id, c as (typeof mapped)[0])
+          }
+          const nextComments = Array.from(byId.values()).sort(
+            (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
+          )
+          return {
+            ...post,
+            comments: nextComments as typeof post.comments,
+            engagement: normalizeEngagementMetrics(post.engagement, {
+              comments: nextComments.length,
+            }),
+          }
+        }),
+      }))
+      broadcastPostEngagement({
+        postId: id,
+        kind: "comment",
+        commentCount: mapped.length,
+      })
+      return { ok: true as const, count: mapped.length, durable: Boolean(remote.durable) }
+    } catch (e) {
+      return { ok: false as const, count: 0, error: e instanceof Error ? e.message : "load_failed" }
+    }
   }, [])
 
   const editPost = async (
@@ -2810,16 +3438,43 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
         const quality = domains.matching.evaluateQuality(candidate)
         const now = Date.now()
+        const myId =
+          String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim() ||
+          "current-user"
         let createdMatch: (typeof state.matches)[number] | null = null
         let alreadyMatched = interest.data.alreadyMatched
+        let durableMutual = false
+        let durableOk = false
+
+        // Phase 5: dual-write interest to durable matching API
+        try {
+          const { socialMatchSignal } = await import("@/lib/social/client")
+          const remote = await socialMatchSignal(candidateId, action)
+          durableOk = Boolean(remote.ok && remote.durable)
+          if (remote.ok && remote.mutual) {
+            durableMutual = true
+            alreadyMatched = alreadyMatched || false
+          }
+          if (remote.ok === false && remote.error) {
+            console.warn("[ghc] match signal remote", remote.error)
+          }
+        } catch (e) {
+          console.warn("[ghc] match signal network", e)
+        }
 
         setState((s) => {
           const alreadyLiked = s.likes.some(
-            (like) => like.fromUserId === "current-user" && like.toUserId === candidateId
+            (like) =>
+              (like.fromUserId === myId || like.fromUserId === "current-user") &&
+              like.toUserId === candidateId
           )
-          const hasMutualLike = s.likes.some(
-            (like) => like.fromUserId === candidateId && like.toUserId === "current-user"
-          )
+          const hasMutualLike =
+            durableMutual ||
+            s.likes.some(
+              (like) =>
+                like.fromUserId === candidateId &&
+                (like.toUserId === myId || like.toUserId === "current-user")
+            )
           const existingMatch = s.matches.find((match) => match.userId === candidateId)
           if (existingMatch) {
             alreadyMatched = true
@@ -2831,7 +3486,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                     ...s.likes,
                     {
                       id: generateId(),
-                      fromUserId: "current-user",
+                      fromUserId: myId,
                       toUserId: candidateId,
                       createdAt: now,
                     },
@@ -2844,7 +3499,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 ...s.likes,
                 {
                   id: generateId(),
-                  fromUserId: "current-user",
+                  fromUserId: myId,
                   toUserId: candidateId,
                   createdAt: now,
                 },
@@ -2902,7 +3557,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
         analytics.trackEvent("swipe_action", { action, candidateId }, state.profile.displayName)
 
-        if (createdMatch && !alreadyMatched) {
+        if ((createdMatch && !alreadyMatched) || (durableMutual && !alreadyMatched)) {
           await domains.graph.addMatch(candidateId).catch(() => null)
           notificationSystem.addNotification(
             "match",
@@ -2911,24 +3566,45 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             "💚",
             { candidateId, candidateName: candidate.name }
           )
-          // Confirmation UI is driven by matchCelebration — avoid reward/earnings language
-          addToast("It's a Match — mutual interest", "success")
+          addToast(
+            durableOk
+              ? "It's a Match — mutual interest"
+              : "It's a Match on this device — server sync pending",
+            "success",
+          )
         } else if (alreadyMatched) {
           addToast("You're already matched", "info")
         } else {
           addToast(
-            action === "superlike" ? "Interest sent" : "Interest sent — not a Match until they like you too",
-            "success",
+            durableOk
+              ? action === "superlike"
+                ? "Interest sent"
+                : "Interest sent — not a Match until they like you too"
+              : action === "superlike"
+                ? "Interest saved here — server not confirmed"
+                : "Interest saved here — not visible to them until server sync",
+            durableOk ? "success" : "info",
           )
         }
       } else {
-        addToast("Passed", "info")
+        // Phase 5: durable pass
+        try {
+          const { socialMatchSignal } = await import("@/lib/social/client")
+          const remote = await socialMatchSignal(candidateId, "pass")
+          if (remote.ok && remote.durable) {
+            addToast("Passed", "info")
+          } else {
+            addToast("Passed on this device — server sync pending", "info")
+          }
+        } catch {
+          addToast("Passed on this device", "info")
+        }
       }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error processing action", "error")
     }
-  }, [state.candidates, state.profile.displayName, state.likes, state.matches, domains, addToast])
+  }, [state.candidates, state.profile, state.likes, state.matches, domains, addToast])
 
   
 
@@ -2938,6 +3614,10 @@ const dismissMatchCelebration = useCallback(() => {
 
   const followUser = useCallback(async (userId: string) => {
     try {
+      if (!isLikelyServerUserId(userId)) {
+        addToast("Cannot follow — pick a real registered member", "error")
+        return
+      }
       const already = (state.following || []).includes(userId)
       if (!already) {
         const matchIds = (state.matches || []).map((m) => m.userId)
@@ -2953,10 +3633,34 @@ const dismissMatchCelebration = useCallback(() => {
         return
       }
       setState((s) => applyGraphPatch(s, patchFromFollow(result.data)))
-      addToast(
-        result.data.action === "follow" ? "Following" : "Unfollowed",
-        result.data.action === "follow" ? "success" : "info"
-      )
+      const wantFollow = result.data.action === "follow"
+      try {
+        const { socialFollow } = await import("@/lib/social/client")
+        const remote = await socialFollow(userId, wantFollow)
+        if (remote.ok && remote.durable) {
+          addToast(wantFollow ? "Following" : "Unfollowed", wantFollow ? "success" : "info")
+        } else if (remote.ok === false) {
+          addToast(
+            remote.error ||
+              (wantFollow
+                ? "Follow saved here — not yet visible to others"
+                : "Unfollow saved here — server not confirmed"),
+            "info",
+          )
+        } else {
+          addToast(
+            wantFollow
+              ? "Following on this device — server sync pending"
+              : "Unfollowed on this device — server sync pending",
+            "info",
+          )
+        }
+      } catch {
+        addToast(
+          wantFollow ? "Following on this device only" : "Unfollowed on this device only",
+          "info",
+        )
+      }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error following user", "error")
@@ -2965,6 +3669,10 @@ const dismissMatchCelebration = useCallback(() => {
 
   const addFriend = useCallback(async (userId: string) => {
     try {
+      if (!isLikelyServerUserId(userId)) {
+        addToast("Cannot connect — pick a real registered member (not a demo card)", "error")
+        return
+      }
       if (state.friends.includes(userId)) {
         const result = await domains.graph.removeFriend(userId)
         if (!result.ok) {
@@ -2980,10 +3688,11 @@ const dismissMatchCelebration = useCallback(() => {
         addToast(result.error, "error")
         return
       }
+      const myId = String(state.profile?.id || "").trim() || "current-user"
       const cand = bootstrapCandidates().find((c) => c.id === userId)
       const newRequest = {
         id: generateId(),
-        fromUserId: "current-user",
+        fromUserId: myId,
         fromUserName: state.profile.displayName || "You",
         fromUserPhoto: state.profile.photos?.[0] || "/placeholder.svg?width=40&height=40",
         toUserId: userId,
@@ -2994,12 +3703,40 @@ const dismissMatchCelebration = useCallback(() => {
         ...s,
         friendRequests: [
           ...(s.friendRequests || []).filter(
-            (r) => !(r.fromUserId === "current-user" && r.toUserId === userId)
+            (r) => !(r.fromUserId === myId && r.toUserId === userId) &&
+              !(r.fromUserId === "current-user" && r.toUserId === userId)
           ),
           newRequest as any,
         ],
       }))
-      addToast("Friend request sent!", "success")
+      // Phase 1: durable connection request so other devices/accounts can receive it
+      let durableOk = false
+      try {
+        const { socialConnectionRequest } = await import("@/lib/social/client")
+        const remote = await socialConnectionRequest({
+          toUserId: userId,
+          source: "profile_connect",
+        })
+        durableOk = Boolean(remote.ok && remote.durable)
+        if (remote.ok === false && remote.error) {
+          console.warn("[ghc] connection request remote", remote.error)
+        }
+      } catch (e) {
+        console.warn("[ghc] connection request network", e)
+      }
+      emitSocialMutation({
+        kind: "connection_request",
+        durable: durableOk,
+        targetUserId: userId,
+      })
+      if (durableOk) {
+        addToast("Friend request sent — they will see it when online", "success")
+      } else {
+        addToast(
+          "Request saved on this device only — not visible to them until server confirms (migrations/auth)",
+          "info",
+        )
+      }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error adding friend", "error")
@@ -3078,14 +3815,39 @@ const dismissMatchCelebration = useCallback(() => {
         addToast(result.error, "error")
         return null
       }
-      const newConversation = {
+      let newConversation = {
         ...result.data.conversation,
         online: true,
       } as Conversation
 
+      // Phase 6: prefer durable conversation id when server creates one
+      try {
+        const { apiCreateDirectConversation } = await import("@/lib/messaging/server-messaging-sync")
+        const remote = await apiCreateDirectConversation(userId)
+        if (remote?.ok && remote.durable && remote.conversation?.id) {
+          const rid = String(remote.conversation.id)
+          newConversation = {
+            ...newConversation,
+            id: rid,
+            participantId: userId,
+            participantName: userName || newConversation.participantName,
+            participantPhoto: userPhoto || newConversation.participantPhoto,
+          }
+        }
+      } catch {
+        /* keep local id */
+      }
+
       setState((s) => ({
         ...s,
-        conversations: [newConversation, ...s.conversations],
+        conversations: [
+          newConversation,
+          ...s.conversations.filter(
+            (c) =>
+              c.id !== newConversation.id &&
+              !(c.participantId === userId && c.conversationType === "private")
+          ),
+        ],
         tab: "messages" as Tab,
       }))
       return newConversation.id
@@ -3094,7 +3856,7 @@ const dismissMatchCelebration = useCallback(() => {
       addToast("Error starting conversation", "error")
       return null
     }
-  }, [state.conversations, state.settings.whoCanMessage, domains, addToast])
+  }, [state.conversations, state.settings.whoCanMessage, domains, addToast, canMessageUser])
 
   const acceptMatch = useCallback(async (userId: string) => {
     try {
@@ -3145,6 +3907,74 @@ const dismissMatchCelebration = useCallback(() => {
       addToast("Error declining match", "error")
     }
   }, [domains, addToast])
+
+
+  /** Phase 6: hydrate messages for one thread from durable API. */
+  const loadConversationMessages = useCallback(
+    async (conversationId: string): Promise<{ ok: boolean; count: number; durable?: boolean }> => {
+      const id = String(conversationId || "").trim()
+      if (!id) return { ok: false, count: 0 }
+      try {
+        const { apiListMessages } = await import("@/lib/messaging/server-messaging-sync")
+        const remote = await apiListMessages(id, { limit: 80 })
+        if (!remote?.ok || !Array.isArray(remote.messages)) {
+          return { ok: false, count: 0, durable: Boolean(remote?.durable) }
+        }
+        const mapped = remote.messages
+          .map((raw: Record<string, unknown>) => {
+            const mid = String(raw.id || raw.message_id || "")
+            if (!mid) return null
+            return {
+              id: mid,
+              senderId: String(raw.senderId || raw.sender_id || ""),
+              text: String(raw.body || raw.text || ""),
+              createdAt: Number(raw.createdAt || raw.created_at || Date.now()) || Date.now(),
+              status: "delivered" as const,
+            }
+          })
+          .filter(Boolean) as Array<{
+          id: string
+          senderId: string
+          text: string
+          createdAt: number
+          status: "delivered"
+        }>
+        setState((s) => ({
+          ...s,
+          conversations: (s.conversations || []).map((c) => {
+            if (c.id !== id) return c
+            const byId = new Map<string, (typeof mapped)[0]>()
+            for (const m of mapped) byId.set(m.id, m)
+            for (const m of c.messages || []) {
+              if (!byId.has(m.id)) {
+                byId.set(m.id, {
+                  id: m.id,
+                  senderId: String(m.senderId || ""),
+                  text: String(m.text || ""),
+                  createdAt: Number(m.createdAt) || Date.now(),
+                  status: (m.status as "delivered") || "delivered",
+                })
+              }
+            }
+            const nextMsgs = Array.from(byId.values()).sort(
+              (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
+            )
+            const last = nextMsgs[nextMsgs.length - 1]
+            return {
+              ...c,
+              messages: nextMsgs as typeof c.messages,
+              lastMessage: last?.text || c.lastMessage,
+              lastMessageTime: last?.createdAt || c.lastMessageTime,
+            }
+          }),
+        }))
+        return { ok: true, count: mapped.length, durable: Boolean(remote.durable) }
+      } catch {
+        return { ok: false, count: 0 }
+      }
+    },
+    []
+  )
 
   const sendMessage = useCallback(async (conversationId: string, text: string) => {
     try {
@@ -3225,8 +4055,45 @@ const dismissMatchCelebration = useCallback(() => {
         return
       }
 
+      let serverId: string | null = null
+      let durable = false
+      try {
+        const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
+        const remote = await apiSendMessageWithRetry(
+          conversationId,
+          sanitizedText,
+          String(uiMessage.id)
+        )
+        if (remote?.ok && remote.durable) {
+          durable = true
+          serverId = remote.message?.id ? String(remote.message.id) : null
+        } else if (remote?.ok === false) {
+          offlineQueue.addAction({
+            type: "send_message",
+            payload: {
+              conversationId,
+              text: sanitizedText,
+              csrfToken,
+              messageId: uiMessage.id,
+            },
+            maxRetries: 3,
+          })
+        }
+      } catch {
+        offlineQueue.addAction({
+          type: "send_message",
+          payload: {
+            conversationId,
+            text: sanitizedText,
+            csrfToken,
+            messageId: uiMessage.id,
+          },
+          maxRetries: 3,
+        })
+      }
+
       await domains.messaging
-        .setMessageStatus(conversationId, result.data.id, "delivered")
+        .setMessageStatus(conversationId, result.data.id, durable ? "delivered" : "sent")
         .catch(() => null)
       setState((s) => ({
         ...s,
@@ -3234,16 +4101,32 @@ const dismissMatchCelebration = useCallback(() => {
           if (c.id !== conversationId) return c
           return {
             ...c,
-            messages: (c.messages || []).map((m) =>
-              m.id === uiMessage.id ? { ...m, status: "delivered" as const } : m,
-            ),
+            messages: (c.messages || []).map((m) => {
+              if (m.id !== uiMessage.id) return m
+              return {
+                ...m,
+                id: serverId || m.id,
+                status: (durable ? "delivered" : "sent") as "delivered" | "sent",
+                senderId: String(
+                  m.senderId ||
+                    state.profile?.id ||
+                    IdentityService.getCurrentUserId() ||
+                    "current-user"
+                ),
+              }
+            }),
           }
         }),
       }))
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:new-message", {
-            detail: { conversationId, messageId: uiMessage.id, outbound: true },
+            detail: {
+              conversationId,
+              messageId: serverId || uiMessage.id,
+              outbound: true,
+              durable,
+            },
           }),
         )
       } catch {
@@ -3253,7 +4136,42 @@ const dismissMatchCelebration = useCallback(() => {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Failed to send message", "error")
     }
-  }, [domains, state.isOnline, state.profile.displayName, addToast])
+  }, [domains, state.isOnline, state.profile, addToast])
+
+  
+  // Phase 7: flush queued profile updates when online
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const flush = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return
+      try {
+        const pending = offlineQueue.getActionsByType?.("profile_update") || []
+        for (const action of pending) {
+          const payload = sanitizeProfileMediaPartial(
+            (action.payload || {}) as Record<string, unknown>
+          )
+          try {
+            const persisted = await persistServerProfile(payload)
+            if (persisted.ok) {
+              offlineQueue.removeAction(action.id)
+            } else {
+              offlineQueue.incrementRetry?.(action.id)
+            }
+          } catch {
+            offlineQueue.incrementRetry?.(action.id)
+          }
+        }
+      } catch {
+        /* */
+      }
+    }
+    const onOnline = () => {
+      void flush()
+    }
+    window.addEventListener("online", onOnline)
+    void flush()
+    return () => window.removeEventListener("online", onOnline)
+  }, [])
 
   // Phase 6 — flush queued messages when back online
   useEffect(() => {
@@ -3263,7 +4181,18 @@ const dismissMatchCelebration = useCallback(() => {
       if (typeof navigator !== "undefined" && !navigator.onLine) return
       try {
         const { flushQueuedMessages } = await import("@/lib/messaging/offline-message-flush")
-        const result = await flushQueuedMessages(async ({ conversationId, text }) => {
+        const result = await flushQueuedMessages(async ({ conversationId, text, messageId }) => {
+          try {
+            const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
+            const remote = await apiSendMessageWithRetry(
+              conversationId,
+              text,
+              String(messageId || `offline-${Date.now()}`)
+            )
+            if (remote?.ok && remote.durable) return { ok: true }
+          } catch {
+            /* domain fallback */
+          }
           const res = await domains.messaging.sendMessage({
             conversationId,
             text,
@@ -3271,21 +4200,18 @@ const dismissMatchCelebration = useCallback(() => {
           })
           if (!res.ok) return { ok: false, error: res.error }
           // Merge into UI if missing
-          const responseData = res.data as {
-            uiMessage?: Partial<Message> & Pick<Message, "id" | "text">
-            id?: string
-            createdAt?: number
-            senderId?: string
-          }
-          const rawUiMessage = responseData.uiMessage
-          // Normalize server responses before inserting them into the strongly typed UI state.
-          // Message.senderId and Message.createdAt are required by the canonical Message type.
-          const uiMessage: Message = {
-            ...rawUiMessage,
-            id: rawUiMessage?.id || responseData.id || `msg-${Date.now()}`,
-            senderId: rawUiMessage?.senderId || responseData.senderId || "current-user",
-            text: rawUiMessage?.text ?? text,
-            createdAt: rawUiMessage?.createdAt ?? responseData.createdAt ?? Date.now(),
+          const rawUi = (res.data as { uiMessage?: { id: string; text: string; createdAt?: number; senderId?: string }; id?: string; createdAt?: number; senderId?: string }).uiMessage
+          const uiMessage: {
+            id: string
+            senderId: string
+            text: string
+            createdAt: number
+            status: "delivered"
+          } = {
+            id: String(rawUi?.id || (res.data as { id?: string }).id || `msg-${Date.now()}`),
+            senderId: String(rawUi?.senderId || (res.data as { senderId?: string }).senderId || "current-user"),
+            text: String(rawUi?.text || text),
+            createdAt: Number(rawUi?.createdAt || (res.data as { createdAt?: number }).createdAt || Date.now()),
             status: "delivered",
           }
           setState((s) => ({
@@ -3293,23 +4219,43 @@ const dismissMatchCelebration = useCallback(() => {
             conversations: (s.conversations || []).map((conv) => {
               if (conv.id !== conversationId) return conv
               const existing = Array.isArray(conv.messages) ? conv.messages : []
-              if (existing.some((m) => m.id === uiMessage.id || (m.text === text && m.status === "sending"))) {
+              const delivered: {
+                id: string
+                senderId: string
+                text: string
+                createdAt: number
+                status: "delivered"
+              } = {
+                id: uiMessage.id,
+                senderId: uiMessage.senderId,
+                text: uiMessage.text,
+                createdAt: uiMessage.createdAt,
+                status: "delivered",
+              }
+              if (existing.some((m) => m.id === delivered.id || (m.text === text && m.status === "sending"))) {
                 return {
                   ...conv,
                   messages: existing.map((m) =>
-                    m.id === uiMessage.id || (m.text === text && (m.status === "sending" || m.status === "failed"))
-                      ? { ...m, ...uiMessage, status: "delivered" as const }
+                    m.id === delivered.id || (m.text === text && (m.status === "sending" || m.status === "failed"))
+                      ? {
+                          ...m,
+                          id: delivered.id,
+                          senderId: delivered.senderId,
+                          text: delivered.text,
+                          createdAt: delivered.createdAt,
+                          status: "delivered" as const,
+                        }
                       : m,
                   ),
                   lastMessage: text,
-                  lastMessageTime: uiMessage.createdAt || Date.now(),
+                  lastMessageTime: delivered.createdAt,
                 }
               }
               return {
                 ...conv,
-                messages: [...existing, { ...uiMessage, status: "delivered" as const }],
+                messages: [...existing, delivered],
                 lastMessage: text,
-                lastMessageTime: uiMessage.createdAt || Date.now(),
+                lastMessageTime: delivered.createdAt,
               }
             }),
           }))
@@ -5164,24 +6110,6 @@ const dismissMatchCelebration = useCallback(() => {
    * Canonical durable feed refresh — server authoritative when online.
    * Reconciles remote posts with local-only optimistic items; never wipes feed on failure.
    */
-  const mapRemoteFeedPosts = (feedPosts: Partial<Post>[]) =>
-    feedPosts.map((p) => ({
-      id: String(p.id),
-      authorId: String(p.authorId || ""),
-      authorName: String(p.authorName || "Member"),
-      authorPhoto: String(p.authorPhoto || ""),
-      content: String(p.content || ""),
-      images: Array.isArray(p.images) ? (p.images as string[]) : [],
-      video: (p.video as string | null) ?? null,
-      pdf: (p.pdf as string | null) ?? null,
-      pdfName: (p.pdfName as string | null) ?? null,
-      likes: Number(p.likes) || 0,
-      comments: Array.isArray(p.comments) ? p.comments : [],
-      createdAt: Number(p.createdAt) || Date.now(),
-      visibility: (p.visibility as Post["visibility"]) || "public",
-      deletedAt: p.deletedAt ? Number(p.deletedAt) : null,
-    })) as Post[]
-
   const refreshFeed = useCallback(async (opts?: {
     before?: number
     beforeId?: string
@@ -5198,7 +6126,8 @@ const dismissMatchCelebration = useCallback(() => {
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
       }
-      if (feed.durable && Array.isArray(feed.posts) && feed.posts.length > 0) {
+      // Phase 2: merge whenever API returns posts (durable preferred, not required)
+      if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
         const remotePosts = mapRemoteFeedPosts(feed.posts)
         setState((s) => {
           if (opts?.append) {
@@ -5228,7 +6157,7 @@ const dismissMatchCelebration = useCallback(() => {
             : s.likedPostIds
           return { ...s, posts: nextPosts, likedPostIds: nextLiked }
         })
-        return { ok: true, durable: true, appended: remotePosts.length }
+        return { ok: true, durable: Boolean(feed.durable), appended: remotePosts.length }
       }
       // Server reachable but empty / non-durable — preserve existing local feed
       return { ok: true, durable: Boolean(feed.durable), appended: 0 }
@@ -5354,6 +6283,7 @@ const dismissMatchCelebration = useCallback(() => {
       archivePost,
       unarchivePost,
       addComment,
+      loadPostComments,
       editComment,
       deleteComment,
       addCommentReaction,
@@ -5394,6 +6324,7 @@ const dismissMatchCelebration = useCallback(() => {
       acceptMatch,
       rejectMatch,
       sendMessage,
+      loadConversationMessages,
       editMessage,
       deleteMessage,
       replyToMessage,
@@ -5560,6 +6491,7 @@ const dismissMatchCelebration = useCallback(() => {
     () => ({
       conversations: visibleSession.conversations,
       sendMessage,
+      loadConversationMessages,
       markConversationRead,
       pinConversation,
       archiveConversation,
@@ -5590,6 +6522,7 @@ const dismissMatchCelebration = useCallback(() => {
       visibleSession.conversations,
       state.profile,
       sendMessage,
+      loadConversationMessages,
       markConversationRead,
       pinConversation,
       archiveConversation,
@@ -5635,6 +6568,7 @@ const dismissMatchCelebration = useCallback(() => {
       archivePost,
       unarchivePost,
       addComment,
+      loadPostComments,
       editComment,
       deleteComment,
       addCommentReaction,
@@ -5682,6 +6616,7 @@ const dismissMatchCelebration = useCallback(() => {
       archivePost,
       unarchivePost,
       addComment,
+      loadPostComments,
       editComment,
       deleteComment,
       addCommentReaction,
