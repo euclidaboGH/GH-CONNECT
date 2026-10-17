@@ -1085,10 +1085,20 @@ export function MarketplaceScreen({
                     availability: 1,
                   })
                   if (remote.ok === false) {
-                    ghc?.addToast?.(
-                      remote.error || "Listing saved on this device — server not confirmed",
-                      "info"
-                    )
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:toast", {
+                          detail: {
+                            message:
+                              remote.error ||
+                              "Listing saved on this device — server not confirmed",
+                            type: "info",
+                          },
+                        }),
+                      )
+                    } catch {
+                      /* */
+                    }
                   } else if (remote.listing?.id && id && String(remote.listing.id) !== String(id)) {
                     try {
                       const KEY = "ghc_marketplace_listings_v1"
@@ -1113,7 +1123,18 @@ export function MarketplaceScreen({
                     }
                   }
                 } catch {
-                  ghc?.addToast?.("Listing saved on this device — server not confirmed", "info")
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:toast", {
+                        detail: {
+                          message: "Listing saved on this device — server not confirmed",
+                          type: "info",
+                        },
+                      }),
+                    )
+                  } catch {
+                    /* */
+                  }
                 }
                 setSellTitle("")
                 setSellPrice("")
