@@ -62,8 +62,13 @@ export function ActionSheet({
     const armTimer = window.setTimeout(() => {
       scrollArmed = true
     }, 100)
-    const onScroll = () => {
-      if (scrollArmed) close()
+    const onScroll = (event: Event) => {
+      if (!scrollArmed) return
+      // Scrolling inside the sheet is expected (especially on mobile); only
+      // close it when the scroll originates outside the active panel.
+      const target = event.target
+      if (target instanceof Node && panelRef.current?.contains(target)) return
+      close()
     }
 
     const histKey = "ghcSheet"

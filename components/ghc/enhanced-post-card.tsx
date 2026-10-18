@@ -783,14 +783,19 @@ function EnhancedPostCardInner({
         )}
       </div>
 
-      {/* Compact engagement summary. Comment text stays inside the dedicated comments sheet. */}
-      <section className="mx-4 mb-2 px-1 py-1" aria-label="Post engagement">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-          <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="inline-flex items-center gap-1.5 font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-md" aria-label={`View ${visibleCommentCount.toLocaleString()} comments`}><MessageCircle size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleCommentCount.toLocaleString()}</strong><span>{visibleCommentCount === 1 ? "comment" : "comments"}</span></button>
-          <span className="inline-flex items-center gap-1.5"><Share2 size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleShareCount.toLocaleString()}</strong><span>shares</span></span>
-        </div>
-        {visibleReactionEntries.length > 0 ? <div className="mt-1.5 flex flex-wrap gap-1" aria-label="Reaction counts">{visibleReactionEntries.slice(0, 5).map(([type, count]) => <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground"><span>{reactionEmoji[type] || "✨"}</span><span className="tabular-nums">{Number(count).toLocaleString()}</span></span>)}</div> : null}
-      </section>
+      {/* Reaction summary only. Comment/share totals live beside their single action controls below. */}
+      {visibleReactionEntries.length > 0 ? (
+        <section className="mx-4 mb-2 px-1 py-1" aria-label="Reaction counts">
+          <div className="flex flex-wrap gap-1">
+            {visibleReactionEntries.slice(0, 5).map(([type, count]) => (
+              <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                <span>{reactionEmoji[type] || "✨"}</span>
+                <span className="tabular-nums">{Number(count).toLocaleString()}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Engagement stats */}
       {post.engagement && (
