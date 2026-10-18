@@ -39,7 +39,12 @@ ok(route.includes('PAID_ORDER_CANCEL_REQUIRES_REFUND'), 'blocks paid cancel with
 ok(route.includes('REQUIRES_VERIFIED_PAYMENT'), 'paid-state set defined')
 ok(pay.includes('transitionOrder(order.id, "payment_verified"'), 'pay route still sets payment_verified')
 ok(pay.includes('market_order_'), 'pay uses market_order_ reference')
+ok(pay.includes('PAYMENT_INTENT_ORDER_MISMATCH'), 'rejects reuse of a completed Pi intent for a different marketplace order')
 ok(store.includes('payment_pending'), 'store state machine intact')
+const createOrder = fs.readFileSync(path.join(root, 'app/api/marketplace/orders/route.ts'), 'utf8')
+ok(createOrder.includes('createReservedOrder(order, idempotencyKey)'), 'order creation delegates stock control to atomic durable reservation RPC')
+ok(createOrder.includes('IDEMPOTENCY_KEY_REQUIRED'), 'order creation requires stable idempotency key')
+ok(!createOrder.includes('STOCK_RESERVATION_UNAVAILABLE'), 'obsolete blanket finite-stock block removed only after atomic RPC wiring')
 
 // Ensure transition route does not blindly allow unpaid → payment_verified
 ok(

@@ -8,7 +8,6 @@ import {
   getEntitlement,
   tryGetEntitlementAuthoritative,
   grantEntitlement,
-  MEMBERSHIP_SERVER_CATALOG,
 } from "@/lib/server/membership/entitlement-store"
 import {
   getPaymentIntent,
@@ -23,23 +22,26 @@ import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/ht
 import { readGhcServerEnv as readEnv } from "@/lib/server/economy/env"
 import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { z } from "zod"
+import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice, membershipPeriodForPaidMonths, paidMonthsForMembershipPeriod, type PaidMembershipMonths } from "@/lib/membership-pricing"
+import { queueReferralReward } from "@/lib/server/referral/referral-service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-async function rpcSpend(input: {
+async function rpcPurchaseMembership(input: {
   userId: string
   amount: number
   referenceId: string
   reason: string
-}): Promise<{ ok: boolean; error?: string; tx?: unknown; idempotent?: boolean }> {
+  row: Record<string, unknown>
+}): Promise<{ ok: boolean; error?: string; spend?: unknown; idempotent?: boolean }> {
   const env = readEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
   }
   try {
     const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_execute_spend`,
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_purchase_membership`,
       {
         method: "POST",
         headers: {
@@ -52,17 +54,17 @@ async function rpcSpend(input: {
           p_amount: input.amount,
           p_reference_id: input.referenceId,
           p_reason: input.reason,
-          p_source_event: "PREMIUM_PURCHASE",
+          p_row: input.row,
         }),
       }
     )
     const data = await res.json().catch(() => null)
     if (!res.ok || !data?.ok) {
-      return { ok: false, error: String(data?.error || "SPEND_FAILED") }
+      return { ok: false, error: String(data?.error || "MEMBERSHIP_PURCHASE_FAILED") }
     }
-    return { ok: true, idempotent: Boolean(data.idempotent), tx: data.tx }
+    return { ok: true, idempotent: Boolean(data.idempotent), spend: data.spend }
   } catch {
-    return { ok: false, error: "SPEND_RPC_FAILED" }
+    return { ok: false, error: "MEMBERSHIP_PURCHASE_RPC_FAILED" }
   }
 }
 
@@ -76,8 +78,9 @@ export async function POST(request: Request) {
   const raw = await request.json().catch(() => ({}))
   const schema = z.object({
     tier: z.enum(["vip", "vvip"]),
-    period: z.enum(["monthly", "yearly"]).optional(),
-    billingPeriod: z.enum(["monthly", "yearly"]).optional(),
+    period: z.enum(["monthly", "four_months", "eight_months", "yearly"]).optional(),
+    billingPeriod: z.enum(["monthly", "four_months", "eight_months", "yearly"]).optional(),
+    paidMonths: z.union([z.literal(1), z.literal(4), z.literal(8), z.literal(12)]).optional(),
     method: z.enum(["pi", "ghc"]),
     intentId: z.string().max(120).optional(),
     paymentId: z.string().max(120).optional(),
@@ -97,15 +100,27 @@ export async function POST(request: Request) {
     )
   }
   const tier = parsed.data.tier
-  const period = (parsed.data.period || parsed.data.billingPeriod || "monthly") as "monthly" | "yearly"
+  const requestedPeriod = parsed.data.period || parsed.data.billingPeriod
+  const requestedMonths = parsed.data.paidMonths || (requestedPeriod ? paidMonthsForMembershipPeriod(requestedPeriod) : 1)
+  if (!requestedMonths) {
+    return NextResponse.json({ ok: false, error: "UNSUPPORTED_MEMBERSHIP_DURATION" }, { status: 400 })
+  }
+  const paidMonths = requestedMonths as PaidMembershipMonths
+  const period = membershipPeriodForPaidMonths(paidMonths)
   const method = parsed.data.method
-  const body = { ...raw, ...parsed.data, period, tier, method }
+  const body = { ...raw, ...parsed.data, period, paidMonths, tier, method }
 
-  const catalog = MEMBERSHIP_SERVER_CATALOG[tier as "vip" | "vvip"]
 
-  // Idempotent / already-active: same tier still valid — do not charge again
+  // Idempotent / already-active: same tier still valid — do not charge again.
+  // In database mode an unreadable entitlement store must fail closed before any debit.
   try {
     const existingResult = await tryGetEntitlementAuthoritative(auth.userId)
+    if (!existingResult.ok && isDatabaseConfigured()) {
+      return NextResponse.json(
+        { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE", message: "Membership status could not be verified. No payment was taken." },
+        { status: 503 }
+      )
+    }
     if (
       existingResult.ok &&
       existingResult.entitlement.tier === tier &&
@@ -124,7 +139,12 @@ export async function POST(request: Request) {
       )
     }
   } catch {
-    /* continue — store may be unavailable; spend path will surface errors */
+    if (isDatabaseConfigured()) {
+      return NextResponse.json(
+        { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE", message: "Membership status could not be verified. No payment was taken." },
+        { status: 503 }
+      )
+    }
   }
 
   if (method === "pi") {
@@ -162,7 +182,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "CURRENCY_MISMATCH" }, { status: 409 })
     }
 
-    const expectedPi = period === "yearly" ? catalog.yearlyPi : catalog.monthlyPi
+    const expectedPi = getMembershipPiPrice(tier, paidMonths).chargePi
     if (Math.abs(Number(intent.amount) - expectedPi) > 0.001) {
       return NextResponse.json(
         { ok: false, error: "amount_mismatch", expected: expectedPi, actual: intent.amount },
@@ -221,55 +241,59 @@ export async function POST(request: Request) {
   }
 
   // method === "ghc"
-  const price = period === "yearly" ? catalog.yearlyGhc : catalog.monthlyGhc
+  const price = getMembershipGhcPrice(tier, paidMonths).chargeGhc
   const referenceId =
     String(body.spendReferenceId || "").trim() ||
     `membership_${tier}_${period}_${auth.userId}`
 
   if (isDatabaseConfigured()) {
-    const spend = await rpcSpend({
+    const now = Date.now()
+    const accessMonths = paidMonths + 1
+    const expiresAt = addCalendarMonths(now, accessMonths)
+    const purchase = await rpcPurchaseMembership({
       userId: auth.userId,
       amount: price,
       referenceId,
-      reason: `Membership ${tier} ${period}`,
+      reason: `Membership ${tier} ${paidMonths}-month plan with one bonus month`,
+      row: {
+        user_id: auth.userId,
+        tier,
+        active: true,
+        started_at: new Date(now).toISOString(),
+        expires_at: new Date(expiresAt).toISOString(),
+        billing_period: period,
+        source: "ghc",
+        purchase_ref: referenceId,
+        payment_intent_id: null,
+      },
     })
-    if (!spend.ok) {
-      const status = spend.error === "INSUFFICIENT_BALANCE" ? 402 : 503
+    if (!purchase.ok) {
+      const status = purchase.error === "INSUFFICIENT_BALANCE" ? 402 : 503
       return NextResponse.json(
         {
           ok: false,
-          error: spend.error || "SPEND_FAILED",
+          error: purchase.error || "MEMBERSHIP_PURCHASE_FAILED",
           message:
-            spend.error === "INSUFFICIENT_BALANCE"
+            purchase.error === "INSUFFICIENT_BALANCE"
               ? "Insufficient GHC balance for this membership plan"
-              : "Could not complete GHC membership spend",
+              : "Could not atomically complete GHC spend and membership entitlement",
         },
         { status }
       )
     }
-    try {
-      const entitlement = await grantEntitlement({
-        userId: auth.userId,
-        tier,
-        billingPeriod: period,
-        source: "ghc",
-        purchaseRef: referenceId,
-      })
-      return NextResponse.json({ ok: true, entitlement, spend: spend.tx, idempotent: spend.idempotent })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
-      console.error("[membership/activate] grant after GHC spend failed", msg)
+    const loaded = await tryGetEntitlementAuthoritative(auth.userId)
+    if (!loaded.ok) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "MEMBERSHIP_DURABLE_WRITE_FAILED",
-          message:
-            "GHC spend may have been applied, but membership entitlement could not be stored durably.",
-          spendReferenceId: referenceId,
-        },
+        { ok: false, error: "MEMBERSHIP_DURABLE_WRITE_FAILED", message: "Purchase was committed but the entitlement read is temporarily unavailable. Refresh membership status; do not purchase again." },
         { status: 503 }
       )
     }
+    void queueReferralReward({
+      referredUserId: auth.userId,
+      membershipReferenceId: referenceId,
+      chargedGhc: price,
+    }).catch(() => undefined)
+    return NextResponse.json({ ok: true, entitlement: loaded.entitlement, spend: purchase.spend, idempotent: purchase.idempotent })
   }
 
   if (allowMemoryServer()) {
@@ -277,7 +301,7 @@ export async function POST(request: Request) {
       userId: auth.userId,
       amount: price,
       referenceId,
-      reason: `Membership ${tier} ${period}`,
+      reason: `Membership ${tier} ${paidMonths}-month plan with one bonus month`,
       sourceEvent: "PREMIUM_PURCHASE",
     })
     if (!spend.ok) {
@@ -293,6 +317,11 @@ export async function POST(request: Request) {
       source: "ghc",
       purchaseRef: spend.tx?.id || referenceId,
     })
+    void queueReferralReward({
+      referredUserId: auth.userId,
+      membershipReferenceId: String(spend.tx?.id || referenceId),
+      chargedGhc: price,
+    }).catch(() => undefined)
     return NextResponse.json({ ok: true, entitlement, spend: spend.tx })
   }
 

@@ -84,6 +84,17 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     }
   }, [open, post?.id, loadPostComments, reloadVersion])
 
+  useEffect(() => {
+    if (!open || !post?.id) return
+    const onMut = (ev: Event) => {
+      const d = (ev as CustomEvent<{ postId?: string }>).detail
+      if (!d?.postId || d.postId !== post.id) return
+      void loadPostComments?.(post.id)
+    }
+    window.addEventListener("ghc:social-mutation", onMut as EventListener)
+    return () => window.removeEventListener("ghc:social-mutation", onMut as EventListener)
+  }, [open, post?.id, loadPostComments])
+
 useEffect(() => {
     if (!open) return
     return onCloseTransientUI(() => onClose())
@@ -136,6 +147,11 @@ useEffect(() => {
     setBusy(true)
     try {
       await addComment(post.id, value, replyToId || undefined)
+      try {
+        await loadPostComments?.(post.id)
+      } catch {
+        /* */
+      }
       setText("")
       setReplyToId(null)
       // Toast may also come from context — keep one friendly line if needed

@@ -55,6 +55,7 @@ import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
 import { ASSET_POLICY } from "@/lib/asset-separation"
+import { isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdServer } from "@/lib/domains/greenhaven-id"
 
 const formatGhc = formatGhcShared
 
@@ -804,9 +805,13 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     setP2pSuccess(null)
     const amount = Number(p2pAmount)
     const name = p2pName.trim()
-    const id = (p2pId.trim() || name.toLowerCase().replace(/\s+/g, "-") || "").slice(0, 64)
+    const id = normalizeGreenHavenId(p2pId.trim())
     if (!name) {
-      setP2pError("Enter the recipient’s name or GH username")
+      setP2pError("Enter the recipient’s display name")
+      return
+    }
+    if (!isValidGreenHavenIdFormat(id)) {
+      setP2pError("Enter a valid GreenHaven ID in the format GH-XXXXXX")
       return
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -825,6 +830,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           toUserName: string
           amount: number
           note?: string
+          toGreenHavenId?: string
         }) => Promise<{ ok: boolean; error?: string }>
         requestGhcFromUser?: (i: {
           fromUserId: string
@@ -833,14 +839,20 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           note?: string
         }) => Promise<{ ok: boolean; error?: string }>
       } | null
+      const resolved = await resolveGreenHavenIdServer(id)
+      if (!resolved) {
+        setP2pError("GreenHaven ID could not be found. No GHC was transferred.")
+        return
+      }
       if (p2pMode === "send") {
         if (!eco?.sendGhcToUser) {
           setP2pError("Transfers unavailable offline")
           return
         }
         const res = await eco.sendGhcToUser({
-          toUserId: id,
-          toUserName: name,
+          toUserId: resolved.userId,
+          toGreenHavenId: resolved.publicId,
+          toUserName: resolved.displayName || name,
           amount,
           note: p2pNote.trim() || undefined,
         })
@@ -855,8 +867,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           return
         }
         const res = await eco.requestGhcFromUser({
-          fromUserId: id,
-          fromUserName: name,
+          fromUserId: resolved.userId,
+          fromUserName: resolved.displayName || name,
           amount,
           note: p2pNote.trim() || undefined,
         })

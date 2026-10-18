@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { feesRequireSettlement, quoteCommunityCreateFee } from "@/lib/server/fees/pilot-fee-policy"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -65,6 +66,36 @@ export async function POST(request: Request) {
   const name = String(body.name || "").trim()
   if (!name || name.length > 80) {
     return NextResponse.json({ ok: false, error: "INVALID_NAME" }, { status: 400 })
+  }
+
+  // Stage 5: community create fee — collection only when env rates approved.
+  const feeQuote = quoteCommunityCreateFee(
+    String(body.feeCurrency || "").toUpperCase() === "PI" ? "PI" : "GHC"
+  )
+  if (feesRequireSettlement(feeQuote)) {
+    const feePaymentId = String(body.feePaymentId || body.feeIntentId || "").trim()
+    if (!feePaymentId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "COMMUNITY_CREATE_FEE_REQUIRED",
+          fee: feeQuote,
+          message: "Community creation requires a verified fee payment when fees are activated.",
+        },
+        { status: 402 }
+      )
+    }
+    // Payment verification for community fees is product-approved separately;
+    // until a dedicated verifier exists, refuse activation rather than trust the client id.
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "COMMUNITY_CREATE_FEE_VERIFIER_PENDING",
+        fee: feeQuote,
+        message: "Fee schedule is configured but payment verification is not enabled yet. Creation remains free until the verifier ships.",
+      },
+      { status: 503 }
+    )
   }
 
   const privacy = ["public", "private", "invite-only"].includes(String(body.privacy || ""))

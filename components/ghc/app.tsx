@@ -2,6 +2,7 @@
 
 import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-connect-flow"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { captureReferralCodeFromLocation, flushPendingReferralAttribution } from "@/lib/referral/capture-ref"
 import { notificationSystem, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications"
 import { APP_RELEASE_VERSION, APP_RELEASE_SUMMARY } from "@/lib/app-release"
 
@@ -278,6 +279,21 @@ export function GHConnectApp() {
     if (economy.ok && typeof economy.count === "number") setEconomyAttentionCount(Math.max(0, economy.count))
   }, [])
 
+  // Invite links: capture ?ref= and attribute once session is ready
+  useEffect(() => {
+    try {
+      captureReferralCodeFromLocation()
+    } catch {
+      /* */
+    }
+  }, [])
+
+  useEffect(() => {
+    const uid = String(profile?.id || IdentityService.getCurrentUserId() || "").trim()
+    if (!uid) return
+    void flushPendingReferralAttribution(() => IdentityService.getAuthHeaders?.() || {})
+  }, [profile?.id])
+
   useEffect(() => {
     void refreshSectionAttention()
     const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
@@ -351,9 +367,15 @@ export function GHConnectApp() {
     refresh()
     const id = window.setInterval(refresh, 8000)
     window.addEventListener("ghc:open-connection-inbox", refresh)
+    window.addEventListener("ghc:connection-inbox-updated", refresh)
+    window.addEventListener("ghc:social-mutation", refresh)
+    window.addEventListener("ghc:connection-updated", refresh)
     return () => {
       window.clearInterval(id)
       window.removeEventListener("ghc:open-connection-inbox", refresh)
+      window.removeEventListener("ghc:connection-inbox-updated", refresh)
+      window.removeEventListener("ghc:social-mutation", refresh)
+      window.removeEventListener("ghc:connection-updated", refresh)
     }
   }, [])
   // One canonical peer-profile entry point for cards, messages, matches and notifications.

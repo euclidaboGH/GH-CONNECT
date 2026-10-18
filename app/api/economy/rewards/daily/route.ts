@@ -1,8 +1,9 @@
 /**
  * POST /api/economy/rewards/daily
  *
- * ECONOMY_VERSION 1.2 — atomic claim path:
- *   auth → server compute (m,g,80/20) → single DB transaction (ledger + streak)
+ * ECONOMY_VERSION 1.2 — atomic Daily Claim path:
+ *   auth → server compute (m,g,80/20) → pending entitlement + streak in one DB transaction.
+ *   The pending entitlement becomes redeemable after 48 hours; it is not spendable yet.
  *
  * Client amounts are ignored. Double-submit returns existing success (idempotent).
  */
@@ -18,7 +19,6 @@ import {
 } from "@/lib/server/economy/http"
 import {
   executeAuthoritativePending,
-  executeAuthoritativeClaimPending,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import {
@@ -157,6 +157,15 @@ export async function POST(request: Request) {
         atomic.error === "SERVER_UNAVAILABLE" ? 503 : 400
       return jsonErr(atomic.error || "CLAIM_FAILED", atomic.error || "CLAIM_FAILED", status)
     }
+    // Fail closed if the database has not yet been upgraded to the 48-hour
+    // pending-claim contract. Never tell users a posted legacy credit is locked.
+    if (atomic.pending !== true || !atomic.redeemableAt) {
+      return jsonErr(
+        "GHC_DAILY_CLAIM_MIGRATION_REQUIRED",
+        "Daily rewards are temporarily unavailable while the 48-hour claim migration is verified.",
+        503
+      )
+    }
 
     recordEmissionDemand(computed.dayKey, computed.baseGross * computed.m)
     recordTelemetryEvent({
@@ -171,11 +180,13 @@ export async function POST(request: Request) {
       reserveIssuance: atomic.reserveAmount ?? computed.reserveGhc,
       grossIssuance: atomic.grossAmount ?? computed.grossGhc,
       sinks: 0,
-      netCirculatingChange: atomic.userAmount ?? computed.userGhc,
+      netCirculatingChange: 0, // pending entitlements do not enter circulating/spendable balance yet
       meta: {
         userId: auth.userId,
         cycleDay: atomic.cycleDay ?? computed.cycleDay,
         alreadyClaimed: atomic.alreadyClaimed,
+        pending: true,
+        redeemableAt: atomic.redeemableAt,
         transactionId: atomic.transactionId,
         economicVersion: ECONOMY_VERSION,
         streakBackend: "database_atomic",
@@ -185,6 +196,8 @@ export async function POST(request: Request) {
     return jsonOk({
       ok: true,
       amount: atomic.userAmount ?? computed.userGhc,
+      pending: true,
+      redeemableAt: atomic.redeemableAt,
       reserve: atomic.reserveAmount ?? computed.reserveGhc,
       gross: atomic.grossAmount ?? computed.grossGhc,
       baseGross: atomic.baseGross ?? computed.baseGross,
@@ -195,6 +208,7 @@ export async function POST(request: Request) {
       missedDayReset: atomic.missedDayReset ?? computed.missedDayReset,
       economicVersion: atomic.economicVersion ?? ECONOMY_VERSION,
       transactionId: atomic.transactionId,
+      holdId: atomic.transactionId,
       reserveTransactionId: atomic.reserveTransactionId,
       referenceId: atomic.referenceId ?? computed.idempotencyKey,
       alreadyClaimed: Boolean(atomic.alreadyClaimed),
@@ -203,7 +217,7 @@ export async function POST(request: Request) {
     })
   }
 
-  // ---------- Memory studio path: ledger first, then streak (no permanent streak without credit) ----------
+  // ---------- Local development path: pending entitlement first, then streak ----------
   const store = getProcessGhcStore()
   const pending = await executeAuthoritativePending(store, {
     userId: auth.userId,
@@ -219,6 +233,8 @@ export async function POST(request: Request) {
     return jsonOk({
       ok: true,
       amount: computed.userGhc,
+      pending: true,
+      redeemableAt: new Date(pending.tx.createdAt + 48 * 60 * 60 * 1000).toISOString(),
       alreadyClaimed: true,
       idempotent: true,
       economicVersion: ECONOMY_VERSION,
@@ -230,24 +246,12 @@ export async function POST(request: Request) {
     })
   }
 
-  const claim = await executeAuthoritativeClaimPending(store, {
-    userId: auth.userId,
-    holdId: pending.tx.id,
-  })
-  if (!claim.ok) {
-    // Ledger did not post — do NOT consume streak
-    return jsonErr("LEDGER_CREDIT_FAILED", "Ledger credit failed; claim not consumed", 500)
-  }
+  // Daily claims are pending entitlements, not spendable wallet credits.
+  // They become redeemable after the server-enforced 48-hour lock.
+  const claimTransactionId = pending.tx.id
+  const redeemableAt = new Date(pending.tx.createdAt + 48 * 60 * 60 * 1000).toISOString()
 
-  await executeAuthoritativePending(store, {
-    userId: "__PROTOCOL_RESERVE__",
-    amount: computed.reserveGhc,
-    referenceId: `${computed.idempotencyKey}:reserve`,
-    reason: `Protocol reserve day ${computed.cycleDay}/7`,
-    sourceEvent: "PROTOCOL_RESERVE_V12",
-  }).catch(() => null)
-
-  // Streak only after successful ledger credit
+  // Streak commits after the pending entitlement is durably recorded.
   const locked = await commitDailyClaimState({
     userId: auth.userId,
     result: computed,
@@ -257,13 +261,15 @@ export async function POST(request: Request) {
     return jsonOk({
       ok: true,
       amount: computed.userGhc,
+      pending: true,
+      redeemableAt,
       reserve: computed.reserveGhc,
       gross: computed.grossGhc,
       cycleDay: computed.cycleDay,
       m: computed.m,
       g: computed.g,
       economicVersion: ECONOMY_VERSION,
-      transactionId: claim.tx?.id,
+      transactionId: claimTransactionId,
       referenceId: computed.idempotencyKey,
       alreadyClaimed: false,
       streakBackend: "memory",
@@ -274,6 +280,8 @@ export async function POST(request: Request) {
   return jsonOk({
     ok: true,
     amount: computed.userGhc,
+    pending: true,
+    redeemableAt,
     reserve: computed.reserveGhc,
     gross: computed.grossGhc,
     baseGross: computed.baseGross,
@@ -283,11 +291,11 @@ export async function POST(request: Request) {
     g: computed.g,
     missedDayReset: computed.missedDayReset,
     economicVersion: ECONOMY_VERSION,
-    transactionId: claim.tx?.id,
+    transactionId: claimTransactionId,
     holdId: pending.tx.id,
     referenceId: computed.idempotencyKey,
-    alreadyClaimed: Boolean(claim.alreadyClaimed),
-    idempotent: Boolean(claim.alreadyClaimed),
+    alreadyClaimed: false,
+    idempotent: false,
     streakBackend: "memory",
   })
 }

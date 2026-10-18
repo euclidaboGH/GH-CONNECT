@@ -62,6 +62,19 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
     }
   }
 
+  // Prefer explicit fixed GHC fee after business approval.
+  const fixedGhc = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_GHC)
+  if (fixedGhc != null) {
+    const feeAmount = Math.round(fixedGhc * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
   // Prefer explicit fixed Pi fee after business approval.
   const fixedPi = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_PI)
   if (fixedPi != null) {

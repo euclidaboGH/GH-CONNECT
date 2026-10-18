@@ -21,6 +21,7 @@ import { mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { DEFAULT_ECONOMY_LIMITS, type EconomyLimits } from "@/lib/domains/economy-types"
 import { mapTransferFailure } from "@/lib/domains/economy-transfer-contract"
+import { deriveGreenHavenId, isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdServer } from "@/lib/domains/greenhaven-id"
 import {
   parseGhcAmount,
   buildTransferReference,
@@ -29,7 +30,10 @@ import {
 export { parseGhcAmount, buildTransferReference }
 
 export type SendRecipient = {
+  /** Internal key used only for local presentation/cache. */
   id: string
+  /** Stable public ID used to authorize the recipient lookup at the server boundary. */
+  greenHavenId?: string
   name: string
   username?: string
   photo?: string | null
@@ -74,7 +78,7 @@ export function collectSendRecipients(): SendRecipient[] {
     for (const id of ids) {
       if (!id || seen.has(id)) continue
       seen.add(id)
-      out.push({ id, name: id, username: id })
+      out.push({ id, greenHavenId: deriveGreenHavenId(id), name: id, username: deriveGreenHavenId(id) })
     }
   } catch {
     /* graph optional */
@@ -86,7 +90,7 @@ export function collectSendRecipients(): SendRecipient[] {
       for (const c of list) {
         if (!c?.id || seen.has(c.id)) continue
         seen.add(c.id)
-        out.push({ id: c.id, name: c.name || c.id, photo: c.photo })
+        out.push({ id: c.id, greenHavenId: deriveGreenHavenId(c.id), name: c.name || c.id, photo: c.photo })
       }
     }
   } catch {
@@ -124,6 +128,8 @@ export function SendGhcFlow({
   const [query, setQuery] = useState("")
   const [recipient, setRecipient] = useState<SendRecipient | null>(null)
   const [manualId, setManualId] = useState("")
+  const [manualResolving, setManualResolving] = useState(false)
+  const [recipientResolving, setRecipientResolving] = useState(false)
   const [amountRaw, setAmountRaw] = useState("")
   const [note, setNote] = useState("")
   const [errorTitle, setErrorTitle] = useState("")
@@ -194,7 +200,10 @@ export function SendGhcFlow({
       return
     }
     if (initialRecipient?.id) {
-      setRecipient(initialRecipient)
+      setRecipient({
+        ...initialRecipient,
+        greenHavenId: initialRecipient.greenHavenId || deriveGreenHavenId(initialRecipient.id),
+      })
       setStep("amount")
     }
   }, [open, initialRecipient])
@@ -205,28 +214,85 @@ export function SendGhcFlow({
     }
   }, [step])
 
-  const selectRecipient = (r: SendRecipient) => {
+  const selectRecipient = async (r: SendRecipient) => {
     if (r.id === currentUserId) {
       setErrorTitle("Invalid recipient")
       setErrorBody("You cannot send GHC to yourself.")
       setStep("error")
       return
     }
-    setRecipient(r)
-    setStep("amount")
+    setRecipientResolving(true)
+    try {
+      const lookupId = r.greenHavenId || deriveGreenHavenId(r.id)
+      const resolved = await resolveGreenHavenIdServer(lookupId, directory)
+      if (!resolved) {
+        setErrorTitle("GreenHaven ID not verified")
+        setErrorBody("Ask this member to share their exact GreenHaven ID, then enter it manually. No transfer has been made.")
+        setStep("error")
+        return
+      }
+      if (resolved.userId === currentUserId) {
+        setErrorTitle("Invalid recipient")
+        setErrorBody("You cannot send GHC to yourself.")
+        setStep("error")
+        return
+      }
+      setRecipient({
+        id: resolved.userId,
+        greenHavenId: resolved.publicId,
+        name: resolved.displayName || r.name,
+        username: resolved.publicId,
+        photo: resolved.avatarUrl || r.photo,
+      })
+      setStep("amount")
+    } catch {
+      setErrorTitle("Could not verify recipient")
+      setErrorBody("Please try again or enter the member’s exact GreenHaven ID. No transfer has been made.")
+      setStep("error")
+    } finally {
+      setRecipientResolving(false)
+    }
   }
 
-  const useManualRecipient = () => {
-    const id = manualId.trim()
+  const useManualRecipient = async () => {
+    const id = normalizeGreenHavenId(manualId)
     if (!id) return
-    if (id === currentUserId) {
-      setErrorTitle("Invalid recipient")
-      setErrorBody("You cannot send GHC to yourself.")
+    if (!isValidGreenHavenIdFormat(id)) {
+      setErrorTitle("Invalid GreenHaven ID")
+      setErrorBody("Enter a valid ID in the format GH-XXXXXX.")
       setStep("error")
       return
     }
-    setRecipient({ id, name: id, username: id })
-    setStep("amount")
+    setManualResolving(true)
+    try {
+      const resolved = await resolveGreenHavenIdServer(id, directory)
+      if (!resolved) {
+        setErrorTitle("GreenHaven ID not found")
+        setErrorBody("Check the ID and try again. No transfer has been made.")
+        setStep("error")
+        return
+      }
+      if (resolved.userId === currentUserId) {
+        setErrorTitle("Invalid recipient")
+        setErrorBody("You cannot send GHC to yourself.")
+        setStep("error")
+        return
+      }
+      setRecipient({
+        id: resolved.userId,
+        greenHavenId: resolved.publicId,
+        name: resolved.displayName || resolved.publicId,
+        username: resolved.publicId,
+        photo: resolved.avatarUrl,
+      })
+      setStep("amount")
+    } catch {
+      setErrorTitle("Could not look up GreenHaven ID")
+      setErrorBody("Please try again. No transfer has been made.")
+      setStep("error")
+    } finally {
+      setManualResolving(false)
+    }
   }
 
   const goReview = () => {
@@ -287,6 +353,7 @@ export function SendGhcFlow({
           toUserName: string
           amount: number
           note?: string
+          toGreenHavenId?: string
           referenceId?: string
         }) => Promise<{ ok: boolean; error?: string; data?: { tx?: { referenceId?: string } } }>
         hydrate?: () => Promise<void>
@@ -302,6 +369,7 @@ export function SendGhcFlow({
 
       const res = await eco.sendGhcToUser({
         toUserId: recipient.id,
+        toGreenHavenId: recipient.greenHavenId || deriveGreenHavenId(recipient.id),
         toUserName: recipient.name,
         amount,
         note: note.trim().slice(0, 120) || undefined,
@@ -430,7 +498,8 @@ export function SendGhcFlow({
                       type="button"
                       role="option"
                       aria-selected={recipient?.id === r.id}
-                      onClick={() => selectRecipient(r)}
+                      onClick={() => void selectRecipient(r)}
+                      disabled={recipientResolving}
                       className="flex w-full items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 text-left transition hover:border-border hover:bg-muted/50"
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
@@ -443,7 +512,7 @@ export function SendGhcFlow({
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-foreground">{r.name}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">
-                          {r.username || r.id}
+                          {r.greenHavenId || r.username || r.id}
                         </span>
                       </span>
                     </button>
@@ -465,15 +534,15 @@ export function SendGhcFlow({
                     value={manualId}
                     onChange={(e) => setManualId(e.target.value)}
                     className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
-                    placeholder="member-id"
+                    placeholder="GH-ABC123"
                   />
                   <button
                     type="button"
                     onClick={useManualRecipient}
-                    disabled={!manualId.trim()}
+                    disabled={!manualId.trim() || manualResolving}
                     className="rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-50"
                   >
-                    Next
+                    {manualResolving ? "Looking up…" : "Next"}
                   </button>
                 </div>
               </div>
@@ -492,7 +561,7 @@ export function SendGhcFlow({
                     Sending to
                   </p>
                   <p className="truncate text-sm font-bold text-foreground">{recipient.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{recipient.id}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{recipient.greenHavenId || recipient.id}</p>
                 </div>
               </div>
 
@@ -596,7 +665,7 @@ export function SendGhcFlow({
                   </span>
                   <div>
                     <p className="text-sm font-bold text-foreground">{recipient.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{recipient.id}</p>
+                    <p className="text-[11px] text-muted-foreground">{recipient.greenHavenId || recipient.id}</p>
                   </div>
                 </div>
               </div>

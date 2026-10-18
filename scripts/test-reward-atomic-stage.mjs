@@ -14,13 +14,12 @@ const mig = fs.readFileSync(
 
 const fnStart = rew.indexOf('export async function evaluateRewardAuthoritative')
 const fn = rew.slice(fnStart)
-const dbPath = fn.slice(0, fn.indexOf('Memory path'))
 
 ok(fnStart > 0, 'evaluateRewardAuthoritative present')
-ok(dbPath.includes('rpcActivityStageReward'), 'DB path uses atomic stage RPC')
-ok(!dbPath.includes('rpcStagePending'), 'DB path does not sequential stage_pending')
-ok(!dbPath.includes('computeAndCommitActivityEmissionDurable'), 'DB path does not pre-commit emission alone')
-ok(fn.indexOf('verifyActionLegitimacy') < fn.indexOf('rpcActivityStageReward'), 'legitimacy before atomic stage')
+ok(fn.includes('GHC_ISSUANCE_POLICY_LOCKED'), 'generic reward issuer is disabled by Phase 6 policy')
+ok(fn.includes('DAILY_CLAIM_ONLY_ISSUANCE'), 'domain guard identifies the only issuance path')
+ok(!fn.includes('rpcActivityStageReward'), 'disabled domain path cannot stage activity rewards')
+ok(!fn.includes('computeAndCommitActivityEmissionDurable'), 'disabled domain path cannot consume emission or stage rewards')
 
 ok(db.includes('export async function rpcActivityStageReward'), 'rpcActivityStageReward client exists')
 ok(db.includes('ghc_activity_stage_reward'), 'calls correct RPC name')

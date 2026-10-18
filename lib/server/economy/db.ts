@@ -629,6 +629,7 @@ export async function rpcClaimPending(
   alreadyClaimed?: boolean
   transactionId?: string
   amount?: number
+  redeemableAt?: string
   error?: string
 }> {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
@@ -650,13 +651,18 @@ export async function rpcClaimPending(
     }
     const data = (await res.json()) as Record<string, unknown>
     if (!data || data.ok === false) {
-      return { ok: false, error: String(data?.error || "NOT_CLAIMABLE") }
+      return {
+        ok: false,
+        error: String(data?.error || "NOT_CLAIMABLE"),
+        redeemableAt: data?.redeemableAt != null ? String(data.redeemableAt) : undefined,
+      }
     }
     return {
       ok: true,
       alreadyClaimed: Boolean(data.alreadyClaimed),
       transactionId: data.transactionId != null ? String(data.transactionId) : undefined,
       amount: data.amount != null ? Number(data.amount) : undefined,
+      redeemableAt: data.redeemableAt != null ? String(data.redeemableAt) : undefined,
     }
   } catch {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
@@ -867,6 +873,8 @@ export type AtomicDailyClaimResult = {
   lastClaimDayKey?: string | null
   totalSuccessfulClaims?: number
   userAmount?: number
+  pending?: boolean
+  redeemableAt?: string
   reserveAmount?: number
   grossAmount?: number
   baseGross?: number
@@ -953,6 +961,8 @@ export async function rpcExecuteDailyClaimV12(
           ? Number(data.totalSuccessfulClaims)
           : undefined,
       userAmount: data.userAmount != null ? Number(data.userAmount) : undefined,
+      pending: data.pending != null ? Boolean(data.pending) : false,
+      redeemableAt: data.redeemableAt != null ? String(data.redeemableAt) : undefined,
       reserveAmount:
         data.reserveAmount != null ? Number(data.reserveAmount) : undefined,
       grossAmount: data.grossAmount != null ? Number(data.grossAmount) : undefined,
@@ -973,5 +983,74 @@ export async function rpcExecuteDailyClaimV12(
     }
   } catch {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+}
+
+/** Ops: list transfer_out rows missing matching transfer_in for same reference + recipient. */
+export async function listOrphanTransferOuts(
+  limit = 50,
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<{ ok: boolean; orphans: unknown[]; error?: string }> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, orphans: [], error: "SERVER_UNAVAILABLE" }
+  }
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_list_orphan_transfer_outs`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({ p_limit: limit }),
+      }
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) {
+      return { ok: false, orphans: [], error: String(data?.error || data?.message || "LIST_FAILED") }
+    }
+    return { ok: true, orphans: Array.isArray(data.orphans) ? data.orphans : [] }
+  } catch {
+    return { ok: false, orphans: [], error: "RPC_FAILED" }
+  }
+}
+
+/**
+ * Ops: complete missing transfer_in for an existing posted transfer_out.
+ * Does not create a second debit.
+ */
+export async function completeOrphanTransferIn(
+  referenceId: string,
+  operatorNote = "ops_complete_orphan_transfer_in",
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<{ ok: boolean; error?: string; idempotent?: boolean }> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_complete_orphan_transfer_in`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({
+          p_reference_id: referenceId,
+          p_operator_note: operatorNote.slice(0, 160),
+        }),
+      }
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) {
+      return { ok: false, error: String(data?.error || data?.message || "COMPLETE_FAILED") }
+    }
+    return { ok: true, idempotent: Boolean(data.idempotent) }
+  } catch {
+    return { ok: false, error: "RPC_FAILED" }
   }
 }

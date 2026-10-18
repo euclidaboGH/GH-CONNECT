@@ -26,7 +26,7 @@
 
 | Gate | Action |
 |------|--------|
-| Env | Set `NEXT_PUBLIC_MESSAGING_DURABLE=true` on Vercel when Supabase messaging is live |
+| Env | Keep `NEXT_PUBLIC_MESSAGING_DURABLE=false` by default; set it to `true` only after the Testnet migration, two-account authorization/IDOR, delivery tests and Preview verification pass |
 | Supabase | Apply membership + messaging migrations; RLS verified |
 | Two-user E2E | Join community, send group message, second user receives |
 | Pi Browser | Messaging + communities in iframe (frame headers already Pi-safe) |

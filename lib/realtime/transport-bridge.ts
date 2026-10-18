@@ -15,17 +15,43 @@
  * - No fake remote service when URL is missing
  */
 
-import { domainEvents, type DomainEvent } from "./event-bus"
+import { domainEvents, isDomainEventType, type DomainEvent } from "./event-bus"
 
 const MAX_EVENT_JSON = 48_000
 
+/** Financial outcomes must be read from authenticated, authoritative APIs—not realtime messages. */
+const SERVER_AUTHORITATIVE_EVENT_TYPES = new Set<string>([
+  "WALLET_BALANCE_UPDATED",
+  "WALLET_TRANSFER_CREATED",
+  "WALLET_TRANSFER_COMPLETED",
+  "WALLET_TRANSFER_FAILED",
+  "REWARD_EARNED",
+  "REWARD_REDEEMED",
+  "REWARD_EXPIRED",
+  "PREMIUM_ACTIVATED",
+  "PREMIUM_EXPIRED",
+  "PREMIUM_UPDATED",
+  "REFERRAL_VERIFIED",
+  "GHC_PURCHASED",
+  "PREMIUM_PURCHASE",
+  "MARKETPLACE_SPEND",
+  "PAYMENT_FAILED",
+  "PAYMENT_REFUNDED",
+  "PAYMENT_COMPLETED",
+  "PAYMENT_VERIFIED",
+  "PAYMENT_INITIATED",
+])
+
 function isValidRemoteEvent(data: unknown): data is DomainEvent {
-  if (!data || typeof data !== "object") return false
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false
   const e = data as Record<string, unknown>
-  if (typeof e.type !== "string" || e.type.length > 80) return false
-  if (e.payload !== undefined && e.payload !== null && typeof e.payload !== "object") return false
-  if (e.actorId !== undefined && e.actorId !== null && typeof e.actorId !== "string") return false
-  if (e.at !== undefined && e.at !== null && typeof e.at !== "number") return false
+  if (!isDomainEventType(e.type)) return false
+  if (SERVER_AUTHORITATIVE_EVENT_TYPES.has(e.type)) return false
+  if (e.payload !== undefined && e.payload !== null && (typeof e.payload !== "object" || Array.isArray(e.payload))) return false
+  if (typeof e.actorId !== "string" || e.actorId.trim().length === 0 || e.actorId.length > 128) return false
+  if (typeof e.at !== "number" || !Number.isFinite(e.at) || e.at <= 0) return false
+  if (e.requestId !== undefined && (typeof e.requestId !== "string" || e.requestId.length > 128)) return false
+  if (e.origin !== undefined && e.origin !== "local" && e.origin !== "remote") return false
   try {
     if (JSON.stringify(data).length > MAX_EVENT_JSON) return false
   } catch {
@@ -134,14 +160,17 @@ export class WebSocketTransport implements RealtimeTransport {
   async connect() {
     if (typeof WebSocket === "undefined") return
     if (!this.url || this.url.includes("placeholder")) return
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) return
+    if (this.retryTimer) return
     this.shouldRun = true
     await this.open()
   }
 
   private open(): Promise<void> {
-    if (this.state === "connecting" || this.state === "reconnecting") {
-      /* allow parallel open only once */
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      return Promise.resolve()
     }
+    if (this.retryTimer) return Promise.resolve()
     this.setState(this.attempt > 0 ? "reconnecting" : "connecting")
     return new Promise((resolve, reject) => {
       try {

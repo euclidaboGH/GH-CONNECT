@@ -16,6 +16,10 @@ export type NotificationType =
   | "reward"
   | "payment"
   | "mention"
+  | "post_like"
+  | "post_comment"
+  | "connection_request"
+  | "curation"
 
 export interface Notification {
   id: string

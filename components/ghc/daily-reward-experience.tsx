@@ -67,6 +67,8 @@ async function creditDailyToWallet(): Promise<{
   serverAmount?: number
   alreadyClaimed?: boolean
   cycleDay?: number
+  pending?: boolean
+  redeemableAt?: string
 }> {
   // The atomic daily endpoint is the only valid authority for daily claims.
   // UI previews are intentionally ignored; no generic reward fallback is allowed.
@@ -87,6 +89,8 @@ async function creditDailyToWallet(): Promise<{
       userAmount?: number
       alreadyClaimed?: boolean
       idempotent?: boolean
+      pending?: boolean
+      redeemableAt?: string
       cycleDay?: number
       error?: string
       message?: string
@@ -105,6 +109,8 @@ async function creditDailyToWallet(): Promise<{
       ok: true,
       serverAmount: Number(data.userAmount ?? data.amount) || undefined,
       alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
+      pending: data.pending !== false,
+      redeemableAt: data.redeemableAt != null ? String(data.redeemableAt) : undefined,
       cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,
     }
   } catch {
@@ -234,6 +240,7 @@ export function DailyRewardFeedCard({
         : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
+      const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
       // Re-hydrate wallet from server ledger — never optimistically add GHC
       try {
@@ -242,7 +249,7 @@ export function DailyRewardFeedCard({
         )
         await syncWalletAfterServerClaim({
           userId,
-          claimedAmount: server.serverAmount ?? null,
+          claimedAmount: null,
           alreadyClaimed: server.alreadyClaimed,
           referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
@@ -251,8 +258,8 @@ export function DailyRewardFeedCard({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC`
-          : `+${amt} GHC · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
+          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       setTick((t) => t + 1)
@@ -265,6 +272,8 @@ export function DailyRewardFeedCard({
               cycleDay: day,
               server: true,
               serverAmount: server.serverAmount,
+              pending: server.pending !== false,
+              redeemableAt: server.redeemableAt,
               alreadyClaimed: server.alreadyClaimed,
             },
           })
@@ -272,7 +281,7 @@ export function DailyRewardFeedCard({
         if (!server.alreadyClaimed && amt) {
           try {
             notifyRewardClaimed({
-              message: `Day ${day}/7 credited · ₲ ${Number(amt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              message: `Day ${day}/7 claim pending for 48 hours · ₲ ${Number(amt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
               amountLabel: String(amt),
             })
           } catch { /* */ }
@@ -420,6 +429,7 @@ export function DailyRewardSheet({
         : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay
+      const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
       try {
         const { syncWalletAfterServerClaim } = await import(
@@ -427,7 +437,7 @@ export function DailyRewardSheet({
         )
         await syncWalletAfterServerClaim({
           userId,
-          claimedAmount: server.serverAmount ?? null,
+          claimedAmount: null,
           alreadyClaimed: server.alreadyClaimed,
           referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
@@ -436,8 +446,8 @@ export function DailyRewardSheet({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC`
-          : `+${amt} GHC added · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
+          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       try {
@@ -448,6 +458,8 @@ export function DailyRewardSheet({
               ghc: amt,
               server: true,
               serverAmount: server.serverAmount,
+              pending: server.pending !== false,
+              redeemableAt: server.redeemableAt,
               alreadyClaimed: server.alreadyClaimed,
             },
           })

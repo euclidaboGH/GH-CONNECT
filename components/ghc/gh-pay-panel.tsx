@@ -33,6 +33,7 @@ import {
 import type { GhPayOrder } from "@/lib/gh-pay/types"
 import { getProduct } from "@/lib/gh-pay/catalog"
 import { ASSET_POLICY } from "@/lib/asset-separation"
+import { getMembershipPiPrice } from "@/lib/membership-pricing"
 
 const VERIFY_KEY = "gh_pay_pi_verified_v1"
 
@@ -233,21 +234,24 @@ export function GhPayPanel({
     }
   }, [lastPaymentId, recovering, notify, refreshOrders])
 
+  const membershipProducts = ([
+    { tier: "vip", period: 1, periodId: "monthly", title: "VIP · 1 month", blurb: "1 paid month + 1 bonus month" },
+    { tier: "vip", period: 4, periodId: "four_months", title: "VIP · 4 months", blurb: "5% off + 1 bonus month" },
+    { tier: "vip", period: 8, periodId: "eight_months", title: "VIP · 8 months", blurb: "10% off + 1 bonus month" },
+    { tier: "vip", period: 12, periodId: "yearly", title: "VIP · 12 months", blurb: "20% off + 1 bonus month" },
+    { tier: "vvip", period: 1, periodId: "monthly", title: "VVIP · 1 month", blurb: "1 paid month + 1 bonus month" },
+    { tier: "vvip", period: 4, periodId: "four_months", title: "VVIP · 4 months", blurb: "5% off + 1 bonus month" },
+    { tier: "vvip", period: 8, periodId: "eight_months", title: "VVIP · 8 months", blurb: "10% off + 1 bonus month" },
+    { tier: "vvip", period: 12, periodId: "yearly", title: "VVIP · 12 months", blurb: "20% off + 1 bonus month" },
+  ] as const).map((plan) => ({
+    id: `membership_${plan.tier}_${plan.periodId}`,
+    icon: Crown,
+    title: plan.title,
+    amount: getProduct(`membership_${plan.tier}_${plan.periodId}`)?.amountPi ?? getMembershipPiPrice(plan.tier, plan.period).chargePi,
+    blurb: plan.blurb,
+  }))
   const products = [
-    {
-      id: "membership_vip_monthly",
-      icon: Crown,
-      title: "VIP · Monthly",
-      amount: getProduct("membership_vip_monthly")?.amountPi ?? 1,
-      blurb: "Priority discovery & elevated limits",
-    },
-    {
-      id: "membership_vvip_monthly",
-      icon: Crown,
-      title: "VVIP · Monthly",
-      amount: getProduct("membership_vvip_monthly")?.amountPi ?? 3,
-      blurb: "Maximum visibility & support",
-    },
+    ...membershipProducts,
     {
       id: "profile_boost",
       icon: Zap,
@@ -471,7 +475,7 @@ export function GhPayPanel({
  */
 export async function runGhPayMembership(
   tier: "vip" | "vvip",
-  period: "monthly" | "yearly" = "monthly",
+  period: "monthly" | "four_months" | "eight_months" | "yearly" = "monthly",
   onToast?: ToastFn
 ): Promise<boolean> {
   try {

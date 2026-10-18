@@ -1070,70 +1070,104 @@ export function MarketplaceScreen({
                   setSellError(res.error || "Could not create listing")
                   return
                 }
-                const id = res.data?.listing?.id
-                // Phase 9: dual-write to durable marketplace API (seller = session)
-                try {
-                  const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
-                  const remote = await socialCreateMarketplaceListing({
-                    id: id || undefined,
-                    title: sellTitle.trim(),
-                    description: sellDesc.trim() || sellTitle.trim(),
-                    price: priceNum,
-                    currency: "GHC",
-                    status: "active",
-                    kind: "product",
-                    availability: 1,
-                  })
-                  if (remote.ok === false) {
+                let id = res.data?.listing?.id
+                // Server-first durable marketplace — no silent local-only public listing
+                const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+                if (!online) {
+                  try {
+                    const { offlineQueue } = await import("@/lib/network-resilience")
+                    offlineQueue.addAction({
+                      type: "create_listing",
+                      payload: {
+                        id: id || undefined,
+                        title: sellTitle.trim(),
+                        description: sellDesc.trim() || sellTitle.trim(),
+                        price: priceNum,
+                        currency: "GHC",
+                        status: "active",
+                        kind: "product",
+                        availability: 1,
+                        location: sellLocation.trim() || undefined,
+                        category: sellCategory,
+                      },
+                      maxRetries: 3,
+                    })
+                    // Keep local draft listing for this device; public publish waits for flush
+                    setSellTitle("")
+                    setSellPrice("")
+                    setSellDesc("")
+                    setSellLocation("")
+                    setBucket("browse")
+                    refresh()
+                    setSellError(null)
+                    // Signal via custom event for global toast hosts
                     try {
                       window.dispatchEvent(
                         new CustomEvent("ghc:toast", {
                           detail: {
                             message:
-                              remote.error ||
-                              "Listing saved on this device — server not confirmed",
+                              "Listing saved offline — will publish when you're back online",
                             type: "info",
                           },
-                        }),
+                        })
                       )
                     } catch {
                       /* */
                     }
-                  } else if (remote.listing?.id && id && String(remote.listing.id) !== String(id)) {
-                    try {
-                      const KEY = "ghc_marketplace_listings_v1"
-                      const raw = window.localStorage.getItem(KEY)
-                      const list = raw ? (JSON.parse(raw) as MarketplaceListing[]) : []
-                      if (Array.isArray(list)) {
-                        const next = list.map((l) =>
-                          l.id === id
-                            ? {
-                                ...l,
-                                id: String(remote.listing!.id),
-                                sellerId: String(
-                                  (remote.listing as { sellerId?: string }).sellerId || l.sellerId
-                                ),
-                              }
-                            : l
-                        )
-                        window.localStorage.setItem(KEY, JSON.stringify(next))
-                      }
-                    } catch {
-                      /* */
-                    }
-                  }
-                } catch {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:toast", {
-                        detail: {
-                          message: "Listing saved on this device — server not confirmed",
-                          type: "info",
-                        },
-                      }),
-                    )
                   } catch {
-                    /* */
+                    setSellError("You're offline — could not queue listing")
+                  }
+                  return
+                }
+                if (online) {
+                  try {
+                    const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
+                    const remote = await socialCreateMarketplaceListing({
+                      id: id || undefined,
+                      title: sellTitle.trim(),
+                      description: sellDesc.trim() || sellTitle.trim(),
+                      price: priceNum,
+                      currency: "GHC",
+                      status: "active",
+                      kind: "product",
+                      availability: 1,
+                    })
+                    if (!remote.ok || remote.durable === false) {
+                      setSellError(
+                        remote.error ||
+                          "Could not publish listing to the server. Try again when online."
+                      )
+                      return
+                    }
+                    if (remote.listing?.id) {
+                      id = String(remote.listing.id)
+                      try {
+                        const KEY = "ghc_marketplace_listings_v1"
+                        const raw = window.localStorage.getItem(KEY)
+                        const list = raw ? (JSON.parse(raw) as MarketplaceListing[]) : []
+                        if (Array.isArray(list) && res.data?.listing?.id) {
+                          const localId = String(res.data.listing.id)
+                          const next = list.map((l) =>
+                            l.id === localId
+                              ? {
+                                  ...l,
+                                  id,
+                                  sellerId: String(
+                                    (remote.listing as { sellerId?: string }).sellerId ||
+                                      l.sellerId
+                                  ),
+                                }
+                              : l
+                          )
+                          window.localStorage.setItem(KEY, JSON.stringify(next))
+                        }
+                      } catch {
+                        /* */
+                      }
+                    }
+                  } catch {
+                    setSellError("Could not reach the server to publish this listing")
+                    return
                   }
                 }
                 setSellTitle("")

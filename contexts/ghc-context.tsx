@@ -1131,20 +1131,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
 
 
-  // Social repair: after any durable social write, re-pull shared lists (feed, connections, notifs)
+  // After social writes (or attempts), re-pull shared lists so other accounts' state converges
   useEffect(() => {
     if (!state.ready || typeof window === "undefined") return
     let timer: ReturnType<typeof setTimeout> | null = null
-    const onMut = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail as { durable?: boolean; kind?: string } | undefined
+    const onMut = (_ev: Event) => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         void (async () => {
           try {
-            const { socialFetchFeed, socialFetchConnectionInbox } = await import("@/lib/social/client")
-            const [feed, inbox] = await Promise.all([
+            const { socialFetchFeed, socialFetchConnectionInbox, socialFetchFollows, socialDiscoverPeople } =
+              await import("@/lib/social/client")
+            const { apiListConversations } = await import("@/lib/messaging/server-messaging-sync")
+            const [feed, inbox, follows, convs, people] = await Promise.all([
               socialFetchFeed({ limit: 40 }),
               socialFetchConnectionInbox(),
+              socialFetchFollows(),
+              apiListConversations(40).catch(() => null),
+              socialDiscoverPeople(40).catch(() => null),
             ])
             setState((s) => {
               let next = { ...s }
@@ -1168,35 +1172,142 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                   (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
                 )
               }
-              if (inbox.ok && inbox.durable) {
-                const incoming = (inbox.incoming || []).map((r) => ({
-                  id: String(r.id || generateId()),
-                  fromUserId: String(r.fromUserId || ""),
-                  fromUserName: "Member",
-                  fromUserPhoto: "/placeholder.svg?width=40&height=40",
-                  toUserId: String(r.toUserId || s.profile?.id || ""),
-                  createdAt: Number(r.createdAt) || Date.now(),
-                }))
-                // Merge server incoming with any local-only outgoing
-                const localOutgoing = (s.friendRequests || []).filter(
-                  (r) => r.fromUserId === s.profile?.id || r.fromUserId === "current-user"
-                )
-                next.friendRequests = [...incoming, ...localOutgoing]
+              if (inbox.ok && (inbox.durable || inbox.incoming.length > 0 || inbox.outgoing.length > 0)) {
+                const candName = (uid: string) => {
+                  const c = (s.candidates || []).find((x) => x.id === uid)
+                  return c?.name || "Member"
+                }
+                const candPhoto = (uid: string) => {
+                  const c = (s.candidates || []).find((x) => x.id === uid)
+                  return c?.photo || "/placeholder.svg?width=40&height=40"
+                }
+                const myId = String(s.profile?.id || "").trim()
+                const fromServer: FriendRequest[] = []
+                for (const r of inbox.incoming || []) {
+                  const from = String(r.fromUserId || "")
+                  if (!from) continue
+                  fromServer.push({
+                    id: String(r.id || `in_${from}`),
+                    fromUserId: from,
+                    fromUserName: candName(from),
+                    fromUserPhoto: candPhoto(from),
+                    toUserId: String(r.toUserId || myId),
+                    createdAt: Number(r.createdAt) || Date.now(),
+                  })
+                }
+                for (const r of inbox.outgoing || []) {
+                  const to = String(r.toUserId || "")
+                  if (!to) continue
+                  fromServer.push({
+                    id: String(r.id || `out_${to}`),
+                    fromUserId: String(r.fromUserId || myId),
+                    fromUserName: s.profile?.displayName || "You",
+                    fromUserPhoto: s.profile?.photos?.[0] || "",
+                    toUserId: to,
+                    createdAt: Number(r.createdAt) || Date.now(),
+                  })
+                }
+                const key = (r: FriendRequest) => `${r.fromUserId}→${r.toUserId}`
+                const byKey = new Map<string, FriendRequest>()
+                // Prefer server rows; keep local-only pairs not on server only when not durable
+                if (!inbox.durable) {
+                  for (const r of s.friendRequests || []) byKey.set(key(r), r)
+                }
+                for (const r of fromServer) byKey.set(key(r), r)
+                next.friendRequests = Array.from(byKey.values())
               }
+              if (follows.ok && (follows.durable || follows.following.length > 0)) {
+                if (Array.isArray(follows.following)) next.following = follows.following.map(String)
+                if (Array.isArray(follows.followers)) next.followers = follows.followers.map(String)
+              }
+              if (convs && convs.ok && convs.durable && Array.isArray(convs.conversations)) {
+                const byId = new Map((next.conversations || []).map((c) => [c.id, c]))
+                for (const r of convs.conversations) {
+                  const id = String(r.id || "")
+                  if (!id) continue
+                  const existing = byId.get(id)
+                  const lastAt =
+                    typeof r.lastMessageAt === "number" && Number.isFinite(r.lastMessageAt)
+                      ? r.lastMessageAt
+                      : existing?.lastMessageTime || Date.now()
+                  byId.set(id, {
+                    ...(existing || {
+                      id,
+                      participantId: "",
+                      participantName: r.title || "Chat",
+                      participantPhoto: "/placeholder.svg?width=40&height=40",
+                      messages: [],
+                      lastMessage: "",
+                      lastMessageTime: lastAt,
+                      unread: false,
+                      unreadCount: 0,
+                    }),
+                    id,
+                    lastMessage:
+                      typeof r.lastMessagePreview === "string" && r.lastMessagePreview
+                        ? r.lastMessagePreview
+                        : existing?.lastMessage || "",
+                    lastMessageTime: lastAt,
+                    participantName: existing?.participantName || r.title || "Chat",
+                  })
+                }
+                next.conversations = Array.from(byId.values()).sort(
+                  (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
+                )
+              }
+
+            if (people && people.ok && Array.isArray(people.people) && people.people.length > 0) {
+              const byId = new Map((next.candidates || []).map((c) => [c.id, c]))
+              for (const p of people.people) {
+                if (!p.userId || p.userId === s.profile?.id) continue
+                const existing = byId.get(p.userId)
+                byId.set(p.userId, {
+                  id: p.userId,
+                  name: p.displayName || existing?.name || "Member",
+                  age: existing?.age || 0,
+                  photo: p.avatarUrl || existing?.photo || "/placeholder.svg?width=80&height=80",
+                  photos: p.avatarUrl ? [p.avatarUrl] : existing?.photos,
+                  bio: p.bio || existing?.bio || "",
+                  location:
+                    [p.city, p.country].filter(Boolean).join(", ") || existing?.location || "",
+                  interests: existing?.interests || [],
+                  verified: existing?.verified ?? false,
+                  online: existing?.online ?? false,
+                  lastSeen: existing?.lastSeen ?? 0,
+                  coverPhoto: existing?.coverPhoto,
+                  profilePhotoHistory: existing?.profilePhotoHistory,
+                  coverPhotoHistory: existing?.coverPhotoHistory,
+                  distance: existing?.distance,
+                  isSample: false,
+                } as Candidate)
+              }
+              const merged = Array.from(byId.values()).filter((c) => {
+                if (people.durable && people.people.length > 0) {
+                  try {
+                    return isLikelyServerUserId(c.id)
+                  } catch {
+                    return true
+                  }
+                }
+                return true
+              })
+              next.candidates = merged
+            }
+
               return next
             })
-            if (detail?.durable) {
-              try {
-                window.dispatchEvent(new CustomEvent("ghc:notification"))
-              } catch {
-                /* */
-              }
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:notification"))
+              window.dispatchEvent(new CustomEvent("ghc:connection-inbox-updated"))
+              window.dispatchEvent(new CustomEvent("ghc:messaging-reconcile"))
+            } catch {
+              /* */
             }
           } catch {
             /* offline */
           }
         })()
-      }, 400)
+      }, 350)
     }
     window.addEventListener(SOCIAL_MUTATION_EVENT, onMut as EventListener)
     return () => {
@@ -1205,31 +1316,210 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [state.ready])
 
-  // Phase 2: soft feed revalidate when app returns to foreground
+  // Soft revalidate feed + connection inbox + follows when app returns to foreground
   useEffect(() => {
     if (!state.ready) return
     let last = 0
-    const MIN_MS = 45_000
+    const MIN_MS = 12_000
     const revalidate = () => {
       const now = Date.now()
       if (now - last < MIN_MS) return
       last = now
       void (async () => {
         try {
-          const { socialFetchFeed } = await import("@/lib/social/client")
-          const feed = await socialFetchFeed({ limit: 40 })
-          if (!feed.ok || !Array.isArray(feed.posts) || feed.posts.length === 0) return
-          const remotePosts = mapRemoteFeedPosts(feed.posts)
+          const { socialFetchFeed, socialFetchConnectionInbox, socialFetchFollows, socialDiscoverPeople, socialFetchMatchInbox } =
+            await import("@/lib/social/client")
+          const { apiListConversations } = await import("@/lib/messaging/server-messaging-sync")
+          const [feed, inbox, follows, convs, people, matchInbox] = await Promise.all([
+            socialFetchFeed({ limit: 40 }),
+            socialFetchConnectionInbox(),
+            socialFetchFollows(),
+            apiListConversations(40).catch(() => null),
+            socialDiscoverPeople(40).catch(() => null),
+            socialFetchMatchInbox().catch(() => null),
+          ])
           setState((s) => {
-            const remoteIds = new Set(remotePosts.map((p) => p.id))
-            const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
-            return {
-              ...s,
-              posts: [...remotePosts, ...localOnly].sort(
+            let next = { ...s }
+            if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+              const remotePosts = mapRemoteFeedPosts(feed.posts)
+              const remoteIds = new Set(remotePosts.map((p) => p.id))
+              const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+              next.posts = [...remotePosts, ...localOnly].sort(
                 (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-              ),
+              )
             }
+            if (inbox.ok && (inbox.durable || inbox.incoming.length > 0 || inbox.outgoing.length > 0)) {
+              const myId = String(s.profile?.id || "").trim()
+              const candName = (uid: string) =>
+                (s.candidates || []).find((x) => x.id === uid)?.name || "Member"
+              const candPhoto = (uid: string) =>
+                (s.candidates || []).find((x) => x.id === uid)?.photo || ""
+              const mapped: FriendRequest[] = []
+              for (const row of inbox.incoming || []) {
+                if (!row.fromUserId) continue
+                mapped.push({
+                  id: row.id || `in_${row.fromUserId}`,
+                  fromUserId: row.fromUserId,
+                  fromUserName: candName(row.fromUserId),
+                  fromUserPhoto: candPhoto(row.fromUserId),
+                  toUserId: row.toUserId || myId,
+                  createdAt: row.createdAt || Date.now(),
+                })
+              }
+              for (const row of inbox.outgoing || []) {
+                if (!row.toUserId) continue
+                mapped.push({
+                  id: row.id || `out_${row.toUserId}`,
+                  fromUserId: row.fromUserId || myId,
+                  fromUserName: s.profile?.displayName || "You",
+                  fromUserPhoto: s.profile?.photos?.[0] || "",
+                  toUserId: row.toUserId,
+                  createdAt: row.createdAt || Date.now(),
+                })
+              }
+              const key = (r: FriendRequest) => `${r.fromUserId}→${r.toUserId}`
+              const byKey = new Map<string, FriendRequest>()
+              if (!inbox.durable) {
+                for (const r of s.friendRequests || []) byKey.set(key(r), r)
+              }
+              for (const r of mapped) byKey.set(key(r), r)
+              next.friendRequests = Array.from(byKey.values())
+            }
+            if (follows.ok) {
+              if (Array.isArray(follows.following) && (follows.durable || follows.following.length > 0)) {
+                next.following = follows.following.map(String)
+              }
+              if (Array.isArray(follows.followers) && (follows.durable || follows.followers.length > 0)) {
+                next.followers = follows.followers.map(String)
+              }
+            }
+            if (convs && convs.ok && convs.durable && Array.isArray(convs.conversations)) {
+              const byId = new Map((next.conversations || []).map((c) => [c.id, c]))
+              for (const r of convs.conversations) {
+                const id = String(r.id || "")
+                if (!id) continue
+                const existing = byId.get(id)
+                const lastAt =
+                  typeof r.lastMessageAt === "number" && Number.isFinite(r.lastMessageAt)
+                    ? r.lastMessageAt
+                    : existing?.lastMessageTime || Date.now()
+                byId.set(id, {
+                  ...(existing || {
+                    id,
+                    participantId: "",
+                    participantName: r.title || "Chat",
+                    participantPhoto: "/placeholder.svg?width=40&height=40",
+                    messages: [],
+                    lastMessage: "",
+                    lastMessageTime: lastAt,
+                    unread: false,
+                    unreadCount: 0,
+                  }),
+                  id,
+                  lastMessage:
+                    typeof r.lastMessagePreview === "string" && r.lastMessagePreview
+                      ? r.lastMessagePreview
+                      : existing?.lastMessage || "",
+                  lastMessageTime: lastAt,
+                  updatedAt:
+                    typeof r.updatedAt === "number" && Number.isFinite(r.updatedAt)
+                      ? r.updatedAt
+                      : existing?.updatedAt || lastAt,
+                  participantName: existing?.participantName || r.title || "Chat",
+                })
+              }
+              next.conversations = Array.from(byId.values()).sort(
+                (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
+              )
+            }
+
+            if (people && people.ok && Array.isArray(people.people) && people.people.length > 0) {
+              const byId = new Map((next.candidates || []).map((c) => [c.id, c]))
+              for (const p of people.people) {
+                if (!p.userId || p.userId === s.profile?.id) continue
+                const existing = byId.get(p.userId)
+                byId.set(p.userId, {
+                  id: p.userId,
+                  name: p.displayName || existing?.name || "Member",
+                  age: existing?.age || 0,
+                  photo: p.avatarUrl || existing?.photo || "/placeholder.svg?width=80&height=80",
+                  photos: p.avatarUrl ? [p.avatarUrl] : existing?.photos,
+                  bio: p.bio || existing?.bio || "",
+                  location:
+                    [p.city, p.country].filter(Boolean).join(", ") || existing?.location || "",
+                  interests: existing?.interests || [],
+                  verified: existing?.verified ?? false,
+                  online: existing?.online ?? false,
+                  lastSeen: existing?.lastSeen ?? 0,
+                  coverPhoto: existing?.coverPhoto,
+                  profilePhotoHistory: existing?.profilePhotoHistory,
+                  coverPhotoHistory: existing?.coverPhotoHistory,
+                  distance: existing?.distance,
+                  isSample: false,
+                } as Candidate)
+              }
+              const merged = Array.from(byId.values()).filter((c) => {
+                if (people.durable && people.people.length > 0) {
+                  try {
+                    return isLikelyServerUserId(c.id)
+                  } catch {
+                    return true
+                  }
+                }
+                return true
+              })
+              next.candidates = merged
+            }
+
+            if (matchInbox && matchInbox.ok && matchInbox.durable) {
+              const myId =
+                String(s.profile?.id || "").trim() || "current-user"
+              const likeKey = (from: string, to: string) => `${from}→${to}`
+              const likeMap = new Map<string, Like>()
+              for (const l of next.likes || []) {
+                likeMap.set(likeKey(l.fromUserId, l.toUserId), l)
+              }
+              for (const o of matchInbox.outgoingLikes || []) {
+                likeMap.set(likeKey(myId, o.toUserId), {
+                  id: `like_${myId}_${o.toUserId}`,
+                  fromUserId: myId,
+                  toUserId: o.toUserId,
+                  createdAt: o.createdAt || Date.now(),
+                })
+              }
+              for (const i of matchInbox.incomingLikes || []) {
+                likeMap.set(likeKey(i.fromUserId, myId), {
+                  id: `like_${i.fromUserId}_${myId}`,
+                  fromUserId: i.fromUserId,
+                  toUserId: myId,
+                  createdAt: i.createdAt || Date.now(),
+                })
+              }
+              const matchMap = new Map((next.matches || []).map((m) => [m.userId, m]))
+              for (const m of matchInbox.matches || []) {
+                if (!matchMap.has(m.userId)) {
+                  matchMap.set(m.userId, {
+                    id: `match_${m.userId}`,
+                    userId: m.userId,
+                    userName: "Match",
+                    userPhoto: "",
+                    matchedAt: m.createdAt || Date.now(),
+                    online: false,
+                  })
+                }
+              }
+              next.likes = Array.from(likeMap.values())
+              next.matches = Array.from(matchMap.values())
+            }
+
+            return next
           })
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:connection-inbox-updated"))
+            window.dispatchEvent(new CustomEvent("ghc:messaging-reconcile"))
+          } catch {
+            /* */
+          }
         } catch {
           /* offline */
         }
@@ -1925,23 +2215,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
       // Durable social profile (server). Await so reload can hydrate photos/fields.
       // Failures do not roll back local UX; queue offline sync when needed.
-      try {
-        const persisted = await persistServerProfile({ ...result.data })
-        if (!persisted.ok && state.isOnline) {
-          offlineQueue.addAction({
-            type: "profile_update",
-            payload: result.data,
-            maxRetries: 3,
-          })
-        }
-      } catch {
-        offlineQueue.addAction({
-          type: "profile_update",
-          payload: result.data,
-          maxRetries: 3,
-        })
-      }
-
       if (!state.isOnline) {
         offlineQueue.addAction({
           type: "profile_update",
@@ -1949,6 +2222,31 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           maxRetries: 3,
         })
         addToast("Profile queued for sync", "info")
+        return
+      }
+
+      try {
+        const persisted = await persistServerProfile({ ...result.data })
+        if (!persisted.ok) {
+          offlineQueue.addAction({
+            type: "profile_update",
+            payload: result.data,
+            maxRetries: 3,
+          })
+          addToast(
+            persisted.error ||
+              "Profile saved on this device — server not confirmed. Will retry.",
+            "info"
+          )
+          return
+        }
+      } catch {
+        offlineQueue.addAction({
+          type: "profile_update",
+          payload: result.data,
+          maxRetries: 3,
+        })
+        addToast("Profile saved on this device — server not confirmed. Will retry.", "info")
         return
       }
 
@@ -2140,62 +2438,60 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       const newPost = domainResult.data
 
-      setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
-
-      // Durable write — server is authoritative when Supabase social core is applied
+      // Durable write first when online — no cross-account "published" without server
       let durableStatus: "ok" | "local" | "unconfirmed" = "local"
-      try {
-        const { socialCreatePost } = await import("@/lib/social/client")
-        const remote = await socialCreatePost({
-          id: newPost.id,
-          content: newPost.content,
-          images: newPost.images,
-          video: newPost.video,
-          pdf: newPost.pdf,
-          pdfName: newPost.pdfName,
-          visibility: newPost.visibility || visibility,
-          authorName: newPost.authorName,
-          authorPhoto: newPost.authorPhoto,
-          communityId: newPost.communityId,
-          communityName: newPost.communityName,
-          contentType: newPost.contentType,
-          listingId: newPost.listingId,
-          listingKind: newPost.listingKind,
-        })
-        if (remote.ok === false) {
-          durableStatus = "unconfirmed"
-        } else if (remote.durable) {
-          durableStatus = "ok"
-          if (remote.post?.id && remote.post.id !== newPost.id) {
-            setState((s) => ({
-              ...s,
-              posts: s.posts.map((p) =>
-                p.id === newPost.id ? { ...p, id: String(remote.post!.id) } : p
-              ),
-            }))
+      let publishedPost = newPost
+      if (state.isOnline) {
+        try {
+          const { socialCreatePost } = await import("@/lib/social/client")
+          const remote = await socialCreatePost({
+            id: newPost.id,
+            content: newPost.content,
+            images: newPost.images,
+            video: newPost.video,
+            pdf: newPost.pdf,
+            pdfName: newPost.pdfName,
+            visibility: newPost.visibility || visibility,
+            authorName: newPost.authorName,
+            authorPhoto: newPost.authorPhoto,
+            communityId: newPost.communityId,
+            communityName: newPost.communityName,
+            contentType: newPost.contentType,
+            listingId: newPost.listingId,
+            listingKind: newPost.listingKind,
+          })
+          if (!remote.ok || remote.durable === false) {
+            addToast(
+              remote.error || "Could not publish post to the server. Try again.",
+              "error"
+            )
+            return false
           }
-        } else {
-          durableStatus = "local"
+          durableStatus = "ok"
+          if (remote.post?.id) {
+            publishedPost = { ...newPost, id: String(remote.post.id) }
+          }
+        } catch {
+          addToast("Could not reach the server to publish this post", "error")
+          return false
         }
-      } catch {
-        durableStatus = state.isOnline ? "unconfirmed" : "local"
-      }
-
-      // Queue for sync if offline
-      if (!state.isOnline) {
+      } else {
         offlineQueue.addAction({
           type: "create_post",
           payload: newPost,
           maxRetries: 3,
         })
+        setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
         addToast("Post queued - will upload when online", "info")
         return true
       }
 
+      setState((s) => ({ ...s, posts: [publishedPost, ...s.posts] }))
+
       // Track analytics
       analytics.trackEvent(
         "post_created",
-        { postId: newPost.id, visibility },
+        { postId: publishedPost.id, visibility },
         state.profile.displayName,
       )
 
@@ -2223,10 +2519,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         } catch {
           /* non-fatal */
         }
-      } else if (durableStatus === "unconfirmed") {
-        addToast("Saved on this device — server publish not confirmed", "info")
       } else {
-        addToast("Saved on this device", "info")
+        // Online path already fail-closed above; offline returns early with queue toast.
+        addToast("Post published", "success")
       }
       return true
     } catch (error) {
@@ -2239,126 +2534,123 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   /** Durable multi-reaction (like, love, support, …). Server is authority when configured. */
   const reactToPost = async (postId: string, reaction: string = "like") => {
     const isLike = reaction === "like" || !reaction
-    if (isLike) {
-      setState((s) => {
-        const isLiked = s.likedPostIds.includes(postId)
-        const nextLikedPostIds = isLiked
-          ? s.likedPostIds.filter((id) => id !== postId)
-          : [...s.likedPostIds, postId]
-        const nextLikes = isLiked
-          ? s.likes.filter(
-              (like) =>
-                !(like.fromUserId === "current-user" && like.toUserId === postId)
-            )
-          : [
-              ...s.likes,
-              {
-                id: generateId(),
-                fromUserId: "current-user",
-                toUserId: postId,
-                createdAt: Date.now(),
-              },
-            ]
-        return {
-          ...s,
-          posts: s.posts.map((post) =>
-            post.id === postId
-              ? { ...post, likes: Math.max(0, post.likes + (isLiked ? -1 : 1)) }
-              : post
-          ),
-          likes: nextLikes,
-          likedPostIds: nextLikedPostIds,
-        }
-      })
-    }
+    const normalized = (reaction || "like").trim() || "like"
     try {
+      // Server-first: other accounts only see reactions that hit durable storage.
       const { socialToggleReaction } = await import("@/lib/social/client")
-      const remote = await socialToggleReaction(postId, reaction || "like")
-      if (remote.ok === false && isLike) {
-        // Roll back optimistic like toggle
-        setState((s) => {
-          const wasOptimisticLiked = s.likedPostIds.includes(postId)
-          // After optimistic update, wasOptimisticLiked is the NEW state; invert
-          const nextLiked = wasOptimisticLiked
-            ? s.likedPostIds.filter((id) => id !== postId)
-            : [...s.likedPostIds, postId]
-          return {
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    likes: Math.max(0, post.likes + (wasOptimisticLiked ? -1 : 1)),
-                  }
-                : post
-            ),
-            likedPostIds: nextLiked,
-          }
-        })
+      const remote = await socialToggleReaction(postId, normalized)
+      if (!remote.ok || remote.durable === false) {
         addToast(remote.error || "Could not update reaction", "error")
+        emitSocialMutation({
+          kind: "reaction",
+          durable: false,
+          postId,
+          error: remote.error || "NOT_DURABLE",
+        })
         return
       }
+
+      const active =
+        remote.active !== undefined
+          ? Boolean(remote.active)
+          : remote.liked !== false
+
+      setState((s) => {
+        let nextLikedPostIds = s.likedPostIds || []
+        let nextLikes = s.likes || []
+        if (isLike) {
+          if (active) {
+            if (!nextLikedPostIds.includes(postId)) {
+              nextLikedPostIds = [...nextLikedPostIds, postId]
+            }
+            const hasLike = nextLikes.some(
+              (like) =>
+                like.toUserId === postId &&
+                (like.fromUserId === "current-user" ||
+                  like.fromUserId === IdentityService.getCurrentUserId())
+            )
+            if (!hasLike) {
+              nextLikes = [
+                ...nextLikes,
+                {
+                  id: generateId(),
+                  fromUserId: IdentityService.getCurrentUserId() || "current-user",
+                  toUserId: postId,
+                  createdAt: Date.now(),
+                },
+              ]
+            }
+          } else {
+            nextLikedPostIds = nextLikedPostIds.filter((id) => id !== postId)
+            nextLikes = nextLikes.filter((like) => like.toUserId !== postId)
+          }
+        }
+        return {
+          ...s,
+          likes: nextLikes,
+          likedPostIds: nextLikedPostIds,
+          posts: s.posts.map((post) => {
+            if (post.id !== postId) return post
+            const next = { ...post }
+            if (typeof remote.likeCount === "number" && Number.isFinite(remote.likeCount)) {
+              next.likes = Math.max(0, remote.likeCount)
+              next.engagement = normalizeEngagementMetrics(post.engagement, {
+                likes: Math.max(0, remote.likeCount),
+              })
+            } else if (isLike) {
+              // Fallback when server omits count: nudge by active state vs previous
+              const wasLiked = (s.likedPostIds || []).includes(postId)
+              if (active && !wasLiked) next.likes = Math.max(0, (post.likes || 0) + 1)
+              if (!active && wasLiked) next.likes = Math.max(0, (post.likes || 0) - 1)
+            }
+            if (remote.reactionCounts && typeof remote.reactionCounts === "object") {
+              next.reactionCounts = remote.reactionCounts
+            }
+            if (Array.isArray(remote.viewerReactions)) {
+              next.viewerReactions = remote.viewerReactions
+            }
+            return next
+          }),
+        }
+      })
+
       emitSocialMutation({
         kind: "reaction",
-        durable: Boolean(remote.durable),
+        durable: true,
         postId,
-        error: remote.ok === false ? remote.error : undefined,
       })
-      if (remote.ok && isLike) {
-        if (typeof remote.likeCount === "number") {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    likes: remote.likeCount as number,
-                    engagement: normalizeEngagementMetrics(post.engagement, {
-                      likes: remote.likeCount as number,
-                    }),
-                  }
-                : post
-            ),
-            likedPostIds:
-              remote.liked === false || remote.active === false
-                ? s.likedPostIds.filter((id) => id !== postId)
-                : s.likedPostIds.includes(postId)
-                  ? s.likedPostIds
-                  : [...s.likedPostIds, postId],
-          }))
-        }
-        const likeCount =
-          typeof remote.likeCount === "number"
-            ? remote.likeCount
-            : undefined
-        broadcastPostEngagement({
-          postId,
-          kind: "reaction",
-          ...(likeCount != null ? { likeCount } : {}),
-          likedByMe: remote.liked !== false && remote.active !== false,
-        })
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:social-mutation", {
+            detail: {
+              type: "reaction",
+              postId,
+              reaction: normalized,
+              active,
+              likeCount: remote.likeCount,
+            },
+          })
+        )
+      } catch {
+        /* */
       }
-      if (remote.ok && remote.reactionCounts) {
-        setState((s) => ({
-          ...s,
-          posts: s.posts.map((post) => post.id === postId
-            ? { ...post, reactionCounts: remote.reactionCounts || {}, viewerReactions: remote.viewerReactions || post.viewerReactions || [] }
-            : post),
-        }))
-        broadcastPostEngagement({
-          postId,
-          kind: "reaction",
-          ...(typeof remote.likeCount === "number" ? { likeCount: remote.likeCount } : {}),
-          reactionCounts: remote.reactionCounts,
-          viewerReactions: remote.viewerReactions,
-          likedByMe: isLike ? remote.liked !== false && remote.active !== false : undefined,
-        })
+      broadcastPostEngagement({
+        postId,
+        kind: "reaction",
+        ...(typeof remote.likeCount === "number" ? { likeCount: remote.likeCount } : {}),
+        reactionCounts: remote.reactionCounts,
+        viewerReactions: remote.viewerReactions,
+        likedByMe: isLike ? active : undefined,
+      })
+    } catch (err) {
+      try {
+        errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
+      } catch {
+        /* */
       }
-    } catch {
-      /* local-only — keep optimistic state when network unavailable */
+      addToast("Could not update reaction", "error")
     }
   }
-
 
   const likePost = async (postId: string) => {
     return reactToPost(postId, "like")
@@ -2648,6 +2940,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
   const deletePost = async (postId: string) => {
     try {
+      const previous = state.posts.find((p) => p.id === postId)
+      const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+      if (online) {
+        try {
+          const { socialDeletePost } = await import("@/lib/social/client")
+          const remote = await socialDeletePost(postId)
+          if (remote.ok === false || remote.durable === false) {
+            addToast(remote.error || "Could not delete post on the server", "error")
+            return
+          }
+        } catch {
+          addToast("Could not reach the server to delete this post", "error")
+          return
+        }
+      }
       const result = await domains.posts.deletePost(postId)
       if (!result.ok) {
         addToast(result.error, "error")
@@ -2658,20 +2965,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...s,
         posts: s.posts.map((p) => (p.id === postId ? { ...p, ...deleted } : p)),
       }))
-      try {
-        const { socialDeletePost } = await import("@/lib/social/client")
-        const remote = await socialDeletePost(postId)
-        if (remote.ok === false) {
-          addToast(
-            remote.error || "Deleted on this device — server not confirmed",
-            "info"
-          )
-          return
-        }
-        addToast(remote.durable ? "Post deleted" : "Post deleted on this device", "success")
-      } catch {
-        addToast("Deleted on this device — server not confirmed", "info")
+      if (!online) {
+        offlineQueue.addAction({
+          type: "delete_post",
+          payload: { id: postId },
+          maxRetries: 3,
+        })
+        addToast("Delete queued — will sync when online", "info")
+        return
       }
+      addToast("Post deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete post", "error")
@@ -2685,7 +2988,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      // Validate reply target exists (orphans still allowed by domain, but UX clearer)
       if (replyToCommentId) {
         const post = state.posts.find((p) => p.id === postId)
         const parentExists = post?.comments?.some((c) => c.id === replyToCommentId)
@@ -2694,31 +2996,71 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           return
         }
       }
-      const result = await domains.posts.addComment(postId, normalizedText, replyToCommentId)
-      if (!result.ok) {
-        addToast(result.error || "Could not post comment", "error")
+
+      // Server-first: other accounts only see comments that hit durable storage.
+      const { socialAddComment } = await import("@/lib/social/client")
+      const profile = state.profile
+      const remote = await socialAddComment(postId, {
+        text: normalizedText,
+        authorName: profile?.displayName || profile?.username || "Member",
+        authorPhoto: profile?.photos?.[0] || "",
+        parentId: replyToCommentId,
+      })
+
+      if (!remote.ok || remote.ok === false) {
+        addToast(
+          remote.error ||
+            (replyToCommentId ? "Could not post reply" : "Could not post comment"),
+          "error"
+        )
         return
       }
-      const newComment = result.data
-      if (!newComment?.id) {
-        addToast("Could not post comment", "error")
+      if (remote.durable === false) {
+        addToast(
+          replyToCommentId
+            ? "Reply not visible to others yet — server not durable"
+            : "Comment not visible to others yet — server not durable",
+          "error"
+        )
         return
       }
+
+      const remoteComment = remote.comment || {}
+      const newComment = {
+        id: String(remoteComment.id || `cmt_${Date.now().toString(36)}`),
+        authorId: String(
+          (remoteComment as { authorId?: string }).authorId ||
+            profile?.id ||
+            IdentityService.getCurrentUserId() ||
+            ""
+        ),
+        authorName: String(
+          (remoteComment as { authorName?: string }).authorName ||
+            profile?.displayName ||
+            "Member"
+        ),
+        authorPhoto: String(
+          (remoteComment as { authorPhoto?: string }).authorPhoto ||
+            profile?.photos?.[0] ||
+            ""
+        ),
+        text: String((remoteComment as { text?: string }).text || normalizedText),
+        createdAt: Number((remoteComment as { createdAt?: number }).createdAt) || Date.now(),
+        replyTo:
+          replyToCommentId ||
+          (remoteComment as { parentId?: string; replyTo?: string }).parentId ||
+          (remoteComment as { replyTo?: string }).replyTo,
+        replies: [] as [],
+        reactions: {},
+        reactionCounts: {},
+      }
+
       setState((s) => ({
         ...s,
         posts: s.posts.map((post) => {
           if (post.id !== postId) return post
           const existing = Array.isArray(post.comments) ? post.comments : []
-          // Dedupe by id (preferred) or near-duplicate text from same user
           if (existing.some((c) => c.id === newComment.id)) return post
-          const duplicate = existing.some(
-            (comment) =>
-              comment.authorId === "current-user" &&
-              (comment.text ?? "").trim().toLowerCase() === normalizedText.toLowerCase() &&
-              Date.now() - (comment.createdAt || 0) < 5000
-          )
-          if (duplicate) return post
-          // Flat list only — buildCommentTree nests via replyTo (no dual-write)
           const nextComments = [
             ...existing,
             {
@@ -2740,65 +3082,19 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         postId,
         kind: "comment",
         commentDelta: 1,
-        commentCount: (state.posts.find((p) => p.id === postId)?.comments?.length ?? 0) + 1,
+        commentCount:
+          (state.posts.find((p) => p.id === postId)?.comments?.length ?? 0) + 1,
       })
       try {
-        const { socialAddComment } = await import("@/lib/social/client")
-        const remote = await socialAddComment(postId, {
-          id: newComment.id,
-          text: normalizedText,
-          authorName: newComment.authorName,
-          authorPhoto: newComment.authorPhoto,
-          parentId: replyToCommentId,
-        })
-        if (remote.ok === false) {
-          addToast(
-            remote.error ||
-              (replyToCommentId
-                ? "Reply saved on this device — server not confirmed"
-                : "Comment saved on this device — server not confirmed"),
-            "info"
-          )
-          return
-        }
-        const remoteId = remote.comment?.id ? String(remote.comment.id) : ""
-        if (remoteId && remoteId !== newComment.id) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) => {
-              if (post.id !== postId) return post
-              return {
-                ...post,
-                comments: (post.comments || []).map((c) =>
-                  c.id === newComment.id ? { ...c, id: remoteId } : c
-                ),
-              }
-            }),
-          }))
-        }
-        emitSocialMutation({
-          kind: "comment",
-          durable: Boolean(remote.durable),
-          postId,
-        })
-        addToast(
-          remote.durable
-            ? replyToCommentId
-              ? "Reply posted"
-              : "Comment posted"
-            : replyToCommentId
-              ? "Reply saved on this device — not visible to others yet"
-              : "Comment saved on this device — not visible to others yet",
-          remote.durable ? "success" : "info"
+        window.dispatchEvent(
+          new CustomEvent("ghc:social-mutation", {
+            detail: { type: "comment", postId, commentId: newComment.id },
+          })
         )
       } catch {
-        addToast(
-          replyToCommentId
-            ? "Reply saved on this device — server not confirmed"
-            : "Comment saved on this device — server not confirmed",
-          "info"
-        )
+        /* */
       }
+      addToast(replyToCommentId ? "Reply posted" : "Comment posted", "success")
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -2808,6 +3104,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       addToast("Could not post comment", "error")
     }
   }
+
 
 
   useEffect(() => {
@@ -2914,11 +3211,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...s,
         posts: s.posts.map((post) => {
           if (post.id !== id) return post
-          // Prefer remote when durable; merge by id with local optimistic
+          // Durable server list is authoritative for cross-account visibility.
+          // When durable, prefer mapped; only keep local rows missing from server if not durable.
           const byId = new Map<string, (typeof mapped)[0]>()
           for (const c of mapped) byId.set(c.id, c)
-          for (const c of post.comments || []) {
-            if (!byId.has(c.id)) byId.set(c.id, c as (typeof mapped)[0])
+          if (!remote.durable) {
+            for (const c of post.comments || []) {
+              if (!byId.has(c.id)) byId.set(c.id, c as (typeof mapped)[0])
+            }
           }
           const nextComments = Array.from(byId.values()).sort(
             (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
@@ -2984,12 +3284,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           )
           return
         }
-        addToast(
-          durable?.durable === false
-            ? "Post updated on this device"
-            : "Post updated",
-          "success"
-        )
+        if (durable?.durable === false) {
+          addToast("Could not save post edit on the server", "error")
+          return
+        }
+        addToast("Post updated", "success")
         try {
           const { broadcastPostEngagement } = await import("@/lib/engagement/post-engagement")
           broadcastPostEngagement({ postId, kind: "edit" })
@@ -3032,22 +3331,25 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         durable?: boolean
         error?: string
       }
-      if (!res.ok || data.ok === false) {
+      if (!res.ok || data.ok === false || data.durable === false) {
         setState((s) => ({
           ...s,
           posts: s.posts.map((p) =>
             p.id === postId ? { ...p, isArchived: false, archivedAt: undefined } : p
           ),
         }))
-        addToast(data.error || "Could not archive post", "error")
+        addToast(data.error || "Could not archive post on the server", "error")
         return
       }
-      addToast(
-        data.durable ? "Post archived" : "Post archived on this device",
-        data.durable ? "success" : "info"
-      )
+      addToast("Post archived", "success")
     } catch {
-      addToast("Post archived on this device", "info")
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((p) =>
+          p.id === postId ? { ...p, isArchived: false, archivedAt: undefined } : p
+        ),
+      }))
+      addToast("Could not reach the server to archive this post", "error")
     }
   }
 
@@ -3077,22 +3379,25 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         durable?: boolean
         error?: string
       }
-      if (!res.ok || data.ok === false) {
+      if (!res.ok || data.ok === false || data.durable === false) {
         setState((s) => ({
           ...s,
           posts: s.posts.map((p) =>
             p.id === postId ? { ...p, isArchived: true, archivedAt: Date.now() } : p
           ),
         }))
-        addToast(data.error || "Could not restore post", "error")
+        addToast(data.error || "Could not restore post on the server", "error")
         return
       }
-      addToast(
-        data.durable ? "Post restored" : "Post restored on this device",
-        data.durable ? "success" : "info"
-      )
+      addToast("Post restored", "success")
     } catch {
-      addToast("Post restored on this device", "info")
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((p) =>
+          p.id === postId ? { ...p, isArchived: true, archivedAt: Date.now() } : p
+        ),
+      }))
+      addToast("Could not reach the server to restore this post", "error")
     }
   }
 
@@ -3158,59 +3463,108 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const addCommentReaction = async (postId: string, commentId: string, emoji: string) => {
+    const em = String(emoji || "").trim().slice(0, 16)
+    if (!em) return
     try {
-      const result = await domains.posts.reactToComment(postId, commentId, emoji)
-      if (!result.ok) {
-        addToast(result.error, "error")
+      // Server-first so emoji reactions are visible across accounts
+      const res = await fetch(
+        `/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/reactions`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...IdentityService.getAuthHeaders(),
+          },
+          body: JSON.stringify({ emoji: em }),
+        }
+      )
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        durable?: boolean
+        error?: string
+        counts?: Record<string, number>
+        active?: boolean
+      }
+      if (!res.ok || body.ok === false) {
+        addToast(body.error || "Could not save reaction", "error")
         return
       }
-      setState((s) => ({
-        ...s,
-        posts: s.posts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                comments: post.comments.map((c) =>
-                  c.id === commentId ? { ...c, reactions: result.data.reactions } : c
-                ),
-              }
-            : post
-        ),
-      }))
-      // Durable dual-write so other accounts can see emoji reactions
+      if (body.durable === false) {
+        addToast("Reaction not visible to others yet — server not durable", "error")
+        return
+      }
+      // Local domain update for optimistic UI counts when available
       try {
-        const res = await fetch(
-          `/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/reactions`,
-          {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              ...IdentityService.getAuthHeaders(),
-            },
-            body: JSON.stringify({ emoji }),
-          }
-        )
-        const body = (await res.json().catch(() => ({}))) as {
-          ok?: boolean
-          durable?: boolean
-          error?: string
-        }
-        if (!res.ok || body.ok === false) {
-          addToast(
-            body.error || "Reaction saved here — not visible to others until server confirms",
-            "info"
-          )
+        const result = await domains.posts.reactToComment(postId, commentId, em)
+        if (result.ok) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    comments: post.comments.map((c) =>
+                      c.id === commentId
+                        ? {
+                            ...c,
+                            reactions: result.data.reactions,
+                            reactionCounts: body.counts || result.data.reactions,
+                          }
+                        : c
+                    ),
+                  }
+                : post
+            ),
+          }))
+        } else if (body.counts) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    comments: post.comments.map((c) =>
+                      c.id === commentId ? { ...c, reactionCounts: body.counts } : c
+                    ),
+                  }
+                : post
+            ),
+          }))
         }
       } catch {
-        addToast("Reaction saved here — server not confirmed", "info")
+        if (body.counts) {
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    comments: post.comments.map((c) =>
+                      c.id === commentId ? { ...c, reactionCounts: body.counts } : c
+                    ),
+                  }
+                : post
+            ),
+          }))
+        }
+      }
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:social-mutation", {
+            detail: { type: "comment-reaction", postId, commentId, emoji: em },
+          })
+        )
+      } catch {
+        /* */
       }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not react to comment", "error")
     }
   }
+
 
   const removeCommentReaction = async (postId: string, commentId: string, emoji: string) => {
     setState((s) => ({
@@ -3237,7 +3591,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const pinComment = async (postId: string, commentId: string) => {
-    // Local-only — no durable comment-pin API/RPC.
+    // Local preference only — no durable comment-pin API/RPC in this build.
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -3249,11 +3603,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Comment pinned on this device", "success")
+    addToast("Pinned on this device only — not synced to other accounts yet", "info")
   }
 
   const unpinComment = async (postId: string, commentId: string) => {
-    // Local-only — no durable comment-pin API/RPC.
+    // Local preference only — no durable comment-pin API/RPC in this build.
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -3265,7 +3619,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-    addToast("Comment unpinned on this device", "success")
+    addToast("Unpinned on this device only", "info")
   }
 
   const createQuoteRepost = async (originalPostId: string, quoteText: string) => {
@@ -3287,7 +3641,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         visibility: "public",
         quoteOf: originalPostId,
       } as Parameters<typeof socialCreatePost>[0] & { quoteOf: string })
-      if (remote.ok && remote.post) {
+      if (remote.ok && remote.durable !== false && remote.post) {
         const durablePost = {
           id: String(remote.post.id || generateId()),
           authorId: IdentityService.getCurrentUserId() || "current-user",
@@ -3304,32 +3658,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           quoteOf: originalPostId,
         } as Post
         setState((s) => ({ ...s, posts: [durablePost, ...s.posts] }))
-        addToast(
-          remote.durable ? "Quote repost published" : "Quote repost saved on this device",
-          remote.durable ? "success" : "info"
-        )
+        addToast("Quote repost published", "success")
         return
       }
+      addToast(
+        (remote as { error?: string }).error || "Could not publish quote on the server",
+        "error"
+      )
+      return
     } catch {
-      /* fall through to local */
+      addToast("Could not reach the server to publish this quote", "error")
+      return
     }
-    const newPost: Post = {
-      id: generateId(),
-      authorId: IdentityService.getCurrentUserId() || "current-user",
-      authorName: state.profile.displayName || "You",
-      authorPhoto: state.profile.photos[0] || "/placeholder.svg?width=32&height=32",
-      content: text || `Quoted @${originalPost.authorName}`,
-      images: [],
-      video: null,
-      pdf: null,
-      pdfName: null,
-      likes: 0,
-      comments: [],
-      createdAt: Date.now(),
-      quoteOf: originalPostId,
-    }
-    setState((s) => ({ ...s, posts: [newPost, ...s.posts] }))
-    addToast("Quote repost saved on this device", "info")
   }
 
   const sharePost = async (
@@ -3394,9 +3734,39 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(remote.error || "Could not save post", "error")
         return
       }
-      addToast(remote.durable ? "Post saved" : "Post saved on this device", "success")
+      if (remote.durable === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  bookmarkedBy: (post.bookmarkedBy || []).filter(
+                    (name) => name !== s.profile.displayName
+                  ),
+                }
+              : post
+          ),
+        }))
+        addToast("Could not save post on the server", "error")
+        return
+      }
+      addToast("Post saved", "success")
     } catch {
-      addToast("Post saved on this device", "success")
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                bookmarkedBy: (post.bookmarkedBy || []).filter(
+                  (name) => name !== s.profile.displayName
+                ),
+              }
+            : post
+        ),
+      }))
+      addToast("Could not reach the server to save this post", "error")
     }
   }
 
@@ -3428,12 +3798,29 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(remote.error || "Could not remove saved post", "error")
         return
       }
-      addToast(
-        remote.durable ? "Post removed from saved" : "Removed from saved on this device",
-        "success"
-      )
+      if (remote.durable === false) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) =>
+            post.id === postId
+              ? { ...post, bookmarkedBy: prevBookmarks || post.bookmarkedBy }
+              : post
+          ),
+        }))
+        addToast("Could not update saved posts on the server", "error")
+        return
+      }
+      addToast("Post removed from saved", "success")
     } catch {
-      addToast("Removed from saved on this device", "success")
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) =>
+          post.id === postId
+            ? { ...post, bookmarkedBy: prevBookmarks || post.bookmarkedBy }
+            : post
+        ),
+      }))
+      addToast("Could not reach the server to update saved posts", "error")
     }
   }
 
@@ -3635,6 +4022,32 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       if (!candidate) return
 
       if (action === "like" || action === "superlike") {
+        // Server-first match signal when online — no local-only "liked" success.
+        let durableMutual = false
+        let durableOk = false
+        let remoteError = ""
+        const online =
+          typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialMatchSignal } = await import("@/lib/social/client")
+            const remote = await socialMatchSignal(candidateId, action)
+            durableOk = Boolean(remote.ok && remote.durable !== false)
+            if (remote.ok && remote.mutual) durableMutual = true
+            if (!durableOk) {
+              remoteError = remote.error || "MATCH_NOT_DURABLE"
+              addToast(
+                remote.error || "Could not save this like on the server. Try again.",
+                "error"
+              )
+              return
+            }
+          } catch (e) {
+            addToast("Could not reach the server to save this like.", "error")
+            return
+          }
+        }
+
         const interest = await domains.matching.expressInterest(candidateId, {
           superlike: action === "superlike",
         })
@@ -3650,24 +4063,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           "current-user"
         let createdMatch: (typeof state.matches)[number] | null = null
         let alreadyMatched = interest.data.alreadyMatched
-        let durableMutual = false
-        let durableOk = false
-
-        // Phase 5: dual-write interest to durable matching API
-        try {
-          const { socialMatchSignal } = await import("@/lib/social/client")
-          const remote = await socialMatchSignal(candidateId, action)
-          durableOk = Boolean(remote.ok && remote.durable)
-          if (remote.ok && remote.mutual) {
-            durableMutual = true
-            alreadyMatched = alreadyMatched || false
-          }
-          if (remote.ok === false && remote.error) {
-            console.warn("[ghc] match signal remote", remote.error)
-          }
-        } catch (e) {
-          console.warn("[ghc] match signal network", e)
-        }
 
         setState((s) => {
           const alreadyLiked = s.likes.some(
@@ -3776,7 +4171,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           addToast(
             durableOk
               ? "It's a Match — mutual interest"
-              : "It's a Match on this device — server sync pending",
+              : "Match recorded offline — will sync when you\'re back online",
             "success",
           )
         } else if (alreadyMatched) {
@@ -3787,24 +4182,28 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               ? action === "superlike"
                 ? "Interest sent"
                 : "Interest sent — not a Match until they like you too"
-              : action === "superlike"
-                ? "Interest saved here — server not confirmed"
-                : "Interest saved here — not visible to them until server sync",
+              : "Interest saved offline — will sync when you're back online",
             durableOk ? "success" : "info",
           )
         }
       } else {
-        // Phase 5: durable pass
-        try {
-          const { socialMatchSignal } = await import("@/lib/social/client")
-          const remote = await socialMatchSignal(candidateId, "pass")
-          if (remote.ok && remote.durable) {
+        // Pass — server-first when online
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialMatchSignal } = await import("@/lib/social/client")
+            const remote = await socialMatchSignal(candidateId, "pass")
+            if (!remote.ok || remote.durable === false) {
+              addToast(remote.error || "Could not save pass on the server", "error")
+              return
+            }
             addToast("Passed", "info")
-          } else {
-            addToast("Passed on this device — server sync pending", "info")
+          } catch {
+            addToast("Could not reach the server to save this pass", "error")
+            return
           }
-        } catch {
-          addToast("Passed on this device", "info")
+        } else {
+          addToast("You're offline — pass will sync when you're back online", "info")
         }
       }
     } catch (err) {
@@ -3826,7 +4225,8 @@ const dismissMatchCelebration = useCallback(() => {
         return
       }
       const already = (state.following || []).includes(userId)
-      if (!already) {
+      const wantFollow = !already
+      if (wantFollow) {
         const matchIds = (state.matches || []).map((m) => m.userId)
         const friendIds = state.friends || []
         if (!privacyCanFollow(state.settings, "current-user", userId, matchIds, friendIds)) {
@@ -3834,40 +4234,41 @@ const dismissMatchCelebration = useCallback(() => {
           return
         }
       }
-      const result = await domains.graph.toggleFollow(userId)
-      if (!result.ok) {
-        addToast(result.error, "error")
+      // Server-first so follower lists match across accounts
+      const { socialFollow } = await import("@/lib/social/client")
+      const remote = await socialFollow(userId, wantFollow)
+      if (!remote.ok || remote.durable === false) {
+        addToast(
+          remote.error ||
+            (wantFollow
+              ? "Could not follow — server not confirmed"
+              : "Could not unfollow — server not confirmed"),
+          "error",
+        )
         return
       }
-      setState((s) => applyGraphPatch(s, patchFromFollow(result.data)))
-      const wantFollow = result.data.action === "follow"
-      try {
-        const { socialFollow } = await import("@/lib/social/client")
-        const remote = await socialFollow(userId, wantFollow)
-        if (remote.ok && remote.durable) {
-          addToast(wantFollow ? "Following" : "Unfollowed", wantFollow ? "success" : "info")
-        } else if (remote.ok === false) {
-          addToast(
-            remote.error ||
-              (wantFollow
-                ? "Follow saved here — not yet visible to others"
-                : "Unfollow saved here — server not confirmed"),
-            "info",
-          )
-        } else {
-          addToast(
-            wantFollow
-              ? "Following on this device — server sync pending"
-              : "Unfollowed on this device — server sync pending",
-            "info",
-          )
-        }
-      } catch {
-        addToast(
-          wantFollow ? "Following on this device only" : "Unfollowed on this device only",
-          "info",
-        )
+      const result = await domains.graph.toggleFollow(userId)
+      if (result.ok) {
+        setState((s) => applyGraphPatch(s, patchFromFollow(result.data)))
+      } else {
+        // Align local list even if domain toggle lagged
+        setState((s) => ({
+          ...s,
+          following: wantFollow
+            ? Array.from(new Set([...(s.following || []), userId]))
+            : (s.following || []).filter((id) => id !== userId),
+        }))
       }
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:social-mutation", {
+            detail: { type: wantFollow ? "follow" : "unfollow", targetUserId: userId },
+          })
+        )
+      } catch {
+        /* */
+      }
+      addToast(wantFollow ? "Following" : "Unfollowed", wantFollow ? "success" : "info")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error following user", "error")
@@ -3890,11 +4291,20 @@ const dismissMatchCelebration = useCallback(() => {
         addToast("Removed from friends", "info")
         return
       }
-      const result = await domains.graph.sendFriendRequest(userId)
-      if (!result.ok) {
-        addToast(result.error, "error")
+      // Server-first connection request
+      const { socialConnectionRequest } = await import("@/lib/social/client")
+      const remote = await socialConnectionRequest({
+        toUserId: userId,
+        source: "profile_connect",
+      })
+      if (!remote.ok || !remote.durable) {
+        addToast(
+          remote.error || "Could not send request — not visible to them until server confirms",
+          "error",
+        )
         return
       }
+      const result = await domains.graph.sendFriendRequest(userId)
       const myId = String(state.profile?.id || "").trim() || "current-user"
       const cand = bootstrapCandidates().find((c) => c.id === userId)
       const newRequest = {
@@ -3916,34 +4326,24 @@ const dismissMatchCelebration = useCallback(() => {
           newRequest as any,
         ],
       }))
-      // Phase 1: durable connection request so other devices/accounts can receive it
-      let durableOk = false
-      try {
-        const { socialConnectionRequest } = await import("@/lib/social/client")
-        const remote = await socialConnectionRequest({
-          toUserId: userId,
-          source: "profile_connect",
-        })
-        durableOk = Boolean(remote.ok && remote.durable)
-        if (remote.ok === false && remote.error) {
-          console.warn("[ghc] connection request remote", remote.error)
-        }
-      } catch (e) {
-        console.warn("[ghc] connection request network", e)
+      if (!result.ok) {
+        console.warn("[ghc] session graph lag after durable connection request", result.error)
       }
       emitSocialMutation({
         kind: "connection_request",
-        durable: durableOk,
+        durable: true,
         targetUserId: userId,
       })
-      if (durableOk) {
-        addToast("Friend request sent — they will see it when online", "success")
-      } else {
-        addToast(
-          "Request saved on this device only — not visible to them until server confirms (migrations/auth)",
-          "info",
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:social-mutation", {
+            detail: { type: "connection_request", toUserId: userId },
+          })
         )
+      } catch {
+        /* */
       }
+      addToast("Friend request sent — they will see it in their inbox", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error adding friend", "error")
@@ -4325,7 +4725,7 @@ const dismissMatchCelebration = useCallback(() => {
           replyToMessageId,
           sharedPostId
         )
-        if (remote?.ok && remote.durable) {
+        if (remote?.ok && remote.durable !== false) {
           durable = true
           serverId = remote.message?.id ? String(remote.message.id) : null
         } else {
@@ -4479,6 +4879,105 @@ const dismissMatchCelebration = useCallback(() => {
     void flush()
     return () => window.removeEventListener("online", onOnline)
   }, [])
+
+  // Flush queued create_post when back online (server-first)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const flush = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return
+      try {
+        const { flushQueuedPosts } = await import("@/lib/social/offline-post-flush")
+        const result = await flushQueuedPosts()
+        if (result.succeeded > 0) {
+          try {
+            const { socialFetchFeed } = await import("@/lib/social/client")
+            const feed = await socialFetchFeed({ limit: 40 })
+            if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+              const remotePosts = mapRemoteFeedPosts(feed.posts)
+              setState((s) => {
+                const remoteIds = new Set(remotePosts.map((p) => p.id))
+                const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
+                return {
+                  ...s,
+                  posts: [...remotePosts, ...localOnly].sort(
+                    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+                  ),
+                }
+              })
+            }
+          } catch {
+            /* non-fatal */
+          }
+          try {
+            addToast(
+              result.succeeded === 1
+                ? "Queued post published"
+                : `${result.succeeded} queued posts published`,
+              "success"
+            )
+          } catch {
+            /* */
+          }
+        }
+      } catch {
+        /* */
+      }
+    }
+    const onOnline = () => {
+      void flush()
+    }
+    window.addEventListener("online", onOnline)
+    void flush()
+    return () => window.removeEventListener("online", onOnline)
+  }, [addToast])
+
+  // Flush queued stories + deletes when back online
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const flush = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return
+      try {
+        const { flushQueuedStories } = await import("@/lib/social/offline-story-flush")
+        const stories = await flushQueuedStories()
+        if (stories.succeeded > 0) {
+          addToast(
+            stories.succeeded === 1
+              ? "Queued story published"
+              : `${stories.succeeded} queued stories published`,
+            "success"
+          )
+        }
+      } catch {
+        /* */
+      }
+      try {
+        const { flushQueuedDeletes } = await import("@/lib/social/offline-delete-flush")
+        await flushQueuedDeletes()
+      } catch {
+        /* */
+      }
+      try {
+        const { flushQueuedListings } = await import("@/lib/social/offline-listing-flush")
+        const listings = await flushQueuedListings()
+        if (listings.succeeded > 0) {
+          addToast(
+            listings.succeeded === 1
+              ? "Queued listing published"
+              : `${listings.succeeded} queued listings published`,
+            "success"
+          )
+        }
+      } catch {
+        /* */
+      }
+    }
+    const onOnline = () => {
+      void flush()
+    }
+    window.addEventListener("online", onOnline)
+    void flush()
+    return () => window.removeEventListener("online", onOnline)
+  }, [addToast])
 
   // Phase 6 — flush queued messages when back online
   useEffect(() => {
@@ -4916,7 +5415,7 @@ const dismissMatchCelebration = useCallback(() => {
         durable?: boolean
         error?: string
       }
-      if (!res.ok || data.ok === false) {
+      if (!res.ok || data.ok === false || data.durable === false) {
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) =>
@@ -4925,12 +5424,20 @@ const dismissMatchCelebration = useCallback(() => {
               : c
           ),
         }))
-        addToast(data.error || "Could not pin message", "error")
+        addToast(data.error || "Could not pin message on the server", "error")
         return
       }
-      addToast(data.durable ? "Message pinned" : "Message pinned on this device", data.durable ? "success" : "info")
+      addToast("Message pinned", "success")
     } catch {
-      addToast("Message pinned on this device", "info")
+      setState((s) => ({
+        ...s,
+        conversations: s.conversations.map((c) =>
+          c.id === conversationId
+            ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, isPinned: false } : m)) }
+            : c
+        ),
+      }))
+      addToast("Could not reach the server to pin this message", "error")
     }
   }, [addToast])
 
@@ -4960,7 +5467,7 @@ const dismissMatchCelebration = useCallback(() => {
         durable?: boolean
         error?: string
       }
-      if (!res.ok || data.ok === false) {
+      if (!res.ok || data.ok === false || data.durable === false) {
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) =>
@@ -4969,12 +5476,20 @@ const dismissMatchCelebration = useCallback(() => {
               : c
           ),
         }))
-        addToast(data.error || "Could not unpin message", "error")
+        addToast(data.error || "Could not unpin message on the server", "error")
         return
       }
-      addToast(data.durable ? "Message unpinned" : "Message unpinned on this device", data.durable ? "success" : "info")
+      addToast("Message unpinned", "success")
     } catch {
-      addToast("Message unpinned on this device", "info")
+      setState((s) => ({
+        ...s,
+        conversations: s.conversations.map((c) =>
+          c.id === conversationId
+            ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, isPinned: true } : m)) }
+            : c
+        ),
+      }))
+      addToast("Could not reach the server to unpin this message", "error")
     }
   }, [addToast])
 
@@ -4996,7 +5511,7 @@ const dismissMatchCelebration = useCallback(() => {
           ),
         }))
         analytics.trackEvent("voice_note_sent", { conversationId }, state.profile.displayName)
-        addToast("Voice note sent on this device", "success")
+        addToast("Voice note is device-local only — durable messaging is text-first", "info")
       } catch (error) {
         errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
         addToast("Failed to send voice note", "error")
@@ -5032,7 +5547,7 @@ const dismissMatchCelebration = useCallback(() => {
 
       analytics.trackEvent("media_sent", { conversationId, type }, state.profile.displayName)
       addToast(
-        `${type === "image" ? "Photo" : type === "video" ? "Video" : "File"} sent on this device`,
+        `${type === "image" ? "Photo" : type === "video" ? "Video" : "File"} is device-local only — text messaging is durable`,
         "success"
       )
     },
@@ -5062,7 +5577,7 @@ const dismissMatchCelebration = useCallback(() => {
       }))
 
       analytics.trackEvent("message_scheduled", { conversationId }, state.profile.displayName)
-      addToast("Message scheduled on this device", "success")
+      addToast("Message scheduled on this device only — not server durable yet", "info")
     },
     [state.profile.displayName, state.conversations, addToast]
   )
@@ -5093,7 +5608,7 @@ const dismissMatchCelebration = useCallback(() => {
       }))
 
       analytics.trackEvent("disappearing_message_sent", { conversationId }, state.profile.displayName)
-      addToast("Disappearing message sent on this device", "success")
+      addToast("Disappearing message is device-local only — not durable messaging", "info")
     },
     [state.profile.displayName, state.conversations, addToast]
   )
@@ -5123,7 +5638,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
     }))
-    addToast("Conversation pinned on this device", "success")
+    addToast("Conversation pinned on this device only", "info")
   }, [addToast])
 
   const unpinConversation = useCallback(async (conversationId: string) => {
@@ -5131,7 +5646,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
     }))
-    addToast("Conversation unpinned on this device", "success")
+    addToast("Conversation unpinned on this device only", "info")
   }, [addToast])
 
   const archiveConversation = useCallback(async (conversationId: string) => {
@@ -5140,7 +5655,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
     }))
-    addToast("Conversation archived on this device", "success")
+    addToast("Conversation archived on this device only", "info")
   }, [addToast])
 
   const unarchiveConversation = useCallback(async (conversationId: string) => {
@@ -5148,7 +5663,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
     }))
-    addToast("Conversation unarchived on this device", "success")
+    addToast("Conversation unarchived on this device only", "info")
   }, [addToast])
 
   const muteConversation = useCallback(async (conversationId: string, muteHours: number = 1) => {
@@ -5158,7 +5673,7 @@ const dismissMatchCelebration = useCallback(() => {
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, muteHours) : c)),
     }))
     addToast(
-      `Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""} on this device`,
+      `Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""} on this device only`,
       "success"
     )
   }, [addToast])
@@ -5168,7 +5683,7 @@ const dismissMatchCelebration = useCallback(() => {
       ...s,
       conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, 0) : c)),
     }))
-    addToast("Notifications unmuted on this device", "success")
+    addToast("Notifications unmuted on this device only", "info")
   }, [addToast])
 
   const setTypingIndicator = useCallback(async (conversationId: string, isTyping: boolean) => {
@@ -5201,30 +5716,43 @@ const dismissMatchCelebration = useCallback(() => {
           return ""
         }
         let newGroup = result.data.community
-        try {
-          const { socialCreateCommunity } = await import("@/lib/social/client")
-          const durable = await socialCreateCommunity({
-            id: newGroup.id,
-            name: newGroup.name || formData.name,
-            purpose: formData.description || "",
-            description: formData.description || "",
-            privacy: formData.privacy,
-            category: formData.category,
-          })
-          // Prefer server-canonical id when durable create returns one
-          const serverId =
-            durable && typeof durable === "object"
-              ? String(
-                  (durable as { id?: string; community?: { id?: string } }).id ||
-                    (durable as { community?: { id?: string } }).community?.id ||
-                    ""
-                ).trim()
-              : ""
-          if (serverId && serverId !== newGroup.id) {
-            newGroup = { ...newGroup, id: serverId }
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialCreateCommunity } = await import("@/lib/social/client")
+            const durable = await socialCreateCommunity({
+              id: newGroup.id,
+              name: newGroup.name || formData.name,
+              purpose: formData.description || "",
+              description: formData.description || "",
+              privacy: formData.privacy,
+              category: formData.category,
+            })
+            const ok =
+              durable &&
+              typeof durable === "object" &&
+              (durable as { ok?: boolean }).ok !== false &&
+              (durable as { durable?: boolean }).durable !== false
+            if (!ok) {
+              addToast(
+                (durable as { error?: string })?.error ||
+                  "Could not create community on the server",
+                "error"
+              )
+              return ""
+            }
+            const serverId = String(
+              (durable as { id?: string; community?: { id?: string } }).id ||
+                (durable as { community?: { id?: string } }).community?.id ||
+                ""
+            ).trim()
+            if (serverId && serverId !== newGroup.id) {
+              newGroup = { ...newGroup, id: serverId }
+            }
+          } catch {
+            addToast("Could not reach the server to create this community", "error")
+            return ""
           }
-        } catch {
-          /* local community remains until durable path available */
         }
         setState((s) => ({
           ...s,
@@ -5241,7 +5769,12 @@ const dismissMatchCelebration = useCallback(() => {
           { groupId: newGroup.id, category: formData.category, privacy: formData.privacy },
           state.profile.displayName
         )
-        addToast(`"${formData.name}" is live — Board is ready`, "success")
+        addToast(
+          online
+            ? `"${formData.name}" is live — Board is ready`
+            : `"${formData.name}" saved offline — will sync when online`,
+          "success"
+        )
         return newGroup.id
       } catch (err) {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -5279,20 +5812,20 @@ const dismissMatchCelebration = useCallback(() => {
           try {
             const { socialJoinCommunity } = await import("@/lib/social/client")
             const durable = await socialJoinCommunity(communityId)
-            if (durable.ok === false) {
+            if (durable.ok === false || durable.durable === false) {
               addToast(
-                durable.error || "Request saved on this device — server not confirmed",
-                "info"
+                durable.error || "Could not send join request to the server",
+                "error"
               )
-              return true
+              return false
             }
             if (String(durable.status || "") === "active") {
               addToast("Joined community", "success")
               return true
             }
           } catch {
-            addToast("Request saved on this device — server not confirmed", "info")
-            return true
+            addToast("Could not reach the server to send join request", "error")
+            return false
           }
           addToast("Join request sent — waiting for approval", "info")
           return true
@@ -5324,26 +5857,33 @@ const dismissMatchCelebration = useCallback(() => {
               return s
             })
             markJoined(communityId)
-            addToast("Joined community on this device", "success")
+            addToast("Joined on this device only — server not confirmed", "error")
             return true
           }
           addToast(result.error, "error")
           return false
         }
         let durableOk: boolean | null = null
-        try {
-          const { socialJoinCommunity } = await import("@/lib/social/client")
-          const durable = await socialJoinCommunity(communityId)
-          durableOk = durable.ok !== false
-          if (durable.ok === false) {
-            addToast(
-              durable.error || "Joined locally — server membership not confirmed",
-              "info"
-            )
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialJoinCommunity } = await import("@/lib/social/client")
+            const durable = await socialJoinCommunity(communityId)
+            if (durable.ok === false || durable.durable === false) {
+              addToast(
+                durable.error || "Could not join community on the server",
+                "error"
+              )
+              return false
+            }
+            durableOk = true
+          } catch {
+            addToast("Could not reach the server to join this community", "error")
+            return false
           }
-        } catch {
+        } else {
           durableOk = false
-          addToast("Joined locally — server membership not confirmed", "info")
+          addToast("You're offline — join will sync when online", "info")
         }
         setState((s) => {
           const memberId = IdentityService.getCurrentUserId() || "current-user"
@@ -5525,19 +6065,26 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         let durableOk: boolean | null = null
-        try {
-          const { socialDecideJoinRequest } = await import("@/lib/social/client")
-          const durable = await socialDecideJoinRequest(communityId, userId, true)
-          durableOk = durable.ok !== false
-          if (durable.ok === false) {
-            addToast(
-              durable.error || "Approved on this device — server not confirmed",
-              "info"
-            )
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialDecideJoinRequest } = await import("@/lib/social/client")
+            const durable = await socialDecideJoinRequest(communityId, userId, true)
+            if (durable.ok === false || durable.durable === false) {
+              addToast(
+                durable.error || "Could not approve join on the server",
+                "error"
+              )
+              return false
+            }
+            durableOk = true
+          } catch {
+            addToast("Could not reach the server to approve this request", "error")
+            return false
           }
-        } catch {
+        } else {
           durableOk = false
-          addToast("Approved on this device — server not confirmed", "info")
+          addToast("You're offline — approval will sync when online", "info")
         }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName ||
@@ -5586,19 +6133,26 @@ const dismissMatchCelebration = useCallback(() => {
           return false
         }
         let durableOk: boolean | null = null
-        try {
-          const { socialDecideJoinRequest } = await import("@/lib/social/client")
-          const durable = await socialDecideJoinRequest(communityId, userId, false)
-          durableOk = durable.ok !== false
-          if (durable.ok === false) {
-            addToast(
-              durable.error || "Declined on this device — server not confirmed",
-              "info"
-            )
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        if (online) {
+          try {
+            const { socialDecideJoinRequest } = await import("@/lib/social/client")
+            const durable = await socialDecideJoinRequest(communityId, userId, false)
+            if (durable.ok === false || durable.durable === false) {
+              addToast(
+                durable.error || "Could not decline join on the server",
+                "error"
+              )
+              return false
+            }
+            durableOk = true
+          } catch {
+            addToast("Could not reach the server to decline this request", "error")
+            return false
           }
-        } catch {
+        } else {
           durableOk = false
-          addToast("Declined on this device — server not confirmed", "info")
+          addToast("You're offline — decline will sync when online", "info")
         }
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
@@ -5699,7 +6253,7 @@ const dismissMatchCelebration = useCallback(() => {
           const durable = await socialJoinCommunity(communityId)
           if (durable.ok === false) {
             addToast(
-              durable.error || "Request saved on this device — server not confirmed",
+              durable.error || "Could not confirm join request on the server",
               "info"
             )
           } else if (String(durable.status || "") === "active") {
@@ -5708,7 +6262,7 @@ const dismissMatchCelebration = useCallback(() => {
             addToast("Join request sent — waiting for approval", "info")
           }
         } catch {
-          addToast("Request saved on this device — server not confirmed", "info")
+          addToast("Could not confirm join request on the server", "error")
         }
         try {
           const communityName =
@@ -6412,7 +6966,62 @@ const dismissMatchCelebration = useCallback(() => {
         ownerId: story.ownerId || "current-user",
         photo: story.photo || state.profile.photos?.[0],
       }
-      const result = await domains.stories.publish(prepared)
+      const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+      let durableStory = prepared
+      if (online) {
+        try {
+          const { socialCreateStory } = await import("@/lib/social/client")
+          const remote = await socialCreateStory({
+            id: prepared.id,
+            ownerId: prepared.ownerId,
+            name: prepared.name,
+            photo: prepared.photo,
+            text: prepared.text,
+            media: prepared.media,
+            background: prepared.background,
+            audience: prepared.audience,
+            expiresAt: prepared.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
+            createdAt: prepared.createdAt,
+          })
+          if (!remote.ok || remote.durable === false) {
+            return {
+              ok: false,
+              durable: false,
+              error: remote.error || "Could not publish story to the server",
+            }
+          }
+          if (remote.story && typeof remote.story === "object") {
+            const sid = String((remote.story as { id?: string }).id || prepared.id)
+            durableStory = { ...prepared, id: sid }
+          }
+        } catch {
+          return {
+            ok: false,
+            durable: false,
+            error: "Could not reach the server to publish this story",
+          }
+        }
+      }
+      if (!online) {
+        offlineQueue.addAction({
+          type: "create_story",
+          payload: prepared,
+          maxRetries: 3,
+        })
+        const resultOffline = await domains.stories.publish(prepared)
+        if (!resultOffline.ok) {
+          return { ok: false, error: resultOffline.error || "Could not save story offline" }
+        }
+        setState((s) => ({
+          ...s,
+          stories: sanitizeStories([
+            resultOffline.data,
+            ...s.stories.filter((x) => x.id !== resultOffline.data.id),
+          ]),
+        }))
+        return { ok: true, durable: false }
+      }
+      const result = await domains.stories.publish(durableStory)
       if (!result.ok) {
         return { ok: false, error: result.error || "Could not publish story" }
       }
@@ -6420,35 +7029,7 @@ const dismissMatchCelebration = useCallback(() => {
         ...s,
         stories: sanitizeStories([result.data, ...s.stories.filter((x) => x.id !== result.data.id)]),
       }))
-      try {
-        const { socialCreateStory } = await import("@/lib/social/client")
-        const remote = await socialCreateStory({
-          id: result.data.id,
-          ownerId: result.data.ownerId,
-          name: result.data.name,
-          photo: result.data.photo,
-          text: result.data.text,
-          media: result.data.media,
-          background: result.data.background,
-          audience: result.data.audience,
-          expiresAt: result.data.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
-          createdAt: result.data.createdAt,
-        })
-        if (remote.ok === false) {
-          return {
-            ok: true,
-            durable: false,
-            error: remote.error || "Story saved on this device — server not confirmed",
-          }
-        }
-        return { ok: true, durable: Boolean(remote.durable) }
-      } catch {
-        return {
-          ok: true,
-          durable: false,
-          error: "Story saved on this device — server not confirmed",
-        }
-      }
+      return { ok: true, durable: true }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       return { ok: false, error: "This story could not be saved safely" }

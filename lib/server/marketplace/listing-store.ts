@@ -51,6 +51,9 @@ export async function getListing(id: string): Promise<ServerMarketListing | null
   const key = String(id || "").trim()
   if (!key) return null
   if (!dbConfigured()) return null
+  // Expired holds must be released before availability/status is read; otherwise a
+  // sold-out listing can remain hidden even after its unpaid reservation expires.
+  await rpcJson("gh_marketplace_release_expired_reservations", {})
   const data = await rpcJson("gh_marketplace_listing_get", { p_id: key })
   if (!data || typeof data !== "object") return null
   const d = data as Record<string, unknown>

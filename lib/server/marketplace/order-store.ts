@@ -42,6 +42,7 @@ export type ServerMarketOrder = {
   paymentId?: string
   txid?: string
   ghcSpendRef?: string
+  reservationExpiresAt?: number
   createdAt: number
   updatedAt: number
   confirmedAt?: number
@@ -140,6 +141,7 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     paymentId: data.paymentId ? String(data.paymentId) : undefined,
     txid: data.txid ? String(data.txid) : undefined,
     ghcSpendRef: data.ghcSpendRef ? String(data.ghcSpendRef) : undefined,
+    reservationExpiresAt: data.reservationExpiresAt != null ? Number(data.reservationExpiresAt) : undefined,
     createdAt: Number(data.createdAt) || Date.now(),
     updatedAt: Number(data.updatedAt) || Date.now(),
     confirmedAt: data.confirmedAt != null ? Number(data.confirmedAt) : undefined,
@@ -160,14 +162,78 @@ export function getOrder(id: string): ServerMarketOrder | null {
 }
 
 export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
-  const mem = map().get(id)
-  if (mem) return mem
-  if (!dbConfigured()) return null
+  // When Supabase is configured, always refresh from the authoritative database.
+  // A process-local cache can be stale after reservation expiry or another instance's payment/cancellation transition.
+  if (!dbConfigured()) return map().get(id) || null
   const data = await rpcJson("gh_marketplace_order_get", { p_id: id })
   if (!data || typeof data !== "object") return null
   const order = rowToOrder(data as Record<string, unknown>)
   map().set(order.id, order)
   return order
+}
+
+/** Create an order and reserve finite inventory in one database transaction.
+ * The caller-supplied idempotency key is scoped to the authenticated buyer.
+ */
+export async function createReservedOrder(
+  order: ServerMarketOrder,
+  idempotencyKey: string
+): Promise<{ ok: true; order: ServerMarketOrder; idempotent: boolean } | { ok: false; error: string; available?: number }> {
+  if (!dbConfigured()) return { ok: false, error: "DURABLE_RESERVATION_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_create_reserved", {
+    p_row: orderToRow(order),
+    p_idempotency_key: idempotencyKey,
+  })
+  if (!result || typeof result !== "object") {
+    return { ok: false, error: "RESERVATION_RPC_UNAVAILABLE" }
+  }
+  const payload = result as Record<string, unknown>
+  if (payload.ok !== true) {
+    return {
+      ok: false,
+      error: String(payload.error || "RESERVATION_FAILED"),
+      available: payload.available == null ? undefined : Number(payload.available),
+    }
+  }
+  if (!payload.order || typeof payload.order !== "object") {
+    return { ok: false, error: "RESERVATION_RESPONSE_INVALID" }
+  }
+  const created = rowToOrder(payload.order as Record<string, unknown>)
+  map().set(created.id, created)
+  return { ok: true, order: created, idempotent: Boolean(payload.idempotent) }
+}
+
+/** Claim the durable inventory reservation before starting a payment operation. */
+export async function claimOrderForPayment(
+  orderId: string,
+  buyerId: string,
+  method: "ghc" | "pi"
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DURABLE_RESERVATION_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_claim_payment", {
+    p_order_id: orderId,
+    p_buyer_id: buyerId,
+    p_method: method,
+  })
+  if (!result || typeof result !== "object") return { ok: false, error: "PAYMENT_CLAIM_RPC_UNAVAILABLE" }
+  const payload = result as Record<string, unknown>
+  return payload.ok === true
+    ? { ok: true }
+    : { ok: false, error: String(payload.error || "PAYMENT_CLAIM_FAILED") }
+}
+
+/** Release a claim only after the payment operation has definitely failed. */
+export async function releaseOrderPaymentClaim(
+  orderId: string,
+  buyerId: string,
+  detail: string
+): Promise<void> {
+  if (!dbConfigured()) return
+  await rpcJson("gh_marketplace_order_release_payment_claim", {
+    p_order_id: orderId,
+    p_buyer_id: buyerId,
+    p_detail: detail.slice(0, 120),
+  })
 }
 
 /**
@@ -269,4 +335,47 @@ export async function transitionOrder(
 
 export function marketplaceOrdersDurable(): boolean {
   return dbConfigured()
+}
+
+
+/** Ops: list orders with payment claims older than N minutes (service-role RPC). */
+export async function listStalePaymentClaims(
+  olderThanMinutes = 60,
+  limit = 50
+): Promise<{ ok: boolean; orders: unknown[]; error?: string }> {
+  if (!dbConfigured()) return { ok: false, orders: [], error: "DB_NOT_CONFIGURED" }
+  const result = await rpcJson("gh_marketplace_list_stale_payment_claims", {
+    p_older_than_minutes: olderThanMinutes,
+    p_limit: limit,
+  })
+  if (!result || typeof result !== "object") {
+    return { ok: false, orders: [], error: "RPC_UNAVAILABLE" }
+  }
+  const payload = result as { ok?: boolean; orders?: unknown[]; error?: string }
+  if (payload.ok !== true) {
+    return { ok: false, orders: [], error: String(payload.error || "LIST_FAILED") }
+  }
+  return { ok: true, orders: Array.isArray(payload.orders) ? payload.orders : [] }
+}
+
+/**
+ * Ops: force-release a stale payment claim after confirming payment is not in flight.
+ * Does not mark the order paid and does not mint GHC.
+ */
+export async function forceReleaseStalePaymentClaim(
+  orderId: string,
+  operatorNote: string,
+  minAgeMinutes = 60
+): Promise<{ ok: boolean; error?: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DB_NOT_CONFIGURED" }
+  const result = await rpcJson("gh_marketplace_force_release_stale_payment_claim", {
+    p_order_id: orderId,
+    p_operator_note: operatorNote.slice(0, 160),
+    p_min_age_minutes: minAgeMinutes,
+  })
+  if (!result || typeof result !== "object") return { ok: false, error: "RPC_UNAVAILABLE" }
+  const payload = result as { ok?: boolean; error?: string }
+  return payload.ok === true
+    ? { ok: true }
+    : { ok: false, error: String(payload.error || "RELEASE_FAILED") }
 }

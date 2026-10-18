@@ -23,11 +23,11 @@ const phaseMigrations = [
 ]
 
 ok("reward route requires authentication", rewardRoute.includes("resolveAuthenticatedUser"))
-ok("reward route rejects client amount", rewardRoute.includes("CLIENT_AMOUNT_FORBIDDEN"))
-ok("reward route does not pass client amount to engine", !rewardRoute.includes("clientSuggestedAmount"))
-ok("reward engine derives amount from rule", rewardEngine.includes("const baseAmount = Number(rule.amount)"))
-ok("reward engine performs legitimacy before durable staging", (() => { const body = rewardEngine.slice(rewardEngine.indexOf("export async function evaluateRewardAuthoritative")); return body.indexOf("verifyActionLegitimacy") >= 0 && body.indexOf("verifyActionLegitimacy") < body.indexOf("rpcActivityStageReward") })())
-ok("reward engine preserves daily-checkin dedicated route", rewardEngine.includes("USE_DAILY_CLAIM_ENDPOINT"))
+ok("reward route is locked to Daily-Claim-only issuance", rewardRoute.includes("GHC_ISSUANCE_POLICY_LOCKED"))
+ok("reward route does not pass client input to an issuer", !rewardRoute.includes("evaluateRewardAuthoritative"))
+ok("reward engine denies generic issuance at domain boundary", rewardEngine.includes("DAILY_CLAIM_ONLY_ISSUANCE"))
+ok("reward engine has no generic staging or emission bypass", !rewardEngine.includes("rpcActivityStageReward") && !rewardEngine.includes("computeAndCommitActivityEmissionDurable"))
+ok("Daily Claim remains the dedicated issuance path", rewardRoute.includes("only through Daily Claim"))
 ok("server wallet repository retains authoritative snapshot", walletRepo.includes("authoritativeWallet"))
 ok("wallet snapshot has spendable/locked authority", walletDb.includes("rpcWalletSnapshot"))
 ok("production build does not ignore TypeScript errors", nextConfig.includes("ignoreBuildErrors: false"))

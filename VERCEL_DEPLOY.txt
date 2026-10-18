@@ -68,12 +68,12 @@ CRITICAL — Mainnet protection:
   - Database migrations are applied SEPARATELY to each Supabase project.
   - Shared code fixes deploy to both; data and secrets stay isolated.
 
-Status: Phases 1–13 source-complete; 14–15 not started; runtime verification required.
+Status note (2026-10-18): source includes Phases 1–13 and ongoing hardening candidates; full clean build, runtime verification and operator release approval remain required.
 
 STATUS NOTE
   This file is a deploy stamp / historical fix log.
   It does not certify production readiness.
-  Phases 1–13: source-implemented. Phases 14–15: not started.
+  Source implementation does not imply runtime verification. Phase 14 hardening remains in progress; Phase 15 is preparation only.
   Push to GitHub ≠ Vercel Production approval.
   See SAFE_TO_PUSH.md and docs/TESTNET_VERIFICATION_GATE.md.
 

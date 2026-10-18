@@ -9,11 +9,10 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   genOrderId,
-  saveOrder,
+  createReservedOrder,
   listOrdersForUserDurable,
   type ServerMarketOrder,
 } from "@/lib/server/marketplace/order-store"
-import { getListing } from "@/lib/server/marketplace/listing-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,6 +26,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const listingId = String(body.listingId || "").trim()
   const quantity = Math.max(1, Math.min(99, Math.floor(Number(body.quantity) || 1)))
+  const idempotencyKey = String(request.headers.get("Idempotency-Key") || body.idempotencyKey || "").trim()
 
   // Ignore client price/seller/title/currency — never trust for financial totals
   void body.unitPrice
@@ -39,71 +39,26 @@ export async function POST(request: Request) {
   if (!listingId) {
     return NextResponse.json({ ok: false, error: "listingId required" }, { status: 400 })
   }
-
-  const listing = await getListing(listingId)
-  if (!listing) {
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "LISTING_NOT_FOUND",
-        message:
-          "Listing must be registered on the server first (POST /api/marketplace/listings).",
-      },
-      { status: 404 }
-    )
-  }
-  if (listing.status !== "active") {
-    return NextResponse.json(
-      { ok: false, error: "LISTING_UNAVAILABLE", status: listing.status },
-      { status: 409 }
-    )
-  }
-  if (listing.sellerId === auth.userId) {
-    return NextResponse.json({ ok: false, error: "CANNOT_BUY_OWN" }, { status: 400 })
-  }
-  if (listing.availability < quantity) {
-    return NextResponse.json(
-      { ok: false, error: "INSUFFICIENT_STOCK", available: listing.availability },
-      { status: 409 }
+      { ok: false, error: "IDEMPOTENCY_KEY_REQUIRED", message: "Provide a stable 8–128 character Idempotency-Key for order creation." },
+      { status: 400 }
     )
   }
 
-  // Finite stock without atomic reservation can oversell under concurrent requests.
-  // Production fails closed until a durable reserve RPC/migration is applied.
-  const isProd =
-    process.env.VERCEL_ENV === "production" ||
-    process.env.NODE_ENV === "production" ||
-    process.env.GHC_ENV === "production"
-  const hasAtomicReserve = process.env.GH_MARKETPLACE_ATOMIC_RESERVE === "1"
-  if (isProd && listing.availability < 9999 && !hasAtomicReserve) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "STOCK_RESERVATION_UNAVAILABLE",
-        message:
-          "Concurrent-safe stock reservation is not enabled. Order not created. Apply marketplace reserve RPC and set GH_MARKETPLACE_ATOMIC_RESERVE=1.",
-        available: listing.availability,
-      },
-      { status: 503 }
-    )
-  }
-  if (!Number.isFinite(listing.price) || listing.price < 0) {
-    return NextResponse.json({ ok: false, error: "INVALID_LISTING_PRICE" }, { status: 500 })
-  }
-
-  const unitPrice = Number(listing.price)
-  const totalAmount = Math.round(unitPrice * quantity * 1e8) / 1e8
-
+  // Listing price, seller, currency, status and availability are resolved under a
+  // database row lock by gh_marketplace_order_create_reserved. Do not reject a replay
+  // from a stale pre-read: the RPC owns both idempotency and inventory authority.
   const order: ServerMarketOrder = {
     id: genOrderId(),
-    listingId: listing.id,
-    listingTitle: listing.title.slice(0, 200),
+    listingId,
+    listingTitle: "",
     buyerId: auth.userId,
-    sellerId: listing.sellerId,
+    sellerId: "",
     quantity,
-    unitPrice,
-    currency: listing.currency || "GHC",
-    totalAmount,
+    unitPrice: 0,
+    currency: "GHC",
+    totalAmount: 0,
     status: "payment_pending",
     paymentMethod: "none",
     paymentStatus: "pending",
@@ -112,15 +67,24 @@ export async function POST(request: Request) {
     audit: [{ at: Date.now(), action: "CREATED", detail: auth.userId }],
   }
 
-  const saved = await saveOrder(order)
-  if (!saved.ok) {
+  const created = await createReservedOrder(order, idempotencyKey)
+  if (!created.ok) {
+    const status = created.error === "LISTING_NOT_FOUND" ? 404 :
+      created.error === "INSUFFICIENT_STOCK" ? 409 :
+      created.error === "CANNOT_BUY_OWN" ? 400 :
+      created.error === "INVALID_INPUT" || created.error === "UNSUPPORTED_CURRENCY" ? 400 :
+      created.error === "IDEMPOTENCY_CONFLICT" ? 409 :
+      created.error === "LISTING_UNAVAILABLE" ? 409 : 503
     return NextResponse.json(
-      { ok: false, error: "ORDER_PERSIST_FAILED", detail: saved.error },
-      { status: 503 }
+      { ok: false, error: created.error, available: created.available },
+      { status, headers: { "Cache-Control": "no-store" } }
     )
   }
 
-  return NextResponse.json({ ok: true, order }, { headers: { "Cache-Control": "no-store" } })
+  return NextResponse.json(
+    { ok: true, order: created.order, idempotent: created.idempotent },
+    { headers: { "Cache-Control": "no-store" } }
+  )
 }
 
 export async function GET(request: Request) {

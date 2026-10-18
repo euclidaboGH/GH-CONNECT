@@ -45,10 +45,14 @@ export async function POST(request: Request) {
     if (!result.ok) {
       const code = result.error || "NOT_CLAIMABLE"
       const status =
-        code === "UNDER_REVIEW" ? 403 : code === "NOT_CLAIMABLE" ? 404 : 400
+        code === "UNDER_REVIEW" ? 403 : code === "NOT_CLAIMABLE" ? 404 : code === "NOT_YET_REDEEMABLE" ? 409 : 400
       return jsonErr(
         code,
-        code === "UNDER_REVIEW" ? "This credit is under review" : "Not claimable",
+        code === "UNDER_REVIEW"
+          ? "This credit is under review"
+          : code === "NOT_YET_REDEEMABLE"
+            ? `This daily claim becomes redeemable at ${result.redeemableAt || "the end of its 48-hour lock"}`
+            : "Not claimable",
         status
       )
     }
@@ -58,6 +62,7 @@ export async function POST(request: Request) {
       alreadyClaimed: result.alreadyClaimed,
       transactionId: result.transactionId,
       amount: result.amount,
+      redeemableAt: result.redeemableAt,
       wallet,
     })
   }
@@ -67,7 +72,10 @@ export async function POST(request: Request) {
       userId: auth.userId,
       holdId,
     })
-    if (!result.ok) return jsonErr(result.error, result.error, 404)
+    if (!result.ok) {
+      const status = result.error === "NOT_YET_REDEEMABLE" ? 409 : result.error === "SOURCE_NOT_REDEEMABLE" ? 403 : 404
+      return jsonErr(result.error, result.error === "NOT_YET_REDEEMABLE" ? "This daily claim is locked for 48 hours after claiming" : result.error, status)
+    }
     return jsonOk({
       ok: true,
       alreadyClaimed: result.alreadyClaimed,

@@ -65,3 +65,36 @@ export async function POST(
     counts: data.counts || {},
   })
 }
+
+/** GET — reaction counts for a comment (cross-account) */
+export async function GET(
+  _request: Request,
+  ctx: { params: Promise<{ id: string; commentId: string }> }
+) {
+  const auth = await resolveAuthenticatedUser(_request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const { id, commentId } = await ctx.params
+  const postId = String(id || "").trim()
+  const cId = String(commentId || "").trim()
+  if (!postId || !cId) {
+    return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
+  }
+  if (!socialDbConfigured()) {
+    return NextResponse.json({ ok: true, durable: false, counts: {} })
+  }
+  const result = await socialRpc("gh_comment_reaction_list", { p_comment_id: cId })
+  const data = (result.data || {}) as { ok?: boolean; counts?: Record<string, number>; error?: string }
+  if (!result.ok || data.ok === false) {
+    return NextResponse.json(
+      { ok: false, error: data.error || result.error || "LIST_FAILED", durable: false },
+      { status: 503 }
+    )
+  }
+  return NextResponse.json({
+    ok: true,
+    durable: true,
+    counts: data.counts || {},
+  })
+}

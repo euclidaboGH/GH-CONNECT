@@ -1,39 +1,37 @@
-# Safe to push — release 0.60.9 Phase 1 review status
+# Release gate — GH-CONNECT 0.61.1 Phase 6 candidate
 
-Static gates currently pass in the packaging environment:
+**Status: NOT CLEARED TO PUSH OR DEPLOY.** This is a source candidate implementing the Daily-Claim-only GHC issuance policy. Static source tests pass; PostgreSQL runtime validation, live Testnet reconciliation, clean dependency install, TypeScript, lint, and production build are still outstanding.
 
-- JSX safety scan: 640 files
-- Production safety scan: 21/21
-- GHC curation reward static contract: 24/24
-- Like/curation separation: 9/9
-- Project test scripts: see `GHC_CURATION_REWARD_ENGINE_2026-10-18.md`
+## Phase 6 changes
 
-Before promoting Testnet:
+- Generic activity/achievement/referral reward evaluation is disabled at the HTTP and domain layers.
+- Manual/admin and purchase credits are disabled.
+- Generic local reward evaluation, pending staging, and pending-reward redemption are disabled.
+- Curation voting remains available, but the GHC reward side effect is disabled; the UI labels the percentage control as curation vote weight rather than a GHC reward.
+- `supabase/migrations/202610180009_ghc_daily_claim_only_issuance.sql` adds a database trigger to allow only the Daily Claim 48-hour entitlement and redemption, the internal protocol reserve leg, and transfer-in entries backed by a matching posted transfer-out.
+- The migration preserves historical ledger rows and does not rewrite balances. Historical non-Daily-Claim pending entitlements need operator disposition before the migration is approved.
 
-1. Extract with `app/` at repository root (no nested folder).
-2. Use Node.js 24.15.0 (matches `.nvmrc` and the declared supported engine range), then run `npm ci --legacy-peer-deps`.
-3. Run `npm run check:release-hygiene`, every `scripts/test-*.mjs` script, `npm run typecheck`, `npm run lint`, `npm run ci:verify`, and `npm run build`. The GitHub Actions static job now runs all repository regression scripts and a migration inventory; it never applies remote migrations.
-4. Review the complete migration inventory and apply migrations to the **testnet Supabase project only** in the documented order. Never infer live database state from the repository manifest.
-5. Verify reward RPC privileges, wallet ledger idempotency, day-cap behavior, vote toggles, concurrent requests, and Pi Browser flows against test accounts.
-6. Confirm Production Vercel environment variables remain bound to mainnet and Preview variables to testnet.
+## Source-level checks
 
-Do not apply the new curation reward migration to mainnet without successful testnet verification and separate explicit approval. Do not commit secrets.
+- 83 `scripts/test-*.mjs` regression scripts passed after Phase 6 updates.
+- New Daily-Claim-only issuance policy assertions: 31/31 passed.
+- Release hygiene: 10/10.
+- Production safety scan: 21/21.
+- Migration readiness scan is static only and warns about future-dated migrations.
 
-## Phase 1 pipeline harmonization
+## Mandatory before Testnet rollout
 
-- CI now pins Node.js 24.15.0 to match the declared runtime contract.
-- CI executes every `scripts/test-*.mjs` regression script, release-hygiene checks, migration inventory, typecheck, lint, and build.
-- Release hygiene checks package/lock/release-notice version alignment, supported Node runtime, migration filename uniqueness, and accidental local `.env*` files.
-- CI does not automatically push migrations to Supabase or deploy production. Testnet and Mainnet database migration histories must be reconciled separately.
+1. Extract the archive so `app/` is at the repository root.
+2. Use the supported Node runtime from `.nvmrc`; run `npm ci --legacy-peer-deps`.
+3. Run `npm run typecheck`, `npm run lint`, `npm run ci:verify`, and `npm run build`.
+4. Reconcile Testnet migration history and schema. Review every `REVIEW_REQUIRED` migration in `VERIFIED_MANIFEST.txt`; do not blindly apply the full directory or both migration sets.
+5. Apply the new issuance guard to a disposable Testnet project first. Test Daily Claim pending insertion, early redemption, redemption at/after 48 hours, duplicate/replayed redemption, and concurrent redemption.
+6. Prove activity staging, curation reward credit, admin credit, purchase credit, and direct positive ledger writes are blocked. Prove curation votes still succeed without GHC rewards.
+7. Prove GreenHaven ID direct transfers and transfer-request acceptance conserve balances, reject self-transfer/insufficient funds, and remain idempotent under replay and concurrency.
+8. Capture SQL migration output and two-account Testnet evidence before considering Preview rollout. Mainnet requires separate explicit approval.
 
-## Current verification limitation
+## Verification limits
 
-Dependencies were not installed in this workspace; TypeScript, ESLint, and the Next.js production build are not yet verified here. SQL migration execution and live database concurrency tests have not been performed. The source package is not a deployment confirmation.
-
-
-## Phase 2 status (0.61.0)
-
-- Added `.env.example` and automated environment-reference coverage.
-- Added Preview/Testnet vs Production/Mainnet readiness regression coverage.
-- **Not release-cleared:** full build and live Testnet migration/E2E checks are outstanding. See `PHASE_2_FULL_PROJECT_AUDIT_2026-10-18.md`.
-- Do not apply all migrations blindly; reconcile target migration history first.
+- Dependencies are not installed in this workspace; `tsc` and `next` binaries are unavailable. TypeScript, ESLint, and Next.js production build are not verified.
+- PostgreSQL parser/runtime and live Supabase connection were unavailable. The Phase 6 SQL has not been applied or executed.
+- No GitHub push, Vercel deployment, Testnet transaction, or Mainnet operation was performed.

@@ -34,6 +34,10 @@ jobs:
         run: npm run test:deployment-network-safety
       - name: Migration release readiness
         run: npm run check:migration-release-readiness
+      - name: Generated migration inventory consistency
+        run: npm run check:migration-inventory
+      - name: Phase 1 release readiness policy
+        run: node scripts/test-phase1-release-readiness.mjs
       - name: Release hygiene
         run: npm run check:release-hygiene
       - name: All repository regression scripts
@@ -74,7 +78,11 @@ jobs:
           GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
         run: |
           if [ -z "$GHC_E2E_BASE_URL" ]; then
-            echo "GHC_E2E_BASE_URL secret not set — skipping browser E2E"
+            if [ "$GITHUB_REF" = "refs/heads/testnet" ]; then
+              echo "GHC_E2E_BASE_URL is required for the Testnet branch release gate"
+              exit 1
+            fi
+            echo "GHC_E2E_BASE_URL not set — skipping optional pull-request browser E2E; this is not release evidence"
             exit 0
           fi
           npx playwright test --project=chromium
@@ -83,7 +91,11 @@ jobs:
           GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
         run: |
           if [ -z "$GHC_E2E_BASE_URL" ]; then
-            echo "skip operator:live-e2e"
+            if [ "$GITHUB_REF" = "refs/heads/testnet" ]; then
+              echo "GHC_E2E_BASE_URL is required for the Testnet operator smoke gate"
+              exit 1
+            fi
+            echo "Operator HTTP smoke skipped for this pull request; this is not release evidence"
             exit 0
           fi
           npm run operator:live-e2e

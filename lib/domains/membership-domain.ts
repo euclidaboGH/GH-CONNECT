@@ -1,3 +1,4 @@
+import { addCalendarMonths, getMembershipGhcPrice, membershipPeriodForPaidMonths, type PaidMembershipMonths } from "@/lib/membership-pricing"
 /**
  * Premium Membership domain — FREE | VIP | VVIP
  *
@@ -83,7 +84,7 @@ export interface MembershipStatus {
   active: boolean
   startedAt?: number
   expiresAt?: number
-  billingPeriod?: "monthly" | "yearly" | "lifetime" | "comp"
+  billingPeriod?: "monthly" | "four_months" | "eight_months" | "yearly" | "lifetime" | "comp"
   lastPurchaseTxId?: string
   source?: "ghc" | "external" | "admin" | "default" | "trial"
   /**
@@ -112,8 +113,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
   vip: {
     id: "vip",
     label: "VIP",
-    priceGhcMonthly: 150,
-    priceGhcYearly: 1500,
+    priceGhcMonthly: getMembershipGhcPrice("vip", 1).chargeGhc,
+    priceGhcYearly: getMembershipGhcPrice("vip", 12).chargeGhc,
     entitlements: [
       "badge_vip",
       "discovery_advanced_filters",
@@ -139,8 +140,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
   vvip: {
     id: "vvip",
     label: "VVIP",
-    priceGhcMonthly: 300,
-    priceGhcYearly: 3000,
+    priceGhcMonthly: getMembershipGhcPrice("vvip", 1).chargeGhc,
+    priceGhcYearly: getMembershipGhcPrice("vvip", 12).chargeGhc,
     entitlements: [
       "badge_vvip",
       "badge_vip",
@@ -480,7 +481,7 @@ export function createMembershipDomain(deps: {
      */
     async activate(input: {
       tier: "vip" | "vvip"
-      billingPeriod: "monthly" | "yearly" | "lifetime" | "comp"
+      billingPeriod: "monthly" | "four_months" | "eight_months" | "yearly" | "lifetime" | "comp"
       source?: MembershipStatus["source"]
       purchaseTxId?: string
       durationMs?: number
@@ -495,21 +496,21 @@ export function createMembershipDomain(deps: {
         },
         mutate: (i) => {
           const now = Date.now()
-          const duration =
-            i.durationMs ||
-            (i.billingPeriod === "monthly"
-              ? 30 * 86400000
-              : i.billingPeriod === "yearly"
-                ? 365 * 86400000
-                : i.billingPeriod === "lifetime"
-                  ? 100 * 365 * 86400000
-                  : 30 * 86400000)
+          const accessMonths =
+            i.billingPeriod === "monthly" ? 2
+              : i.billingPeriod === "four_months" ? 5
+                : i.billingPeriod === "eight_months" ? 9
+                  : i.billingPeriod === "yearly" ? 13 : 1
+          const computedExpiry = i.billingPeriod === "lifetime"
+            ? now + 100 * 365 * 86400000
+            : addCalendarMonths(now, accessMonths)
+          const expiry = i.durationMs ? now + i.durationMs : computedExpiry
           const status: MembershipStatus = {
             userId,
             tier: i.tier,
             active: true,
             startedAt: now,
-            expiresAt: i.billingPeriod === "comp" ? undefined : now + duration,
+            expiresAt: i.billingPeriod === "comp" ? undefined : expiry,
             billingPeriod: i.billingPeriod,
             lastPurchaseTxId: i.purchaseTxId,
             source: i.source || "external",
@@ -606,11 +607,14 @@ export function createMembershipDomain(deps: {
 
     async purchaseWithGhc(
       tier: "vip" | "vvip",
-      billingPeriod: "monthly" | "yearly" = "monthly"
+      billingPeriod: PaidMembershipMonths = 1
     ): Promise<MutationResult<{ status: MembershipStatus }>> {
       const plan = planFor(tier)
-      const price =
-        billingPeriod === "yearly" ? plan.priceGhcYearly : plan.priceGhcMonthly
+      const periodKey = membershipPeriodForPaidMonths(billingPeriod)
+      const price = getMembershipGhcPrice(tier, billingPeriod).chargeGhc
+      const purchaseAttemptId = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
       if (price <= 0) {
         return { ok: false, error: "Invalid price", phase: "validate", requestId: "local" }
       }
@@ -626,9 +630,10 @@ export function createMembershipDomain(deps: {
           headers,
           body: JSON.stringify({
             tier,
-            period: billingPeriod,
+            paidMonths: billingPeriod,
+            period: periodKey,
             method: "ghc",
-            spendReferenceId: `membership_${tier}_${billingPeriod}_${userId}`,
+            spendReferenceId: `membership_${tier}_${periodKey}_${purchaseAttemptId}`,
           }),
         })
         const data = await res.json().catch(() => ({}))
@@ -636,7 +641,7 @@ export function createMembershipDomain(deps: {
           const e = data.entitlement
           const activated = await this.activate({
             tier: e.tier === "vvip" ? "vvip" : "vip",
-            billingPeriod,
+            billingPeriod: periodKey,
             source: "ghc",
             purchaseTxId: e.purchaseRef,
             durationMs:
@@ -681,9 +686,9 @@ export function createMembershipDomain(deps: {
       }
       const paid = await deps.spendGhc({
         amount: price,
-        reason: `${plan.label} ${billingPeriod}`,
+        reason: `${plan.label} ${billingPeriod}-month plan with one bonus month`,
         sourceEvent: "PREMIUM_PURCHASE",
-        referenceId: `${tier}_${billingPeriod}`,
+        referenceId: `membership_${tier}_${periodKey}_${purchaseAttemptId}`,
       })
       if (!paid.ok) {
         return {
@@ -695,7 +700,7 @@ export function createMembershipDomain(deps: {
       }
       return this.activate({
         tier,
-        billingPeriod,
+        billingPeriod: periodKey,
         source: "ghc",
         purchaseTxId: paid.txId,
       })

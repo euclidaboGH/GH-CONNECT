@@ -87,6 +87,7 @@ export function MessageScreen() {
   const durablePreferred = isDurableMessagingEnabled()
   const bottomRef = useRef<HTMLDivElement>(null)
   const markedRef = useRef<string | null>(null)
+  const pendingOpenRef = useRef<{ conversationId?: string; peerUserId?: string; kind?: string } | null>(null)
 
 
   useEffect(() => {
@@ -154,11 +155,31 @@ export function MessageScreen() {
         setWindowSize(MESSAGE_WINDOW)
       }
     }
+    const resolvePeer = (peer: string) => {
+      const rows = (conversations || []) as Array<{
+        id?: string
+        participantId?: string
+        otherUserId?: string
+        userId?: string
+      }>
+      const hit = rows.find((c) => {
+        const p = String(c.participantId || c.otherUserId || c.userId || "")
+        return p === peer
+      })
+      return hit?.id ? String(hit.id) : ""
+    }
     const onOpenConversation = (e: Event) => {
       const detail = (e as CustomEvent).detail || {}
-      const id = String(detail.conversationId || "").trim()
-      if (!id) return
+      let id = String(detail.conversationId || "").trim()
+      const peer = String(detail.peerUserId || detail.userId || "").trim()
       const kind = String(detail.kind || "").toLowerCase()
+      if (!id && peer) id = resolvePeer(peer)
+      if (!id) {
+        // Conversations may not be loaded yet — retry when list updates
+        pendingOpenRef.current = { conversationId: detail.conversationId, peerUserId: peer || undefined, kind }
+        return
+      }
+      pendingOpenRef.current = null
       startTransition(() => {
         if (kind === "community" || kind === "group") {
           setFilter("communities")
@@ -185,7 +206,33 @@ export function MessageScreen() {
       window.removeEventListener("ghc:open-conversation", onOpenConversation as EventListener)
       window.removeEventListener("ghc:messaging-reconcile", onReconcile as EventListener)
     }
-  }, [])
+  }, [conversations])
+
+  // Flush deep-link open once conversations hydrate
+  useEffect(() => {
+    const pending = pendingOpenRef.current
+    if (!pending) return
+    let id = String(pending.conversationId || "").trim()
+    const peer = String(pending.peerUserId || "").trim()
+    if (!id && peer) {
+      const hit = (conversations || []).find((c: { id?: string; participantId?: string; otherUserId?: string; userId?: string }) => {
+        const p = String(c.participantId || c.otherUserId || c.userId || "")
+        return p === peer
+      })
+      if (hit?.id) id = String(hit.id)
+    }
+    if (!id) return
+    pendingOpenRef.current = null
+    startTransition(() => {
+      if (String(pending.kind || "").toLowerCase() === "community" || String(pending.kind || "").toLowerCase() === "group") {
+        setFilter("communities")
+      }
+      setSelectedId(id)
+      setDraft("")
+      setWindowSize(MESSAGE_WINDOW)
+      markedRef.current = null
+    })
+  }, [conversations])
 
   const unreadCount = useMemo(
     () =>

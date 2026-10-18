@@ -32,6 +32,7 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
+import { EconomyProgramStatus } from "./economy-program-status"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
@@ -409,6 +410,10 @@ export function RewardsCentreScreen({
           onClaimed={refresh}
           onOpenWallet={onOpenWallet}
         />
+
+        <div className="mx-3 mt-3">
+          <EconomyProgramStatus />
+        </div>
 
         {/* Weekly quality streak — real qualityDays only (not likes) */}
         <div className="mx-3 mt-3 flex items-start gap-3 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]">

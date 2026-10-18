@@ -1,216 +1,216 @@
 {
-  "generatedAt": "2026-10-18T10:10:52.375Z",
+  "generatedAt": "2026-10-18T12:15:21.245Z",
   "step": "5",
   "automated": [
     {
       "name": "safety-scan",
       "status": "PASS",
-      "ms": 94
+      "ms": 69
     },
     {
       "name": "authority-map",
       "status": "PASS",
-      "ms": 45
+      "ms": 50
     },
     {
       "name": "community-authority",
       "status": "PASS",
-      "ms": 47
+      "ms": 106
     },
     {
       "name": "trust-authority",
       "status": "PASS",
-      "ms": 36
+      "ms": 30
     },
     {
       "name": "governance-durability",
       "status": "PASS",
-      "ms": 41
+      "ms": 33
     },
     {
       "name": "context-strangler-50.1",
       "status": "PASS",
-      "ms": 44
+      "ms": 37
     },
     {
       "name": "context-strangler-step4",
       "status": "PASS",
-      "ms": 43
+      "ms": 33
     },
     {
       "name": "domain-contracts",
       "status": "PASS",
-      "ms": 45
+      "ms": 38
     },
     {
       "name": "discovery-connections",
       "status": "PASS",
-      "ms": 38
+      "ms": 40
     },
     {
       "name": "unified-connections",
       "status": "PASS",
-      "ms": 43
+      "ms": 32
     },
     {
       "name": "connection-inbox",
       "status": "PASS",
-      "ms": 43
+      "ms": 32
     },
     {
       "name": "connection-ux",
       "status": "PASS",
-      "ms": 52
+      "ms": 30
     },
     {
       "name": "universal-search",
       "status": "PASS",
-      "ms": 45
+      "ms": 34
     },
     {
       "name": "communities",
       "status": "PASS",
-      "ms": 42
+      "ms": 33
     },
     {
       "name": "community-belonging",
       "status": "PASS",
-      "ms": 46
+      "ms": 33
     },
     {
       "name": "community-hub",
       "status": "PASS",
-      "ms": 41
+      "ms": 37
     },
     {
       "name": "community-governance",
       "status": "PASS",
-      "ms": 53
+      "ms": 32
     },
     {
       "name": "community-health",
       "status": "PASS",
-      "ms": 47
+      "ms": 35
     },
     {
       "name": "community-lifecycle",
       "status": "PASS",
-      "ms": 46
+      "ms": 31
     },
     {
       "name": "community-moderation",
       "status": "PASS",
-      "ms": 39
+      "ms": 34
     },
     {
       "name": "community-onboarding",
       "status": "PASS",
-      "ms": 48
+      "ms": 30
     },
     {
       "name": "community-participation-bridge",
       "status": "PASS",
-      "ms": 41
+      "ms": 28
     },
     {
       "name": "community-participation-depth",
       "status": "PASS",
-      "ms": 46
+      "ms": 36
     },
     {
       "name": "community-participation",
       "status": "PASS",
-      "ms": 45
+      "ms": 30
     },
     {
       "name": "community-feed-search",
       "status": "PASS",
-      "ms": 49
+      "ms": 35
     },
     {
       "name": "home-os-audit",
       "status": "PASS",
-      "ms": 43
+      "ms": 36
     },
     {
       "name": "social-experience",
       "status": "PASS",
-      "ms": 46
+      "ms": 33
     },
     {
       "name": "engagement-roster-security",
       "status": "PASS",
-      "ms": 41
+      "ms": 29
     },
     {
       "name": "social-os-foundation",
       "status": "PASS",
-      "ms": 44
+      "ms": 28
     },
     {
       "name": "economy-v12",
       "status": "PASS",
-      "ms": 54
+      "ms": 37
     },
     {
       "name": "pi-payment-durable",
       "status": "PASS",
-      "ms": 48
+      "ms": 32
     },
     {
       "name": "ghc-curation-reward",
       "status": "PASS",
-      "ms": 43
+      "ms": 30
     },
     {
       "name": "like-curation-separation",
       "status": "PASS",
-      "ms": 42
+      "ms": 29
     },
     {
       "name": "notification-attention",
       "status": "PASS",
-      "ms": 47
+      "ms": 30
     },
     {
       "name": "social-visibility",
       "status": "PASS",
-      "ms": 49
+      "ms": 32
     },
     {
       "name": "feed-card-layout",
       "status": "PASS",
-      "ms": 39
+      "ms": 28
     },
     {
       "name": "rewards-reliability",
       "status": "PASS",
-      "ms": 56
+      "ms": 29
     },
     {
       "name": "engagement-roster-security",
       "status": "PASS",
-      "ms": 39
+      "ms": 30
     },
     {
       "name": "story-creator",
       "status": "PASS",
-      "ms": 47
+      "ms": 30
     },
     {
       "name": "post-composer",
       "status": "PASS",
-      "ms": 49
+      "ms": 29
     },
     {
       "name": "social-messaging-upgrade",
       "status": "PASS",
-      "ms": 45
+      "ms": 33
     },
     {
       "name": "messaging-reliability",
       "status": "PASS",
-      "ms": 44
+      "ms": 34
     }
   ],
   "passCount": 42,

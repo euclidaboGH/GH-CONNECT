@@ -1,4 +1,5 @@
 import type { GhPayProduct } from "./types"
+import { getMembershipPiPrice } from "@/lib/membership-pricing"
 
 /**
  * GH Pay product catalog — single source for U2A / A2U commerce.
@@ -7,48 +8,44 @@ import type { GhPayProduct } from "./types"
 export const GH_PAY_CATALOG: Record<string, GhPayProduct> = {
   // —— User → GreenHaven (U2A) ——
   membership_vip_monthly: {
-    id: "membership_vip_monthly",
-    direction: "u2a",
-    category: "membership",
-    title: "VIP · Monthly",
-    description: "Priority discovery, boosts, elevated media",
-    amountPi: 1.5,
-    memo: "GreenHaven VIP (1 month)",
-    fulfillment: { type: "membership", tier: "vip", period: "monthly" },
-    active: true,
+    id: "membership_vip_monthly", direction: "u2a", category: "membership", title: "VIP · 1 month",
+    description: "1 paid month + 1 bonus month; no discount", amountPi: getMembershipPiPrice("vip", 1).chargePi,
+    memo: "GreenHaven VIP (1 paid month + 1 bonus month)", fulfillment: { type: "membership", tier: "vip", period: "monthly" }, active: true,
+  },
+  membership_vip_four_months: {
+    id: "membership_vip_four_months", direction: "u2a", category: "membership", title: "VIP · 4 months",
+    description: "5% off 4 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vip", 4).chargePi,
+    memo: "GreenHaven VIP (4 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vip", period: "four_months" }, active: true,
+  },
+  membership_vip_eight_months: {
+    id: "membership_vip_eight_months", direction: "u2a", category: "membership", title: "VIP · 8 months",
+    description: "10% off 8 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vip", 8).chargePi,
+    memo: "GreenHaven VIP (8 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vip", period: "eight_months" }, active: true,
   },
   membership_vip_yearly: {
-    id: "membership_vip_yearly",
-    direction: "u2a",
-    category: "membership",
-    title: "VIP · Yearly",
-    description: "VIP for 12 months",
-    amountPi: 15,
-    memo: "GreenHaven VIP (12 months)",
-    fulfillment: { type: "membership", tier: "vip", period: "yearly" },
-    active: true,
+    id: "membership_vip_yearly", direction: "u2a", category: "membership", title: "VIP · 12 months",
+    description: "20% off 12 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vip", 12).chargePi,
+    memo: "GreenHaven VIP (12 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vip", period: "yearly" }, active: true,
   },
   membership_vvip_monthly: {
-    id: "membership_vvip_monthly",
-    direction: "u2a",
-    category: "membership",
-    title: "VVIP · Monthly",
-    description: "Elite access, creator tools, max media",
-    amountPi: 3,
-    memo: "GreenHaven VVIP (1 month)",
-    fulfillment: { type: "membership", tier: "vvip", period: "monthly" },
-    active: true,
+    id: "membership_vvip_monthly", direction: "u2a", category: "membership", title: "VVIP · 1 month",
+    description: "1 paid month + 1 bonus month; no discount", amountPi: getMembershipPiPrice("vvip", 1).chargePi,
+    memo: "GreenHaven VVIP (1 paid month + 1 bonus month)", fulfillment: { type: "membership", tier: "vvip", period: "monthly" }, active: true,
+  },
+  membership_vvip_four_months: {
+    id: "membership_vvip_four_months", direction: "u2a", category: "membership", title: "VVIP · 4 months",
+    description: "5% off 4 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vvip", 4).chargePi,
+    memo: "GreenHaven VVIP (4 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vvip", period: "four_months" }, active: true,
+  },
+  membership_vvip_eight_months: {
+    id: "membership_vvip_eight_months", direction: "u2a", category: "membership", title: "VVIP · 8 months",
+    description: "10% off 8 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vvip", 8).chargePi,
+    memo: "GreenHaven VVIP (8 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vvip", period: "eight_months" }, active: true,
   },
   membership_vvip_yearly: {
-    id: "membership_vvip_yearly",
-    direction: "u2a",
-    category: "membership",
-    title: "VVIP · Yearly",
-    description: "VVIP for 12 months",
-    amountPi: 30,
-    memo: "GreenHaven VVIP (12 months)",
-    fulfillment: { type: "membership", tier: "vvip", period: "yearly" },
-    active: true,
+    id: "membership_vvip_yearly", direction: "u2a", category: "membership", title: "VVIP · 12 months",
+    description: "20% off 12 paid months + 1 bonus month", amountPi: getMembershipPiPrice("vvip", 12).chargePi,
+    memo: "GreenHaven VVIP (12 paid months + 1 bonus month)", fulfillment: { type: "membership", tier: "vvip", period: "yearly" }, active: true,
   },
   profile_boost: {
     id: "profile_boost",
@@ -205,7 +202,7 @@ export function listProducts(filter?: {
 
 export function productForMembership(
   tier: "vip" | "vvip",
-  period: "monthly" | "yearly"
+  period: "monthly" | "four_months" | "eight_months" | "yearly"
 ): GhPayProduct {
   const id = `membership_${tier}_${period}`
   return GH_PAY_CATALOG[id]

@@ -549,6 +549,7 @@ export function createMarketplaceDomain(deps: {
               quantity: local.quantity,
               unitPrice: local.unitPrice,
               currency: local.currency,
+              idempotencyKey: `market-order-${local.id}`,
             }),
           })
           const created = await createRes.json().catch(() => ({}))

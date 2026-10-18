@@ -9,6 +9,8 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   loadOrder,
+  claimOrderForPayment,
+  releaseOrderPaymentClaim,
   transitionOrder,
   saveOrder,
   marketplaceOrdersDurable,
@@ -118,6 +120,13 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}))
   const method = String(body.method || "").toLowerCase()
+  const orderCurrency = String(order.currency || "GHC").toUpperCase()
+  if (!(["GHC", "PI"].includes(orderCurrency)) || method !== orderCurrency.toLowerCase()) {
+    return NextResponse.json(
+      { ok: false, error: "PAYMENT_CURRENCY_MISMATCH", expected: orderCurrency },
+      { status: 409 }
+    )
+  }
   // Ignore client amount/balance claims
   void body.amount
   void body.balance
@@ -131,6 +140,16 @@ export async function POST(
 
     const referenceId = `market_order_${order.id}`
     const reason = `Marketplace order ${order.listingTitle || order.id}`
+
+    // Atomically claim the live stock reservation before the ledger spend. This prevents
+    // the expiry worker from releasing stock while payment is being processed.
+    const claim = await claimOrderForPayment(order.id, auth.userId, "ghc")
+    if (!claim.ok) {
+      const status = claim.error === "NOT_FOUND" ? 404 :
+        claim.error === "FORBIDDEN" ? 403 :
+        claim.error === "PAYMENT_IN_PROGRESS" || claim.error === "NOT_PAYABLE" || claim.error === "RESERVATION_EXPIRED" ? 409 : 503
+      return NextResponse.json({ ok: false, error: claim.error }, { status })
+    }
 
     let spendOk = false
     let spendTx: unknown = null
@@ -176,6 +195,12 @@ export async function POST(
     }
 
     if (!spendOk) {
+      // Release only on a definite insufficient-balance result. A transport/server error
+      // may have happened after the ledger committed; keep the claim for idempotent recovery
+      // rather than releasing stock while the payment outcome is ambiguous.
+      if (spendError === "INSUFFICIENT_BALANCE") {
+        await releaseOrderPaymentClaim(order.id, auth.userId, spendError)
+      }
       const status = spendError === "INSUFFICIENT_BALANCE" ? 402 : 400
       return NextResponse.json({ ok: false, error: spendError }, { status })
     }
@@ -227,6 +252,17 @@ export async function POST(
     if (!intent || intent.userId !== auth.userId) {
       return NextResponse.json({ ok: false, error: "INTENT_NOT_FOUND" }, { status: 404 })
     }
+    // A completed intent is not sufficient by itself: bind it to this marketplace
+    // order so one same-user/same-amount intent cannot pay for multiple orders.
+    if (
+      intent.purpose !== "marketplace" ||
+      ![order.id, `market_order_${order.id}`].includes(String(intent.referenceId || ""))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "PAYMENT_INTENT_ORDER_MISMATCH" },
+        { status: 409 }
+      )
+    }
     if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
       return NextResponse.json(
         { ok: false, error: "PAYMENT_NOT_COMPLETED", status: intent.status },
@@ -243,6 +279,16 @@ export async function POST(
         },
         { status: 409 }
       )
+    }
+
+    // The Pi intent must already be completed and amount-matched before claiming the
+    // reservation. Once claimed, the expiry worker cannot release this stock mid-fulfilment.
+    const claim = await claimOrderForPayment(order.id, auth.userId, "pi")
+    if (!claim.ok) {
+      const status = claim.error === "NOT_FOUND" ? 404 :
+        claim.error === "FORBIDDEN" ? 403 :
+        claim.error === "PAYMENT_IN_PROGRESS" || claim.error === "NOT_PAYABLE" || claim.error === "RESERVATION_EXPIRED" ? 409 : 503
+      return NextResponse.json({ ok: false, error: claim.error }, { status })
     }
 
     order.paymentMethod = "pi"

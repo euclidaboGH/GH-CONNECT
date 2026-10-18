@@ -173,6 +173,27 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
     }
   }, [tick, meId])
 
+  // Re-fetch when app focuses or another surface reports a social mutation
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => setTick((n) => n + 1)
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") bump()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    window.addEventListener("focus", bump)
+    window.addEventListener("ghc:connection-inbox-updated", bump)
+    window.addEventListener("ghc:social-mutation", bump)
+    window.addEventListener("ghc:connection-updated", bump)
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      window.removeEventListener("focus", bump)
+      window.removeEventListener("ghc:connection-inbox-updated", bump)
+      window.removeEventListener("ghc:social-mutation", bump)
+      window.removeEventListener("ghc:connection-updated", bump)
+    }
+  }, [])
+
   const inbox = useMemo(() => {
     void tick
     const session = buildConnectionRequestInbox(meId, { durableAvailable })

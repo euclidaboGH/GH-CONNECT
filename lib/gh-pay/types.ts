@@ -35,7 +35,7 @@ export type OrderStatus =
   | "refunded"
 
 export type FulfillmentSpec =
-  | { type: "membership"; tier: "vip" | "vvip"; period: "monthly" | "yearly" }
+  | { type: "membership"; tier: "vip" | "vvip"; period: "monthly" | "four_months" | "eight_months" | "yearly" }
   | { type: "boost"; target: "profile" | "post"; hours?: number }
   | { type: "marketplace"; feature: string; listingId?: string }
   | { type: "donation"; causeId: string }

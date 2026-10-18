@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { getBoundDomainServices } from "@/lib/domains/compat"
+import { getMembershipGhcPrice, getMembershipPiPrice, type PaidMembershipMonths } from "@/lib/membership-pricing"
 import {
   MEMBERSHIP_PLANS,
   type MembershipTierId,
@@ -159,8 +160,8 @@ const NEXT_UPGRADES_FOR_FREE: EntitlementKey[] = [
 const TIER_ORDER: MembershipTierId[] = ["free", "vip", "vvip"]
 
 const COMPARE_ROWS: { key: string; label: string; free: string; vip: string; vvip: string }[] = [
-  { key: "price_m", label: "Monthly (GHC)", free: "0", vip: "200", vvip: "500" },
-  { key: "price_y", label: "Yearly (GHC)", free: "0", vip: "1,800", vvip: "4,500" },
+  { key: "price_m", label: "1 paid month + 1 bonus (GHC)", free: "0", vip: "150", vvip: "300" },
+  { key: "price_y", label: "12 paid months + 1 bonus · 20% off (GHC)", free: "0", vip: "1,440", vvip: "2,880" },
   { key: "badge", label: "Profile badge", free: "—", vip: "VIP", vvip: "VVIP Elite" },
   { key: "filters", label: "Discovery filters", free: "Standard", vip: "Advanced", vvip: "Priority + spotlight" },
   { key: "match", label: "Matching tools", free: "Standard", vip: "Enhanced", vvip: "Advanced + exclusive" },
@@ -229,7 +230,7 @@ function EntitlementIcon({ name }: { name?: string }) {
 
 export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHC()
-  const [period, setPeriod] = useState<"monthly" | "yearly">("monthly")
+  const [period, setPeriod] = useState<PaidMembershipMonths>(1)
   /** Method-scoped busy — never spin both Pi and GHC from one flag */
   const [busy, setBusy] = useState<{
     tier: MembershipTierId
@@ -294,7 +295,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           ? Number(e.expiresAt)
           : undefined,
       billingPeriod:
-        e.billingPeriod === "yearly" || e.billingPeriod === "monthly"
+        e.billingPeriod === "yearly" || e.billingPeriod === "monthly" || e.billingPeriod === "four_months" || e.billingPeriod === "eight_months"
           ? e.billingPeriod
           : undefined,
       source:
@@ -402,7 +403,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     }
     setBusy({ tier, method: "pi" })
     try {
-      const ok = await runGhPayMembership(tier as "vip" | "vvip", period, (msg, type) => {
+      const piPeriod = period === 1 ? "monthly" : period === 4 ? "four_months" : period === 8 ? "eight_months" : "yearly"
+      const ok = await runGhPayMembership(tier as "vip" | "vvip", piPeriod, (msg, type) => {
         const t =
           type === "error" || type === "success" || type === "info" ? type : "info"
         addToast(msg, t)
@@ -703,10 +705,14 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 {(status?.billingPeriod || (status as { source?: string } | null)?.source) && currentTier !== "free" ? (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {status?.billingPeriod === "yearly"
-                      ? "Billed yearly"
-                      : status?.billingPeriod === "monthly"
-                        ? "Billed monthly"
-                        : null}
+                      ? "12 paid months + 1 bonus month"
+                      : status?.billingPeriod === "eight_months"
+                        ? "8 paid months + 1 bonus month"
+                        : status?.billingPeriod === "four_months"
+                          ? "4 paid months + 1 bonus month"
+                          : status?.billingPeriod === "monthly"
+                            ? "1 paid month + 1 bonus month"
+                            : null}
                     {status?.billingPeriod && (status as { source?: string }).source ? " · " : null}
                     {(status as { source?: string } | null)?.source === "pi" ||
                     (status as { source?: string } | null)?.source === "external"
@@ -779,43 +785,28 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           Compare Free → VIP → VVIP
         </p>
 
-        {/* Period — calm, no pressure */}
-        <div
-          className="mb-2 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm"
-          role="tablist"
-          aria-label="Billing period"
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-              e.preventDefault()
-              setPeriod((p) => (p === "monthly" ? "yearly" : "monthly"))
-            }
-          }}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={period === "monthly"}
-            onClick={() => setPeriod("monthly")}
-            className={`flex-1 rounded-xl py-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-              period === "monthly" ? "bg-[var(--gh-green)] text-white" : "text-muted-foreground"
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={period === "yearly"}
-            onClick={() => setPeriod("yearly")}
-            className={`flex-1 rounded-xl py-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-              period === "yearly" ? "bg-[var(--gh-green)] text-white" : "text-muted-foreground"
-            }`}
-          >
-            Yearly
-          </button>
+        {/* Subscription duration and transparent discount policy */}
+        <div className="mb-2 grid grid-cols-2 gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm sm:grid-cols-4" role="group" aria-label="Subscription duration">
+          {([
+            { months: 1 as const, label: "1 month", discount: "No discount" },
+            { months: 4 as const, label: "4 months", discount: "5% off" },
+            { months: 8 as const, label: "8 months", discount: "10% off" },
+            { months: 12 as const, label: "12 months", discount: "20% off" },
+          ]).map((option) => (
+            <button
+              key={option.months}
+              type="button"
+              aria-pressed={period === option.months}
+              onClick={() => setPeriod(option.months)}
+              className={`rounded-xl px-2 py-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${period === option.months ? "bg-[var(--gh-green)] text-white" : "text-muted-foreground"}`}
+            >
+              <span className="block">{option.label}</span>
+              <span className="mt-0.5 block text-[10px] font-medium opacity-90">{option.discount}</span>
+            </button>
+          ))}
         </div>
         <p className="mb-3 px-1 text-[10px] text-muted-foreground">
-          Prices in GHC (in-app utility). No external auto-charge is implied.
+          Every plan includes one free bonus month. Discounts apply to paid months only. GHC is the authoritative in-app utility balance.
         </p>
 
         {/* View toggle */}
@@ -889,12 +880,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             {TIER_ORDER.map((tier) => {
               const plan = MEMBERSHIP_PLANS[tier]
               const isCurrent = currentTier === tier
-              const price =
-                tier === "free"
-                  ? 0
-                  : period === "monthly"
-                    ? plan.priceGhcMonthly
-                    : plan.priceGhcYearly
+              const price = tier === "free" ? 0 : getMembershipGhcPrice(tier, period).chargeGhc
+              const pricing = tier === "free" ? null : getMembershipGhcPrice(tier, period)
               const accent =
                 tier === "vvip"
                   ? "border-amber-200/80 from-amber-50/80 to-card dark:from-amber-950/20"
@@ -943,9 +930,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                           )}
                         </p>
                         {price > 0 ? (
-                          <p className="text-[10px] text-muted-foreground">
-                            / {period === "monthly" ? "month" : "year"} · in-app GHC only
-                          </p>
+                          <div className="text-[10px] text-muted-foreground">
+                            <p>{period} paid month{period === 1 ? "" : "s"} · {pricing?.discountPct || 0}% discount · {period + 1} months access</p>
+                            <p>Pi option: {getMembershipPiPrice(tier as "vip" | "vvip", period as PaidMembershipMonths).chargePi} π</p>
+                          </div>
                         ) : (
                           <p className="text-[10px] text-muted-foreground">Always included</p>
                         )}
@@ -1116,17 +1104,15 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               Confirm {MEMBERSHIP_PLANS[confirmTier].label}
             </h3>
             <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {period === "yearly" ? "Yearly billing" : "Monthly billing"}
+              {period}-month subscription · one bonus month
             </p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               You will spend{" "}
               <strong className="text-foreground">
-                {period === "monthly"
-                  ? MEMBERSHIP_PLANS[confirmTier].priceGhcMonthly
-                  : MEMBERSHIP_PLANS[confirmTier].priceGhcYearly}{" "}
+                {getMembershipGhcPrice(confirmTier, period).chargeGhc}{" "}
                 GHC
               </strong>{" "}
-              from your wallet for a {period} period. Benefits activate via the entitlement system.
+              from your wallet for {period} paid month{period === 1 ? "" : "s"}, plus one free bonus month (a total of {period + 1} months of access). Benefits activate via the entitlement system.
               This does not change verification or reputation.
             </p>
             <ul className="mt-3 max-h-32 space-y-1 overflow-y-auto rounded-xl bg-muted/50 px-3 py-2">

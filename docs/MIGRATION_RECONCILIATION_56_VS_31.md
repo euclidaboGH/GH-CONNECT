@@ -65,6 +65,6 @@ When applying from staging package, **swap 08/09** or apply by dependency, not b
 
 **No** `ghc_marketplace_reserve` (or equivalent) RPC exists in repository migrations.
 
-`GH_MARKETPLACE_ATOMIC_RESERVE=1` is an **application flag only**. Enabling it without a real RPC does **not** create atomicity.
+`GH_MARKETPLACE_ATOMIC_RESERVE=1` was only an application flag and did not create atomicity. The current order route deliberately ignores that flag.
 
-Production finite-stock orders correctly return `STOCK_RESERVATION_UNAVAILABLE` until a future migration adds atomic decrement + the flag is set.
+Production finite-stock orders return `STOCK_RESERVATION_UNAVAILABLE` until an actual durable atomic reservation RPC is added, wired into order creation, and verified under concurrency. A future environment flag alone must never bypass this guard.

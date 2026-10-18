@@ -4,11 +4,16 @@
  */
 
 import { BOOST_FEE_RATE, VIP_PRICE_GHC, VVIP_PRICE_GHC } from "./economic-config"
+import { getMembershipGhcPrice } from "@/lib/membership-pricing"
 
 export type SpendPurpose =
   | "boost"
   | "membership_vip_monthly"
   | "membership_vvip_monthly"
+  | "membership_vip_four_months"
+  | "membership_vvip_four_months"
+  | "membership_vip_eight_months"
+  | "membership_vvip_eight_months"
   | "membership_vip_yearly"
   | "membership_vvip_yearly"
   | "marketplace"
@@ -47,14 +52,34 @@ const FIXED: Record<string, SpendCatalogEntry> = {
     amountGhc: VVIP_PRICE_GHC,
     description: "VVIP monthly (GHC rail)",
   },
+  membership_vip_four_months: {
+    purpose: "membership_vip_four_months",
+    amountGhc: getMembershipGhcPrice("vip", 4).chargeGhc,
+    description: "VIP 4-month subscription (5% discount + 1 bonus month; GHC rail)",
+  },
+  membership_vvip_four_months: {
+    purpose: "membership_vvip_four_months",
+    amountGhc: getMembershipGhcPrice("vvip", 4).chargeGhc,
+    description: "VVIP 4-month subscription (5% discount + 1 bonus month; GHC rail)",
+  },
+  membership_vip_eight_months: {
+    purpose: "membership_vip_eight_months",
+    amountGhc: getMembershipGhcPrice("vip", 8).chargeGhc,
+    description: "VIP 8-month subscription (10% discount + 1 bonus month; GHC rail)",
+  },
+  membership_vvip_eight_months: {
+    purpose: "membership_vvip_eight_months",
+    amountGhc: getMembershipGhcPrice("vvip", 8).chargeGhc,
+    description: "VVIP 8-month subscription (10% discount + 1 bonus month; GHC rail)",
+  },
   membership_vip_yearly: {
     purpose: "membership_vip_yearly",
-    amountGhc: VIP_PRICE_GHC * 10, // yearly package if used; adjust only via economic version
+    amountGhc: getMembershipGhcPrice("vip", 12).chargeGhc, // 12 paid months less 20%; 1 bonus month is free
     description: "VIP yearly (GHC rail)",
   },
   membership_vvip_yearly: {
     purpose: "membership_vvip_yearly",
-    amountGhc: VVIP_PRICE_GHC * 10,
+    amountGhc: getMembershipGhcPrice("vvip", 12).chargeGhc,
     description: "VVIP yearly (GHC rail)",
   },
 }

@@ -7,8 +7,9 @@
  * - runtime opt-in window.__GHC_MESSAGING_DURABLE === true
  *
  * Server always uses durable store when Supabase is configured regardless of this flag.
- * Client still attempts durable write when online (see messaging-domain) and treats
- * API failure as soft (local optimistic retained) unless the flag is on.
+ * Online sends always await durable API success (see messaging-domain).
+ * Offline path uses local "sending" + offline-message-flush.
+ * isDurableMessagingEnabled remains available for ops/diagnostics.
  */
 export function isDurableMessagingEnabled(): boolean {
   try {

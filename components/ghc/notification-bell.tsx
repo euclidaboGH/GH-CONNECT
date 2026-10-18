@@ -187,28 +187,59 @@ export function NotificationBell({
           ? economyData.items : []
         setDurableOk(Boolean(socialRows.length || economyRows.length || (socialData.ok && economyData.ok)))
 
-        const mappedSocial: Notification[] = socialRows.map((n) => ({
-          id: String(n.id || ""),
-          type: (n.type === "follow" ? "follow"
-            : n.type === "post_created" ? "system"
-            : n.type === "post_like" || n.type === "curation" || n.type === "post_curation" ? "like"
-            : n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention" ? "comment"
-            : n.type === "share" ? "share" : "system") as NotificationType,
-          title: String(n.title || "Activity"),
-          message: String(n.body || ""),
-          icon: "🔔",
-          timestamp: Number(n.createdAt) || Date.now(),
-          read: Boolean(n.readAt),
-          data: {
-            ...(n.metadata || {}),
-            durable: true,
-            actorUserId: n.actorUserId,
-            entityId: n.entityId,
-            entityType: n.entityType,
-            postId: n.type === "post_created" ? n.entityId : (n.metadata?.postId as string | undefined),
-            socialType: n.type,
-          },
-        }))
+        const mappedSocial: Notification[] = socialRows.map((n) => {
+          const socialType = String(n.type || "")
+          const type = (
+            socialType === "follow" ? "follow"
+            : socialType === "friend_request" || socialType === "connection_request" ? "friend_request"
+            : socialType === "post_created" ? "system"
+            : socialType === "post_like" || socialType === "like" || socialType === "curation" || socialType === "post_curation" ? "like"
+            : socialType === "post_comment" || socialType === "comment_reply" || socialType === "comment" || socialType === "mention" ? "comment"
+            : socialType === "share" ? "share"
+            : socialType === "match" ? "match"
+            : socialType === "message" || socialType === "new_message" || socialType === "dm" || socialType === "chat" ? "message"
+            : "system"
+          ) as NotificationType
+          const meta = (n.metadata || {}) as Record<string, unknown>
+          const postId =
+            (typeof meta.postId === "string" && meta.postId) ||
+            (n.entityType === "post" && n.entityId ? String(n.entityId) : undefined) ||
+            (socialType === "post_created" && n.entityId ? String(n.entityId) : undefined) ||
+            undefined
+          const conversationId =
+            (typeof meta.conversationId === "string" && meta.conversationId) ||
+            (n.entityType === "conversation" || n.entityType === "message"
+              ? (n.entityId ? String(n.entityId) : undefined)
+              : undefined) ||
+            (typeof meta.threadId === "string" ? meta.threadId : undefined)
+          return {
+            id: String(n.id || ""),
+            type,
+            title: String(n.title || "Activity"),
+            message: String(n.body || ""),
+            icon:
+              type === "message" ? "✉️"
+              : socialType.includes("like") ? "❤️"
+              : socialType.includes("comment") ? "💬"
+              : socialType.includes("connection") || socialType.includes("friend") ? "🤝"
+              : "🔔",
+            timestamp: Number(n.createdAt) || Date.now(),
+            read: Boolean(n.readAt),
+            data: {
+              ...meta,
+              durable: true,
+              actorUserId: n.actorUserId,
+              entityId: n.entityId,
+              entityType: n.entityType,
+              postId,
+              conversationId,
+              fromUserId: n.actorUserId,
+              userId: meta.userId || n.actorUserId,
+              open: type === "message" ? "messages" : meta.open,
+              socialType,
+            },
+          }
+        })
 
         const mappedEconomy: Notification[] = economyRows.map((n) => {
           const eventType = String(n.eventType || "")

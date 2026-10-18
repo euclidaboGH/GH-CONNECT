@@ -171,21 +171,22 @@ export async function ensurePublicIdentity(input: {
   if (!userId) return null
 
   if (isDatabaseConfigured()) {
-    const row = await rpcEnsure(
+    // A configured production database is authoritative. Do not mint an ephemeral
+    // identity when the RPC fails; it would not resolve consistently across instances.
+    return await rpcEnsure(
       userId,
       input.displayName,
       input.avatarUrl,
       input.preferred
     )
-    if (row) return row
   }
 
   if (allowMemoryServer()) {
     return memoryEnsure(userId, input.displayName, input.avatarUrl, input.preferred)
   }
 
-  // Last resort temporary compatibility (never claim DB authority)
-  return memoryEnsure(userId, input.displayName, input.avatarUrl, input.preferred)
+  // Fail closed outside explicitly enabled local/test memory mode.
+  return null
 }
 
 export async function resolvePublicIdentity(
@@ -195,15 +196,16 @@ export async function resolvePublicIdentity(
   if (!GH_ID_REGEX.test(id)) return null
 
   if (isDatabaseConfigured()) {
-    const row = await rpcResolve(id)
-    if (row) return row
+    // Never fall back to process-local identity state when the durable directory is
+    // configured but unavailable: IDs must resolve identically across server instances.
+    return await rpcResolve(id)
   }
 
   if (allowMemoryServer()) {
     return memoryResolve(id)
   }
 
-  return memoryResolve(id)
+  return null
 }
 
 /** Public API projection — never includes balance/email/token */

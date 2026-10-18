@@ -1,3 +1,4 @@
+import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice } from "@/lib/membership-pricing"
 /**
  * Server-authoritative membership entitlements.
  * DATABASE is production authority. Memory is cache / Studio-only fallback.
@@ -9,7 +10,7 @@ import { hasPrivilegedDatabase, readGhcServerEnv } from "@/lib/server/economy/en
 import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
 
 export type MembershipTier = "free" | "vip" | "vvip"
-export type BillingPeriod = "monthly" | "yearly" | "comp"
+export type BillingPeriod = "monthly" | "four_months" | "eight_months" | "yearly" | "comp"
 export type MembershipSource = "default" | "ghc" | "pi" | "external" | "comp"
 
 export type ServerMembershipEntitlement = {
@@ -40,16 +41,24 @@ export function clearMembershipCacheForTests(): void {
   map().clear()
 }
 
-const PERIOD_MS: Record<string, number> = {
-  monthly: 30 * 86400000,
-  yearly: 365 * 86400000,
-  comp: 30 * 86400000,
+const ACCESS_MONTHS: Record<string, number> = {
+  monthly: 2,
+  four_months: 5,
+  eight_months: 9,
+  yearly: 13,
+  comp: 1,
 }
 
 /** Catalog prices — must match commerce / membership-domain / economic-config */
 export const MEMBERSHIP_SERVER_CATALOG = {
-  vip: { monthlyGhc: 150, yearlyGhc: 1500, monthlyPi: 1.5, yearlyPi: 15 },
-  vvip: { monthlyGhc: 300, yearlyGhc: 3000, monthlyPi: 3, yearlyPi: 30 },
+  vip: {
+    monthlyGhc: getMembershipGhcPrice("vip", 1).chargeGhc, fourMonthsGhc: getMembershipGhcPrice("vip", 4).chargeGhc, eightMonthsGhc: getMembershipGhcPrice("vip", 8).chargeGhc, yearlyGhc: getMembershipGhcPrice("vip", 12).chargeGhc,
+    monthlyPi: getMembershipPiPrice("vip", 1).chargePi, fourMonthsPi: getMembershipPiPrice("vip", 4).chargePi, eightMonthsPi: getMembershipPiPrice("vip", 8).chargePi, yearlyPi: getMembershipPiPrice("vip", 12).chargePi,
+  },
+  vvip: {
+    monthlyGhc: getMembershipGhcPrice("vvip", 1).chargeGhc, fourMonthsGhc: getMembershipGhcPrice("vvip", 4).chargeGhc, eightMonthsGhc: getMembershipGhcPrice("vvip", 8).chargeGhc, yearlyGhc: getMembershipGhcPrice("vvip", 12).chargeGhc,
+    monthlyPi: getMembershipPiPrice("vvip", 1).chargePi, fourMonthsPi: getMembershipPiPrice("vvip", 4).chargePi, eightMonthsPi: getMembershipPiPrice("vvip", 8).chargePi, yearlyPi: getMembershipPiPrice("vvip", 12).chargePi,
+  },
 } as const
 
 function defaultFree(userId: string): ServerMembershipEntitlement {
@@ -231,13 +240,13 @@ export async function grantEntitlement(input: {
   if (prev.purchaseRef === input.purchaseRef && prev.tier === input.tier && prev.active) {
     return prev
   }
-  const duration = PERIOD_MS[input.billingPeriod] || PERIOD_MS.monthly
+  const accessMonths = ACCESS_MONTHS[input.billingPeriod] || ACCESS_MONTHS.monthly
   const next: ServerMembershipEntitlement = {
     userId: input.userId,
     tier: input.tier,
     active: true,
     startedAt: now,
-    expiresAt: input.billingPeriod === "comp" ? undefined : now + duration,
+    expiresAt: input.billingPeriod === "comp" ? undefined : addCalendarMonths(now, accessMonths),
     billingPeriod: input.billingPeriod,
     source: input.source,
     purchaseRef: input.purchaseRef,
@@ -323,31 +332,16 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
 
   let tier: "vip" | "vvip" | null = null
   let period: BillingPeriod | null = null
-  if (productId === "membership_vip_monthly") {
-    tier = "vip"
-    period = "monthly"
-  } else if (productId === "membership_vip_yearly") {
-    tier = "vip"
-    period = "yearly"
-  } else if (productId === "membership_vvip_monthly") {
-    tier = "vvip"
-    period = "monthly"
-  } else if (productId === "membership_vvip_yearly") {
-    tier = "vvip"
-    period = "yearly"
+  const productMatch = productId.match(/^membership_(vip|vvip)_(monthly|four_months|eight_months|yearly)$/)
+  if (productMatch) {
+    tier = productMatch[1] as "vip" | "vvip"
+    period = productMatch[2] as BillingPeriod
   } else {
-    const mTier = String(
-      intent.metadata?.tier || intent.metadata?.membershipTier || ""
-    ).toLowerCase()
-    const mPeriod = String(
-      intent.metadata?.period || intent.metadata?.billingPeriod || ""
-    ).toLowerCase()
-    if (
-      (mTier === "vip" || mTier === "vvip") &&
-      (mPeriod === "monthly" || mPeriod === "yearly")
-    ) {
+    const mTier = String(intent.metadata?.tier || intent.metadata?.membershipTier || "").toLowerCase()
+    const mPeriod = String(intent.metadata?.period || intent.metadata?.billingPeriod || "").toLowerCase()
+    if ((mTier === "vip" || mTier === "vvip") && (["monthly", "four_months", "eight_months", "yearly"].includes(mPeriod))) {
       tier = mTier
-      period = mPeriod
+      period = mPeriod as BillingPeriod
     }
   }
 
@@ -356,7 +350,7 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
   }
 
   const catalog = MEMBERSHIP_SERVER_CATALOG[tier]
-  const expectedPi = period === "yearly" ? catalog.yearlyPi : catalog.monthlyPi
+  const expectedPi = period === "yearly" ? catalog.yearlyPi : period === "eight_months" ? catalog.eightMonthsPi : period === "four_months" ? catalog.fourMonthsPi : catalog.monthlyPi
   if (Math.abs(Number(intent.amount) - expectedPi) > 0.001) {
     return { granted: false, error: "amount_mismatch" }
   }
@@ -382,5 +376,85 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
     return { granted: false, error: msg }
+  }
+}
+
+
+/** Ops: list spend posts that look like membership without matching purchase_ref. */
+export async function listOrphanMembershipPurchaseCandidates(
+  limit = 50
+): Promise<{ ok: boolean; candidates: unknown[]; error?: string }> {
+  const { isDatabaseConfigured } = await import("@/lib/server/economy/http")
+  if (!isDatabaseConfigured()) return { ok: false, candidates: [], error: "DB_NOT_CONFIGURED" }
+  const { readGhcServerEnv } = await import("@/lib/server/economy/env")
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, candidates: [], error: "SERVER_UNAVAILABLE" }
+  }
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_membership_list_orphan_purchase_candidates`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({ p_limit: limit }),
+      }
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) {
+      return { ok: false, candidates: [], error: String(data?.error || "LIST_FAILED") }
+    }
+    return { ok: true, candidates: Array.isArray(data.candidates) ? data.candidates : [] }
+  } catch {
+    return { ok: false, candidates: [], error: "RPC_FAILED" }
+  }
+}
+
+/**
+ * Ops: complete entitlement when ledger debit already exists for reference.
+ * Never executes a new spend.
+ */
+export async function completeOrphanedMembershipPurchase(input: {
+  userId: string
+  referenceId: string
+  row: Record<string, unknown>
+  operatorNote?: string
+}): Promise<{ ok: boolean; error?: string; idempotent?: boolean }> {
+  const { isDatabaseConfigured } = await import("@/lib/server/economy/http")
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_NOT_CONFIGURED" }
+  const { readGhcServerEnv } = await import("@/lib/server/economy/env")
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_membership_complete_orphaned_purchase`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({
+          p_user_id: input.userId,
+          p_reference_id: input.referenceId,
+          p_row: input.row,
+          p_operator_note: (input.operatorNote || "ops_orphan_entitlement_complete").slice(0, 160),
+        }),
+      }
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) {
+      return { ok: false, error: String(data?.error || "RECONCILE_FAILED") }
+    }
+    return { ok: true, idempotent: Boolean(data.idempotent) }
+  } catch {
+    return { ok: false, error: "RPC_FAILED" }
   }
 }

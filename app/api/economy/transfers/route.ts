@@ -18,6 +18,8 @@ import {
 import { notifyTransferCompleted } from "@/lib/server/economy/notifications"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
+import { isValidGreenHavenIdFormat, normalizeGreenHavenId } from "@/lib/domains/greenhaven-id"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -48,14 +50,27 @@ export async function POST(request: Request) {
   void body.userId
   void body.balance
 
-  const toUserId = String(body.toUserId || "").trim()
+  const rawGreenHavenId = String(
+    body.toGreenHavenId || body.recipientGreenHavenId || body.toUserId || ""
+  ).trim()
   const referenceId = String(body.referenceId || "").trim()
-  const note = body.note != null ? String(body.note) : undefined
+  const note = body.note != null ? String(body.note).slice(0, 120) : undefined
   const requestId = body.requestId != null ? String(body.requestId) : undefined
-  const toUserName = body.toUserName != null ? String(body.toUserName) : undefined
 
-  if (!toUserId) return jsonErr("INVALID_RECIPIENT", "Recipient required", 400)
+  if (!rawGreenHavenId) return jsonErr("GREENHAVEN_ID_REQUIRED", "Recipient GreenHaven ID required", 400)
+  if (!isValidGreenHavenIdFormat(rawGreenHavenId)) {
+    return jsonErr("GREENHAVEN_ID_REQUIRED", "Enter a valid recipient GreenHaven ID (GH-XXXXXX)", 400)
+  }
   if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
+
+  // Resolve the recipient using the durable public directory. Never trust an internal
+  // account key or display name supplied by the client as the transfer destination.
+  const recipient = await resolvePublicIdentity(normalizeGreenHavenId(rawGreenHavenId))
+  if (!recipient) {
+    return jsonErr("INVALID_RECIPIENT", "GreenHaven ID could not be resolved", 404)
+  }
+  const toUserId = recipient.userId
+  const toUserName = recipient.displayName || "GreenHaven member"
 
   const { validatePositiveGhcAmount } = await import("@/lib/server/economy/amount")
   const amt = validatePositiveGhcAmount(body.amount, { max: 5_000 })

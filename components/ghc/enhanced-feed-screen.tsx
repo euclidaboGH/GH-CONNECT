@@ -512,18 +512,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // One actionable in-app notice per user/reward day; server status is authoritative.
   useEffect(() => {
-    const status = dailyClaim.status
-    if (!currentUserId || !status?.claimable || !status.dayKey) {
+    if (!currentUserId || !dailyClaim.status?.claimable || !dailyClaim.status?.dayKey) {
       setRewardReadyNotice(false)
       return
     }
-    const key = `ghc:daily-reward-ready-notice:${currentUserId}:${status.dayKey}`
+    const key = `ghc:daily-reward-ready-notice:${currentUserId}:${dailyClaim.status.dayKey}`
     try {
       if (window.localStorage.getItem(key) === "1") return
       window.localStorage.setItem(key, "1")
     } catch { /* show this session's notice if storage is unavailable */ }
     setRewardReadyNotice(true)
-  }, [currentUserId, dailyClaim.status, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
+  }, [currentUserId, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">

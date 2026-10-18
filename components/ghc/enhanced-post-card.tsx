@@ -180,9 +180,10 @@ function EnhancedPostCardInner({
     curationLongPressTriggeredRef.current = false
     curationLongPressTimerRef.current = setTimeout(() => {
       curationLongPressTriggeredRef.current = true
-      setCurationReactionKind(kind)
-      setShowReactions(true)
-    }, 500)
+      // Long-press → engagement roster (who upvoted / downvoted), not reaction picker.
+      // Reaction picker stays available via the visible reaction chips when counts exist.
+      openRoster(kind === "positive" ? "upvotes" : "downvotes")
+    }, 480)
     // Track release outside the button too, so a completed long press cannot
     // leave a stale suppression flag or accidentally vote on a later tap.
     const finish = () => {
@@ -223,6 +224,14 @@ function EnhancedPostCardInner({
         try {
           window.dispatchEvent(new CustomEvent("ghc:toast", {
             detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : (res.error || "Could not record vote"), type: "error" },
+          }))
+        } catch { /* */ }
+        return
+      }
+      if (res.durable === false) {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:toast", {
+            detail: { message: "Vote not visible to others yet — server not confirmed", type: "error" },
           }))
         } catch { /* */ }
         return
@@ -795,6 +804,17 @@ function EnhancedPostCardInner({
                 e.preventDefault()
                 openRoster("viewers")
               }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                const timer = window.setTimeout(() => openRoster("viewers"), 480)
+                const clear = () => {
+                  window.clearTimeout(timer)
+                  window.removeEventListener("pointerup", clear)
+                  window.removeEventListener("pointercancel", clear)
+                }
+                window.addEventListener("pointerup", clear, { once: true })
+                window.addEventListener("pointercancel", clear, { once: true })
+              }}
             >
               {post.engagement.views} views
             </button>
@@ -819,10 +839,10 @@ function EnhancedPostCardInner({
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <label className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] leading-none text-muted-foreground" title="Reward percentage for this upvote">
-          <span>Reward</span>
+        <label className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] leading-none text-muted-foreground" title="Curation weight only; this setting does not issue GHC">
+          <span>Vote weight</span>
           <select
-            aria-label="GHC reward percentage for this post upvote"
+            aria-label="Curation vote weight percentage; does not issue GHC"
             value={rewardPercentage}
             disabled={curationBusy}
             onChange={(e) => setRewardPercentage(Number(e.target.value))}

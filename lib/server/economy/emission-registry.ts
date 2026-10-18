@@ -1,6 +1,9 @@
 /**
  * ECONOMY_VERSION 1.2 — GHC emission channel registry (audit map).
- * Not a runtime router; documents which controller owns each pathway.
+ * Not a runtime router; documents each pathway and its current policy status.
+ * Phase 6: only daily_claim may issue new user GHC. Activity, achievement,
+ * referral, onboarding, community, challenge, marketplace reward, promotion,
+ * admin credit and purchase credit are disabled. Transfers are redistribution.
  */
 
 export type EmissionChannelId =
@@ -20,6 +23,8 @@ export type EmissionChannelId =
 
 export type EmissionChannelSpec = {
   id: EmissionChannelId
+  /** Current Phase 6 policy: enabled issuance, disabled issuance, or redistribution. */
+  policyStatus: "enabled_issuance" | "disabled_issuance" | "redistribution"
   description: string
   /** Server path that authorizes the credit */
   serverPath: string
@@ -37,6 +42,7 @@ export type EmissionChannelSpec = {
 export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   {
     id: "daily_claim",
+    policyStatus: "enabled_issuance",
     description: "7-day progressive daily claim",
     serverPath: "POST /api/economy/rewards/daily → ghc_execute_daily_claim_v12",
     usesNetworkScarcity: true,
@@ -48,6 +54,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "activity_reward",
+    policyStatus: "disabled_issuance",
     description: "Social / creator activity via reward rules",
     serverPath: "POST /api/economy/rewards/evaluate → evaluateRewardAuthoritative + activity-emission",
     usesNetworkScarcity: true,
@@ -59,6 +66,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "achievement",
+    policyStatus: "disabled_issuance",
     description: "ACHIEVEMENT_UNLOCKED / verified achievements",
     serverPath: "evaluateRewardAuthoritative (sourceEvent ACHIEVEMENT_UNLOCKED)",
     usesNetworkScarcity: true,
@@ -70,6 +78,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "referral",
+    policyStatus: "disabled_issuance",
     description: "REFERRAL_VERIFIED",
     serverPath: "evaluateRewardAuthoritative",
     usesNetworkScarcity: true,
@@ -81,6 +90,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "onboarding",
+    policyStatus: "disabled_issuance",
     description: "ONBOARDING_COMPLETED profile completion",
     serverPath: "evaluateRewardAuthoritative",
     usesNetworkScarcity: true,
@@ -92,6 +102,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "community",
+    policyStatus: "disabled_issuance",
     description: "GROUP_JOINED / COMMUNITY_ROLE_CHANGED",
     serverPath: "evaluateRewardAuthoritative",
     usesNetworkScarcity: true,
@@ -103,6 +114,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "challenge",
+    policyStatus: "disabled_issuance",
     description: "CHALLENGE_COMPLETED",
     serverPath: "evaluateRewardAuthoritative",
     usesNetworkScarcity: true,
@@ -114,6 +126,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "marketplace_reward",
+    policyStatus: "disabled_issuance",
     description: "MARKETPLACE_ORDER_COMPLETED seller/activity credit",
     serverPath: "evaluateRewardAuthoritative",
     usesNetworkScarcity: true,
@@ -125,6 +138,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "promotion",
+    policyStatus: "disabled_issuance",
     description: "Campaign / promo grants",
     serverPath: "admin credit or controlled evaluate sourceEvent",
     usesNetworkScarcity: false,
@@ -136,6 +150,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "admin_credit",
+    policyStatus: "disabled_issuance",
     description: "Privileged adjusted credit",
     serverPath: "POST /api/economy/ledger/credit (GHC_ADMIN_CREDIT_KEY required)",
     usesNetworkScarcity: false,
@@ -147,6 +162,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "purchase_credit",
+    policyStatus: "disabled_issuance",
     description: "Pi payment fulfillment must not invent GHC without payment intent",
     serverPath: "payments fulfillment only (no client creditPurchase)",
     usesNetworkScarcity: false,
@@ -158,6 +174,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "transfer_in",
+    policyStatus: "redistribution",
     description: "Peer transfer credit (not emission — redistribution)",
     serverPath: "POST /api/economy/transfers → ghc_execute_transfer",
     usesNetworkScarcity: false,
@@ -169,6 +186,7 @@ export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   },
   {
     id: "peer_request_accept",
+    policyStatus: "redistribution",
     description: "Accepted GHC request (redistribution)",
     serverPath: "transfer-request accept RPC",
     usesNetworkScarcity: false,

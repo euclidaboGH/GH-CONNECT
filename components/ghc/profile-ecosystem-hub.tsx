@@ -19,6 +19,7 @@ import {
 } from "@/lib/domains/greenhaven-id"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { getUserXp, xpProgress } from "@/lib/domains/reward-level-domain"
+import { ReferralShareCard } from "@/components/ghc/referral-share-card"
 
 type MembershipSummary = {
   tier: "free" | "vip" | "vvip"
@@ -272,6 +273,10 @@ export function ProfileEcosystemHub({
             <ChevronRight size={14} aria-hidden />
           </span>
         </button>
+      </div>
+
+      <div className="mt-3 px-0">
+        <ReferralShareCard />
       </div>
     </div>
   )

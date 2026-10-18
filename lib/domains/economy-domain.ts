@@ -36,6 +36,7 @@ import type {
   GhcTransferResult,
 } from "./economy-transfer-contract"
 import { mapTransferFailure } from "./economy-transfer-contract"
+import { deriveGreenHavenId, isValidGreenHavenIdFormat, normalizeGreenHavenId } from "./greenhaven-id"
 import {
   emptyWallet,
   computeWalletFromLedger,
@@ -510,6 +511,12 @@ export function createEconomyDomain(deps: {
         actorId: userId,
         input,
         validate: (i) => {
+          if (
+            i.amount > 0 &&
+            ["earned", "purchased", "adjusted", "pending", "transfer_in"].includes(i.kind)
+          ) {
+            return "GHC_ISSUANCE_POLICY_LOCKED: only Daily Claim may issue new GHC; transfers must use the atomic transfer API"
+          }
           if (!i.reason?.trim()) return "Reason required"
           if (!i.sourceEvent?.trim()) return "Source event required"
           if (!Number.isFinite(i.amount) || i.amount === 0) return "Invalid amount"
@@ -686,408 +693,50 @@ export function createEconomyDomain(deps: {
       })
     },
 
-    /** Credit GHC after server-verified external payment (never from client alone) */
+    /** GHC purchase credit is disabled by the Daily-Claim-only issuance policy. */
     async creditPurchase(input: {
       amount: number
       paymentRef: string
       reason?: string
-      /** Must be true only from server-verified payment path */
       serverAuthority?: boolean
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      if (repo.mode === "server") {
-        // Client must never invent purchase credits. Server payment completion
-        // writes the ledger; client only hydrates.
-        if (input.serverAuthority !== true) {
-          return {
-            ok: false,
-            error: "GHC purchase credit requires server-verified payment authority",
-            phase: "permission",
-            requestId: "server",
-          }
-        }
-        if (typeof repo.hydrate === "function") {
-          try {
-            await repo.hydrate(userId)
-          } catch {
-            /* */
-          }
-        }
-        const w = computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
-        const existing = repo
-          .listTransactions(userId)
-          .find((x) => x.referenceId === input.paymentRef && x.kind === "purchased")
-        if (existing) {
-          return { ok: true, data: { tx: existing, wallet: w }, requestId: "server" }
-        }
-        return {
-          ok: false,
-          error: "Purchase not yet reflected on server ledger — complete Pi payment first",
-          phase: "mutate",
-          requestId: "server",
-        }
+      void input
+      return {
+        ok: false,
+        error: "GHC_ISSUANCE_POLICY_LOCKED: GHC purchase credits are disabled",
+        phase: "permission",
+        requestId: repo.mode === "server" ? "server" : "local",
       }
-      return this.recordTransaction({
-        kind: "purchased",
-        amount: Math.abs(input.amount),
-        reason: input.reason || "Verified payment top-up",
-        sourceEvent: "GHC_PURCHASED",
-        referenceId: input.paymentRef,
-        status: "posted",
-        metadata: {
-          serverAuthority: input.serverAuthority === true ? "server-authoritative" : false,
-        },
-      })
     },
 
-    async marketplaceSpend(input: {
-      amount: number
-      orderId: string
-      reason?: string
-    }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      return this.spend({
-        amount: input.amount,
-        reason: input.reason || "Marketplace purchase",
-        sourceEvent: "MARKETPLACE_SPEND",
-        referenceId: input.orderId,
-      })
-    },
-
-    /**
-     * Real GHC sink: profile or post boost — available balance only.
-     * Pending rewards cannot fund boosts.
-     */
-    async purchaseBoost(input: {
-      target: "profile" | "post"
-      targetId?: string
-      /** Default 25 GHC */
-      amount?: number
-    }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      const amount = Math.abs(input.amount ?? 25)
-      const wallet = computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
-      if (wallet.balance < amount) {
-        return {
-          ok: false,
-          error: wallet.pending > 0
-            ? "Insufficient available GHC — claim pending rewards first"
-            : "Insufficient available GHC",
-          phase: "permission",
-          requestId: "local",
-        }
-      }
-      const label = input.target === "profile" ? "Profile boost (24h)" : "Post boost (24h)"
-      return this.spend({
-        amount,
-        reason: label,
-        sourceEvent: input.target === "profile" ? "BOOST_PROFILE" : "BOOST_POST",
-        referenceId: `boost_${input.target}_${input.targetId || userId}_${Date.now()}`,
-      })
-    },
-
-    async reverse(
-      transactionId: string,
-      reason: string,
-      adjustedBy = "system"
-    ): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      return runMutation({
-        name: "economy.reverse",
-        actorId: userId,
-        input: { transactionId, reason, adjustedBy },
-        mutate: (i) => {
-          const original = repo.listTransactions(userId).find((t) => t.id === i.transactionId)
-          if (!original) throw new Error("Transaction not found")
-          if (original.status !== "posted") throw new Error("Only posted transactions can be reversed")
-          const rev = reverseTransaction(original, i.reason, i.adjustedBy)
-          repo.appendTransaction(rev)
-          // mark conceptually reversed via new tx; original remains for audit trail
-          const w = computeWalletFromLedger(userId, repo.listTransactions(userId), limits)
-          return { tx: rev, wallet: w }
-        },
-      })
-    },
-
-    /**
-     * Reward engine entry — driven by verified platform events, not raw spam engagement.
-     */
+    /** Generic activity/achievement/referral reward issuance is disabled in Phase 6. */
     async evaluateReward(input: {
       sourceEvent: string
       targetId?: string
       referenceId?: string
       metadata?: Record<string, unknown>
-    }): Promise<
-      MutationResult<{ rewards: RewardRecord[]; skipped?: string }>
-    > {
-      // Server mode: stage pending rewards only via evaluate API (never local ledger invent)
-      if (repo.mode === "server" && typeof repo.evaluateRewardServer === "function") {
-        const matched = rulesBySourceEvent(rules, input.sourceEvent)
-        if (!matched.length) {
-          return { ok: true, data: { rewards: [], skipped: "No rule for event" } , requestId: "local" }
-        }
-        const created: RewardRecord[] = []
-        for (const rule of matched) {
-          const ref =
-            (input.referenceId || "").trim() ||
-            `${rule.id}_${input.sourceEvent}_${userId}_${Date.now()}`
-          const remote = await repo.evaluateRewardServer({
-            referenceId: ref,
-            sourceEvent: rule.sourceEvent,
-            targetId: input.targetId,
-            metadata: input.metadata,
-          })
-          if (!remote.ok) continue
-          if (remote.transaction) repo.appendTransaction(remote.transaction)
-          const reward: RewardRecord = {
-            id: remote.holdId || ref,
-            userId,
-            ruleId: rule.id,
-            category: rule.category,
-            sourceEvent: rule.sourceEvent,
-            amount: Math.max(0, Number(remote.amount ?? remote.transaction?.amount) || 0),
-            validationStatus: "pending_validation",
-            referenceId: ref,
-            reason: rule.description,
-            transactionId: remote.transaction?.id,
-            createdAt: Date.now(),
-          }
-          repo.appendReward(reward)
-          markAward(rule.id, input.targetId)
-          created.push(reward)
-        }
-        if (typeof repo.hydrate === "function") {
-          try {
-            await repo.hydrate(userId)
-          } catch {
-            /* */
-          }
-        }
-        return { ok: true, data: { rewards: created }, requestId: "server" }
+    }): Promise<MutationResult<{ rewards: RewardRecord[]; skipped?: string }>> {
+      void input
+      return {
+        ok: true,
+        data: { rewards: [], skipped: "GHC_ISSUANCE_POLICY_LOCKED" },
+        requestId: repo.mode === "server" ? "server" : "local",
       }
-
-      return runMutation({
-        name: "economy.evaluateReward",
-        actorId: userId,
-        input,
-        mutate: (i) => {
-          const rate = hitRateLimit(
-            `rewardEval:${userId}`,
-            antiAbusePolicy.maxRewardEvalsPerMinute,
-            60_000
-          )
-          if (!rate.ok) return { rewards: [], skipped: rate.error }
-
-          const elig = checkEarnEligibility(antiAbusePolicy, earnEligibility)
-          if (!elig.ok) return { rewards: [], skipped: elig.error }
-
-          const matched = rulesBySourceEvent(rules, i.sourceEvent)
-          if (!matched.length) {
-            return { rewards: [], skipped: "No rule for event" }
-          }
-
-          // Marketplace self-trade block
-          if (
-            antiAbusePolicy.blockMarketplaceSelfTrade &&
-            i.sourceEvent === "MARKETPLACE_ORDER_COMPLETED" &&
-            i.targetId === userId
-          ) {
-            return { rewards: [], skipped: "Self-trade reward blocked" }
-          }
-
-          const created: RewardRecord[] = []
-          let earnedToday = countEarnedToday()
-
-          for (const rule of matched) {
-            if (rule.antiAbuse.blockSelf && i.targetId && i.targetId === userId) {
-              continue
-            }
-            // Duplicate reward same reference
-            const dupR = findDuplicateReward(repo.listRewards(userId), {
-              ruleId: rule.id,
-              referenceId: i.referenceId,
-              sourceEvent: rule.sourceEvent,
-            })
-            if (dupR) continue
-            // Achievement / same-rule same-day dedupe when reference is missing or noisy
-            if (
-              rule.category === "achievement" ||
-              rule.sourceEvent === "ACHIEVEMENT_UNLOCKED"
-            ) {
-              const dayStart = new Date()
-              dayStart.setHours(0, 0, 0, 0)
-              const t0 = dayStart.getTime()
-              const sameDay = repo.listRewards(userId).find(
-                (r) =>
-                  r.ruleId === rule.id &&
-                  r.sourceEvent === rule.sourceEvent &&
-                  r.createdAt >= t0 &&
-                  r.validationStatus !== "rejected" &&
-                  (i.referenceId
-                    ? r.referenceId === i.referenceId
-                    : r.reason === rule.description)
-              )
-              if (sameDay) continue
-            }
-
-            const cool = checkCooldown(rule, i.targetId)
-            if (cool) continue
-            if (countRuleToday(rule.id) >= rule.dailyLimit) continue
-            if (earnedToday + rule.amount > limits.maxDailyEarn) continue
-
-            // Referral daily cap
-            if (
-              rule.category === "referral" &&
-              countRuleToday(rule.id) >= antiAbusePolicy.maxReferralCreditsPerDay
-            ) {
-              continue
-            }
-
-            // All awards stage as pending until claim — enforce pending inventory cap
-            const pendingCount = repo
-              .listRewards(userId)
-              .filter((r) => r.validationStatus === "pending_validation").length
-            if (pendingCount >= limits.maxPendingRewards) continue
-
-            // Stage every positive reward as pending — not transferable until claimed.
-            // ECONOMY 1.2: local/studio path must not stage above activity daily pre-control cap (0.5).
-            // Daily claims use /api/economy/rewards/daily (not this path).
-            const ACTIVITY_PRE_CAP = 0.5
-            const stagedAmount = Math.min(Number(rule.amount) || 0, ACTIVITY_PRE_CAP)
-            if (stagedAmount <= 0) continue
-
-            const reward: RewardRecord = {
-              id: genId("rwd"),
-              userId,
-              ruleId: rule.id,
-              category: rule.category,
-              sourceEvent: rule.sourceEvent,
-              amount: stagedAmount,
-              validationStatus: "pending_validation",
-              referenceId: i.referenceId,
-              reason: rule.description,
-              createdAt: Date.now(),
-            }
-
-            {
-              const built = createLedgerTransaction({
-                userId,
-                kind: "pending",
-                amount: stagedAmount,
-                reason: rule.description,
-                sourceEvent: rule.sourceEvent,
-                referenceId: reward.id,
-                status: "pending",
-                metadata: { claimable: true, ruleId: rule.id },
-              })
-              if (built.ok) {
-                repo.appendTransaction(built.tx)
-                reward.transactionId = built.tx.id
-              }
-            }
-
-            repo.appendReward(reward)
-            markAward(rule.id, i.targetId)
-            created.push(reward)
-          }
-
-          return { rewards: created }
-        },
-      })
     },
 
-    /**
-     * Convert a pending reward into posted/available GHC.
-     * Idempotent — already-paid rewards do not double-credit.
-     * Pending GHC is never transferable until this path succeeds.
-     */
+    /** Generic pending rewards cannot be converted into spendable GHC under Phase 6. */
     async _creditPendingReward(
       rewardId: string,
       actor: string
     ): Promise<MutationResult<{ reward: RewardRecord; wallet: GhcWalletSnapshot }>> {
-      return runMutation({
-        name: "economy.creditPendingReward",
-        actorId: userId,
-        input: { rewardId, actor },
-        mutate: (i) => {
-          const reward = repo.listRewards(userId).find((r) => r.id === i.rewardId)
-          if (!reward) throw new Error("Reward not found")
-          if (reward.userId !== userId) throw new Error("Not your reward")
-          if (reward.validationStatus === "paid") {
-            return {
-              reward,
-              wallet: computeWalletFromLedger(userId, repo.listTransactions(userId), limits),
-            }
-          }
-          if (reward.validationStatus === "rejected" || reward.validationStatus === "blocked") {
-            throw new Error("Reward cannot be claimed")
-          }
-          if (
-            reward.validationStatus !== "pending_validation" &&
-            reward.validationStatus !== "eligible" &&
-            reward.validationStatus !== "approved"
-          ) {
-            throw new Error("Reward is not claimable")
-          }
-
-          const txs = repo.listTransactions(userId)
-          const pendingTx = txs.find(
-            (tx) =>
-              tx.status === "pending" &&
-              (tx.referenceId === reward.id || tx.id === reward.transactionId) &&
-              tx.amount > 0
-          )
-
-          if (pendingTx && repo.updateTransaction) {
-            repo.updateTransaction(userId, pendingTx.id, {
-              status: "expired",
-              metadata: {
-                ...(pendingTx.metadata || {}),
-                claimedAt: Date.now(),
-                claimedBy: i.actor,
-              },
-            })
-          }
-
-          const alreadyPosted = txs.find(
-            (tx) =>
-              tx.status === "posted" &&
-              tx.kind === "earned" &&
-              tx.referenceId === reward.id &&
-              tx.amount > 0
-          )
-          let postedId = alreadyPosted?.id
-          if (!alreadyPosted) {
-            const built = createLedgerTransaction({
-              userId,
-              kind: "earned",
-              amount: reward.amount,
-              reason: reward.reason,
-              sourceEvent: reward.sourceEvent,
-              referenceId: reward.id,
-              status: "posted",
-              metadata: { claimedBy: i.actor, fromPending: pendingTx?.id },
-            })
-            if (!built.ok) throw new Error(built.error)
-            repo.appendTransaction(built.tx)
-            postedId = built.tx.id
-          }
-
-          const next: RewardRecord = {
-            ...reward,
-            validationStatus: "paid",
-            transactionId: postedId,
-            resolvedAt: Date.now(),
-          }
-          repo.updateReward(reward.id, next)
-          domainEvents.publish(
-            "REWARD_EARNED",
-            { rewardId: reward.id, kind: reward.category, points: reward.amount },
-            userId,
-            reward.id
-          )
-          return {
-            reward: next,
-            wallet: computeWalletFromLedger(userId, repo.listTransactions(userId), limits),
-          }
-        },
-      })
+      void rewardId
+      void actor
+      return {
+        ok: false,
+        error: "GHC_ISSUANCE_POLICY_LOCKED: only Daily Claim entitlements may be redeemed",
+        phase: "permission",
+        requestId: repo.mode === "server" ? "server" : "local",
+      }
     },
 
     /**
@@ -1319,6 +968,8 @@ export function createEconomyDomain(deps: {
       toUserName: string
       amount: number
       note?: string
+      /** Public GreenHaven ID used by the authoritative transfer API. */
+      toGreenHavenId?: string
       /** Stable idempotency key — retries with the same key do not double-post */
       referenceId?: string
       /** When fulfilling a request */
@@ -1395,8 +1046,18 @@ export function createEconomyDomain(deps: {
               return { ok: true, data: { tx: found.debit, wallet: wallet(), creditTxId: found.credit?.id } , requestId: "local" }
             }
           }
+          const recipientInput = input.toUserId.trim()
+          // The HTTP boundary receives a public GreenHaven ID, never a client-authoritative
+          // recipient account key. Legacy internal IDs are deterministically mapped to the
+          // default public ID format; the server still resolves that ID against its directory.
+          const toGreenHavenId = input.toGreenHavenId && isValidGreenHavenIdFormat(input.toGreenHavenId)
+            ? normalizeGreenHavenId(input.toGreenHavenId)
+            : isValidGreenHavenIdFormat(recipientInput)
+              ? normalizeGreenHavenId(recipientInput)
+              : deriveGreenHavenId(recipientInput)
           const remote = await repo.executeTransfer({
-            toUserId: input.toUserId.trim(),
+            toUserId: recipientInput,
+            toGreenHavenId,
             toUserName: input.toUserName,
             amount,
             note: note || undefined,

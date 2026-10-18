@@ -23,8 +23,10 @@ export type EconomyPersistenceMode = "local" | "server"
  * Sender is always the authenticated principal on the server.
  */
 export interface GhcTransferIntent {
-  /** Recipient user id */
+  /** Recipient internal key is cache/context only; server resolves the public GreenHaven ID. */
   toUserId: string
+  /** Public recipient identifier required by the authoritative transfer API. */
+  toGreenHavenId: string
   /** Display name for ledger reason text (non-authoritative) */
   toUserName?: string
   /** Positive GHC amount */
@@ -53,6 +55,7 @@ export type GhcTransferErrorCode =
   | "INSUFFICIENT_BALANCE"
   | "INVALID_AMOUNT"
   | "INVALID_RECIPIENT"
+  | "GREENHAVEN_ID_REQUIRED"
   | "SELF_TRANSFER"
   | "BLOCKED_USER"
   | "ACCOUNT_RESTRICTED"
@@ -109,8 +112,10 @@ export function mapTransferFailure(
           ? "BLOCKED_USER"
           : lower.includes("restrict") || lower.includes("suspend")
             ? "ACCOUNT_RESTRICTED"
-            : lower.includes("not found") || lower.includes("recipient")
-              ? "INVALID_RECIPIENT"
+            : lower.includes("greenhaven id") || lower.includes("greenhaven_id")
+              ? "GREENHAVEN_ID_REQUIRED"
+              : lower.includes("not found") || lower.includes("recipient")
+                ? "INVALID_RECIPIENT"
               : lower.includes("auth") || lower.includes("unauthor")
                 ? "AUTH_REQUIRED"
                 : lower.includes("limit") && lower.includes("request")
@@ -138,8 +143,10 @@ export function mapTransferFailure(
           ? "Transfers are not allowed with this user."
           : code === "ACCOUNT_RESTRICTED"
             ? "This account cannot send or request GHC right now."
-            : code === "INVALID_RECIPIENT"
-              ? "Recipient could not be found."
+            : code === "GREENHAVEN_ID_REQUIRED"
+              ? "Enter a valid recipient GreenHaven ID (GH-XXXXXX)."
+              : code === "INVALID_RECIPIENT"
+                ? "Recipient could not be found."
               : code === "INVALID_AMOUNT"
                 ? "Enter a valid transfer amount."
                 : code === "TRANSFER_LIMIT_EXCEEDED"
@@ -166,7 +173,7 @@ export function mapTransferFailure(
 /** Request body for POST /economy/transfers — intent only */
 export function toTransferHttpBody(intent: GhcTransferIntent): Record<string, unknown> {
   return {
-    toUserId: intent.toUserId,
+    toGreenHavenId: intent.toGreenHavenId,
     toUserName: intent.toUserName,
     amount: intent.amount,
     note: intent.note,

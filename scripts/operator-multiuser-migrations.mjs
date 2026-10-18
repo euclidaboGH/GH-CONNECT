@@ -10,6 +10,18 @@ import { fileURLToPath } from "url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const migDir = join(root, "supabase", "migrations")
 
+
+/** Economy / recovery — present in repo; apply only after Stage 2 gates and operator approval */
+const ECONOMY_OPERATOR_REVIEW = [
+  { file: "202610181200_marketplace_stale_payment_claim_recovery.sql", why: "Stale marketplace payment claim recovery" },
+  { file: "202610181300_membership_orphaned_purchase_recovery.sql", why: "Orphaned membership purchase complete-only" },
+  { file: "202610181400_transfer_pair_orphan_recovery.sql", why: "Orphan transfer pair recovery" },
+  { file: "202610181500_referral_programme.sql", why: "Referral schema (issuance flag-gated)" },
+  { file: "202610181501_issuance_guard_referral_and_curation_redistribute.sql", why: "Issuance guard + feature flags" },
+  { file: "202610181502_curation_redistribute_balance_funded.sql", why: "Curation redistribute RPC (flag-gated)" },
+  { file: "202609190001_gh_messaging_durable.sql", why: "Durable messaging core (already in MULTIUSER_CRITICAL if listed)" },
+]
+
 const MULTIUSER_CRITICAL = [
   { file: "20260905_connection_request_intents.sql", class: "REQUIRES_APPROVAL", why: "Connection requests inbox", mustContain: ["ghc_connection_request_upsert", "ghc_connection_request_accept"] },
   { file: "202609120001_marketplace_listings_and_list_rpc.sql", class: "REQUIRED", why: "Shared marketplace catalog", mustContain: ["gh_marketplace"] },

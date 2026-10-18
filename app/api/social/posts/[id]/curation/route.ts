@@ -6,6 +6,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { redistributeCurationReward, curationRedistributeEnabled } from "@/lib/server/curation/redistribute"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
@@ -175,9 +176,39 @@ export async function POST(
     })()
   }
 
+  // Stage 4: optional balance-funded redistribution (flagged; no mint)
+  let redistribute: Record<string, unknown> | undefined
+  if (
+    curationRedistributeEnabled() &&
+    finalChoice === "upvote" &&
+    rewardPercentage > 0
+  ) {
+    const authorId = await lookupPostAuthor(postId)
+    if (authorId && authorId !== auth.userId) {
+      const amount = Math.min(1, Math.max(0, (Number(rewardPercentage) / 100) * 0.1))
+      if (amount > 0) {
+        const red = await redistributeCurationReward({
+          voterId: auth.userId,
+          authorId,
+          postId,
+          amount,
+          referenceId: `curation_redist_${postId}_${auth.userId}`,
+        })
+        redistribute = {
+          attempted: true,
+          ok: red.ok,
+          credited: red.credited,
+          amount: red.amount,
+          reason: red.reason || red.error,
+        }
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     durable: true,
+    redistribute,
     choice: finalChoice,
     upvoteCount: data.upvoteCount ?? 0,
     downvoteCount: data.downvoteCount ?? 0,

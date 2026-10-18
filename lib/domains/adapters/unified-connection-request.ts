@@ -107,9 +107,21 @@ export function getUnifiedConnectionState(
 }
 
 async function postJson(url: string, body: Record<string, unknown>) {
+  let authHeaders: Record<string, string> = {}
+  try {
+    const { IdentityService } = await import("@/lib/identity/identity-service")
+    authHeaders = IdentityService.getAuthHeaders?.() || {}
+  } catch {
+    /* */
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...authHeaders,
+    },
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({}))
@@ -150,7 +162,7 @@ export async function sendUnifiedConnectionRequest(
         source: (input.source as ConnectionRequestContext["source"]) || "discover",
       })
     } catch { /* */ }
-    return { ok: true, intents, durable: "session", state: "outgoing_pending" }
+    // Still attempt durable upsert for idempotent server truth
   }
 
   const ctx: ConnectionRequestContext = {
@@ -159,21 +171,8 @@ export async function sendUnifiedConnectionRequest(
     source: (input.source as ConnectionRequestContext["source"]) || "discover",
   }
 
-  const services = getBoundDomainServices()
-  if (services?.graph?.sendFriendRequest) {
-    const res = await services.graph.sendFriendRequest(input.toUserId, ctx)
-    if (!res.ok) {
-      return { ok: false, error: res.error || "REQUEST_FAILED", code: "REQUEST_FAILED", intents }
-    }
-  } else {
-    persistOutgoingRequestIntent(input.fromUserId, input.toUserId, ctx)
-  }
-
-  try {
-    persistOutgoingRequestIntent(input.fromUserId, input.toUserId, ctx)
-  } catch { /* */ }
-
-  let durable: SendConnectionRequestResult["durable"] = "session"
+  // Server-first: recipient only sees requests that hit durable storage.
+  let durable: SendConnectionRequestResult["durable"] = "server_unavailable"
   if (typeof window !== "undefined") {
     try {
       const { res, data } = await postJson("/api/connections/request", {
@@ -182,13 +181,63 @@ export async function sendUnifiedConnectionRequest(
         note: input.note,
         source: input.source,
       })
-      if (res.ok && data?.durable === true) durable = "session+server"
-      else if (res.ok) durable = "session"
-      else durable = "server_unavailable"
+      if (res.ok && data?.durable === true) {
+        durable = "session+server"
+      } else if (res.ok && data?.ok !== false && data?.durable !== true) {
+        durable = "session"
+        return {
+          ok: false,
+          error: String(data?.error || "REQUEST_NOT_DURABLE"),
+          code: "REQUEST_NOT_DURABLE",
+          intents,
+          durable,
+        }
+      } else {
+        return {
+          ok: false,
+          error: String(data?.error || "REQUEST_FAILED"),
+          code: "REQUEST_FAILED",
+          intents,
+          durable: "server_unavailable",
+        }
+      }
     } catch {
-      durable = "server_unavailable"
+      return {
+        ok: false,
+        error: "NETWORK_ERROR",
+        code: "NETWORK_ERROR",
+        intents,
+        durable: "server_unavailable",
+      }
+    }
+  } else {
+    return {
+      ok: false,
+      error: "SERVER_REQUIRED",
+      code: "SERVER_REQUIRED",
+      intents,
+      durable: "server_unavailable",
     }
   }
+
+  const services = getBoundDomainServices()
+  if (services?.graph?.sendFriendRequest) {
+    const res = await services.graph.sendFriendRequest(input.toUserId, ctx)
+    if (!res.ok) {
+      console.warn("[connection] session graph lag after durable request", res.error)
+    }
+  }
+  try {
+    persistOutgoingRequestIntent(input.fromUserId, input.toUserId, ctx)
+  } catch { /* */ }
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent("ghc:social-mutation", {
+        detail: { type: "connection_request", toUserId: input.toUserId, durable: true },
+      })
+    )
+  } catch { /* */ }
 
   return { ok: true, intents, durable, state: "outgoing_pending" }
 }
@@ -201,20 +250,42 @@ export async function acceptUnifiedConnectionRequest(
     return { ok: false, error: "INVALID_PAIR", code: "INVALID_PAIR" }
   }
   const prior = getOutgoingRequestIntent(fromUserId, actorUserId)
-  const services = getBoundDomainServices()
-  if (!services?.graph?.acceptFriendRequest) {
-    return { ok: false, error: "GRAPH_UNAVAILABLE", code: "GRAPH_UNAVAILABLE" }
-  }
-  const res = await services.graph.acceptFriendRequest(fromUserId)
-  if (!res.ok) {
-    return { ok: false, error: res.error || "ACCEPT_FAILED", code: "ACCEPT_FAILED" }
-  }
+
+  // Server-first accept so both accounts share the same relationship state
   if (typeof window !== "undefined") {
     try {
-      await postJson("/api/connections/accept", { fromUserId })
-      window.dispatchEvent(new CustomEvent("ghc:connection-updated", { detail: { action: "accept", fromUserId } }))
-    } catch { /* */ }
+      const { res, data } = await postJson("/api/connections/accept", { fromUserId })
+      if (!res.ok || data?.ok === false || data?.durable === false) {
+        return {
+          ok: false,
+          error: String(data?.error || "ACCEPT_NOT_DURABLE"),
+          code: "ACCEPT_NOT_DURABLE",
+        }
+      }
+    } catch {
+      return { ok: false, error: "NETWORK_ERROR", code: "NETWORK_ERROR" }
+    }
+  } else {
+    return { ok: false, error: "SERVER_REQUIRED", code: "SERVER_REQUIRED" }
   }
+
+  const services = getBoundDomainServices()
+  if (services?.graph?.acceptFriendRequest) {
+    const res = await services.graph.acceptFriendRequest(fromUserId)
+    if (!res.ok) {
+      console.warn("[connection] session graph lag after durable accept", res.error)
+    }
+  }
+  try {
+    window.dispatchEvent(
+      new CustomEvent("ghc:connection-updated", { detail: { action: "accept", fromUserId } })
+    )
+    window.dispatchEvent(
+      new CustomEvent("ghc:social-mutation", {
+        detail: { type: "connection_accept", fromUserId, durable: true },
+      })
+    )
+  } catch { /* */ }
   return { ok: true, intents: prior?.intents || [] }
 }
 

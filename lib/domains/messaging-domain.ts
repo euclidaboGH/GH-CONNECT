@@ -227,21 +227,75 @@ export function createMessagingDomain(deps: {
           })
           return gate.allowed ? null : gate.reason
         },
-        mutate: (i) => {
-          const initialStatus: MessageStatus = i.offline ? "sending" : "sent"
-          const prepared =
-            prepareMessageForSending(i.text.trim(), actorId, i.conversationId) ||
-            ({
-              id: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        mutate: async (i) => {
+          // Offline: local "sending" only — offline-message-flush will retry.
+          // Online: server-first — no permanent "sent" without durable API ok.
+          const online = shouldAttemptDurableMessaging(i.offline)
+          const clientId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+          if (online) {
+            const res = await apiSendMessageWithRetry(
+              i.conversationId,
+              i.text.trim(),
+              clientId,
+              i.replyToId,
+              i.sharedPostId
+            )
+            const ok = Boolean(res && ((res as { ok?: boolean }).ok || (res as { httpOk?: boolean }).httpOk))
+            const durable = (res as { durable?: boolean }).durable
+            // Accept explicit durable true, or ok without durable:false (legacy API)
+            const accepted = ok && durable !== false
+            if (!accepted) {
+              const err =
+                (res as { error?: string })?.error ||
+                (res as { message?: string })?.message ||
+                "MESSAGE_NOT_DURABLE"
+              throw new Error(err)
+            }
+            const serverId = String(
+              (res as { message?: { id?: string } }).message?.id ||
+                (res as { id?: string }).id ||
+                clientId
+            )
+            const uiMessage: Message = {
+              id: serverId,
               senderId: actorId,
               text: i.text.trim(),
               createdAt: Date.now(),
-              status: initialStatus,
+              status: "sent",
+              replyTo: i.replyToId,
+              sharedPostId: i.sharedPostId,
+            }
+            const msg: DomainMessage & { uiMessage?: Message } = {
+              id: uiMessage.id,
+              conversationId: i.conversationId,
+              senderId: actorId,
+              text: uiMessage.text,
+              replyToId: i.replyToId,
+              createdAt: uiMessage.createdAt || Date.now(),
+              status: "sent",
+              uiMessage,
+            }
+            if (deps.repository) {
+              deps.repository.append(i.conversationId, uiMessage)
+            }
+            return msg
+          }
+
+          // Offline path — queue later via offline-message-flush
+          const prepared =
+            prepareMessageForSending(i.text.trim(), actorId, i.conversationId) ||
+            ({
+              id: clientId,
+              senderId: actorId,
+              text: i.text.trim(),
+              createdAt: Date.now(),
+              status: "sending" as MessageStatus,
             } as Message)
 
           const uiMessage: Message = {
             ...prepared,
-            status: initialStatus,
+            status: "sending",
             replyTo: i.replyToId || prepared.replyTo,
             sharedPostId: i.sharedPostId || prepared.sharedPostId,
           }
@@ -253,42 +307,12 @@ export function createMessagingDomain(deps: {
             text: uiMessage.text,
             replyToId: i.replyToId,
             createdAt: uiMessage.createdAt || Date.now(),
-            status: initialStatus,
+            status: "sending",
             uiMessage,
           }
 
           if (deps.repository) {
             deps.repository.append(i.conversationId, uiMessage)
-          }
-
-          // Durable path: always attempt when online. Permanent success when API ok.
-          // clientMessageId = uiMessage.id for idempotent dedupe on the server.
-          // Flag still gates *requiring* durable success for production ops.
-          if (shouldAttemptDurableMessaging(i.offline)) {
-            void apiSendMessageWithRetry(i.conversationId, uiMessage.text, uiMessage.id, i.replyToId, i.sharedPostId).then((res) => {
-              const ok = Boolean(res && (res as { ok?: boolean }).ok)
-              if (!ok) {
-                try {
-                  console.warn(
-                    "[messaging] durable send deferred/failed",
-                    (res as { error?: string })?.error || "unknown"
-                  )
-                } catch {
-                  /* */
-                }
-                // When flag requires durable and send failed, mark local failed for retry UX
-                if (isDurableMessagingEnabled() && deps.repository) {
-                  try {
-                    deps.repository.update(i.conversationId, uiMessage.id, {
-                      ...uiMessage,
-                      status: "failed",
-                    })
-                  } catch {
-                    /* */
-                  }
-                }
-              }
-            })
           }
 
           return msg
@@ -534,7 +558,7 @@ export function createMessagingDomain(deps: {
           const now = Date.now()
           let id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 
-          // Private DMs: prefer durable conversation id from server (membership rows).
+          // Private DMs: server-first durable conversation id (no local-only id when online).
           if (i.kind === "private" && i.participantId) {
             try {
               const { apiCreateDirectConversation } = await import(
@@ -547,12 +571,21 @@ export function createMessagingDomain(deps: {
                 throw new Error("Cannot start chat: this user needs to open GreenHaven once to sync their privacy settings")
               } else if (res.error === "BLOCKED" || res.error === "PRIVACY_RESTRICTED" || res.status === 403) {
                 throw new Error("Cannot start chat: this user’s messaging privacy settings do not allow it")
-              } else if (isDurableMessagingEnabled()) {
-                throw new Error("Cannot start chat: a secure conversation could not be created. Please retry when the connection recovers.")
+              } else if (shouldAttemptDurableMessaging(false)) {
+                // Online but server did not confirm — do not invent a local-only conversation
+                throw new Error(
+                  res.error
+                    ? `Cannot start chat: ${res.error}`
+                    : "Cannot start chat: a secure conversation could not be created. Please retry when the connection recovers."
+                )
               }
-              // Local-only conversation fallback is allowed only when durable messaging is not required.
             } catch (e) {
               if (e instanceof Error && e.message.startsWith("Cannot start chat:")) throw e
+              if (shouldAttemptDurableMessaging(false)) {
+                throw e instanceof Error
+                  ? e
+                  : new Error("Cannot start chat: connection error")
+              }
             }
           }
 

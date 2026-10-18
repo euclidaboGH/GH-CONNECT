@@ -22,16 +22,13 @@ Static/automated green **does not** imply Testnet verified or production ready.
 
 | Location | Count |
 |----------|------:|
-| `supabase/migrations/*.sql` (canonical files on disk) | **70** |
-| Latest sequencing id | `20261022_gh_content_rewards.sql` |
+| `supabase/migrations/*.sql` (canonical files on disk) | **90** |
+| Latest filename in canonical inventory | `202610240007_gh_post_created_notifications.sql` |
+| Classification | **69 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL / 18 REVIEW_REQUIRED** |
 
-Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations.
+Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations. Migration filenames are sequence identifiers, not proof of application date or live status.
 
-Migration filenames are **sequence identifiers**, not claims about calendar deployment dates.
-
-Phase 14A reconciled inventory: **70** files (67 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL). See `docs/MIGRATION_CHECKLIST.md`, `docs/MIGRATION_GAP_REPORT.md`, `VERIFIED_MANIFEST.txt`.
-
-See **docs/MIGRATION_CHECKLIST.md** for REQUIRED vs PROPOSAL classification. Do not apply all 70 blindly.
+The inventory is generated from `supabase/migrations/*.sql` by `scripts/generate-migration-inventory.mjs`. Run `node scripts/generate-migration-inventory.mjs --check` to detect documentation drift. See `docs/MIGRATION_CHECKLIST.md` and `VERIFIED_MANIFEST.txt`. Never bulk-apply the inventory; reconcile Testnet and Mainnet independently.
 
 ---
 
@@ -133,7 +130,7 @@ Engagement paths must **not** call: `ghc_execute_*`, payment complete, membershi
 2. CI: `npm ci` → typecheck → lint → `test:safety` → build  
 3. Pi Browser E2E (auth, payment, membership)  
 4. Two-user IDOR + multi-instance durability  
-5. `NEXT_PUBLIC_MESSAGING_DURABLE=1` only after messaging IDOR pass  
+5. Keep `NEXT_PUBLIC_MESSAGING_DURABLE=false` by default; enable only after the Testnet migration, two-user IDOR, and delivery E2E gates pass  
 
 ---
 
@@ -152,7 +149,7 @@ See **docs/TESTNET_VERIFICATION_GATE.md**.
 
 - Literal `TODO:` / `FIXME:` markers in application TypeScript: **none found** (last scan).
 - Intentional deferred/fail-closed surfaces: **`docs/DEFERRED_AND_GATED.md`**.
-- Full migration inventory (70): **`docs/MIGRATION_CHECKLIST.md`**.
+- Full generated migration inventory (90): **`docs/MIGRATION_CHECKLIST.md`**.
 
 ### Phase 14B — Static security (2026-10-10)
 
