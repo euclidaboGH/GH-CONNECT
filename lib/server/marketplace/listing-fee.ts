@@ -34,7 +34,7 @@ export type ListingFeeResult = {
   /** true only when an explicit approved config source is present */
   ratesApproved: boolean
   /** Human-readable basis for UI (never trust as authority) */
-  basis: "none" | "fixed_pi" | "fixed_ghc" | "bps_of_seller_price"
+  basis: "none" | "fixed_pi" | "bps_of_seller_price"
   /** Opaque code for clients / logs */
   code: "FEE_NOT_CONFIGURED" | "FEE_FIXED" | "FEE_BPS"
 }

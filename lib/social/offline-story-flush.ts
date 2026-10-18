@@ -18,6 +18,21 @@ export async function flushQueuedStories(): Promise<FlushStoryResult> {
   for (const action of pending) {
     const payload = (action.payload || {}) as Record<string, unknown>
     const id = payload.id ? String(payload.id) : undefined
+    const rawMedia = payload.media
+    const media =
+      rawMedia === null
+        ? null
+        : typeof rawMedia === "object" &&
+            rawMedia !== null &&
+            !Array.isArray(rawMedia) &&
+            ((rawMedia as Record<string, unknown>).type === "image" ||
+              (rawMedia as Record<string, unknown>).type === "video") &&
+            typeof (rawMedia as Record<string, unknown>).url === "string"
+          ? {
+              type: (rawMedia as { type: "image" | "video" }).type,
+              url: (rawMedia as { url: string }).url,
+            }
+          : undefined
     try {
       const result = await withRetry(
         () =>
@@ -27,7 +42,7 @@ export async function flushQueuedStories(): Promise<FlushStoryResult> {
             name: typeof payload.name === "string" ? payload.name : undefined,
             photo: typeof payload.photo === "string" ? payload.photo : undefined,
             text: typeof payload.text === "string" ? payload.text : "",
-            media: payload.media as { type?: string; url?: string } | undefined,
+            media,
             background: typeof payload.background === "string" ? payload.background : undefined,
             audience: typeof payload.audience === "string" ? payload.audience : undefined,
             expiresAt:
