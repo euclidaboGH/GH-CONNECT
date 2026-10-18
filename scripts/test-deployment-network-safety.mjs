@@ -23,7 +23,7 @@ function scanEnvRefs(dir) {
 }
 scanEnvRefs('app'); scanEnvRefs('lib'); scanEnvRefs('components')
 for (const match of read('middleware.ts').matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)) referencedEnv.add(match[1])
-const envNames = new Set([...envExample.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map(m => m[1]))
+const envNames = new Set([...envExample.matchAll(/^\s*#?\s*([A-Z][A-Z0-9_]*)=/gm)].map(m => m[1]))
 const standardEnv = new Set(['NODE_ENV', 'VERCEL', 'VERCEL_ENV'])
 const missingEnvDocs = [...referencedEnv].filter(name => !envNames.has(name) && !standardEnv.has(name))
 const checks = [
