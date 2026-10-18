@@ -322,6 +322,10 @@ export interface Candidate {
   coverPhoto?: string | null
   profilePhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
   coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Optional approximate discovery distance in kilometres when supplied by the server/discovery layer. */
+  distance?: number
+  /** Marks non-durable/demo discovery entries; server-hydrated people explicitly set this false. */
+  isSample?: boolean
 }
 
 export interface MatchEntry {
