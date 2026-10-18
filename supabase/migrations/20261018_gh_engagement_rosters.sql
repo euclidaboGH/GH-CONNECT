@@ -20,14 +20,40 @@ DECLARE
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
   v_reaction text := lower(trim(COALESCE(p_reaction, 'like')));
   v_author text;
+  v_visibility text;
+  v_actor text := trim(COALESCE(p_actor_id, ''));
   v_rows jsonb;
 BEGIN
   IF p_post_id IS NULL OR length(trim(p_post_id)) = 0 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'INVALID_POST');
   END IF;
-  SELECT author_id INTO v_author FROM public.gh_posts WHERE id = p_post_id AND deleted_at IS NULL;
+  IF v_actor = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ACTOR_REQUIRED');
+  END IF;
+  SELECT author_id, visibility INTO v_author, v_visibility
+  FROM public.gh_posts
+  WHERE id = trim(p_post_id) AND deleted_at IS NULL;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
+  END IF;
+
+  -- Keep the roster no more visible than the post itself.
+  IF EXISTS (
+    SELECT 1 FROM public.ghc_user_blocks b
+    WHERE (b.blocker_id = v_actor AND b.blocked_id = v_author)
+       OR (b.blocker_id = v_author AND b.blocked_id = v_actor)
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+  END IF;
+  IF v_visibility = 'public' OR v_author = v_actor THEN
+    NULL;
+  ELSIF v_visibility = 'followers' AND EXISTS (
+    SELECT 1 FROM public.gh_follows f
+    WHERE f.follower_id = v_actor AND f.following_id = v_author
+  ) THEN
+    NULL;
+  ELSE
+    RETURN jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
   END IF;
 
   SELECT COALESCE(jsonb_agg(row_to_json(q)::jsonb ORDER BY q."createdAt" DESC), '[]'::jsonb)

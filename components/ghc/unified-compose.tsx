@@ -103,6 +103,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   useEffect(() => {
     if (!open) return
+    if (initialMode === "story") {
+      onOpenChange(false)
+      window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
+      return
+    }
+    setMode("post")
     const close = () => onOpenChange(false)
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
     window.addEventListener("ghc:tab-change", close)
@@ -562,7 +568,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             role="tab"
             aria-selected={mode === tab}
             onClick={() => {
-              setMode(tab)
+              if (tab === "story") {
+                onOpenChange(false)
+                window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
+                return
+              }
+              setMode("post")
               setSelectedImages([])
               setSelectedVideo(null)
               setStoryMedia(null)

@@ -17,7 +17,7 @@
     "test:daily-wallet": "node scripts/test-daily-claim-wallet-pipeline.mjs",
     "test:release": "node scripts/verify-production-release.mjs",
     "test:safety": "node scripts/scan-production-safety.mjs",
-    "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run build",
+    "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run test:engagement-rosters && npm run test:stories && npm run build",
     "test:idor-checklist": "node scripts/test-idor-isolation.mjs",
     "ops:migration-check": "node scripts/print-migration-checklist.mjs",
     "verify:static": "node scripts/verify-phase14-static.mjs",
@@ -35,7 +35,9 @@
     "test:e2e:prod": "node -e \"if(process.env.GHC_E2E_ALLOW_PRODUCTION!=='1'){console.error('Set GHC_E2E_ALLOW_PRODUCTION=1');process.exit(2)}\" && playwright test --project=chromium",
     "test:e2e:validate": "node -e \"import('./lib/e2e/resolve-base-url.mjs').then(m=>m.requireE2eBaseUrl())\"",
     "operator:live-e2e-social": "node scripts/operator-live-e2e-social.mjs",
-    "operator:verify-migration-defs": "node scripts/operator-verify-migration-defs.mjs"
+    "operator:verify-migration-defs": "node scripts/operator-verify-migration-defs.mjs",
+    "test:engagement-rosters": "node scripts/test-engagement-roster-security.mjs",
+    "test:stories": "node scripts/test-story-creator.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

@@ -1,9 +1,9 @@
 # GreenHaven — Migration Checklist (authoritative inventory)
 
-**Generated:** 2026-10-09T20:54:04Z  
+**Generated:** 2026-10-18T02:04:59Z  
 **Canonical path:** `supabase/migrations/*.sql`  
-**On-disk count:** **70**  
-**Classification:** REQUIRED **67** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
+**On-disk count:** **77**  
+**Classification:** REQUIRED **74** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
 
 This document is the **source inventory**. It does **not** mean migrations are applied to Testnet or Production.
 
@@ -15,30 +15,25 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 
 | Class | Action |
 |-------|--------|
-| **REQUIRED** | Apply **oldest → newest** on Testnet after operator confirms prerequisites |
+| **REQUIRED** | Apply oldest → newest on Testnet after operator confirms prerequisites |
 | **REQUIRES_APPROVAL** | Product + security review, then explicit approve |
 | **PROPOSAL** | **Do not apply** without written approval |
-
----
 
 ## Staging order (REQUIRED groups, oldest first)
 
 1. **Foundation economy / ledger / claims / membership / Pi intents** (20260821 → 20260905 activity governor)
 2. **Auth / Pi identities / sessions / WebAuthn** (20260908*)
-3. **Wallet snapshot + marketplace** (20260911 → 20260912)
+3. **Wallet snapshot + marketplace** (20260911 → 20260912; spendable snapshot follow-up 202610150003)
 4. **Verification + messaging + profiles** (20260914 → 20260919)
 5. **Stage pending + ledger ACL + communities + social core + polls** (20260922 → 20260925)
 6. **Withdrawal + reactions + attention + curation + reputation + ads + creator** (20260926 → 20260930)
 7. **Media / follow / notifications / search / shares / messaging prefs / archive** (20261001 → 20261008)
 8. **Balance lock / spendable / withdrawal settle / activity stage** (20261009 → 20261012)
 9. **GHPV judgment → weight → calibration → settlement infra → soft-delete** (20261013 → 20261020)
-10. **Notification types extend + content rewards tables** (20261021 → 20261022)
+10. **Stable feed/comment cursors + durable match signals + engagement rosters** (202610150001 → 20261018)
+11. **Notification types + content rewards + profile library + roster visibility + story creator** (20261021 → 202610240004)
 
-**Notes on groups 8–10:**
-
-- `20261009`–`20261012` harden balance concurrency; apply only after core ledger RPCs exist.
-- GHPV (`20261013`–`20261020`) is **judgment / weight / settlement infrastructure**. Votes must **not** mint GHC. Settlement is **system-only** (not a client action).
-- `20261022` content rewards creates accrual tables; distribution to ledger is a **separate** economy path.
+**Operator note:** Review migration dependencies and the actual database schema before applying. Apply to Testnet first, run verification queries and feature tests, then promote the same reviewed migrations to Mainnet. The story creator migration stores text-story themes and implements audience visibility for everyone, followers and reciprocal follows. `matches-only` deliberately fails closed until a canonical server-side match relation is available. This inventory is not a record of applied migrations.
 
 ---
 
@@ -108,53 +103,23 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 | 60 | `20261012_ghc_activity_stage_lock_align.sql` | REQUIRED |  |
 | 61 | `20261013_ghpv_judgment_infrastructure.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
 | 62 | `20261014_ghpv_curation_weight_and_settle.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 63 | `20261015_ghpv_curator_calibration_apply.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 64 | `20261016_ghpv_active_weight_set_semantics.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 65 | `20261017_ghpv_settlement_engine.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 66 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 67 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 68 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 69 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
-| 70 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
-| 71 | `20261023_gh_profile_content_library.sql` | NEW | Apply on Testnet before enabling profile library search.
+| 63 | `202610150001_gh_post_list_feed_stable_cursor.sql` | REQUIRED | Stable feed cursor pagination; requires social core. |
+| 64 | `202610150002_gh_comment_stable_cursor.sql` | REQUIRED | Stable comment cursor pagination; requires social core. |
+| 65 | `202610150003_ghc_wallet_snapshot_spendable.sql` | REQUIRED | Wallet snapshot/spendable read model; preserve ledger authority. |
+| 66 | `20261015_ghpv_curator_calibration_apply.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 67 | `20261016_ghpv_active_weight_set_semantics.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 68 | `20261017_ghpv_settlement_engine.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 69 | `20261017_match_signals_durable.sql` | REQUIRED | Durable matching signals; no direct chat grant. |
+| 70 | `20261018_gh_engagement_rosters.sql` | REQUIRED | Engagement roster RPCs; service-role only, owner-gated lists. |
+| 71 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 72 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 73 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 74 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
+| 75 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
+| 76 | `20261023_gh_profile_content_library.sql` | REQUIRED | Profile library search; viewer-authorized. |
+| 77 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REQUIRED | Security follow-up: reaction rosters respect post visibility and blocks. |
+| 78 | `202610240004_gh_story_creator_upgrade.sql` | REQUIRED | Persists text-story backgrounds and enforces everyone/follower/mutual-follow audience visibility; matches-only fails closed until canonical server match relation is available. |
 
 ---
 
-## Non-REQUIRED files (detail)
-
-### REQUIRES_APPROVAL (1)
-
-- `20260905_connection_request_intents.sql`
-
-### PROPOSAL (2) — do not apply by default
-
-- `20260906_community_join_reasons_proposal.sql`
-- `20260907_community_governance_log_proposal.sql`
-
----
-
-## Post-apply verification (SQL examples — operator runs on Testnet)
-
-```sql
-select to_regclass('public.ghc_user_accounts');
-select to_regclass('public.gh_pi_identities');
-select to_regclass('public.gh_sessions');
-select to_regclass('public.gh_posts');
-select to_regclass('public.gh_post_shares');
-select to_regclass('public.gh_social_notifications');
-select to_regclass('public.gh_content_quality_state');  -- GHPV
-select to_regclass('public.gh_content_rewards');        -- content rewards
-```
-
-Also: `GET /api/health` → identity / session / supabase config flags.
-
----
-
-## Related docs
-
-- `docs/MIGRATION_GAP_REPORT.md` — Phase 14A gap analysis (no live DB)
-- `docs/TESTNET_VERIFICATION_GATE.md` — Testnet procedure
-- `docs/DEFERRED_AND_GATED.md` — fail-closed surfaces
-- `scripts/print-migration-checklist.mjs` — regenerate console inventory
-
-**Supersedes** older counts of 54 migrations in prior manifests.
+For current migration-application status, verify the target Supabase project directly. This checklist only inventories files in this repository.

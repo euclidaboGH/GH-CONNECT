@@ -23,6 +23,7 @@ import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation
 import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 import { CreatorStudioOverlay } from "./creator-studio-overlay"
+import ProfileStorySection from "./profile-story-section"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -1043,11 +1044,7 @@ export function GHConnectApp() {
             } else if (action === "challenge") {
               setChallengeOpen(true)
             } else if (action === "story") {
-              window.dispatchEvent(
-                new CustomEvent("ghc:open-compose", {
-                  detail: { mode: "story" },
-                })
-              )
+              window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
             } else {
               // Unified post: text + photo + video + files in one composer
               window.dispatchEvent(
@@ -1134,6 +1131,7 @@ export function GHConnectApp() {
       ) : null}
 
       <CreatorStudioOverlay />
+      <ProfileStorySection creatorHost />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3">
         {visibleToasts.map((toast) => (

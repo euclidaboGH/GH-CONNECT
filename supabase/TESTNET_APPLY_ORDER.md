@@ -22,7 +22,7 @@ The last ACL hardening before the later feature migrations is `202609250003_rpc_
 GHPV migrations `20261013`–`20261020` are repository-only until Testnet; settlement is
 system-only and votes must not mint GHC (see `README.md`).
 
-## Full inventory (70 files, in apply order)
+## Selected operational apply sequence (73 listed entries; see `docs/MIGRATION_CHECKLIST.md` for the complete classified inventory)
 
 | # | File | Action |
 |---|------|--------|
@@ -97,6 +97,8 @@ system-only and votes must not mint GHC (see `README.md`).
 | 69 | `20261021_gh_social_notifications_types_extend.sql` | apply |
 | 70 | `20261022_gh_content_rewards.sql` | apply |
 | 71 | `20261023_gh_profile_content_library.sql` | apply after review |
+| 72 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | apply after review |
+| 73 | `202610240004_gh_story_creator_upgrade.sql` | apply after review |
 
 ## After apply (read-only checks)
 

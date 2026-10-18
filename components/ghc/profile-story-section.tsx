@@ -1,22 +1,47 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Plus, X } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  ArrowLeft, ArrowRight, Camera, Check, Clock3, Eye, ImagePlus, LoaderCircle,
+  Palette, Plus, Send, ShieldCheck, Sparkles, Type, Video, X,
+} from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
-import { socialViewStory } from "@/lib/social/client"
+import { socialListStoryViewers, socialViewStory } from "@/lib/social/client"
 import { compressImage } from "@/lib/ghc-data"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
-import { isDurableMediaUrl, isBlobUrl } from "@/lib/media/durable-url"
+import { isBlobUrl } from "@/lib/media/durable-url"
 import { mediaUserMessage } from "@/lib/media/user-messages"
-import type { StoryItem } from "@/lib/ghc-types"
+import type { StoryAudience, StoryItem } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
 
+type StoryMode = "choose" | "text" | "camera"
+type StoryViewerRecord = Record<string, unknown>
+
+const STORY_BACKGROUNDS = [
+  { name: "Aurora", value: "linear-gradient(145deg,#064e3b 0%,#047857 48%,#0f172a 100%)" },
+  { name: "Sunset", value: "linear-gradient(145deg,#7c2d12 0%,#db2777 52%,#4c1d95 100%)" },
+  { name: "Ocean", value: "linear-gradient(145deg,#082f49 0%,#0369a1 52%,#312e81 100%)" },
+  { name: "Golden", value: "linear-gradient(145deg,#713f12 0%,#ca8a04 52%,#9a3412 100%)" },
+  { name: "Berry", value: "linear-gradient(145deg,#4a044e 0%,#a21caf 55%,#831843 100%)" },
+  { name: "Night", value: "linear-gradient(145deg,#111827 0%,#334155 52%,#020617 100%)" },
+]
+
+const STORY_AUDIENCES: Array<{ id: StoryAudience; title: string; detail: string }> = [
+  { id: "everyone", title: "Everyone", detail: "Anyone who can discover your profile" },
+  { id: "followers", title: "Followers", detail: "People who follow you" },
+  { id: "friends", title: "Friends", detail: "Your mutual connections" },
+  { id: "private", title: "Only me", detail: "Keep this moment private" },
+]
+
+function isInlineImage(url: string | undefined) {
+  return Boolean(url && url.startsWith("data:image/"))
+}
+
 /**
- * Moments strip — one design for feed and profile.
- * - scope="feed": own ring + followed people
- * - scope="profile": owner-only (personal control surface)
+ * Modern, mobile-first Stories experience. Story ownership and engagement are
+ * server-backed where available; UI never reports a local-only reaction as sent.
  */
-export default function ProfileStorySection({ scope = "profile" }: { scope?: "profile" | "feed" }) {
+export default function ProfileStorySection({ scope = "profile", creatorHost = false }: { scope?: "profile" | "feed"; creatorHost?: boolean }) {
   const ghc = useGHC()
   const profile = ghc.profile
   const stories = Array.isArray(ghc.stories) ? ghc.stories : []
@@ -27,108 +52,232 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
   const startConversation = ghc.startConversation
   const sendMessage = ghc.sendMessage
   const setTab = ghc.setTab
-  const conversations = ghc.conversations
+
+  const isOwnStory = useCallback((story: StoryItem) => {
+    return story.ownerId === "current-user" || Boolean(profile.id && story.ownerId === profile.id)
+  }, [profile.id])
 
   const ownStory = stories
-    .filter((story) => story.ownerId === "current-user")
+    .filter((story) => isOwnStory(story) && (story.expiresAt == null || story.expiresAt > Date.now()))
     .sort((a, b) => b.createdAt - a.createdAt)[0]
 
   const followingSet = new Set(following.map(String))
-  const friendSet = new Set(
-    friends
-      .map((friend: unknown) => {
-        if (typeof friend === "string") return friend
-        if (friend && typeof friend === "object") {
-          const item = friend as { id?: string; userId?: string; friendId?: string }
-          return String(item.userId || item.friendId || item.id || "")
-        }
-        return ""
-      })
-      .filter(Boolean),
-  )
+  const friendSet = new Set(friends.map((friend: unknown) => {
+    if (typeof friend === "string") return friend
+    if (friend && typeof friend === "object") {
+      const item = friend as { id?: string; userId?: string; friendId?: string }
+      return String(item.userId || item.friendId || item.id || "")
+    }
+    return ""
+  }).filter(Boolean))
 
-  const otherStories =
-    scope === "feed"
-      ? stories.filter((story) => {
-          if (!story.ownerId || story.ownerId === "current-user" || story.id === ownStory?.id) return false
-          return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId))
-        })
-      : []
+  const otherStories = scope === "feed" ? stories
+    .filter((story) => {
+      if (!story.ownerId || isOwnStory(story) || (story.expiresAt != null && story.expiresAt <= Date.now())) return false
+      if (story.audience === "private" || story.audience === "matches-only") return false
+      if (story.audience === "friends") return friendSet.has(String(story.ownerId))
+      if (story.audience === "followers") return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId))
+      return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId)) || story.audience === "everyone" || !story.audience
+    })
+    .sort((a, b) => b.createdAt - a.createdAt) : []
 
-  const [composerOpen, setComposerOpen] = useState(false)
+  const queue = [ownStory, ...otherStories].filter((item): item is StoryItem => Boolean(item))
+  const [creatorOpen, setCreatorOpen] = useState(false)
+  const [storyMode, setStoryMode] = useState<StoryMode>("choose")
   const [text, setText] = useState("")
   const [media, setMedia] = useState<{ type: "image" | "video"; url: string } | null>(null)
+  const [background, setBackground] = useState(STORY_BACKGROUNDS[0].value)
+  const [audience, setAudience] = useState<StoryAudience>("followers")
+  const [audienceOpen, setAudienceOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [uploading, setUploading] = useState<"image" | "video" | null>(null)
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraError, setCameraError] = useState("")
   const [viewing, setViewing] = useState<StoryItem | null>(null)
-  const [storyAudience, setStoryAudience] = useState<"everyone" | "followers" | "friends" | "private">("followers")
   const [seenStoryIds, setSeenStoryIds] = useState<string[]>([])
+  const [highlights, setHighlights] = useState<string[]>([])
   const [replyText, setReplyText] = useState("")
   const [replying, setReplying] = useState(false)
-  const [storyReaction, setStoryReaction] = useState<string | null>(null)
-  const [highlights, setHighlights] = useState<string[]>([])
+  const [viewerUsers, setViewerUsers] = useState<StoryViewerRecord[]>([])
+  const [loadingViewers, setLoadingViewers] = useState(false)
+  const [viewersOpen, setViewersOpen] = useState(false)
   const imageRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
+  const touchStartX = useRef<number | null>(null)
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("ghc-story-seen")
       if (raw) setSeenStoryIds(JSON.parse(raw))
-    } catch {
-      /* */
-    }
+      const savedHighlights = window.localStorage.getItem("ghc-story-highlights")
+      if (savedHighlights) setHighlights(JSON.parse(savedHighlights))
+    } catch { /* optional local story preferences */ }
   }, [])
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("ghc-story-highlights")
-      if (raw) setHighlights(JSON.parse(raw))
-    } catch {
-      /* */
-    }
+  const toggleHighlight = (storyId: string) => {
+    setHighlights((previous) => {
+      const next = previous.includes(storyId)
+        ? previous.filter((id) => id !== storyId)
+        : [...previous, storyId].slice(-20)
+      try { window.localStorage.setItem("ghc-story-highlights", JSON.stringify(next)) } catch { /* optional local preference */ }
+      addToast?.(next.includes(storyId) ? "Saved to this device’s story highlights" : "Removed from this device’s highlights", "success")
+      return next
+    })
+  }
+
+  const stopCamera = useCallback(() => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    cameraStreamRef.current = null
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
+    setCameraOpen(false)
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (media?.type === "video" && media.url.startsWith("blob:")) URL.revokeObjectURL(media.url)
-    }
+  useEffect(() => () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    if (media?.type === "video" && media.url.startsWith("blob:")) URL.revokeObjectURL(media.url)
   }, [media])
+
+  useEffect(() => {
+    if (!cameraOpen || !cameraVideoRef.current || !cameraStreamRef.current) return
+    cameraVideoRef.current.srcObject = cameraStreamRef.current
+    void cameraVideoRef.current.play().catch(() => undefined)
+  }, [cameraOpen])
+
+  useEffect(() => {
+    if (!viewing) return
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewing(null)
+      if (event.key === "ArrowRight") navigateStory(1)
+      if (event.key === "ArrowLeft") navigateStory(-1)
+    }
+    window.addEventListener("keydown", handleKey)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", handleKey)
+      document.body.style.overflow = previousOverflow
+    }
+    // navigation is stable for this view's queue
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewing?.id, queue.length])
+
+  const openCreator = () => {
+    setText("")
+    setMedia(null)
+    setStoryMode("choose")
+    setCameraError("")
+    setCreatorOpen(true)
+  }
+
+  const closeCreator = () => {
+    stopCamera()
+    setCreatorOpen(false)
+    setCameraError("")
+  }
+
+  useEffect(() => {
+    if (!creatorHost) return
+    const open = () => {
+      setText("")
+      setMedia(null)
+      setStoryMode("choose")
+      setCameraError("")
+      setCreatorOpen(true)
+    }
+    const close = () => {
+      stopCamera()
+      setCreatorOpen(false)
+    }
+    window.addEventListener("ghc:open-story-creator", open)
+    window.addEventListener("ghc:close-transient-ui", close)
+    window.addEventListener("ghc:tab-change", close)
+    return () => {
+      window.removeEventListener("ghc:open-story-creator", open)
+      window.removeEventListener("ghc:close-transient-ui", close)
+      window.removeEventListener("ghc:tab-change", close)
+    }
+  }, [creatorHost, stopCamera])
 
   const readMedia = async (file: File | undefined, type: "image" | "video") => {
     if (!file) return
+    const maxBytes = type === "video" ? 4 * 1024 * 1024 : 30 * 1024 * 1024
+    if (file.size > maxBytes) {
+      addToast?.(type === "video" ? "For now, choose a video clip under 4 MB so it can upload reliably." : "Choose a photo smaller than 30 MB so it can be optimized safely.", "error")
+      return
+    }
     setUploading(type)
     try {
-      const preview = type === "image" ? await compressImage(file) : ""
-      const uploadBlob = type === "image" ? await (await fetch(preview)).blob() : file
+      let uploadBlob: Blob = file
+      let preview = ""
+      if (type === "image") {
+        preview = await compressImage(file)
+        if (preview) uploadBlob = await (await fetch(preview)).blob()
+      }
       const uploaded = await uploadDurableMedia(uploadBlob, { fileName: file.name })
       if (uploaded.ok && uploaded.url && uploaded.kind === type) {
         setMedia({ type, url: uploaded.url })
-        addToast?.(`${type === "image" ? "Photo" : "Video"} ready to share`, "success")
-      } else if (type === "image" && preview.length > 0 && preview.length <= 180_000) {
-        setMedia({ type, url: preview })
-        addToast?.("Photo ready to share", "success")
+        setStoryMode("choose")
+        addToast?.(`${type === "image" ? "Photo" : "Video"} ready`, "success")
       } else {
-        addToast?.(
-          mediaUserMessage(uploaded.ok ? "STORAGE_ERROR" : uploaded.error, uploaded.ok ? undefined : uploaded.userMessage),
-          "error",
-        )
+        addToast?.(mediaUserMessage(uploaded.ok ? "STORAGE_ERROR" : uploaded.error, uploaded.ok ? undefined : uploaded.userMessage), "error")
       }
     } catch {
-      addToast?.(`Could not upload this ${type}`, "error")
+      addToast?.(`Could not prepare this ${type}`, "error")
     } finally {
       setUploading(null)
     }
   }
 
-  const publish = async () => {
-    if (publishing || uploading) return
-    if (!text.trim() && !media) {
-      addToast?.("Add a photo, video, or status first", "error")
+  const startCamera = async () => {
+    setCameraError("")
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Live camera is not available here. Choose a photo or video from your device instead.")
       return
     }
-    const mediaUrl = media?.url || ""
-    if (isBlobUrl(mediaUrl)) {
-      addToast?.("Media still preparing — wait for upload", "error")
+    try {
+      stopCamera()
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1080 }, height: { ideal: 1920 } }, audio: false })
+      cameraStreamRef.current = stream
+      setCameraOpen(true)
+      setStoryMode("camera")
+    } catch {
+      setCameraError("Camera access was blocked or unavailable. You can still choose media from your device.")
+    }
+  }
+
+  const captureCameraPhoto = async () => {
+    const video = cameraVideoRef.current
+    const canvas = cameraCanvasRef.current
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+      setCameraError("Camera is still starting. Try again in a moment.")
+      return
+    }
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.88))
+    if (!blob) {
+      setCameraError("Could not capture the photo. Please try again.")
+      return
+    }
+    stopCamera()
+    await readMedia(new File([blob], `greenhaven-story-${Date.now()}.jpg`, { type: "image/jpeg" }), "image")
+  }
+
+  const publish = async () => {
+    if (publishing || uploading) return
+    const cleanText = text.trim()
+    if (!cleanText && !media) {
+      addToast?.("Add a photo, video, or a text moment first", "error")
+      return
+    }
+    if (media && isBlobUrl(media.url)) {
+      addToast?.("Media is still preparing — wait for the upload to finish", "error")
       return
     }
     setPublishing(true)
@@ -139,365 +288,189 @@ export default function ProfileStorySection({ scope = "profile" }: { scope?: "pr
         ownerId: "current-user",
         name: profile.displayName || "You",
         photo: profile.photos?.[0],
-        text: text.trim(),
+        text: cleanText,
         media,
+        background: !media ? background : undefined,
         createdAt: now,
         status: "published",
-        audience: storyAudience,
+        audience,
         expiresAt: now + 24 * 60 * 60 * 1000,
       }
-      await publishStory?.(next)
-      setText("")
-      setMedia(null)
-      setComposerOpen(false)
-      addToast?.("Moment shared · expires in 24h", "success")
+      const result = await publishStory?.(next)
+      if (!result?.ok) {
+        addToast?.(result?.error || "Could not publish your story. Please try again.", "error")
+        return
+      }
+      if (result.durable === false) {
+        closeCreator()
+        addToast?.(result.error || "Your story is saved locally, but the server did not confirm it. It may not be visible to other people yet.", "error")
+        return
+      }
+      closeCreator()
+      addToast?.("Your story is live · expires in 24 hours", "success")
     } catch {
-      addToast?.("Could not publish moment", "error")
+      addToast?.("Could not publish your story. Please try again.", "error")
     } finally {
       setPublishing(false)
     }
   }
 
-  const hoursLeft = (story: StoryItem) => {
-    const exp = story.expiresAt || story.createdAt + 24 * 60 * 60 * 1000
-    return Math.max(0, Math.ceil((exp - Date.now()) / (60 * 60 * 1000)))
-  }
-
-  const toggleHighlight = (storyId: string) => {
-    setHighlights((prev) => {
-      const next = prev.includes(storyId) ? prev.filter((id) => id !== storyId) : [...prev, storyId].slice(0, 20)
-      try {
-        window.localStorage.setItem("ghc-story-highlights", JSON.stringify(next))
-      } catch {
-        /* */
-      }
-      addToast?.(next.includes(storyId) ? "Added to highlights" : "Removed from highlights", "success")
-      return next
-    })
-  }
-
   const openStory = (story: StoryItem) => {
     setViewing(story)
-    setStoryReaction(null)
     setReplyText("")
-    if (story.ownerId !== "current-user") {
-      try {
-        void socialViewStory(String(story.id)).catch(() => {})
-      } catch {
-        /* */
-      }
+    setViewersOpen(false)
+    setViewerUsers([])
+    if (!isOwnStory(story)) {
+      void socialViewStory(String(story.id)).catch(() => undefined)
       setSeenStoryIds((prev) => {
         if (prev.includes(story.id)) return prev
-        const next = [...prev, story.id].slice(-80)
-        try {
-          window.localStorage.setItem("ghc-story-seen", JSON.stringify(next))
-        } catch {
-          /* */
-        }
+        const next = [...prev, story.id].slice(-120)
+        try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch { /* optional */ }
         return next
       })
     }
   }
 
-  /** Shared circular rail — identical chrome for feed & profile */
-  const rail = (
-    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hide">
-      {/* Own ring */}
-      <button
-        type="button"
-        onClick={() => (ownStory ? openStory(ownStory) : setComposerOpen(true))}
-        className="flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-        aria-label={ownStory ? "View your moment" : "Add a moment"}
-      >
-        <span
-          className={`relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 ${
-            ownStory
-              ? "border-emerald-500"
-              : "border-dashed border-emerald-600/50 bg-emerald-50 dark:bg-emerald-950/40"
-          }`}
-        >
-          {ownStory?.media?.url && isDurableMediaUrl(ownStory.media.url) ? (
-            <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" />
-          ) : profile.photos?.[0] ? (
-            <LazyImage src={profile.photos[0]} alt="" className="h-full w-full object-cover opacity-90" />
-          ) : (
-            <Plus size={22} className="text-emerald-800" />
-          )}
-          {!ownStory ? (
-            <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">
-              +
-            </span>
-          ) : null}
-        </span>
-        <span className="max-w-[4.25rem] truncate text-[10px] font-semibold text-muted-foreground">
-          {ownStory ? "Yours" : "Add"}
-        </span>
-      </button>
-
-      {/* Followed moments — feed only */}
-      {scope === "feed" &&
-        otherStories.map((story) => {
-          const seen = seenStoryIds.includes(story.id)
-          return (
-            <button
-              key={story.id}
-              type="button"
-              onClick={() => openStory(story)}
-              className="flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label={`View ${story.name || "member"}'s moment`}
-            >
-              <span
-                className={`flex h-16 w-16 overflow-hidden rounded-full border-2 p-0.5 ${
-                  seen ? "border-muted-foreground/40" : "border-emerald-500"
-                }`}
-              >
-                <LazyImage
-                  src={story.photo || story.media?.url || "/avatars/user.svg"}
-                  alt=""
-                  className="h-full w-full rounded-full object-cover"
-                />
-              </span>
-              <span className="max-w-[4.25rem] truncate text-[10px] font-semibold text-foreground">
-                {story.name || "Member"}
-              </span>
-            </button>
-          )
-        })}
-
-      {scope === "feed" && otherStories.length === 0 ? (
-        <p className="flex min-h-16 max-w-[9rem] items-center text-[11px] leading-snug text-muted-foreground">
-          Follow people to see their moments.
-        </p>
-      ) : null}
-    </div>
-  )
-
-  /** Shared composer — same on feed & profile */
-  const composer = composerOpen ? (
-    <div className="mt-2 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-      <div className="mb-2.5 flex items-center justify-between">
-        <p className="text-sm font-bold text-foreground">New moment</p>
-        <button type="button" onClick={() => setComposerOpen(false)} aria-label="Close" className="rounded-full p-1 hover:bg-muted">
-          <X size={16} />
-        </button>
-      </div>
-      <div className="mb-2.5 flex flex-wrap gap-1.5">
-        {(
-          [
-            { id: "everyone" as const, label: "Public" },
-            { id: "followers" as const, label: "Followers" },
-            { id: "friends" as const, label: "Friends" },
-            { id: "private" as const, label: "Only me" },
-          ] as const
-        ).map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setStoryAudience(a.id)}
-            className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
-              storyAudience === a.id ? "bg-[var(--gh-green)] text-white" : "bg-muted text-muted-foreground"
-            }`}
-          >
-            {a.label}
-          </button>
-        ))}
-      </div>
-      <p className="mb-2 text-[10px] text-muted-foreground">Visible for 24 hours · Replies become private messages</p>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value.slice(0, 500))}
-        placeholder="Share a moment…"
-        rows={3}
-        className="w-full resize-none rounded-xl border border-border/70 bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-      />
-      {media?.url && typeof media.url === "string" && (isDurableMediaUrl(media.url) || media.url.startsWith("data:")) ? (
-        <div className="relative mt-2 overflow-hidden rounded-lg">
-          {media.type === "image" ? (
-            <LazyImage src={media.url} alt="" className="max-h-40 w-full object-cover" />
-          ) : (
-            <video src={media.url} className="max-h-40 w-full object-cover" controls />
-          )}
-          <button
-            type="button"
-            onClick={() => setMedia(null)}
-            className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white"
-            aria-label="Remove media"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ) : null}
-      <div className="mt-2.5 flex items-center gap-2">
-        <input
-          ref={imageRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(e) => {
-            void readMedia(e.target.files?.[0], "image")
-            e.currentTarget.value = ""
-          }}
-        />
-        <input
-          ref={videoRef}
-          type="file"
-          accept="video/*"
-          className="sr-only"
-          onChange={(e) => {
-            void readMedia(e.target.files?.[0], "video")
-            e.currentTarget.value = ""
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => imageRef.current?.click()}
-          disabled={!!uploading}
-          className="rounded-full border border-border/70 bg-background px-3.5 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-        >
-          {uploading === "image" ? "…" : "Photo"}
-        </button>
-        <button
-          type="button"
-          onClick={() => videoRef.current?.click()}
-          disabled={!!uploading}
-          className="rounded-full border border-border/70 bg-background px-3.5 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-        >
-          {uploading === "video" ? "…" : "Video"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void publish()}
-          disabled={publishing || !!uploading || (!text.trim() && !media)}
-          className="ml-auto rounded-full bg-[var(--gh-green)] px-4 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-        >
-          {publishing ? "…" : "Share"}
-        </button>
-      </div>
-    </div>
-  ) : null
-
-  /** Shared viewer modal */
-  const viewer = viewing ? (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
-      role="dialog"
-      aria-modal="true"
-      onClick={() => setViewing(null)}
-    >
-      <div
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-border/50 bg-card shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate font-bold text-foreground">{viewing.name || "Moment"}</p>
-            <p className="text-[10px] text-muted-foreground">
-              {viewing.audience ? `${viewing.audience} · ` : ""}~{hoursLeft(viewing)}h left
-            </p>
-          </div>
-          <button type="button" onClick={() => setViewing(null)} aria-label="Close" className="rounded-full p-1 hover:bg-muted">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-4">
-          {viewing.media?.type === "image" && viewing.media.url && isDurableMediaUrl(viewing.media.url) ? (
-            <LazyImage src={viewing.media.url} alt="" className="max-h-[45vh] w-full rounded-xl object-cover" />
-          ) : null}
-          {viewing.media?.type === "video" && viewing.media.url ? (
-            <video src={viewing.media.url} controls className="max-h-[45vh] w-full rounded-xl" />
-          ) : null}
-          {viewing.text ? <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/90">{viewing.text}</p> : null}
-
-          {viewing.ownerId === "current-user" ? (
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-              <span>~{(viewing.viewIds?.length ?? 0) || "—"} views</span>
-              <span>·</span>
-              <span>{viewing.replyCount ?? 0} replies</span>
-              <button type="button" className="underline" onClick={() => toggleHighlight(viewing.id)}>
-                {highlights.includes(viewing.id) ? "In highlights" : "Add to highlights"}
-              </button>
-            </div>
-          ) : null}
-
-          {viewing.ownerId && viewing.ownerId !== "current-user" ? (
-            <div className="mt-4 border-t border-border/50 pt-3">
-              <div className="mb-2 flex gap-2">
-                {["👏", "🔥", "💚", "🙌"].map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => {
-                      setStoryReaction(emoji)
-                      addToast?.(`Reacted ${emoji}`, "success")
-                    }}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full text-lg ${
-                      storyReaction === emoji ? "bg-emerald-100 ring-2 ring-emerald-500" : "bg-muted"
-                    }`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reply as message</p>
-              <div className="flex gap-2">
-                <input
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value.slice(0, 300))}
-                  placeholder="Reply to this moment…"
-                  className="min-w-0 flex-1 rounded-xl border border-border/70 px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                  aria-label="Moment reply"
-                />
-                <button
-                  type="button"
-                  disabled={!replyText.trim() || replying}
-                  className="rounded-xl bg-[var(--gh-green)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
-                  onClick={async () => {
-                    const body = replyText.trim()
-                    if (!body || !viewing.ownerId) return
-                    setReplying(true)
-                    try {
-                      const preview = viewing.text?.slice(0, 80) || (viewing.media ? "Photo/video moment" : "Moment")
-                      const msg = `📷 Moment reply\n> ${preview}\n\n${body}`
-                      const convId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
-                      if (convId && sendMessage) await sendMessage(convId, msg)
-                      setReplyText("")
-                      setViewing(null)
-                      setTab?.("messages")
-                      addToast?.("Reply sent as message", "success")
-                    } catch {
-                      addToast?.("Could not send reply", "error")
-                    } finally {
-                      setReplying(false)
-                    }
-                  }}
-                >
-                  {replying ? "…" : "Send"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // ── Feed: circular rail + composer + viewer ──
-  if (scope === "feed") {
-    return (
-      <section className="px-1 py-2" aria-label="Moments">
-        {rail}
-        {composer}
-        {viewer}
-      </section>
-    )
+  const navigateStory = (direction: number) => {
+    if (!viewing || !queue.length) return
+    const index = queue.findIndex((story) => story.id === viewing.id)
+    const next = queue[index + direction]
+    if (next) openStory(next)
+    else setViewing(null)
   }
 
-  // ── Profile: same design, owner-only ──
-  return (
-    <section className="w-full px-4 py-2" aria-label="Your moments">
-      {rail}
-      {composer}
-      {viewer}
-    </section>
+  const loadViewers = async (story: StoryItem) => {
+    setLoadingViewers(true)
+    setViewersOpen(true)
+    try {
+      const result = await socialListStoryViewers(story.id, 100)
+      if (!result.ok) {
+        addToast?.(result.error || "Could not load viewers", "error")
+        setViewerUsers([])
+      } else setViewerUsers(result.users)
+    } catch {
+      addToast?.("Could not load viewers", "error")
+    } finally {
+      setLoadingViewers(false)
+    }
+  }
+
+  const sendStoryReaction = async (emoji: string) => {
+    if (!viewing?.ownerId || isOwnStory(viewing)) return
+    setReplying(true)
+    try {
+      const conversationId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
+      if (!conversationId || !sendMessage) throw new Error("Messaging unavailable")
+      await sendMessage(conversationId, `${emoji} Reacted to your story`)
+      addToast?.("Reaction sent privately", "success")
+      setTab?.("messages")
+      setViewing(null)
+    } catch {
+      addToast?.("Could not send reaction. Please try again.", "error")
+    } finally {
+      setReplying(false)
+    }
+  }
+
+  const sendReply = async () => {
+    const body = replyText.trim()
+    if (!body || !viewing?.ownerId || isOwnStory(viewing) || replying) return
+    setReplying(true)
+    try {
+      const preview = viewing.text?.slice(0, 80) || (viewing.media ? "Photo/video story" : "Story")
+      const convId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
+      if (!convId || !sendMessage) throw new Error("Messaging unavailable")
+      await sendMessage(convId, `📷 Story reply\n> ${preview}\n\n${body}`)
+      setReplyText("")
+      setViewing(null)
+      setTab?.("messages")
+      addToast?.("Reply sent privately", "success")
+    } catch {
+      addToast?.("Could not send reply", "error")
+    } finally {
+      setReplying(false)
+    }
+  }
+
+  const rail = (
+    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 scrollbar-hide" aria-label="Stories from your community">
+      <button type="button" onClick={() => ownStory ? openStory(ownStory) : openCreator()} className="group flex w-[4.8rem] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={ownStory ? "View your story" : "Create a story"}>
+        <span className={`relative flex h-[4.35rem] w-[4.35rem] items-center justify-center overflow-hidden rounded-full p-[3px] transition-transform group-hover:scale-[1.04] ${ownStory ? "bg-gradient-to-tr from-amber-400 via-pink-500 to-violet-600" : "bg-gradient-to-tr from-emerald-500 to-teal-300"}`}>
+          <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[3px] border-background bg-muted">
+            {ownStory?.media?.url ? ownStory.media.type === "video" ? <video src={ownStory.media.url} className="h-full w-full object-cover" muted playsInline /> : <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" /> : profile.photos?.[0] ? <LazyImage src={profile.photos[0]} alt="" className="h-full w-full object-cover" /> : <span className="text-xl font-bold text-emerald-700">{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</span>}
+          </span>
+          {!ownStory && <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-emerald-600 text-white shadow"><Plus size={14} strokeWidth={3} /></span>}
+        </span>
+        <span className="w-full truncate text-[11px] font-semibold text-foreground">{ownStory ? "Your story" : "Add story"}</span>
+      </button>
+
+      {scope === "feed" && otherStories.map((story) => {
+        const seen = seenStoryIds.includes(story.id)
+        return <button key={story.id} type="button" onClick={() => openStory(story)} className="group flex w-[4.8rem] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name || "member"}'s story`}>
+          <span className={`flex h-[4.35rem] w-[4.35rem] items-center justify-center overflow-hidden rounded-full p-[3px] transition-transform group-hover:scale-[1.04] ${seen ? "bg-muted-foreground/40" : "bg-gradient-to-tr from-amber-400 via-pink-500 to-violet-600"}`}>
+            <span className="h-full w-full overflow-hidden rounded-full border-[3px] border-background bg-muted"><LazyImage src={story.photo || story.media?.url || "/avatars/user.svg"} alt="" className="h-full w-full object-cover" /></span>
+          </span>
+          <span className="w-full truncate text-[11px] font-semibold text-foreground">{story.name || "Member"}</span>
+        </button>
+      })}
+      {scope === "feed" && otherStories.length === 0 && <button type="button" onClick={() => openCreator()} className="flex min-h-[4.5rem] min-w-[9rem] items-center gap-2 rounded-2xl border border-dashed border-border px-3 text-left text-xs text-muted-foreground"><Sparkles size={16} className="shrink-0 text-emerald-600" /><span>Start the conversation. Share a moment with your community.</span></button>}
+    </div>
   )
+
+  const creator = creatorOpen ? (
+    <div className="fixed inset-0 z-[90] flex flex-col bg-[#07110f] text-white" role="dialog" aria-modal="true" aria-label="Create a story">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <button type="button" onClick={closeCreator} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20" aria-label="Close story creator"><X size={20} /></button>
+        <div className="min-w-0 text-center"><p className="text-sm font-bold tracking-wide">Create a story</p><p className="text-[11px] text-white/55">A moment that disappears in 24 hours</p></div>
+        <button type="button" onClick={() => setAudienceOpen((open) => !open)} className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold"><ShieldCheck size={14} />{STORY_AUDIENCES.find((a) => a.id === audience)?.title || "Audience"}</button>
+      </header>
+
+      {audienceOpen && <div className="absolute right-3 top-[4.5rem] z-20 w-[min(21rem,calc(100vw-1.5rem))] rounded-2xl border border-white/10 bg-[#12211d] p-2 shadow-2xl">
+        <p className="px-3 py-2 text-xs font-bold text-white/70">Who can see this story?</p>
+        {STORY_AUDIENCES.map((item) => <button key={item.id} type="button" onClick={() => { setAudience(item.id); setAudienceOpen(false) }} className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-white/10"><span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-white/40">{audience === item.id && <span className="h-2 w-2 rounded-full bg-emerald-400" />}</span><span className="flex-1"><span className="block text-sm font-semibold">{item.title}</span><span className="block text-[11px] text-white/55">{item.detail}</span></span></button>)}
+      </div>}
+
+      <main className="flex min-h-0 flex-1 items-center justify-center px-3 pb-3 sm:px-6">
+        <div className="relative flex h-full max-h-[min(76vh,52rem)] w-full max-w-[27rem] flex-col overflow-hidden rounded-[1.8rem] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,.45)]" style={{ background: !media ? background : "#111827" }}>
+          {cameraOpen ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black"><video ref={cameraVideoRef} autoPlay muted playsInline className="h-full w-full object-cover" /><canvas ref={cameraCanvasRef} className="hidden" /><div className="absolute bottom-5 flex items-center gap-4"><button type="button" onClick={stopCamera} className="rounded-full bg-black/55 px-4 py-2 text-sm">Cancel</button><button type="button" onClick={() => void captureCameraPhoto()} className="flex h-16 w-16 items-center justify-center rounded-full border-[5px] border-white bg-white/20 shadow-xl" aria-label="Take photo"><span className="h-10 w-10 rounded-full bg-white" /></button></div></div> : media?.url ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black">{media.type === "image" ? <img src={media.url} alt="Story preview" className="h-full w-full object-contain" /> : <video src={media.url} controls playsInline className="h-full w-full object-contain" />}<button type="button" onClick={() => setMedia(null)} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60" aria-label="Remove selected media"><X size={17} /></button></div> : storyMode === "text" ? <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-4 flex items-center gap-2 text-white/75"><Type size={17} /><span className="text-xs font-semibold uppercase tracking-[.18em]">Text story</span></div><textarea autoFocus value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} placeholder="What’s on your mind?" maxLength={500} className="min-h-[13rem] w-full resize-none bg-transparent text-center text-2xl font-semibold leading-relaxed text-white outline-none placeholder:text-white/50 sm:text-3xl" /><p className="text-center text-xs text-white/60">{text.length}/500</p></div> : <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-5 flex items-center gap-2"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15"><Sparkles size={20} /></span><div><p className="text-lg font-bold">Make it a moment.</p><p className="text-xs text-white/65">Start with a photo, video or words.</p></div></div><div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => void startCamera()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Camera size={24} /><span><span className="block text-sm font-bold">Open camera</span><span className="text-[11px] text-white/60">Capture a moment now</span></span></button><button type="button" onClick={() => imageRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><ImagePlus size={24} /><span><span className="block text-sm font-bold">Photo</span><span className="text-[11px] text-white/60">Choose from gallery</span></span></button><button type="button" onClick={() => videoRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Video size={24} /><span><span className="block text-sm font-bold">Video</span><span className="text-[11px] text-white/60">Choose a video clip</span></span></button><button type="button" onClick={() => { setStoryMode("text"); setMedia(null) }} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Type size={24} /><span><span className="block text-sm font-bold">Text story</span><span className="text-[11px] text-white/60">Words with a mood</span></span></button></div><p className="mt-5 text-center text-[11px] leading-relaxed text-white/50">Your original media stays yours. Choose who can see this moment before sharing.</p></div>}
+
+          {!cameraOpen && (media || storyMode === "text") && <div className="shrink-0 space-y-3 bg-gradient-to-t from-black/85 via-black/60 to-transparent p-4 pt-8 sm:p-5 sm:pt-8">
+            {storyMode === "text" && !media && <div className="flex items-center gap-2 overflow-x-auto pb-1" aria-label="Text background themes">{STORY_BACKGROUNDS.map((item) => <button key={item.name} type="button" title={item.name} aria-label={`${item.name} background`} onClick={() => setBackground(item.value)} className={`h-8 w-8 shrink-0 rounded-full border-2 ${background === item.value ? "border-white ring-2 ring-white/30" : "border-white/25"}`} style={{ background: item.value }} />)}<span className="ml-1 flex items-center gap-1 text-[11px] text-white/65"><Palette size={13} /> Mood · {text.length}/500</span></div>}
+            {media && <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} placeholder="Add a caption…" rows={2} maxLength={500} className="w-full resize-none rounded-2xl border border-white/15 bg-black/25 px-4 py-3 text-sm text-white outline-none placeholder:text-white/55 focus:border-white/40" />}
+            <div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setStoryMode("choose")} className="rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white/85">Change media</button><button type="button" disabled={publishing || !!uploading || (!text.trim() && !media)} onClick={() => void publish()} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 py-2.5 text-sm font-extrabold text-[#06251a] shadow-lg transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50">{publishing ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={15} />}{publishing ? "Publishing…" : "Share story"}</button></div>
+          </div>}
+          {uploading && <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/75 text-center"><LoaderCircle size={30} className="animate-spin text-emerald-300" /><p className="text-sm font-semibold">Preparing your story…</p><p className="text-xs text-white/55">Keep this screen open while media uploads.</p></div>}
+        </div>
+      </main>
+
+      <footer className="flex shrink-0 items-center justify-center gap-2 px-4 pb-4 text-[11px] text-white/50"><Clock3 size={13} /> Stories disappear after 24 hours <span>·</span> <ShieldCheck size={13} /> {STORY_AUDIENCES.find((item) => item.id === audience)?.title}</footer>
+      {cameraError && <div role="status" className="mx-auto mb-3 max-w-md rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-xs text-amber-100">{cameraError}</div>}
+      <input ref={imageRef} type="file" accept="image/*" className="sr-only" onChange={(e) => { void readMedia(e.currentTarget.files?.[0], "image"); e.currentTarget.value = "" }} />
+      <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={(e) => { void readMedia(e.currentTarget.files?.[0], "video"); e.currentTarget.value = "" }} />
+    </div>
+  ) : null
+
+  const viewer = viewing ? (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black text-white" role="dialog" aria-modal="true" aria-label={`${viewing.name || "Member"}'s story`} onClick={() => setViewing(null)} onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }} onTouchEnd={(e) => { if (touchStartX.current == null) return; const delta = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current; if (Math.abs(delta) > 65) navigateStory(delta < 0 ? 1 : -1); touchStartX.current = null }}>
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 p-3 sm:px-6 sm:py-4" onClick={(e) => e.stopPropagation()}><div className="flex min-w-0 flex-1 gap-1.5">{queue.map((item) => { const itemIndex = queue.findIndex((q) => q.id === item.id); const activeIndex = queue.findIndex((q) => q.id === viewing.id); const completed = itemIndex < activeIndex; const active = item.id === viewing.id; return <span key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30"><span className={`block h-full rounded-full ${completed ? "w-full bg-white" : active && viewing.media?.type !== "video" ? "bg-white" : "bg-transparent"}`} style={active && viewing.media?.type !== "video" ? { animation: "gh-story-progress 7s linear forwards" } : undefined} onAnimationEnd={active && viewing.media?.type !== "video" ? () => navigateStory(1) : undefined} /></span> })}</div><button type="button" onClick={() => setViewing(null)} className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label="Close story"><X size={20} /></button></div>
+      <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
+        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]">{viewing.media.type === "video" ? <video key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <img src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
+        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <img src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
+        {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
+        {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}
+        {viewing.media && viewing.text && <p className="absolute bottom-28 left-4 right-4 z-10 whitespace-pre-wrap rounded-2xl bg-black/35 px-4 py-3 text-sm leading-relaxed sm:bottom-32 sm:left-8 sm:right-8">{viewing.text}</p>}
+        {!isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-4 pb-5 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6 sm:pb-7" onClick={(e) => e.stopPropagation()}><div className="mb-3 flex items-center justify-center gap-3">{["💚", "🔥", "👏", "😂", "😍"].map((emoji) => <button key={emoji} type="button" disabled={replying} onClick={() => void sendStoryReaction(emoji)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl transition hover:scale-110 hover:bg-white/20 disabled:opacity-50" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}</div><div className="flex items-center gap-2"><input value={replyText} onChange={(e) => setReplyText(e.target.value.slice(0, 300))} onKeyDown={(e) => { if (e.key === "Enter") void sendReply() }} placeholder="Reply privately…" aria-label="Reply to story" className="h-12 min-w-0 flex-1 rounded-full border border-white/20 bg-black/30 px-5 text-sm text-white outline-none placeholder:text-white/60 focus:border-white/60" /><button type="button" onClick={() => void sendReply()} disabled={!replyText.trim() || replying} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-[#06251a] disabled:opacity-50" aria-label="Send reply">{replying ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}</button></div></div>}
+        {isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 to-transparent px-4 pb-6 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6"><p className="text-center text-xs text-white/75"><Eye size={14} className="mr-1 inline" />Story insights · Open Viewers to see who watched</p></div>}
+      </div>
+      {viewersOpen && <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center" onClick={(e) => { e.stopPropagation(); setViewersOpen(false) }}><div className="max-h-[72vh] w-full max-w-md overflow-hidden rounded-t-3xl border border-white/10 bg-[#101a17] sm:rounded-3xl" onClick={(e) => e.stopPropagation()}><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-bold">Story viewers</p><p className="text-xs text-white/55">People who watched this story</p></div><button type="button" onClick={() => setViewersOpen(false)} aria-label="Close viewers" className="rounded-full bg-white/10 p-2"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{loadingViewers ? <div className="flex items-center justify-center gap-2 p-8 text-sm text-white/70"><LoaderCircle size={18} className="animate-spin" />Loading viewers…</div> : viewerUsers.length ? viewerUsers.map((user, index) => <div key={String(user.userId || index)} className="flex items-center gap-3 rounded-xl px-3 py-3"><span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/10">{typeof user.avatarUrl === "string" && user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span>{String(user.displayName || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{String(user.displayName || "Member")}</span><Check size={16} className="text-emerald-300" /></div>) : <p className="p-8 text-center text-sm text-white/55">No viewers yet. When someone watches, they’ll appear here.</p>}</div></div></div>}
+    </div>
+  ) : null
+
+  if (creatorHost) return <>{creator}</>
+
+  return <section className={scope === "feed" ? "px-1 py-2" : "w-full px-4 py-2"} aria-label={scope === "feed" ? "Stories" : "Your stories"}>
+    {rail}
+    {creator}
+    {viewer}
+  </section>
 }

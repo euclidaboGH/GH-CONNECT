@@ -26,6 +26,8 @@ export interface StoryItem {
   photo?: string
   text: string
   media?: { type: "image" | "video"; url: string } | null
+  /** Preset background used for text-only stories. */
+  background?: string
   createdAt: number
   /** Lifecycle */
   status?: StoryStatus

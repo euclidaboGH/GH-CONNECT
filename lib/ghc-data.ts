@@ -39,6 +39,14 @@ export function seedStories(): StoryItem[] {
 }
 
 const STORY_MEDIA_MAX_BYTES = 48_000
+const SAFE_STORY_BACKGROUNDS = new Set([
+  "linear-gradient(145deg,#064e3b 0%,#047857 48%,#0f172a 100%)",
+  "linear-gradient(145deg,#7c2d12 0%,#db2777 52%,#4c1d95 100%)",
+  "linear-gradient(145deg,#082f49 0%,#0369a1 52%,#312e81 100%)",
+  "linear-gradient(145deg,#713f12 0%,#ca8a04 52%,#9a3412 100%)",
+  "linear-gradient(145deg,#4a044e 0%,#a21caf 55%,#831843 100%)",
+  "linear-gradient(145deg,#111827 0%,#334155 52%,#020617 100%)",
+])
 
 function boundedStoryText(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, maxLength) : ""
@@ -63,6 +71,12 @@ export function sanitizeStory(value: unknown): StoryItem | null {
     photo: typeof raw.photo === "string" && raw.photo.length <= STORY_MEDIA_MAX_BYTES ? raw.photo : undefined,
     text: boundedStoryText(raw.text, 500),
     media,
+    background: typeof raw.background === "string" && SAFE_STORY_BACKGROUNDS.has(raw.background) ? raw.background : undefined,
+    audience: ["everyone", "followers", "friends", "matches-only", "private"].includes(String(raw.audience)) ? raw.audience : undefined,
+    status: ["draft", "published", "expired", "archived", "highlight"].includes(String(raw.status)) ? raw.status : undefined,
+    expiresAt: typeof raw.expiresAt === "number" && Number.isFinite(raw.expiresAt) ? raw.expiresAt : undefined,
+    archivedAt: typeof raw.archivedAt === "number" && Number.isFinite(raw.archivedAt) ? raw.archivedAt : undefined,
+    highlightedAt: typeof raw.highlightedAt === "number" && Number.isFinite(raw.highlightedAt) ? raw.highlightedAt : undefined,
     createdAt,
   }
 }

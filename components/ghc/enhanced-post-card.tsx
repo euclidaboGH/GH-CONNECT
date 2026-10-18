@@ -921,6 +921,13 @@ function EnhancedPostCardInner({
         upvoteCount={upvoteCount}
         downvoteCount={downvoteCount}
       />
+
+      <EngagementRosterSheet
+        open={rosterOpen}
+        onClose={() => setRosterOpen(false)}
+        kind={rosterKind}
+        postId={post.id}
+      />
     </div>
   )
 }
@@ -974,13 +981,5 @@ export function VisibilityReasonTooltip({
         </div>
       </div>
     </div>
-      <EngagementRosterSheet
-        open={rosterOpen}
-        onClose={() => setRosterOpen(false)}
-        kind={rosterKind}
-        postId={post.id}
-      />
-
-
   )
 }

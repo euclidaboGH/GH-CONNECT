@@ -24,7 +24,17 @@ type StoryRequestBody = {
   photo?: unknown
   ownerPhoto?: unknown
   audience?: unknown
+  background?: unknown
 }
+
+const SAFE_STORY_BACKGROUNDS = new Set([
+  "linear-gradient(145deg,#064e3b 0%,#047857 48%,#0f172a 100%)",
+  "linear-gradient(145deg,#7c2d12 0%,#db2777 52%,#4c1d95 100%)",
+  "linear-gradient(145deg,#082f49 0%,#0369a1 52%,#312e81 100%)",
+  "linear-gradient(145deg,#713f12 0%,#ca8a04 52%,#9a3412 100%)",
+  "linear-gradient(145deg,#4a044e 0%,#a21caf 55%,#831843 100%)",
+  "linear-gradient(145deg,#111827 0%,#334155 52%,#020617 100%)",
+])
 
 function safeStoryMediaUrl(value: unknown): string | null {
   const raw = typeof value === "string" ? value.trim() : ""
@@ -119,6 +129,7 @@ export async function POST(request: Request) {
     text,
     mediaType: requestedMediaType || (mediaUrl ? "image" : null),
     mediaUrl,
+    background: typeof body.background === "string" && SAFE_STORY_BACKGROUNDS.has(body.background) ? body.background : null,
     audience: ["everyone", "followers", "friends", "matches-only", "private"].includes(
       String(body.audience || "")
     )

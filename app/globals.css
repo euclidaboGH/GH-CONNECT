@@ -1821,3 +1821,5 @@ body {
 .dark {
   --gh-modal-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), 0 8px 24px rgba(109, 40, 217, 0.10);
 }
+
+@keyframes gh-story-progress { from { width: 0%; } to { width: 100%; } }

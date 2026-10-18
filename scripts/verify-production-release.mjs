@@ -40,6 +40,7 @@ const SUITES = [
   ["scripts/test-community-feed-search.mjs", "community-feed-search"],
   ["scripts/test-home-os-audit.mjs", "home-os-audit"],
   ["scripts/test-social-experience-upgrade.mjs", "social-experience"],
+  ["scripts/test-engagement-roster-security.mjs", "engagement-roster-security"],
   ["scripts/test-social-os-foundation.mjs", "social-os-foundation"],
   ["scripts/test-economy-v12.mjs", "economy-v12"],
   ["scripts/test-pi-payment-durable.mjs", "pi-payment-durable"],

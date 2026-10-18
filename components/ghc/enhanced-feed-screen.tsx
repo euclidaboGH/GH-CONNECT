@@ -380,8 +380,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   useEffect(() => {
     const open = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
-      if (d.mode === "story") setComposeMode("story")
-      else setComposeMode("post")
+      if (d.mode === "story") {
+        window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
+        return
+      }
+      setComposeMode("post")
       setShowComposer(true)
     }
     window.addEventListener("ghc:open-compose", open as EventListener)
@@ -910,7 +913,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   type="button"
                   onClick={() => {
                     try {
-                      window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "story" } }))
+                      window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
                     } catch {
                       setShowComposer(true)
                     }
