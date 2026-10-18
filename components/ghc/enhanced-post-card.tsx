@@ -71,7 +71,7 @@ interface EnhancedPostCardProps {
   onBlock?: (postId: string) => void
   onCopyLink?: (postId: string) => void
   onInsights?: (postId: string) => void
-  onOpenMedia?: (url: string, caption?: string) => void
+  onOpenPost?: (postId: string) => void
   onShowVisibilityReason: (postId: string) => void
   visibilityReason?: { reason: string; category: string }
   onOpenProfile?: (userId: string) => void
@@ -98,14 +98,12 @@ function EnhancedPostCardInner({
   onBlock,
   onCopyLink,
   onInsights,
-  onOpenMedia,
+  onOpenPost,
   onShowVisibilityReason,
   visibilityReason,
   onOpenProfile,
 }: EnhancedPostCardProps) {
   const [showReactions, setShowReactions] = useState(false)
-  const [lastTapTime, setLastTapTime] = useState<number>(0)
-  const [tapCount, setTapCount] = useState<number>(0)
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
   const displayAuthor = (() => {
     const raw = String(post.authorName || "").trim()
@@ -132,7 +130,6 @@ function EnhancedPostCardInner({
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
   const [rosterOpen, setRosterOpen] = useState(false)
@@ -163,7 +160,13 @@ function EnhancedPostCardInner({
     if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
     if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
   }, [post.id, propUp, propDown])
-  const netJudgment = upvoteCount - downvoteCount
+  const visibleLikeCount = Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) || 0)
+  const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
+  const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
+  const visibleReactionEntries = Object.entries(post.reactionCounts || {})
+    .filter(([, count]) => Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+  const reactionEmoji: Record<string, string> = { like: "❤️", love: "😍", support: "💪", inspire: "✨", insight: "💡", celebrate: "🎉", laugh: "😂", fire: "🔥", clap: "👏", wow: "😮", sad: "😢" }
 
   // Community review status is loaded only on its dedicated detail surface.
   // Fetching it once per feed card caused an N+1 request storm and the value
@@ -250,23 +253,12 @@ function EnhancedPostCardInner({
     }
   }, [post.id])
 
-  // Double-tap media → author profile (Like/Pass for matching live on profiles, not posts)
-  const handleImageTap = () => {
-    const now = Date.now()
-    const timeSinceLastTap = now - lastTapTime
-    setLastTapTime(now)
-
-    if (timeSinceLastTap < 300 && tapCount > 0) {
-      setTapCount(0)
-      if (!isOwn && post.authorId) {
-        onOpenProfile?.(post.authorId)
-      }
-    } else {
-      setTapCount(1)
-      doubleTapTimerRef.current = setTimeout(() => {
-        setTapCount(0)
-      }, 300)
-    }
+  // A single tap on the post media opens the complete post view, not just a thumbnail.
+  const handleImageTap = (event?: React.MouseEvent) => {
+    const target = event?.target as HTMLElement | null
+    if (target?.closest("button, a, [role=button]")) return
+    event?.stopPropagation()
+    onOpenPost?.(post.id)
   }
 
   // Long-press for quick reactions
@@ -345,7 +337,12 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground cursor-pointer"
+      onClick={(event) => {
+        const target = event.target as HTMLElement | null
+        if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
+        onOpenPost?.(post.id)
+      }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
@@ -744,6 +741,8 @@ function EnhancedPostCardInner({
           </div>
         )}
 
+        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={(event) => { event.stopPropagation(); onOpenPost?.(post.id) }} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Open video post in full view"><video src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video · View post</span></button> : null}
+
         {/* Quote repost */}
         {post.quoteOf && (
           <div className="mb-2 p-2 border border-border/80 rounded-lg bg-muted/40 text-xs text-muted-foreground">
@@ -752,6 +751,17 @@ function EnhancedPostCardInner({
           </div>
         )}
       </div>
+
+      {/* Always-visible engagement summary and recent comment previews, hydrated with the feed. */}
+      <section className="mx-4 mb-3 rounded-2xl border border-border/50 bg-muted/20 px-3 py-2.5" aria-label="Post engagement">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5"><span aria-hidden>❤️</span><strong className="tabular-nums text-foreground">{visibleLikeCount.toLocaleString()}</strong><span>likes</span></span>
+          <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="inline-flex items-center gap-1.5 hover:text-foreground"><MessageCircle size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleCommentCount.toLocaleString()}</strong><span>comments</span></button>
+          <span className="inline-flex items-center gap-1.5"><Share2 size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleShareCount.toLocaleString()}</strong><span>shares</span></span>
+        </div>
+        {visibleReactionEntries.length > 0 ? <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Reaction counts">{visibleReactionEntries.map(([type, count]) => <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card px-2 py-1 text-[11px] font-semibold text-foreground"><span>{reactionEmoji[type] || "✨"}</span><span className="tabular-nums">{Number(count).toLocaleString()}</span></span>)}</div> : null}
+        {Array.isArray(post.comments) && post.comments.length > 0 ? <div className="mt-2 space-y-1.5 border-t border-border/40 pt-2">{post.comments.slice(-2).map((comment) => <button key={comment.id} type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="block w-full truncate text-left text-xs text-muted-foreground hover:text-foreground"><strong className="text-foreground">{comment.authorName || "Member"}</strong><span className="ml-1.5">{comment.text}</span></button>)}{visibleCommentCount > post.comments.length ? <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="text-[11px] font-bold text-emerald-700 hover:underline dark:text-emerald-300">View all {visibleCommentCount.toLocaleString()} comments</button> : null}</div> : visibleCommentCount > 0 ? <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="mt-2 border-t border-border/40 pt-2 text-left text-[11px] font-bold text-emerald-700 hover:underline dark:text-emerald-300">View {visibleCommentCount.toLocaleString()} comments</button> : null}
+      </section>
 
       {/* Engagement stats */}
       {post.engagement && (

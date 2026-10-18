@@ -6,7 +6,7 @@ import {
   Palette, Plus, Send, ShieldCheck, Sparkles, Type, Video, X,
 } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
-import { socialListStoryViewers, socialViewStory } from "@/lib/social/client"
+import { socialListStoryViewers, socialViewStory, socialToggleStoryReaction } from "@/lib/social/client"
 import { compressImage } from "@/lib/ghc-data"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { isBlobUrl } from "@/lib/media/durable-url"
@@ -99,6 +99,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const [replyText, setReplyText] = useState("")
   const [replying, setReplying] = useState(false)
   const [viewerUsers, setViewerUsers] = useState<StoryViewerRecord[]>([])
+  const [storyReactionOverrides, setStoryReactionOverrides] = useState<Record<string, Record<string, number>>>({})
   const [loadingViewers, setLoadingViewers] = useState(false)
   const [viewersOpen, setViewersOpen] = useState(false)
   const imageRef = useRef<HTMLInputElement>(null)
@@ -356,18 +357,29 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   }
 
   const sendStoryReaction = async (emoji: string) => {
-    if (!viewing?.ownerId || isOwnStory(viewing)) return
+    if (!viewing?.ownerId || isOwnStory(viewing) || replying) return
     setReplying(true)
     try {
-      const conversationId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
-      if (!conversationId || !sendMessage) throw new Error("Messaging unavailable")
-      const accepted = await sendMessage(conversationId, `${emoji} Reacted to your story`)
-      if (!accepted) throw new Error("Reaction was not accepted")
-      addToast?.("Reaction sent privately", "success")
-      setTab?.("messages")
-      setViewing(null)
-    } catch {
-      addToast?.("Could not send reaction. Please try again.", "error")
+      const result = await socialToggleStoryReaction(viewing.id, emoji)
+      if (!result.ok || result.durable === false) {
+        throw new Error(result.error || "Story reaction could not be saved")
+      }
+      const counts = result.reactionCounts || {}
+      setStoryReactionOverrides((previous) => ({ ...previous, [viewing.id]: counts }))
+      setViewing((previous) => previous && previous.id === viewing.id
+        ? { ...previous, reactionCounts: counts, viewerReactions: result.viewerReactions || previous.viewerReactions || [] }
+        : previous)
+      // Keep the existing private notification as a best-effort extra; the durable
+      // reaction remains saved even if messaging is unavailable.
+      if (result.active) {
+        try {
+          const conversationId = await startConversation?.(viewing.ownerId, viewing.name || "Member", viewing.photo || "")
+          if (conversationId && sendMessage) await sendMessage(conversationId, `${emoji} Reacted to your story`)
+        } catch { /* a durable story reaction does not depend on private messaging */ }
+      }
+      addToast?.(result.active ? "Story reaction saved" : "Story reaction removed", "success")
+    } catch (error) {
+      addToast?.(error instanceof Error ? error.message : "Could not save story reaction", "error")
     } finally {
       setReplying(false)
     }
@@ -395,27 +407,26 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   }
 
   const rail = (
-    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 scrollbar-hide" aria-label="Stories from your community">
-      <button type="button" onClick={() => ownStory ? openStory(ownStory) : openCreator()} className="group flex w-[4.8rem] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={ownStory ? "View your story" : "Create a story"}>
-        <span className={`relative flex h-[4.35rem] w-[4.35rem] items-center justify-center overflow-hidden rounded-full p-[3px] transition-transform group-hover:scale-[1.04] ${ownStory ? "bg-gradient-to-tr from-amber-400 via-pink-500 to-violet-600" : "bg-gradient-to-tr from-emerald-500 to-teal-300"}`}>
-          <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[3px] border-background bg-muted">
-            {ownStory?.media?.url ? ownStory.media.type === "video" ? <video src={ownStory.media.url} className="h-full w-full object-cover" muted playsInline /> : <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" /> : profile.photos?.[0] ? <LazyImage src={profile.photos[0]} alt="" className="h-full w-full object-cover" /> : <span className="text-xl font-bold text-emerald-700">{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</span>}
-          </span>
-          {!ownStory && <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-emerald-600 text-white shadow"><Plus size={14} strokeWidth={3} /></span>}
-        </span>
-        <span className="w-full truncate text-[11px] font-semibold text-foreground">{ownStory ? "Your story" : "Add story"}</span>
-      </button>
-
-      {scope === "feed" && otherStories.map((story) => {
-        const seen = seenStoryIds.includes(story.id)
-        return <button key={story.id} type="button" onClick={() => openStory(story)} className="group flex w-[4.8rem] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name || "member"}'s story`}>
-          <span className={`flex h-[4.35rem] w-[4.35rem] items-center justify-center overflow-hidden rounded-full p-[3px] transition-transform group-hover:scale-[1.04] ${seen ? "bg-muted-foreground/40" : "bg-gradient-to-tr from-amber-400 via-pink-500 to-violet-600"}`}>
-            <span className="h-full w-full overflow-hidden rounded-full border-[3px] border-background bg-muted"><LazyImage src={story.photo || story.media?.url || "/avatars/user.svg"} alt="" className="h-full w-full object-cover" /></span>
-          </span>
-          <span className="w-full truncate text-[11px] font-semibold text-foreground">{story.name || "Member"}</span>
+    <div className="space-y-2.5" aria-label="Stories from your community">
+      {scope === "feed" ? <div className="flex items-end justify-between gap-3 px-1"><div><h2 className="text-sm font-extrabold tracking-tight text-foreground">Stories & moments</h2><p className="text-[11px] text-muted-foreground">See what your community is sharing</p></div><span className="shrink-0 text-[10px] font-semibold text-muted-foreground">24-hour stories</span></div> : null}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 scrollbar-hide">
+        <button type="button" onClick={() => ownStory ? openStory(ownStory) : openCreator()} className="group relative h-[10.5rem] w-[7.5rem] shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={ownStory ? "View your story" : "Create a story"}>
+          {ownStory?.media?.url ? (ownStory.media.type === "video" ? <video src={ownStory.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop /> : <LazyImage src={ownStory.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />) : ownStory ? <div className="absolute inset-0 flex items-center justify-center p-3" style={{ background: ownStory.background || STORY_BACKGROUNDS[0].value }}><p className="line-clamp-5 whitespace-pre-wrap text-center text-sm font-bold text-white drop-shadow">{ownStory.text || "Your moment"}</p></div> : <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400"><div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center text-white"><span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/50 bg-white/15"><Plus size={24} /></span><span className="text-xs font-extrabold">Add a story</span><span className="text-[10px] text-white/75">Photo, video or text</span></div></div>}
+          {ownStory ? <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2.5 pb-2.5 pt-10 text-white"><p className="truncate text-xs font-extrabold">Your story</p><p className="mt-0.5 line-clamp-2 text-[10px] text-white/80">{ownStory.text || "Tap to view your moment"}</p></div> : null}
+          {ownStory ? <span className="absolute left-2 top-2 rounded-full bg-black/40 px-2 py-1 text-[9px] font-bold text-white">Your moment</span> : null}
         </button>
-      })}
-      {scope === "feed" && otherStories.length === 0 && <button type="button" onClick={() => openCreator()} className="flex min-h-[4.5rem] min-w-[9rem] items-center gap-2 rounded-2xl border border-dashed border-border px-3 text-left text-xs text-muted-foreground"><Sparkles size={16} className="shrink-0 text-emerald-600" /><span>Start the conversation. Share a moment with your community.</span></button>}
+        {scope === "feed" && otherStories.map((story) => {
+          const seen = seenStoryIds.includes(story.id)
+          const counts = storyReactionOverrides[story.id] || story.reactionCounts || {}
+          const reactionTotal = Object.values(counts).reduce((sum, count) => sum + (Number(count) || 0), 0)
+          return <button key={story.id} type="button" onClick={() => openStory(story)} className="group relative h-[10.5rem] w-[7.5rem] shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name || "member"}'s story`}>
+            {story.media?.url ? (story.media.type === "video" ? <video src={story.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop /> : <LazyImage src={story.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />) : <div className="absolute inset-0 flex items-center justify-center p-3" style={{ background: story.background || STORY_BACKGROUNDS[1].value }}><p className="line-clamp-6 whitespace-pre-wrap text-center text-sm font-bold text-white drop-shadow">{story.text || "A moment shared"}</p></div>}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-2.5 pb-2.5 pt-12 text-white"><div className="flex items-center gap-1.5"><span className={`h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/80 bg-black/25 ${seen ? "opacity-70" : "ring-2 ring-amber-400"}`}>{story.photo ? <LazyImage src={story.photo} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-[10px] font-bold">{(story.name || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 truncate text-[11px] font-extrabold">{story.name || "Member"}</span></div>{story.text && story.media?.url ? <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/85">{story.text}</p> : null}{reactionTotal > 0 ? <p className="mt-1 text-[10px] font-semibold text-white/90">✨ {reactionTotal} reaction{reactionTotal === 1 ? "" : "s"}</p> : null}</div>
+            {!seen ? <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-black/25" aria-label="Unseen story" /> : null}
+          </button>
+        })}
+        {scope === "feed" && otherStories.length === 0 && !ownStory ? <button type="button" onClick={() => openCreator()} className="flex h-[10.5rem] min-w-[7.5rem] shrink-0 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/25 p-3 text-center text-xs text-muted-foreground"><span><Sparkles size={20} className="mx-auto mb-2 text-emerald-600" />Be the first to share a moment with your community.</span></button> : null}
+      </div>
     </div>
   )
 
@@ -461,7 +472,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
         {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}
         {viewing.media && viewing.text && <p className="absolute bottom-28 left-4 right-4 z-10 whitespace-pre-wrap rounded-2xl bg-black/35 px-4 py-3 text-sm leading-relaxed sm:bottom-32 sm:left-8 sm:right-8">{viewing.text}</p>}
-        {!isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-4 pb-5 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6 sm:pb-7" onClick={(e) => e.stopPropagation()}><div className="mb-3 flex items-center justify-center gap-3">{["💚", "🔥", "👏", "😂", "😍"].map((emoji) => <button key={emoji} type="button" disabled={replying} onClick={() => void sendStoryReaction(emoji)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl transition hover:scale-110 hover:bg-white/20 disabled:opacity-50" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}</div><div className="flex items-center gap-2"><input value={replyText} onChange={(e) => setReplyText(e.target.value.slice(0, 300))} onKeyDown={(e) => { if (e.key === "Enter") void sendReply() }} placeholder="Reply privately…" aria-label="Reply to story" className="h-12 min-w-0 flex-1 rounded-full border border-white/20 bg-black/30 px-5 text-sm text-white outline-none placeholder:text-white/60 focus:border-white/60" /><button type="button" onClick={() => void sendReply()} disabled={!replyText.trim() || replying} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-[#06251a] disabled:opacity-50" aria-label="Send reply">{replying ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}</button></div></div>}
+        {!isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-4 pb-5 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6 sm:pb-7" onClick={(e) => e.stopPropagation()}><div className="mb-3 flex items-center justify-center gap-3">{["💚", "🔥", "👏", "😂", "😍"].map((emoji) => { const counts = storyReactionOverrides[viewing.id] || viewing.reactionCounts || {}; const count = Number(counts[emoji] || 0); const active = (viewing.viewerReactions || []).includes(emoji); return <button key={emoji} type="button" disabled={replying} onClick={() => void sendStoryReaction(emoji)} className={`relative flex h-12 min-w-12 flex-col items-center justify-center rounded-full border text-lg transition hover:scale-110 disabled:opacity-50 ${active ? "border-emerald-300 bg-emerald-400/25 ring-2 ring-emerald-300/60" : "border-white/15 bg-white/10 hover:bg-white/20"}`} aria-label={`${active ? "Remove" : "Send"} ${emoji} reaction${count ? `; ${count} total` : ""}`} aria-pressed={active}>{emoji}{count > 0 ? <span className="text-[9px] font-bold leading-none text-white/90">{count}</span> : null}</button>})}</div><div className="flex items-center gap-2"><input value={replyText} onChange={(e) => setReplyText(e.target.value.slice(0, 300))} onKeyDown={(e) => { if (e.key === "Enter") void sendReply() }} placeholder="Reply privately…" aria-label="Reply to story" className="h-12 min-w-0 flex-1 rounded-full border border-white/20 bg-black/30 px-5 text-sm text-white outline-none placeholder:text-white/60 focus:border-white/60" /><button type="button" onClick={() => void sendReply()} disabled={!replyText.trim() || replying} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-[#06251a] disabled:opacity-50" aria-label="Send reply">{replying ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}</button></div></div>}
         {isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 to-transparent px-4 pb-6 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6"><p className="text-center text-xs text-white/75"><Eye size={14} className="mr-1 inline" />Story insights · Open Viewers to see who watched</p></div>}
       </div>
       {viewersOpen && <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center" onClick={(e) => { e.stopPropagation(); setViewersOpen(false) }}><div className="max-h-[72vh] w-full max-w-md overflow-hidden rounded-t-3xl border border-white/10 bg-[#101a17] sm:rounded-3xl" onClick={(e) => e.stopPropagation()}><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-bold">Story viewers</p><p className="text-xs text-white/55">People who watched this story</p></div><button type="button" onClick={() => setViewersOpen(false)} aria-label="Close viewers" className="rounded-full bg-white/10 p-2"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{loadingViewers ? <div className="flex items-center justify-center gap-2 p-8 text-sm text-white/70"><LoaderCircle size={18} className="animate-spin" />Loading viewers…</div> : viewerUsers.length ? viewerUsers.map((user, index) => <div key={String(user.userId || index)} className="flex items-center gap-3 rounded-xl px-3 py-3"><span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/10">{typeof user.avatarUrl === "string" && user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span>{String(user.displayName || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{String(user.displayName || "Member")}</span><Check size={16} className="text-emerald-300" /></div>) : <p className="p-8 text-center text-sm text-white/55">No viewers yet. When someone watches, they’ll appear here.</p>}</div></div></div>}

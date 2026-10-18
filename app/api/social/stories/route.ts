@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
 export const runtime = "nodejs"
@@ -72,10 +72,50 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "STORY_LIST_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
   const data = result.data as { stories?: unknown[] }
+  const stories = Array.isArray(data?.stories) ? data.stories : []
+  const storyRows = stories.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+  const ids = Array.from(new Set(storyRows.map((story) => String(story.id || "").trim()).filter(Boolean))).slice(0, 100)
+  let enrichedStories: unknown[] = stories
+  if (ids.length) {
+    try {
+      const quotedIds = `in.(${ids.map((id) => `"${id.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`).join(",")})`
+      const query = new URLSearchParams({ story_id: quotedIds, select: "story_id,user_id,reaction", limit: "5000" })
+      const reactions = await socialRest<Array<{ story_id?: string; user_id?: string; reaction?: string }>>(`gh_story_reactions?${query.toString()}`)
+      const countsByStory = new Map<string, Record<string, number>>()
+      const mineByStory = new Map<string, string[]>()
+      if (reactions.ok && Array.isArray(reactions.data)) {
+        for (const row of reactions.data) {
+          const storyId = String(row.story_id || "")
+          const reaction = String(row.reaction || "")
+          if (!storyId || !reaction || !ids.includes(storyId)) continue
+          const counts = countsByStory.get(storyId) || {}
+          counts[reaction] = (counts[reaction] || 0) + 1
+          countsByStory.set(storyId, counts)
+          if (String(row.user_id || "") === auth.userId) {
+            const mine = mineByStory.get(storyId) || []
+            if (!mine.includes(reaction)) mine.push(reaction)
+            mineByStory.set(storyId, mine)
+          }
+        }
+      }
+      enrichedStories = storyRows.map((story) => {
+        const id = String(story.id || "")
+        const reactionCounts = countsByStory.get(id) || {}
+        return {
+          ...story,
+          reactionCounts,
+          viewerReactions: mineByStory.get(id) || [],
+          reactionCount: Object.values(reactionCounts).reduce((sum, count) => sum + count, 0),
+        }
+      })
+    } catch {
+      /* Story cards still render their media/text if reaction counts cannot load. */
+    }
+  }
   return NextResponse.json({
     ok: true,
     durable: true,
-    stories: Array.isArray(data?.stories) ? data.stories : [],
+    stories: enrichedStories,
   }, { headers: { "Cache-Control": "no-store" } })
 }
 

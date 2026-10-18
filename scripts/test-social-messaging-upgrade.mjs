@@ -36,7 +36,7 @@ check(context.includes("replyToId: replyToMessageId") && context.includes("retur
 check(context.includes("replyToMessageId,") && offlineFlush.includes("replyToMessageId: payload.replyToMessageId"), "offline retries preserve message reply relationships")
 check(messageScreen.includes("accepted === false || accepted === undefined"), "composer retains text when a send is rejected or unconfirmed")
 check(messageScreen.includes("Retry not confirmed"), "failed message retries do not falsely report success")
-check(storySection.includes('if (!accepted) throw new Error("Reply was not accepted")') && storySection.includes('if (!accepted) throw new Error("Reaction was not accepted")'), "story replies and reactions only report success when messaging accepts them")
+check(storySection.includes('if (!accepted) throw new Error("Reply was not accepted")') && storySection.includes("socialToggleStoryReaction(viewing.id, emoji)") && storySection.includes("a durable story reaction does not depend on private messaging"), "story replies require messaging acceptance while story reactions persist independently")
 
 console.log(`\nPassed: ${passed}; Failed: ${failed}`)
 if (failed) process.exit(1)

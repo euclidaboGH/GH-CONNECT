@@ -28,6 +28,105 @@ async function mutedAuthorIds(viewerId: string): Promise<Set<string>> {
   return out
 }
 
+type FeedCommentRow = {
+  id?: string
+  post_id?: string
+  author_id?: string
+  author_name?: string
+  author_photo?: string
+  text?: string
+  parent_id?: string | null
+  created_at?: string
+}
+
+type FeedReactionRow = { post_id?: string; user_id?: string; reaction?: string }
+
+function postIdsFilter(ids: string[]): string {
+  // Post IDs are text keys; quoted PostgREST `in` values safely support punctuation.
+  return `in.(${ids.map((id) => `"${id.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`).join(",")})`
+}
+
+/** Batch-hydrate public engagement previews so the feed never waits for a user to tap first. */
+async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promise<unknown[]> {
+  const rows = posts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+  const ids = Array.from(new Set(rows.map((p) => String(p.id || "").trim()).filter(Boolean))).slice(0, 50)
+  if (!ids.length) return posts
+
+  const q = new URLSearchParams()
+  q.set("post_id", postIdsFilter(ids))
+  q.set("deleted_at", "is.null")
+  q.set("select", "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at")
+  q.set("order", "created_at.desc")
+  q.set("limit", String(Math.min(ids.length * 12, 600)))
+  const rq = new URLSearchParams()
+  rq.set("post_id", postIdsFilter(ids))
+  rq.set("select", "post_id,user_id,reaction")
+  rq.set("limit", "2000")
+
+  const [commentsResult, reactionsResult] = await Promise.all([
+    socialRest<FeedCommentRow[]>(`gh_post_comments?${q.toString()}`),
+    socialRest<FeedReactionRow[]>(`gh_post_reactions?${rq.toString()}`),
+  ])
+  const commentsByPost = new Map<string, FeedCommentRow[]>()
+  if (commentsResult.ok && Array.isArray(commentsResult.data)) {
+    for (const comment of commentsResult.data) {
+      const postId = String(comment.post_id || "")
+      if (!postId || !ids.includes(postId)) continue
+      const bucket = commentsByPost.get(postId) || []
+      if (bucket.length < 3) bucket.push(comment)
+      commentsByPost.set(postId, bucket)
+    }
+  }
+  const countsByPost = new Map<string, Record<string, number>>()
+  const mineByPost = new Map<string, string[]>()
+  if (reactionsResult.ok && Array.isArray(reactionsResult.data)) {
+    for (const row of reactionsResult.data) {
+      const postId = String(row.post_id || "")
+      const reaction = String(row.reaction || "").trim().toLowerCase()
+      if (!postId || !reaction || !ids.includes(postId)) continue
+      const counts = countsByPost.get(postId) || {}
+      counts[reaction] = (counts[reaction] || 0) + 1
+      countsByPost.set(postId, counts)
+      if (String(row.user_id || "") === viewerId) {
+        const mine = mineByPost.get(postId) || []
+        if (!mine.includes(reaction)) mine.push(reaction)
+        mineByPost.set(postId, mine)
+      }
+    }
+  }
+
+  return rows.map((post) => {
+    const id = String(post.id || "")
+    const comments = (commentsByPost.get(id) || []).slice().reverse().map((comment) => ({
+      id: String(comment.id || ""),
+      authorId: String(comment.author_id || ""),
+      authorName: String(comment.author_name || "Member"),
+      authorPhoto: String(comment.author_photo || ""),
+      text: String(comment.text || ""),
+      createdAt: comment.created_at ? new Date(comment.created_at).getTime() : Date.now(),
+      replyTo: comment.parent_id ? String(comment.parent_id) : undefined,
+    })).filter((comment) => comment.id)
+    const reactionCounts = countsByPost.get(id) || {}
+    const likes = Number(post.likes ?? post.likeCount ?? post.like_count ?? 0) || 0
+    const commentCount = Number(post.commentCount ?? post.comment_count ?? comments.length) || 0
+    const shares = Number(post.shares ?? post.shareCount ?? post.share_count ?? 0) || 0
+    return {
+      ...post,
+      comments,
+      commentCount,
+      reactionCounts,
+      viewerReactions: mineByPost.get(id) || [],
+      engagement: {
+        ...((post.engagement && typeof post.engagement === "object") ? post.engagement as Record<string, unknown> : {}),
+        likes,
+        comments: commentCount,
+        shares,
+        views: Number(post.viewCount ?? post.view_count ?? 0) || 0,
+      },
+    }
+  })
+}
+
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
@@ -96,6 +195,14 @@ export async function GET(request: Request) {
       )
       return !authorId || !muted.has(authorId)
     })
+  }
+
+  // Engagement counts and recent comment previews are hydrated in two batched reads,
+  // never one request per post. Fail-soft: feed posts remain usable if previews are unavailable.
+  try {
+    posts = await hydrateFeedEngagement(posts, auth.userId)
+  } catch {
+    /* engagement previews are an enhancement; never fail the feed for them */
   }
 
   const last = posts.length ? (posts[posts.length - 1] as { id?: string; createdAt?: number }) : null

@@ -183,7 +183,19 @@ export function DailyRewardFeedCard({
     return getDailyStreak(userId, tier)
   }, [userId, tier, tick, refreshKey, statusRevision])
   const daily = useMemo(() => {
-    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) return localDaily
+    // Local browser state can lag behind a server-side claim day (e.g. after
+    // reinstall, another device, or a stale tab). Until the server confirms
+    // today's status, keep the claim visible. The POST endpoint is idempotent,
+    // so a repeat attempt cannot mint a second reward.
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) {
+      const previewDay = Math.max(1, Math.min(7, localDaily.displayCycleDay || 1))
+      return {
+        ...localDaily,
+        canClaimToday: true,
+        displayCycleDay: previewDay,
+        todayGhc: Math.max(0, localDaily.todayGhc || ghcForCycleDay(previewDay, tier)),
+      }
+    }
     const cycleDay = serverStatus.cycleDay
     return {
       ...localDaily,
@@ -361,7 +373,19 @@ export function DailyRewardSheet({
     return getDailyStreak(userId, tier)
   }, [userId, tier, open, statusRevision])
   const daily = useMemo(() => {
-    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) return localDaily
+    // Local browser state can lag behind a server-side claim day (e.g. after
+    // reinstall, another device, or a stale tab). Until the server confirms
+    // today's status, keep the claim visible. The POST endpoint is idempotent,
+    // so a repeat attempt cannot mint a second reward.
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) {
+      const previewDay = Math.max(1, Math.min(7, localDaily.displayCycleDay || 1))
+      return {
+        ...localDaily,
+        canClaimToday: true,
+        displayCycleDay: previewDay,
+        todayGhc: Math.max(0, localDaily.todayGhc || ghcForCycleDay(previewDay, tier)),
+      }
+    }
     const cycleDay = serverStatus.cycleDay
     return {
       ...localDaily,

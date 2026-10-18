@@ -300,5 +300,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // Durable post-created alerts go only to followers who are allowed to see
+  // this post. The RPC skips blocked relationships and enforces mutual-only
+  // visibility in SQL; community/private posts never fan out to all followers.
+  if (!communityId && visibility !== "private") {
+    const preview = content || (images.length ? "Shared a photo" : video ? "Shared a video" : "Shared a post")
+    await socialRpc("gh_social_notify_post_followers", {
+      p_author_id: auth.userId,
+      p_post_id: id,
+      p_body: preview.slice(0, 180),
+      p_dedupe_key: `post_created:${id}`,
+      p_visibility: visibility,
+    }).catch(() => null)
+  }
+
   return NextResponse.json({ ok: true, durable: true, post: row })
 }

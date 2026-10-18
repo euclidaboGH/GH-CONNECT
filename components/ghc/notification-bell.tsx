@@ -149,96 +149,115 @@ export function NotificationBell({
       setItems([])
       setUnread(0)
     }
-    // Merge durable social notifications (server-authoritative)
+    // Merge both durable notification stores (social activity + GHC economy).
+    // The old implementation replaced the unread count with the social count,
+    // hiding local rewards and durable GHC events from the bell.
     void (async () => {
       setListLoading(true)
       try {
-        const res = await fetch("/api/social/notifications?limit=40", {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        })
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean
-          notifications?: Array<{
-            id?: string
-            type?: string
-            title?: string
-            body?: string
-            createdAt?: number
-            readAt?: string | null
-            actorUserId?: string
-            entityId?: string
-            entityType?: string
-          }>
-        }
-        if (!res.ok || !data.ok || !Array.isArray(data.notifications)) {
-          setDurableOk(false)
-          return
-        }
-        setDurableOk(true)
-        const mapped: Notification[] = data.notifications.map((n) => ({
+        const [socialRes, economyRes, socialCountRes, economyCountRes] = await Promise.all([
+          fetch("/api/social/notifications?limit=60", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
+          fetch("/api/economy/notifications?limit=60", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
+          fetch("/api/social/notifications?countOnly=1", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
+          fetch("/api/economy/notifications/unread-count", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
+        ])
+        const [socialData, economyData, socialCountData, economyCountData] = await Promise.all([
+          socialRes?.json().catch(() => ({})) || {},
+          economyRes?.json().catch(() => ({})) || {},
+          socialCountRes?.json().catch(() => ({})) || {},
+          economyCountRes?.json().catch(() => ({})) || {},
+        ]) as [
+          { ok?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: number; readAt?: string | null; actorUserId?: string; entityId?: string; entityType?: string; metadata?: Record<string, unknown> }> },
+          { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
+          { ok?: boolean; unreadCount?: number },
+          { ok?: boolean; count?: number },
+        ]
+
+        const socialRows = socialRes?.ok && socialData.ok && Array.isArray(socialData.notifications)
+          ? socialData.notifications : []
+        const economyRows = economyRes?.ok && economyData.ok && Array.isArray(economyData.items)
+          ? economyData.items : []
+        setDurableOk(Boolean(socialRows.length || economyRows.length || (socialData.ok && economyData.ok)))
+
+        const mappedSocial: Notification[] = socialRows.map((n) => ({
           id: String(n.id || ""),
-          type: (n.type === "follow"
-            ? "follow"
-            : n.type === "post_like"
-              ? "like"
-              : n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention"
-                ? "comment"
-              : n.type === "curation" || n.type === "post_curation"
-                ? "like"
-              : n.type === "reputation_level_up"
-                ? "system"
-              : n.type === "share"
-                ? "share"
-                : "system") as NotificationType,
+          type: (n.type === "follow" ? "follow"
+            : n.type === "post_created" ? "system"
+            : n.type === "post_like" || n.type === "curation" || n.type === "post_curation" ? "like"
+            : n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention" ? "comment"
+            : n.type === "share" ? "share" : "system") as NotificationType,
           title: String(n.title || "Activity"),
           message: String(n.body || ""),
           icon: "🔔",
           timestamp: Number(n.createdAt) || Date.now(),
           read: Boolean(n.readAt),
           data: {
+            ...(n.metadata || {}),
             durable: true,
             actorUserId: n.actorUserId,
             entityId: n.entityId,
             entityType: n.entityType,
+            postId: n.type === "post_created" ? n.entityId : (n.metadata?.postId as string | undefined),
             socialType: n.type,
           },
         }))
-        // Durable server notifications are authoritative when available
-        const suppress = new Set([...blockedUsers, ...mutedUsers].map(String))
-        const durableVisible = mapped.filter((n) => {
-          const actor = String(
-            (n.data as { actorUserId?: string } | undefined)?.actorUserId || ""
-          )
-          if (actor && suppress.has(actor)) return false
-          return true
+
+        const mappedEconomy: Notification[] = economyRows.map((n) => {
+          const eventType = String(n.eventType || "")
+          const type: NotificationType = eventType === "GHC_RECEIVED" ? "ghc_received"
+            : eventType === "GHC_SENT" ? "ghc_sent"
+            : eventType.includes("REQUEST") ? "group"
+            : eventType.includes("REWARD") ? "reward"
+            : eventType.includes("MEMBERSHIP") || eventType.includes("PREMIUM") ? "system"
+            : "system"
+          return {
+            id: String(n.id || ""), type,
+            title: String(n.title || "GreenHaven update"), message: String(n.body || ""),
+            icon: eventType.includes("REWARD") ? "🎁" : eventType.startsWith("GHC_") ? "🪙" : "🔔",
+            timestamp: Number(n.createdAt) || Date.now(),
+            read: Boolean(n.readAt),
+            data: {
+              durableEconomy: true, eventType, referenceId: n.referenceId, requestId: n.requestId,
+              ...(n.metadata || {}),
+            },
+          }
         })
+
+        const suppress = new Set([...blockedUsers, ...mutedUsers].map(String))
+        const durableSocialVisible = mappedSocial.filter((n) => {
+          const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
+          return !actor || !suppress.has(actor)
+        })
+        const durableEconomyVisible = mappedEconomy
         setItems((prev) => {
-          const localOnly = prev.filter((x) => !(x.data as { durable?: boolean } | undefined)?.durable)
+          const localOnly = prev.filter((x) => {
+            const d = x.data as { durable?: boolean; durableEconomy?: boolean } | undefined
+            return !d?.durable && !d?.durableEconomy
+          })
           const byId = new Map<string, Notification>()
-          for (const x of [...durableVisible, ...localOnly]) {
+          for (const x of [...durableSocialVisible, ...durableEconomyVisible, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
           return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         })
-        const durableUnread = mapped.filter((m) => !m.read).length
-        // Prefer server unread count when durable list loaded
-        void fetch("/api/social/notifications?countOnly=1", {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        })
-          .then((r) => r.json())
-          .then((c: { ok?: boolean; unreadCount?: number }) => {
-            if (c && c.ok && typeof c.unreadCount === "number") {
-              setUnread(Math.max(0, Number(c.unreadCount) || 0))
-            } else {
-              setUnread(durableUnread)
-            }
-          })
-          .catch(() => setUnread(durableUnread))
+
+        const localUnread = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers).filter((n) => !n.read).length
+        const socialUnread = socialCountData.ok && typeof socialCountData.unreadCount === "number"
+          ? Math.max(0, socialCountData.unreadCount) : mappedSocial.filter((n) => !n.read).length
+        const economyUnread = economyCountData.ok && typeof economyCountData.count === "number"
+          ? Math.max(0, economyCountData.count) : mappedEconomy.filter((n) => !n.read).length
+        setUnread(localUnread + socialUnread + economyUnread)
       } catch {
         setDurableOk(false)
-        /* local-only remains */
+        /* Local-only notifications remain visible if a server store is unavailable. */
       } finally {
         setListLoading(false)
       }
@@ -349,13 +368,16 @@ export function NotificationBell({
     // Optimistic UI — durable rows only update after server merge otherwise
     setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
     setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
-    if (n.data && (n.data as { durable?: boolean }).durable && n.id) {
+    const notificationData = (n.data || {}) as { durable?: boolean; durableEconomy?: boolean }
+    if (notificationData.durable && n.id) {
       void fetch("/api/social/notifications", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
-      }).catch(() => null)
+      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
+    } else if (notificationData.durableEconomy && n.id) {
+      void fetch(`/api/economy/notifications/${encodeURIComponent(n.id)}/read`, {
+        method: "POST", credentials: "include", headers: { Accept: "application/json" },
+      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
     }
     const link = resolveNotificationDeepLink(n)
     navigateNotificationDeepLink(link)
@@ -371,12 +393,15 @@ export function NotificationBell({
     } catch {
       /* */
     }
-    void fetch("/api/social/notifications", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markAll: true }),
-    }).catch(() => null)
+    void Promise.all([
+      fetch("/api/social/notifications", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAll: true }),
+      }).catch(() => null),
+      fetch("/api/economy/notifications/read-all", {
+        method: "POST", credentials: "include", headers: { Accept: "application/json" },
+      }).catch(() => null),
+    ]).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
     setItems((prev) => prev.map((x) => ({ ...x, read: true })))
     setUnread(0)
     setStatusMsg("Marked all as read")

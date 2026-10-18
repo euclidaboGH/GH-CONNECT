@@ -6,6 +6,7 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export type SocialNotificationType =
   | "follow"
+  | "post_created"
   | "post_like"
   | "post_comment"
   | "comment_reply"

@@ -571,6 +571,11 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
         : []
     const commentsRaw = p.comments
     const comments = Array.isArray(commentsRaw) ? (commentsRaw as Post["comments"]) : []
+    const commentCount = Number(p.commentCount ?? p.comment_count ?? ((p.engagement && typeof p.engagement === "object") ? (p.engagement as Record<string, unknown>).comments : undefined) ?? comments.length) || 0
+    const reactionCounts = p.reactionCounts && typeof p.reactionCounts === "object"
+      ? Object.fromEntries(Object.entries(p.reactionCounts as Record<string, unknown>).map(([key, value]) => [key, Math.max(0, Number(value) || 0)]))
+      : {}
+    const viewerReactions = Array.isArray(p.viewerReactions) ? p.viewerReactions.map(String) : []
     const visibilityRaw = String(p.visibility || p.visible_to || "public").toLowerCase()
     const visibility = (
       ["public", "followers", "mutuals", "private"].includes(visibilityRaw)
@@ -599,6 +604,12 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
       likes,
       comments,
       createdAt,
+      engagement: normalizeEngagementMetrics(
+        p.engagement && typeof p.engagement === "object" ? p.engagement as Post["engagement"] : undefined,
+        { likes, comments: commentCount, shares, views: viewCount },
+      ),
+      reactionCounts,
+      viewerReactions,
       visibility,
       deletedAt: Number.isFinite(deletedAt as number) ? (deletedAt as number) : null,
       isEdited: Boolean(p.isEdited ?? p.is_edited),
@@ -2326,6 +2337,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           likedByMe: remote.liked !== false && remote.active !== false,
         })
       }
+      if (remote.ok && remote.reactionCounts) {
+        setState((s) => ({
+          ...s,
+          posts: s.posts.map((post) => post.id === postId
+            ? { ...post, reactionCounts: remote.reactionCounts || {}, viewerReactions: remote.viewerReactions || post.viewerReactions || [] }
+            : post),
+        }))
+        broadcastPostEngagement({
+          postId,
+          kind: "reaction",
+          ...(typeof remote.likeCount === "number" ? { likeCount: remote.likeCount } : {}),
+          reactionCounts: remote.reactionCounts,
+          viewerReactions: remote.viewerReactions,
+          likedByMe: isLike ? remote.liked !== false && remote.active !== false : undefined,
+        })
+      }
     } catch {
       /* local-only — keep optimistic state when network unavailable */
     }
@@ -2792,6 +2819,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         commentCount?: number
         likeCount?: number
         likedByMe?: boolean
+        reactionCounts?: Record<string, number>
+        viewerReactions?: string[]
+        shareCount?: number
       }>).detail
       if (!detail?.postId) return
       const postId = String(detail.postId)
@@ -2821,6 +2851,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               next.engagement = normalizeEngagementMetrics(post.engagement, {
                 likes: Math.max(0, detail.likeCount),
               })
+            }
+            if (detail.reactionCounts && typeof detail.reactionCounts === "object") {
+              next.reactionCounts = detail.reactionCounts
+            }
+            if (Array.isArray(detail.viewerReactions)) {
+              next.viewerReactions = detail.viewerReactions
+            }
+            if (typeof detail.shareCount === "number" && Number.isFinite(detail.shareCount)) {
+              next.shares = Math.max(0, detail.shareCount)
+              next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, { shares: Math.max(0, detail.shareCount) })
             }
             if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
               next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, {

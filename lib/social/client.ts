@@ -93,6 +93,8 @@ export async function socialToggleReaction(
   active?: boolean
   liked?: boolean
   likeCount?: number | null
+  reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
   error?: string
 }> {
   return json(`/api/social/posts/${encodeURIComponent(postId)}/reactions`, {
@@ -276,6 +278,25 @@ export async function socialViewStory(
   return json(`/api/social/stories/${encodeURIComponent(storyId)}/view`, {
     method: "POST",
     body: JSON.stringify({}),
+  })
+}
+
+export async function socialToggleStoryReaction(
+  storyId: string,
+  reaction: string,
+): Promise<{
+  ok: boolean
+  durable: boolean
+  active?: boolean
+  reaction?: string
+  reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
+  reactionCount?: number
+  error?: string
+}> {
+  return json(`/api/social/stories/${encodeURIComponent(storyId)}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ reaction }),
   })
 }
 

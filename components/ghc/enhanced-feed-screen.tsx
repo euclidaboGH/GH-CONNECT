@@ -26,6 +26,7 @@ import { MediaLightbox } from "./media-lightbox"
 import { PostInsightsSheet } from "./post-insights"
 import { PostSkeleton } from "./feed-components"
 import { CommentSheet } from "./comment-sheet"
+import { PostDetailSheet } from "./post-detail-sheet"
 import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
 import { PostComposer } from "./post-composer"
@@ -33,6 +34,7 @@ import ProfileStorySection from "./profile-story-section"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
+import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -40,6 +42,7 @@ import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
+import { DailyRewardFeedCard } from "./daily-reward-experience"
 
 const FEED_FILTERS: {
   value: FeedFilter
@@ -88,11 +91,11 @@ function FeedSkeleton() {
 
 export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenProps) {
   const {
-    posts, profile, candidates, likePost, reactToPost,
+    posts, profile, candidates, likedPostIds, likePost, reactToPost,
     addToast, followUser,
     blockUser, reportPost, reportContent, deletePost, following, friends,
     blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
-    muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed,
+    muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed, loadPostComments,
   } = useGHCFeed()
   const { setTab: shellSetTab } = useGHCShell()
   const { conversations } = useGHCMessaging()
@@ -123,6 +126,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
   const [likedPosts, setLikedPosts] = useState<string[]>([])
+  // Keep the visible liked state tied to the authenticated server-hydrated feed,
+  // rather than waiting for the user to click Like once in this screen session.
+  useEffect(() => {
+    setLikedPosts(Array.isArray(likedPostIds) ? likedPostIds : [])
+  }, [likedPostIds])
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<string[]>([])
   const [draftPosts, setDraftPosts] = useState<PostDraft[]>([])
@@ -141,6 +149,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [composeMode, setComposeMode] = useState<"post" | "story">("post")
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [saveCollectionPostId, setSaveCollectionPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; caption?: string } | null>(null)
   const [insightsPost, setInsightsPost] = useState<Post | null>(null)
@@ -432,6 +441,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     setCommentingPostId(postId)
   }, [])
 
+  const openPostDetail = useCallback((postId: string) => {
+    setSelectedPostId(postId)
+  }, [])
+
   // Profile owner-post actions route through the canonical Feed overlays so the
   // same comment, share, and insights flows are reused instead of duplicated.
   useEffect(() => {
@@ -668,6 +681,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
           {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
+          {/* Daily GHC claims belong on the actual production feed, not only the legacy home hub. */}
+          <div className="mx-3" data-ghc-feed-daily-reward="true">
+            <DailyRewardFeedCard
+              onOpenFull={() => {
+                try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ }
+              }}
+            />
+          </div>
 
       {draftPosts.length > 0 ? (
         <div className="mx-3 mb-2 rounded-2xl border border-border/50 bg-card/80 px-3 py-2.5">
@@ -816,7 +837,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         }
                       : undefined
                   }
-                  onOpenMedia={(url, caption) => setLightbox({ url, caption })}
+                  onOpenPost={openPostDetail}
                   onArchive={
                     isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && archivePost
                       ? (postId) => void archivePost(postId)
@@ -954,6 +975,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     const { socialSharePost } = await import("@/lib/social/client")
                     const remote = await socialSharePost(sharePostId)
                     durableOk = remote.ok !== false
+                    if (remote.ok && typeof remote.shareCount === "number") {
+                      broadcastPostEngagement({ postId: sharePostId, kind: "share", shareCount: remote.shareCount })
+                    }
                   } catch {
                     durableOk = false
                   }
@@ -974,6 +998,16 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           />
         )
       })()}
+
+      <PostDetailSheet
+        post={selectedPostId ? posts.find((p) => p.id === selectedPostId) || rankedPosts.find((r) => r.post.id === selectedPostId)?.post || null : null}
+        open={Boolean(selectedPostId)}
+        onClose={() => setSelectedPostId(null)}
+        onComments={(postId) => { setSelectedPostId(null); setCommentingPostId(postId) }}
+        onShare={(postId) => { setSelectedPostId(null); setSharePostId(postId) }}
+        onOpenMedia={(url, caption) => setLightbox({ url, caption })}
+        loadComments={loadPostComments}
+      />
 
       <CommentSheet
         post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}

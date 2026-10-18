@@ -22,7 +22,7 @@ The last ACL hardening before the later feature migrations is `202609250003_rpc_
 GHPV migrations `20261013`–`20261020` are repository-only until Testnet; settlement is
 system-only and votes must not mint GHC (see `README.md`).
 
-## Selected operational apply sequence (74 listed entries; see `docs/MIGRATION_CHECKLIST.md` for the complete classified inventory)
+## Selected operational apply sequence (75 listed entries; see `docs/MIGRATION_CHECKLIST.md` for the complete classified inventory)
 
 | # | File | Action |
 |---|------|--------|
@@ -100,6 +100,7 @@ system-only and votes must not mint GHC (see `README.md`).
 | 72 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | apply after review |
 | 73 | `202610240004_gh_story_creator_upgrade.sql` | apply after review |
 | 74 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | apply after review; follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` and test two accounts |
+| 75 | `202610240006_gh_story_reactions.sql` | apply after review; adds durable story reactions and counts; verify owner/self-reaction and blocked-user protections |
 
 ## After apply (read-only checks)
 

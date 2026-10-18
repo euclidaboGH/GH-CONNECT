@@ -18,6 +18,9 @@ export type PostEngagementDetail = {
   /** Authoritative like/reaction total when server returns it */
   likeCount?: number
   likedByMe?: boolean
+  reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
+  shareCount?: number
 }
 
 export const POST_ENGAGEMENT_EVENT = "ghc:post-engagement" as const

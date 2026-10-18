@@ -20,6 +20,7 @@ const steps = [
   ["test-economy-v12.mjs", "Economy v12"],
   ["test-daily-claim-wallet-pipeline.mjs", "Daily claim → wallet"],
   ["test-rewards-reliability.mjs", "Rewards reliability"],
+  ["test-notification-attention.mjs", "Notification attention"],
   ["check-jsx-safety.mjs", "JSX safety"],
   ["print-migration-checklist.mjs", "Migration inventory"],
 ]

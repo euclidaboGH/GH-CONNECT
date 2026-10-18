@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { normalizeReactionType } from "@/lib/social/reactions"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
@@ -91,6 +91,23 @@ export async function POST(
       })
     })()
   }
+  let reactionCounts: Record<string, number> | undefined
+  let viewerReactions: string[] | undefined
+  try {
+    const query = new URLSearchParams({ post_id: `eq.${postId}`, select: "user_id,reaction", limit: "5000" })
+    const rows = await socialRest<Array<{ user_id?: string; reaction?: string }>>(`gh_post_reactions?${query.toString()}`)
+    if (rows.ok && Array.isArray(rows.data)) {
+      reactionCounts = {}
+      viewerReactions = []
+      for (const row of rows.data) {
+        const type = String(row.reaction || "").trim().toLowerCase()
+        if (!type) continue
+        reactionCounts[type] = (reactionCounts[type] || 0) + 1
+        if (String(row.user_id || "") === auth.userId && viewerReactions && !viewerReactions.includes(type)) viewerReactions.push(type)
+      }
+    }
+  } catch { /* reaction mutation already succeeded; counts are a best-effort read */ }
+
   return NextResponse.json({
     ok: true,
     durable: true,
@@ -98,5 +115,6 @@ export async function POST(
     active,
     liked: reaction === "like" ? active : Boolean(data?.liked),
     likeCount: data?.likeCount ?? null,
-  })
+    ...(reactionCounts ? { reactionCounts, viewerReactions: viewerReactions || [] } : {}),
+  }, { headers: { "Cache-Control": "no-store" } })
 }

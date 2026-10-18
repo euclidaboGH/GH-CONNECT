@@ -39,6 +39,8 @@ export interface StoryItem {
   /** Engagement (optional session fields) */
   viewIds?: string[]
   reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
+  reactionCount?: number
   replyCount?: number
 }
 
@@ -219,6 +221,10 @@ export interface Post {
   impressionRank?: number // algorithm rank for "why am I seeing this"
   nativeLanguage?: string
   engagement?: PostEngagementMetrics
+  /** Durable aggregate counts by reaction type, hydrated with the initial feed. */
+  reactionCounts?: Record<string, number>
+  /** Reaction types the authenticated viewer has applied to this post. */
+  viewerReactions?: string[]
   // Marketplace share — canonical listing remains in marketplace domain
   listingId?: string
   listingKind?: "product" | "service" | "opportunity"

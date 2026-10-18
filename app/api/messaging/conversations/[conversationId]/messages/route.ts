@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { socialRpc } from "@/lib/server/social/rpc"
 import {
   listMessages,
   appendMessage,
@@ -155,6 +156,17 @@ export async function POST(request: Request, ctx: Ctx) {
         { status, headers: { "Cache-Control": "no-store" } }
       )
     }
+    // Durable recipient notification: one server-side fan-out RPC after the
+    // message was accepted, never for optimistic/local-only or idempotent retries.
+    // Notification failure never turns a sent message into failure.
+    if (isMessagingStoreDurable() && !result.idempotent) {
+      await socialRpc("gh_social_notify_message_members", {
+        p_sender_id: auth.userId,
+        p_conversation_id: conversationId,
+        p_message_id: result.message.id,
+      }).catch(() => null)
+    }
+
     return NextResponse.json(
       {
         ok: true,

@@ -2,9 +2,11 @@
 
 import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-connect-flow"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { notificationSystem, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications"
+import { APP_RELEASE_VERSION, APP_RELEASE_SUMMARY } from "@/lib/app-release"
 
 import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
-import { useGHCShell, useGHCProfile, useGHCDiscovery } from "@/contexts/ghc-context"
+import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
 import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
@@ -245,9 +247,99 @@ export function GHConnectApp() {
   const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
+  const { conversations } = useGHCMessaging()
   const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
+  const [socialAttentionCount, setSocialAttentionCount] = useState(0)
+  const [economyAttentionCount, setEconomyAttentionCount] = useState(0)
+  const [localAttentionCount, setLocalAttentionCount] = useState(0)
+  const unreadMessageCount = useMemo(() => (Array.isArray(conversations) ? conversations : []).reduce(
+    (count, conversation) => count + (typeof (conversation as { unreadCount?: number }).unreadCount === "number"
+      ? Math.max(0, Number((conversation as { unreadCount?: number }).unreadCount) || 0)
+      : conversation.unread ? 1 : 0), 0), [conversations])
+  const unreadGroupCount = useMemo(() => (Array.isArray(conversations) ? conversations : []).reduce(
+    (count, conversation) => count + (conversation.conversationType === "group" &&
+      (conversation.unread || Number((conversation as { unreadCount?: number }).unreadCount || 0) > 0) ? 1 : 0), 0), [conversations])
+
+  // Section attention indicators use authenticated server counts plus local in-app
+  // alerts. Polling and event-driven refresh cover new activity without requiring a tap.
+  const refreshSectionAttention = useCallback(async () => {
+    try { setLocalAttentionCount(notificationSystem.getUnreadCount()) } catch { setLocalAttentionCount(0) }
+    const [socialResponse, economyResponse] = await Promise.all([
+      fetch("/api/social/notifications?countOnly=1", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
+      fetch("/api/economy/notifications/unread-count", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
+    ])
+    const [social, economy] = await Promise.all([
+      socialResponse?.json().catch(() => ({})) || {},
+      economyResponse?.json().catch(() => ({})) || {},
+    ]) as [{ ok?: boolean; unreadCount?: number }, { ok?: boolean; count?: number }]
+    if (social.ok && typeof social.unreadCount === "number") setSocialAttentionCount(Math.max(0, social.unreadCount))
+    if (economy.ok && typeof economy.count === "number") setEconomyAttentionCount(Math.max(0, economy.count))
+  }, [])
+
+  useEffect(() => {
+    void refreshSectionAttention()
+    const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
+    const onAttention = () => void refreshSectionAttention()
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshSectionAttention() }
+    window.addEventListener("focus", onAttention)
+    window.addEventListener("online", onAttention)
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onAttention as EventListener)
+    window.addEventListener("ghc:notification", onAttention)
+    window.addEventListener("ghc:new-message", onAttention)
+    window.addEventListener("ghc:post-engagement", onAttention)
+    window.addEventListener("ghc:daily-reward-claimed", onAttention)
+    window.addEventListener("ghc:community-updated", onAttention)
+    window.addEventListener("ghc:notifications-read", onAttention)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", onAttention)
+      window.removeEventListener("online", onAttention)
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onAttention as EventListener)
+      window.removeEventListener("ghc:notification", onAttention)
+      window.removeEventListener("ghc:new-message", onAttention)
+      window.removeEventListener("ghc:post-engagement", onAttention)
+      window.removeEventListener("ghc:daily-reward-claimed", onAttention)
+      window.removeEventListener("ghc:community-updated", onAttention)
+      window.removeEventListener("ghc:notifications-read", onAttention)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [refreshSectionAttention])
+
+  useEffect(() => {
+    if (!ready) return
+    const userId = String(profile?.id || IdentityService.getCurrentUserId() || "").trim()
+    if (!userId || userId === "current-user" || userId === "anonymous") return
+    try {
+      const key = `ghc:last-seen-release:${userId}`
+      const previousVersion = window.localStorage.getItem(key)
+      if (!previousVersion) {
+        // First visit on this device: establish a baseline without generating noise.
+        window.localStorage.setItem(key, APP_RELEASE_VERSION)
+        return
+      }
+      if (previousVersion !== APP_RELEASE_VERSION) {
+        notificationSystem.addNotification(
+          "system",
+          "GreenHaven has been updated",
+          APP_RELEASE_SUMMARY,
+          "✨",
+          {
+            dedupeKey: `app-release:${APP_RELEASE_VERSION}:${userId}`,
+            open: "home",
+            section: "updates",
+            releaseVersion: APP_RELEASE_VERSION,
+          },
+        )
+        window.localStorage.setItem(key, APP_RELEASE_VERSION)
+      }
+    } catch {
+      // Release notices are best-effort and never block app startup.
+    }
+  }, [ready, profile?.id])
+
   useEffect(() => {
     const refresh = () => {
       try {
@@ -1012,7 +1104,16 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={id === "create" ? "text-white" : undefined}
                     />
-                    {/* Connection-request badge was for matches tab; primary NAV_ITEMS has no matches id */}
+                    {((id === "home" && (socialAttentionCount + localAttentionCount + economyAttentionCount > 0)) ||
+                      (id === "messages" && unreadMessageCount > 0) ||
+                      (id === "discover" && connectionRequestBadge > 0) ||
+                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0))) ? (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
+                        aria-label="New activity"
+                        title="New activity — open this section to review"
+                      />
+                    ) : null}
                   </span>
                 </span>
                 <span
