@@ -728,9 +728,9 @@ function EnhancedPostCardInner({
           <div
             className="relative mb-2 aspect-[4/5] max-h-[24rem] w-full overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem] group cursor-pointer"
             onClick={handleImageTap}
-            onMouseDown={handleLongPress}
+            onMouseDown={() => handleLongPress("positive")}
             onMouseUp={handlePressEnd}
-            onTouchStart={handleLongPress}
+            onTouchStart={() => handleLongPress("positive")}
             onTouchEnd={handlePressEnd}
           >
             <LazyImage

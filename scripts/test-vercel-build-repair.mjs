@@ -40,6 +40,13 @@ const lock = JSON.parse(read('package-lock.json'))
 check('package and lockfile versions match', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version)
 check('build keeps lint and type validation enabled', !/ignoreBuildErrors\s*:\s*true/.test(read('next.config.mjs')) && !/ignoreDuringBuilds\s*:\s*true/.test(read('next.config.mjs')))
 
+
+// Regression: React mouse/touch handlers must not receive a MouseEvent as the reaction kind.
+const postCard = read('components/ghc/enhanced-post-card.tsx')
+check('long-press mouse handler wraps reaction kind instead of passing event', /onMouseDown=\{\(\) => handleLongPress\("positive"\)\}/.test(postCard))
+check('long-press touch handler wraps reaction kind instead of passing event', /onTouchStart=\{\(\) => handleLongPress\("positive"\)\}/.test(postCard))
+check('daily reward notice effect tracks the authoritative status object', /\[currentUserId, dailyClaim\.status, dailyClaim\.status\?\.claimable, dailyClaim\.status\?\.dayKey\]/.test(read('components/ghc/enhanced-feed-screen.tsx')))
+
 const failed = checks.filter((item) => !item.pass)
 console.log(`\n=== RESULTS: ${checks.length - failed.length} passed, ${failed.length} failed ===`)
 if (failed.length) process.exitCode = 1

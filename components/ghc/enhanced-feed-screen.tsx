@@ -523,7 +523,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       window.localStorage.setItem(key, "1")
     } catch { /* show this session's notice if storage is unavailable */ }
     setRewardReadyNotice(true)
-  }, [currentUserId, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
+  }, [currentUserId, dailyClaim.status, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
