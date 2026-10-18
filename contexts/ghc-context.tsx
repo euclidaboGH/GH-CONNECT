@@ -3514,7 +3514,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                         ? {
                             ...c,
                             reactions: result.data.reactions,
-                            reactionCounts: body.counts || result.data.reactions,
+                            reactionCounts:
+                              body.counts ??
+                              Object.fromEntries(
+                                Object.entries(result.data.reactions).map(([reaction, users]) => [
+                                  reaction,
+                                  users.length,
+                                ])
+                              ),
                           }
                         : c
                     ),
