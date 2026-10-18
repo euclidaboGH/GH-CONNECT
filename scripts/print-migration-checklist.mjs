@@ -66,7 +66,7 @@ Staging order (REQUIRED groups, oldest first):
 6) Withdrawal + reactions + attention + curation + reputation + ads + creator (20260926 → 20260930)
 7) Media / follow / notifications / search / shares / messaging prefs / archive (20261001 → 20261008)
 8) Balance lock / spendable / withdrawal settle / activity stage (20261009 → 20261012)
-9) GHPV judgment → weight → calibration → settlement infra (20261013 → 20261020)
+9) GHPV judgment → weight → calibration → settlement infra plus curation reward credit (20261013 → 20261020; curation rewards are Testnet-first)
 10) Notification types + content rewards tables (20261021 → 20261022)
 11) Profile content library search (20261023; additive social read RPC, no economy coupling)
 12) Messaging delivery receipts + presence + server privacy + unread counts (202610240005; Testnet-first)

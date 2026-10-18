@@ -1,11 +1,11 @@
 # GreenHaven — Migration Checklist (authoritative inventory)
 
-**Generated:** 2026-10-18T02:50:00Z  
+**Generated:** 2026-10-18 (reviewed source inventory)  
 **Canonical path:** `supabase/migrations/*.sql`  
-**On-disk count:** **79**  
-**Classification:** REQUIRED **76** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
+**On-disk count:** **82**  
+**Classification:** REQUIRED **79** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
 
-This document is the **source inventory**. It does **not** mean migrations are applied to Testnet or Production.
+This document is the **source inventory**. It includes the 202610180001 curation-reward migration and the 202610240007 post-created notification migration. It does **not** mean migrations are applied to Testnet or Production.
 
 Do **not** drop tables, disable RLS, or run all files blindly.
 
@@ -29,11 +29,12 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 6. **Withdrawal + reactions + attention + curation + reputation + ads + creator** (20260926 → 20260930)
 7. **Media / follow / notifications / search / shares / messaging prefs / archive** (20261001 → 20261008)
 8. **Balance lock / spendable / withdrawal settle / activity stage** (20261009 → 20261012)
-9. **GHPV judgment → weight → calibration → settlement infra → soft-delete** (20261013 → 20261020)
+9. **GHPV judgment → weight → calibration → settlement infra → soft-delete, plus curation reward credit** (20261013 → 20261020; curation rewards are Testnet-first)
 10. **Stable feed/comment cursors + durable match signals + engagement rosters** (202610150001 → 20261018)
 11. **Notification types + content rewards + profile library + roster visibility + story creator** (20261021 → 202610240004)
 12. **Messaging delivery receipts + presence + server-enforced privacy + unread counts** (`202610240005`; apply after reviewing `supabase/MESSAGING_PRESENCE_DEPLOY.md`)
 13. **Durable story reactions and visible counts** (`202610240006`; apply Testnet first and verify two-account reactions)
+14. **Post-created notification RPC** (`202610240007`; apply after the notification-types migration and verify follower delivery on Testnet)
 
 **Operator note:** Review migration dependencies and the actual database schema before applying. Apply to Testnet first, run verification queries and feature tests, then promote the same reviewed migrations to Mainnet. The story creator migration stores text-story themes and implements audience visibility for everyone, followers and reciprocal follows. `202610240005_gh_messaging_presence_delivery_receipts.sql` adds private per-recipient receipts, expiring presence, server-side inbound messaging/online-status privacy and an unread-count RPC. Apply it to Testnet first and follow `supabase/MESSAGING_PRESENCE_DEPLOY.md`. The `202610240006_gh_story_reactions.sql` migration adds durable story reaction counts with service-role-only writes; apply it after `202610240004_gh_story_creator_upgrade.sql` and the current messaging migration. This inventory is not a record of applied migrations.
 
@@ -112,18 +113,34 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 | 67 | `20261016_ghpv_active_weight_set_semantics.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
 | 68 | `20261017_ghpv_settlement_engine.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
 | 69 | `20261017_match_signals_durable.sql` | REQUIRED | Durable matching signals; no direct chat grant. |
-| 70 | `20261018_gh_engagement_rosters.sql` | REQUIRED | Engagement roster RPCs; service-role only, owner-gated lists. |
-| 71 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 72 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 73 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
-| 74 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
-| 75 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
-| 76 | `20261023_gh_profile_content_library.sql` | REQUIRED | Profile library search; viewer-authorized. |
-| 77 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REQUIRED | Security follow-up: reaction rosters respect post visibility and blocks. |
-| 78 | `202610240004_gh_story_creator_upgrade.sql` | REQUIRED | Persists text-story backgrounds and enforces everyone/follower/mutual-follow audience visibility; matches-only fails closed until canonical server match relation is available. |
-| 79 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | REQUIRED | Per-recipient sent/delivered/read receipts, online/typing presence, server-enforced messaging and online-status privacy, unread-count RPC. Testnet-first; see `supabase/MESSAGING_PRESENCE_DEPLOY.md`. |
-| 80 | `202610240006_gh_story_reactions.sql` | REQUIRED | Durable story reaction table and owner/block-protected toggle RPC; service-role execute only. Apply Testnet first. |
-
+| 70 | `202610180001_ghc_curation_rewards.sql` | REQUIRED | Atomic, idempotent curation reward credit; Testnet-first, explicit Mainnet approval required. |
+| 71 | `20261018_gh_engagement_rosters.sql` | REQUIRED | Engagement roster RPCs; service-role only, owner-gated lists. |
+| 72 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 73 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 74 | `20261020_ghpv_soft_delete_atomic.sql` | REQUIRED | GHPV infra; no client mint; settlement system-only |
+| 75 | `20261021_gh_social_notifications_types_extend.sql` | REQUIRED |  |
+| 76 | `20261022_gh_content_rewards.sql` | REQUIRED | Accrual tables; votes do not mint GHC |
+| 77 | `20261023_gh_profile_content_library.sql` | REQUIRED | Profile library search; viewer-authorized. |
+| 78 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REQUIRED | Security follow-up: reaction rosters respect post visibility and blocks. |
+| 79 | `202610240004_gh_story_creator_upgrade.sql` | REQUIRED | Persists text-story backgrounds and enforces everyone/follower/mutual-follow audience visibility; matches-only fails closed until canonical server match relation is available. |
+| 80 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | REQUIRED | Per-recipient sent/delivered/read receipts, online/typing presence, server-enforced messaging and online-status privacy, unread-count RPC. Testnet-first; see `supabase/MESSAGING_PRESENCE_DEPLOY.md`. |
+| 81 | `202610240006_gh_story_reactions.sql` | REQUIRED | Durable story reaction table and owner/block-protected toggle RPC; service-role execute only. Apply Testnet first. |
+| 82 | `202610240007_gh_post_created_notifications.sql` | REQUIRED | Durable post-created notifications via server RPC; service-role only. |
+| 83 | `202610180002_gh_curation_pipeline_atomic.sql` | REQUIRED | Atomic vote/reward/GHPV pipeline; ensure it is applied after `202610180001_ghc_curation_rewards.sql`. |
+| 84 | `202610180003_reputation_event_integrity.sql` | REQUIRED | Database guard for canonical reputation-event point values; Testnet-first. |
+| 85 | `202610180004_curation_self_vote_guard.sql` | REQUIRED | Blocks authors from upvoting/downvoting their own posts in the authoritative curation RPC; Testnet-first. |
 ---
 
+
+## Release-readiness warning (audit 2026-10-18)
+
+The repository currently contains 86 migration files. Ten filenames are dated after 2026-10-18 (`20261019` through `202610240007`). These files may represent planned follow-up changes, but their date alone does not prove they are approved, ordered correctly, or applied anywhere. Review dependencies and target-project migration history before execution. The static guard `npm run check:migration-release-readiness` reports this condition without connecting to a database.
+
+The self-curation policy is intentionally superseding: `202610180004_curation_self_vote_guard.sql` is followed by `202610180005_allow_self_curation.sql`. The later migration permits an author to self-curate for display/encouragement only. Self-curation must not count as independent reviewer evidence or earn account reputation/GHC. Confirm both migration versions and resulting function definition on a disposable clean database and Testnet before release.
+
+**Do not treat this inventory as a push/deploy approval or as proof of live migration status.** Reconcile Testnet and Mainnet independently; never blindly apply all files.
+
 For current migration-application status, verify the target Supabase project directly. This checklist only inventories files in this repository.
+
+
+| 86 | `202610180005_allow_self_curation.sql` | REQUIRED (testnet first) | Supersedes the 004 self-curation prohibition; permits creator self-curation for display only, never independent evidence/rewards. Verify 004 then 005 order. |

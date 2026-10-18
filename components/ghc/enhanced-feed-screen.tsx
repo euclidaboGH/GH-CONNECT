@@ -42,7 +42,7 @@ import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
-import { DailyRewardFeedCard } from "./daily-reward-experience"
+import { useDailyClaimStatus } from "./use-daily-claim-status"
 
 const FEED_FILTERS: {
   value: FeedFilter
@@ -506,6 +506,24 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const displayPosts = useMemo(() => searchResults.slice(0, displayedPostsCount), [searchResults, displayedPostsCount])
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
+  const currentUserId = IdentityService.getCurrentUserId() || ""
+  const dailyClaim = useDailyClaimStatus(currentUserId, Boolean(currentUserId))
+  const [rewardReadyNotice, setRewardReadyNotice] = useState(false)
+
+  // One actionable in-app notice per user/reward day; server status is authoritative.
+  useEffect(() => {
+    const status = dailyClaim.status
+    if (!currentUserId || !status?.claimable || !status.dayKey) {
+      setRewardReadyNotice(false)
+      return
+    }
+    const key = `ghc:daily-reward-ready-notice:${currentUserId}:${status.dayKey}`
+    try {
+      if (window.localStorage.getItem(key) === "1") return
+      window.localStorage.setItem(key, "1")
+    } catch { /* show this session's notice if storage is unavailable */ }
+    setRewardReadyNotice(true)
+  }, [currentUserId, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -533,6 +551,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         actions={
           <>
             <PremiumSurfaceActions />
+            <button
+              type="button"
+              onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ } }}
+              aria-label={dailyClaim.status?.claimable ? "Daily GHC reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily GHC reward claimed today" : "Open daily GHC rewards"}
+              title={dailyClaim.status?.claimable ? "Daily reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily reward claimed today" : "Daily rewards"}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold transition hover:bg-muted ${dailyClaim.status?.claimable ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-border/60 text-foreground/80"}`}
+            >
+              <span aria-hidden>◈</span>
+              <span>{dailyClaim.status?.claimable ? "Reward ready" : dailyClaim.status?.claimedToday ? "Claimed" : "GHC"}</span>
+              {dailyClaim.status?.claimable ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden /> : null}
+            </button>
             <NotificationBell
               onOpenTarget={(n) => {
                 if (n.type === "message") setTab("messages")
@@ -553,6 +582,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
+            {rewardReadyNotice && dailyClaim.status?.claimable ? (
+              <div role="status" className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-foreground">
+                <span aria-hidden className="text-base">◈</span>
+                <span className="min-w-0 flex-1 font-medium">Your daily GHC reward is ready to claim.</span>
+                <button type="button" className="min-h-8 shrink-0 rounded-full bg-emerald-600 px-3 font-bold text-white hover:bg-emerald-700" onClick={() => { setRewardReadyNotice(false); try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ } }}>Claim now</button>
+                <button type="button" className="min-h-8 px-1 text-muted-foreground" aria-label="Dismiss reward notice" onClick={() => setRewardReadyNotice(false)}>×</button>
+              </div>
+            ) : null}
             {/* header search only */}
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
@@ -681,14 +718,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
           {/* Moments lead the feed; the public timeline begins immediately underneath. */}
           <ProfileStorySection scope="feed" />
-          {/* Daily GHC claims belong on the actual production feed, not only the legacy home hub. */}
-          <div className="mx-3" data-ghc-feed-daily-reward="true">
-            <DailyRewardFeedCard
-              onOpenFull={() => {
-                try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ }
-              }}
-            />
-          </div>
+          {/* Daily reward status is kept compact in the app header; details live in Rewards Centre. */}
 
       {draftPosts.length > 0 ? (
         <div className="mx-3 mb-2 rounded-2xl border border-border/50 bg-card/80 px-3 py-2.5">

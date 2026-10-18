@@ -1,4 +1,4 @@
 /** Keep in sync with package.json; the regression test enforces the match. */
-export const APP_RELEASE_VERSION = "0.60.0"
+export const APP_RELEASE_VERSION = "0.61.1"
 export const APP_RELEASE_SUMMARY =
-  "Daily GHC rewards are easier to find, notification types are unified, and navigation now highlights unread activity."
+  "Phase 2 release hardening: explicit environment template, deployment network safety checks, and Testnet-first release gates."

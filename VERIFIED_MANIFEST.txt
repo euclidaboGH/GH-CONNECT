@@ -1,14 +1,14 @@
 GH-CONNECT VERIFIED MANIFEST
-generated=2026-10-18T02:17:46Z
-canonical_migrations=78
-required=75
+generated=2026-10-18T07:52:23Z
+canonical_migrations=82
+required=79
 requires_approval=1
 proposal=2
 source=on-disk supabase/migrations/*.sql
 note=Inventory only. Does NOT claim migrations are applied to any database.
 
 CLASSIFICATION_POLICY:
-  REQUIRED            = apply oldest→newest on Testnet after operator review of order
+  REQUIRED            = review and apply oldest→newest on Testnet only after verification
   REQUIRES_APPROVAL   = product/security review before apply
   PROPOSAL            = do NOT apply without explicit written approval
 
@@ -82,6 +82,7 @@ ALL_MIGRATIONS_OLDEST_FIRST:
 [REQUIRED] size=6885 path=supabase/migrations/20261016_ghpv_active_weight_set_semantics.sql
 [REQUIRED] size=8903 path=supabase/migrations/20261017_ghpv_settlement_engine.sql
 [REQUIRED] size=2211 path=supabase/migrations/20261017_match_signals_durable.sql
+[REQUIRED] size=7869 path=supabase/migrations/202610180001_ghc_curation_rewards.sql
 [REQUIRED] size=13820 path=supabase/migrations/20261018_gh_engagement_rosters.sql
 [REQUIRED] size=6996 path=supabase/migrations/20261018_ghpv_calibration_bounds.sql
 [REQUIRED] size=2438 path=supabase/migrations/20261019_ghpv_soft_delete_quality_cleanup.sql
@@ -90,17 +91,9 @@ ALL_MIGRATIONS_OLDEST_FIRST:
 [REQUIRED] size=9096 path=supabase/migrations/20261022_gh_content_rewards.sql
 [REQUIRED] size=7964 path=supabase/migrations/20261023_gh_profile_content_library.sql
 [REQUIRED] size=2854 path=supabase/migrations/202610240003_gh_post_reaction_roster_visibility_guard.sql
-
-LATEST_GROUPS:
-  economy_balance_lock: 20261009–20261012
-  ghpv: 20261013–20261020 (judgment/weight/settlement infrastructure; settlement is system-only)
-  social_feed_cursor_and_wallet: 202610150001–202610150003 (stable cursors and wallet snapshot spendable)
-  match_signals: 20261017 (durable matching signals)
-  engagement_rosters: 20261018 + 202610240003 (rosters; visibility and block checks enforced server-side)
-  social_notif_extend: 20261021
-  content_rewards: 20261022 (no vote→mint; ledger distribution is separate path)
-  profile_content_library: 20261023 (viewer-authorized profile media/post search; no economy coupling)
-
-DESIGN_TRANSFORM_PACKAGE: GH-CONNECT-DESIGN-TRANSFORM-2026-10-08.zip
-PHASE_14A: migration inventory reconciliation (docs only, no DB writes)
 [REQUIRED] size=4346 path=supabase/migrations/202610240004_gh_story_creator_upgrade.sql
+[REQUIRED] size=8255 path=supabase/migrations/202610240005_gh_messaging_presence_delivery_receipts.sql
+[REQUIRED] size=3503 path=supabase/migrations/202610240006_gh_story_reactions.sql
+[REQUIRED] size=7467 path=supabase/migrations/202610240007_gh_post_created_notifications.sql
+
+IMPORTANT: The new curation reward migration is testnet-first. The manifest is not a live-schema diff and cannot confirm which migrations have already run. Reconcile against each Supabase project migration history before applying anything.

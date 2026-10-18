@@ -68,19 +68,19 @@ LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT CASE
-    WHEN p_points >= 15000 THEN 15
-    WHEN p_points >= 10000 THEN 14
-    WHEN p_points >= 7000 THEN 13
-    WHEN p_points >= 5000 THEN 12
-    WHEN p_points >= 3500 THEN 11
-    WHEN p_points >= 2500 THEN 10
-    WHEN p_points >= 1800 THEN 9
-    WHEN p_points >= 1200 THEN 8
-    WHEN p_points >= 800 THEN 7
-    WHEN p_points >= 500 THEN 6
-    WHEN p_points >= 300 THEN 5
-    WHEN p_points >= 150 THEN 4
-    WHEN p_points >= 75 THEN 3
+    WHEN p_points >= 30000 THEN 15
+    WHEN p_points >= 22000 THEN 14
+    WHEN p_points >= 16000 THEN 13
+    WHEN p_points >= 11500 THEN 12
+    WHEN p_points >= 8000 THEN 11
+    WHEN p_points >= 5500 THEN 10
+    WHEN p_points >= 3700 THEN 9
+    WHEN p_points >= 2400 THEN 8
+    WHEN p_points >= 1500 THEN 7
+    WHEN p_points >= 900 THEN 6
+    WHEN p_points >= 500 THEN 5
+    WHEN p_points >= 250 THEN 4
+    WHEN p_points >= 100 THEN 3
     WHEN p_points >= 25 THEN 2
     ELSE 1
   END;

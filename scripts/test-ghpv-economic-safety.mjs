@@ -24,9 +24,10 @@ function row(id, title, pass, evidence) {
 }
 
 const ledgerHit = /ghc_execute_|executeDurableGhc|executeAuthoritativeTransfer|executeAuthoritativePending|ghc_execute_spend|ghc_execute_transfer/
-row(1, "Vote cannot mint GHC", !ledgerHit.test(allGhpv) && !ledgerHit.test(route), "no ledger RPC in ghpv+curation route")
-row(2, "Upvote cannot create GHC", !ledgerHit.test(route), "curation route")
-row(3, "Downvote cannot create GHC", !ledgerHit.test(route), "curation route")
+const curationRewardMigration = fs.readFileSync(path.join(root, "supabase/migrations/202610180001_ghc_curation_rewards.sql"), "utf8")
+row(1, "GHPV consensus/weighting path cannot mint GHC", !ledgerHit.test(allGhpv), "GHPV modules remain non-financial")
+row(2, "Upvote rewards use a service-role-only atomic vote/reward RPC", route.includes("gh_post_curation_set_with_reward") && curationRewardMigration.includes("GRANT EXECUTE ON FUNCTION public.ghc_curation_reward_credit(text, text, text, numeric) TO service_role") && curationRewardMigration.includes("GRANT EXECUTE ON FUNCTION public.gh_post_curation_set_with_reward(text, text, text, numeric) TO service_role"), "explicit atomic curation reward engine, outside GHPV settlement")
+row(3, "Downvotes cannot trigger GHC rewards", curationRewardMigration.includes("IF v_choice = 'upvote' THEN") && curationRewardMigration.includes("NO_REWARD_FOR_NON_UPVOTE") && route.includes("gh_post_curation_set_with_reward"), "database wrapper calls reward engine only for the authoritative final upvote")
 row(4, "CP not purchased with GHC", /GHC balance is intentionally excluded|coefficient = 0|Never uses wallet/.test(allGhpv), "curation-power.ts")
 row(5, "Reputation not purchased with GHC", !/balance.*level|ghc.*reputationLevel/i.test(allGhpv), "ghpv sources")
 row(6, "Creator quality not purchased with GHC", /Never uses GHC balance/.test(allGhpv), "creator-quality.ts")

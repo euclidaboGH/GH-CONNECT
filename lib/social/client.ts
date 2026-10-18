@@ -352,6 +352,7 @@ export async function socialFetchPostInsights(postId: string): Promise<{
   isAuthor?: boolean
   error?: string
   reason?: string
+  reward?: { credited?: boolean; amount?: number; reason?: string; status?: string }
 }> {
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
@@ -481,7 +482,8 @@ export async function socialDecideJoinRequest(
 /** Phase 3 curation — quality signal only. Fail-soft if DB down. */
 export async function socialSetCuration(
   postId: string,
-  choice: "upvote" | "downvote" | "neutral"
+  choice: "upvote" | "downvote" | "neutral",
+  rewardPercentage = 100
 ): Promise<{
   ok: boolean
   durable?: boolean
@@ -490,13 +492,14 @@ export async function socialSetCuration(
   downvoteCount?: number | null
   error?: string
   reason?: string
+  reward?: { credited?: boolean; amount?: number; reason?: string; status?: string }
 }> {
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
   try {
     return await json(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
       method: "POST",
-      body: JSON.stringify({ choice }),
+      body: JSON.stringify({ choice, rewardPercentage }),
     })
   } catch {
     // Phase 1: do not invent success or vote totals offline

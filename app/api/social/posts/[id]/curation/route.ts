@@ -1,7 +1,7 @@
 /**
  * POST /api/social/posts/[id]/curation
- * Body: { choice: "upvote" | "downvote" | "neutral" }
- * Session actor only. Quality signal — zero economy side effects.
+ * Body: { choice: "upvote" | "downvote" | "neutral", rewardPercentage?: number }
+ * Session actor only. Vote mutation and GHC reward decision use one atomic server RPC.
  * GHPV-1A: server-derived curation weight recorded for later settlement.
  */
 import { NextResponse } from "next/server"
@@ -62,6 +62,11 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "INVALID_CHOICE" }, { status: 400 })
   }
   const choice: CurationChoice = rawChoice
+  const rawPercentage = body.rewardPercentage === undefined ? 100 : Number(body.rewardPercentage)
+  if (!Number.isFinite(rawPercentage) || rawPercentage < 0 || rawPercentage > 100) {
+    return NextResponse.json({ ok: false, error: "INVALID_REWARD_PERCENTAGE" }, { status: 400 })
+  }
+  const rewardPercentage = Math.round(rawPercentage * 100) / 100
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Post curation", {
@@ -76,11 +81,26 @@ export async function POST(
     return NextResponse.json(nd.body, { status: nd.status })
   }
 
-  // Authoritative actor = session only
-  const result = await socialRpc("gh_post_curation_set", {
+  // Compute reviewer weight from server-side reputation/calibration before the
+  // transaction. The DB RPC atomically persists the vote, reward decision, and
+  // percentage-scaled active GHPV weight; no client authority is accepted.
+  let weightedVote: Awaited<ReturnType<typeof resolveWeightedVote>>
+  try {
+    weightedVote = await resolveWeightedVote({
+      reviewerId: auth.userId,
+      choice,
+    })
+  } catch {
+    return NextResponse.json({ ok: false, error: "CURATION_WEIGHT_UNAVAILABLE", durable: false }, { status: 503 })
+  }
+  const judgmentMode = inferJudgmentMode({})
+  const result = await socialRpc("gh_post_curation_set_with_reward", {
     p_post_id: postId,
     p_user_id: auth.userId,
     p_choice: choice,
+    p_percentage: rewardPercentage,
+    p_curation_weight: weightedVote.effectiveWeight,
+    p_judgment_mode: judgmentMode,
   })
 
   const data = result.data as {
@@ -89,6 +109,8 @@ export async function POST(
     choice?: string
     upvoteCount?: number
     downvoteCount?: number
+    reward?: { ok?: boolean; credited?: boolean; amount?: number; reason?: string; status?: string }
+    ghpv?: { ok?: boolean; weight?: number; upvoteWeight?: number; downvoteWeight?: number; independentVoters?: number; settled?: boolean; ghcMutated?: boolean }
   }
 
   if (!result.ok || data?.ok === false) {
@@ -96,8 +118,8 @@ export async function POST(
     if (err === "NOT_FOUND") {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
     }
-    if (err === "FORBIDDEN") {
-      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
+    if (err === "FORBIDDEN" || err === "SELF_CURATION_FORBIDDEN") {
+      return NextResponse.json({ ok: false, error: err }, { status: 403 })
     }
     if (err === "INVALID_CHOICE") {
       return NextResponse.json({ ok: false, error: "INVALID_CHOICE" }, { status: 400 })
@@ -111,34 +133,28 @@ export async function POST(
   const rpcChoice = String(data.choice || choice).toLowerCase().trim()
   const finalChoice: CurationChoice = isCurationChoice(rpcChoice) ? rpcChoice : choice
 
-  // GHPV-1A: weighted judgment signal (not settlement, not GHC)
-  let ghpv: Record<string, unknown> = { recorded: false }
-  try {
-    const weighted = await resolveWeightedVote({
-      reviewerId: auth.userId,
-      choice: finalChoice === "neutral" ? "neutral" : finalChoice,
-    })
-    const mode = inferJudgmentMode({})
-    const rec = await socialRpc("gh_ghpv_record_curation_weight", {
-      p_content_id: postId,
-      p_reviewer_id: auth.userId,
-      p_choice: finalChoice,
-      p_weight: finalChoice === "neutral" ? 0 : weighted.effectiveWeight,
-      p_judgment_mode: mode,
-    })
-    const recData = rec.data as { ok?: boolean; ghcMutated?: boolean }
-    ghpv = {
-      recorded: Boolean(rec.ok && recData?.ok !== false),
-      curationPower: weighted.curationPower,
-      weight: finalChoice === "neutral" ? 0 : weighted.effectiveWeight,
-      reputationLevel: weighted.reputationLevel,
-      maxConsensusShare: weighted.maxConsensusShare,
-      settled: false,
-      ghcMutated: false,
-    }
-  } catch {
-    ghpv = { recorded: false, settled: false, ghcMutated: false }
+  // GHPV was written by the same DB transaction as the vote and reward.
+  const ghpvResult = data.ghpv
+  const ghpv: Record<string, unknown> = {
+    recorded: Boolean(ghpvResult?.ok),
+    curationPower: weightedVote.curationPower,
+    weight: Number(ghpvResult?.weight ?? (finalChoice === "neutral" ? 0 : weightedVote.effectiveWeight * rewardPercentage / 100)),
+    reputationLevel: weightedVote.reputationLevel,
+    maxConsensusShare: weightedVote.maxConsensusShare,
+    settled: false,
+    ghcMutated: false,
   }
+
+  // Reward decision is returned by the same transaction as the vote write.
+  const rewardData = data.reward
+  const reward: Record<string, unknown> = rewardData
+    ? {
+        credited: Boolean(rewardData.credited),
+        amount: Number(rewardData.amount || 0),
+        reason: rewardData.reason,
+        status: rewardData.status,
+      }
+    : { credited: false, amount: 0, reason: "NO_REWARD_FOR_NON_UPVOTE" }
 
   // Safe public curation notice — no JCS/weights/private calibration
   if (finalChoice === "upvote" || finalChoice === "downvote") {
@@ -166,5 +182,6 @@ export async function POST(
     upvoteCount: data.upvoteCount ?? 0,
     downvoteCount: data.downvoteCount ?? 0,
     ghpv,
+    reward,
   })
 }

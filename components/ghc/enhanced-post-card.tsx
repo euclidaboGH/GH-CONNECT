@@ -40,12 +40,12 @@ import { shouldSendAttention } from "@/lib/social/attention-client"
 import { PostRewardPanel } from "@/components/ghc/post-reward/post-reward-panel"
 
 const REACTIONS: PostReaction[] = [
-  { type: "like", emoji: "👍", label: "Like" },
   { type: "support", emoji: "💪", label: "Support" },
   { type: "inspire", emoji: "✨", label: "Inspire" },
   { type: "insight", emoji: "💡", label: "Insightful" },
   { type: "celebrate", emoji: "🎉", label: "Celebrate" },
   { type: "love", emoji: "❤️", label: "Love" },
+  { type: "sad", emoji: "😢", label: "Concerned" },
 ]
 
 interface EnhancedPostCardProps {
@@ -104,6 +104,7 @@ function EnhancedPostCardInner({
   onOpenProfile,
 }: EnhancedPostCardProps) {
   const [showReactions, setShowReactions] = useState(false)
+  const [curationReactionKind, setCurationReactionKind] = useState<"positive" | "negative">("positive")
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
   const displayAuthor = (() => {
     const raw = String(post.authorName || "").trim()
@@ -153,24 +154,59 @@ function EnhancedPostCardInner({
     Number.isFinite(seedDown) ? Math.max(0, seedDown) : 0
   )
   const [curationBusy, setCurationBusy] = useState(false)
+  const [rewardPercentage, setRewardPercentage] = useState(100)
   const lastCurationAtRef = useRef(0)
+  const curationLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const curationLongPressTriggeredRef = useRef(false)
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
   useEffect(() => {
     if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
     if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
   }, [post.id, propUp, propDown])
-  const visibleLikeCount = Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) || 0)
   const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
   const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
   const visibleReactionEntries = Object.entries(post.reactionCounts || {})
-    .filter(([, count]) => Number(count) > 0)
+    .filter(([type, count]) => type !== "like" && Number(count) > 0)
     .sort((a, b) => Number(b[1]) - Number(a[1]))
   const reactionEmoji: Record<string, string> = { like: "❤️", love: "😍", support: "💪", inspire: "✨", insight: "💡", celebrate: "🎉", laugh: "😂", fire: "🔥", clap: "👏", wow: "😮", sad: "😢" }
 
   // Community review status is loaded only on its dedicated detail surface.
   // Fetching it once per feed card caused an N+1 request storm and the value
   // was not rendered here; keep feed cards lean and defer that request.
+
+  const startCurationLongPress = (kind: "positive" | "negative") => {
+    if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
+    curationLongPressTriggeredRef.current = false
+    curationLongPressTimerRef.current = setTimeout(() => {
+      curationLongPressTriggeredRef.current = true
+      setCurationReactionKind(kind)
+      setShowReactions(true)
+    }, 500)
+    // Track release outside the button too, so a completed long press cannot
+    // leave a stale suppression flag or accidentally vote on a later tap.
+    const finish = () => {
+      endCurationLongPress()
+      window.removeEventListener("pointerup", finish)
+      window.removeEventListener("pointercancel", cancel)
+      window.setTimeout(() => { curationLongPressTriggeredRef.current = false }, 0)
+    }
+    const cancel = () => {
+      endCurationLongPress(true)
+      window.removeEventListener("pointerup", finish)
+      window.removeEventListener("pointercancel", cancel)
+    }
+    window.addEventListener("pointerup", finish, { once: true })
+    window.addEventListener("pointercancel", cancel, { once: true })
+  }
+
+  const endCurationLongPress = (cancelled = false) => {
+    if (curationLongPressTimerRef.current) {
+      clearTimeout(curationLongPressTimerRef.current)
+      curationLongPressTimerRef.current = null
+    }
+    if (cancelled) curationLongPressTriggeredRef.current = false
+  }
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return
@@ -182,7 +218,7 @@ function EnhancedPostCardInner({
     lastCurationAtRef.current = Date.now()
     setCurationBusy(true)
     try {
-      const res = await socialSetCuration(post.id, choice)
+      const res = await socialSetCuration(post.id, choice, rewardPercentage)
       if (!res.ok) {
         try {
           window.dispatchEvent(new CustomEvent("ghc:toast", {
@@ -197,6 +233,9 @@ function EnhancedPostCardInner({
         const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
+        if (res.reward?.credited && Number(res.reward.amount) > 0) {
+          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `You earned ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC`, type: "success" } })) } catch { /* */ }
+        }
         broadcastPostEngagement({
           postId: post.id,
           kind: "curation",
@@ -262,8 +301,9 @@ function EnhancedPostCardInner({
   }
 
   // Long-press for quick reactions
-  const handleLongPress = () => {
+  const handleLongPress = (kind: "positive" | "negative" = "positive") => {
     pressTimerRef.current = setTimeout(() => {
+      setCurationReactionKind(kind)
       setShowReactions(true)
     }, 500)
   }
@@ -283,11 +323,8 @@ function EnhancedPostCardInner({
       }
     }
     setShowReactions(false)
-    // Heart-style "like" on content maps to upvote (quality), not profile interest
-    if (reaction.type === "like") {
-      void handleCuration("upvote")
-      return
-    }
+    // Post cards do not expose Like; Likes belong to profile/account cards.
+    if (reaction.type === "like") return
     if (onReact) {
       onReact(post.id, reaction.type)
     }
@@ -723,21 +760,6 @@ function EnhancedPostCardInner({
               </>
             )}
 
-            {/* Quick reactions overlay */}
-            {showReactions && (
-              <div className="absolute inset-0 bg-black/20 flex items-center justify-center gap-2 z-40">
-                {REACTIONS.map((reaction) => (
-                  <button
-                    key={reaction.type}
-                    onClick={() => handleQuickReaction(reaction)}
-                    className="w-12 h-12 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-2xl transform hover:scale-125 transition-transform"
-                    title={reaction.label}
-                  >
-                    {reaction.emoji}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -755,7 +777,6 @@ function EnhancedPostCardInner({
       {/* Compact engagement summary. Comment text stays inside the dedicated comments sheet. */}
       <section className="mx-4 mb-2 px-1 py-1" aria-label="Post engagement">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5"><span aria-hidden>❤️</span><strong className="tabular-nums text-foreground">{visibleLikeCount.toLocaleString()}</strong><span>likes</span></span>
           <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="inline-flex items-center gap-1.5 font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-md" aria-label={`View ${visibleCommentCount.toLocaleString()} comments`}><MessageCircle size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleCommentCount.toLocaleString()}</strong><span>{visibleCommentCount === 1 ? "comment" : "comments"}</span></button>
           <span className="inline-flex items-center gap-1.5"><Share2 size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleShareCount.toLocaleString()}</strong><span>shares</span></span>
         </div>
@@ -782,34 +803,63 @@ function EnhancedPostCardInner({
         </div>
       )}
 
+      {showReactions && (
+        <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>
+          <span className="px-1 text-xs font-semibold text-muted-foreground">{curationReactionKind === "positive" ? "Positive reaction" : "Negative reaction"}</span>
+          {REACTIONS.filter((reaction) => curationReactionKind === "positive" ? reaction.type !== "sad" && reaction.type !== "like" : reaction.type === "sad").map((reaction) => (
+            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-10 min-w-10 items-center justify-center rounded-full bg-muted px-2 text-xl hover:bg-muted/70" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
+          ))}
+          <button type="button" onClick={() => setShowReactions(false)} className="ml-auto rounded-full px-2 py-1 text-xs text-muted-foreground">Cancel</button>
+        </div>
+      )}
+
       {/* Primary actions — curation · comments · save · share */}
       <div
         className="flex items-center gap-1 border-t border-border/40 px-3 py-2"
         role="toolbar"
-        aria-label="Content quality and post actions"
+        aria-label="Post engagement and curation actions"
       >
+        <label className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] leading-none text-muted-foreground" title="Reward percentage for this upvote">
+          <span>Reward</span>
+          <select
+            aria-label="GHC reward percentage for this post upvote"
+            value={rewardPercentage}
+            disabled={curationBusy}
+            onChange={(e) => setRewardPercentage(Number(e.target.value))}
+            className="h-7 max-w-[4.4rem] rounded-md border border-border bg-background px-1 text-xs font-semibold text-foreground"
+          >
+            <option value={0}>0%</option>
+            <option value={25}>25%</option>
+            <option value={50}>50%</option>
+            <option value={75}>75%</option>
+            <option value={100}>100%</option>
+          </select>
+        </label>
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for who upvoted (owner)."
+          aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for positive reactions."
           aria-pressed={curationChoice === "upvote"}
-          onClick={() => void handleCuration("upvote")}
+          onClick={(e) => {
+            if (curationLongPressTriggeredRef.current) {
+              curationLongPressTriggeredRef.current = false
+              e.preventDefault()
+              return
+            }
+            void handleCuration("upvote")
+          }}
           onContextMenu={(e) => {
             e.preventDefault()
             openRoster("upvotes")
           }}
           onPointerDown={(e) => {
             if (e.button !== 0) return
-            const t = window.setTimeout(() => openRoster("upvotes"), 480)
-            const clear = () => {
-              window.clearTimeout(t)
-              window.removeEventListener("pointerup", clear)
-              window.removeEventListener("pointercancel", clear)
-            }
-            window.addEventListener("pointerup", clear)
-            window.addEventListener("pointercancel", clear)
+            startCurationLongPress("positive")
           }}
-          title="Upvote content quality. Long-press to see who upvoted (owner). Votes never mint GHC on the client."
+          onPointerUp={() => endCurationLongPress()}
+          onPointerCancel={() => endCurationLongPress(true)}
+          onPointerLeave={() => endCurationLongPress()}
+          title="Upvote content quality. Long-press for positive reactions. Reward calculation is server-authoritative."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "upvote"
               ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -822,25 +872,28 @@ function EnhancedPostCardInner({
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Downvote content — lowers quality ranking. Long-press for who downvoted (owner)."
+          aria-label="Downvote content — lowers quality ranking. Long-press for negative reactions."
           aria-pressed={curationChoice === "downvote"}
-          onClick={() => void handleCuration("downvote")}
+          onClick={(e) => {
+            if (curationLongPressTriggeredRef.current) {
+              curationLongPressTriggeredRef.current = false
+              e.preventDefault()
+              return
+            }
+            void handleCuration("downvote")
+          }}
           onContextMenu={(e) => {
             e.preventDefault()
             openRoster("downvotes")
           }}
           onPointerDown={(e) => {
             if (e.button !== 0) return
-            const t = window.setTimeout(() => openRoster("downvotes"), 480)
-            const clear = () => {
-              window.clearTimeout(t)
-              window.removeEventListener("pointerup", clear)
-              window.removeEventListener("pointercancel", clear)
-            }
-            window.addEventListener("pointerup", clear)
-            window.addEventListener("pointercancel", clear)
+            startCurationLongPress("negative")
           }}
-          title="Downvote weak content. Long-press to see who downvoted (owner)."
+          onPointerUp={() => endCurationLongPress()}
+          onPointerCancel={() => endCurationLongPress(true)}
+          onPointerLeave={() => endCurationLongPress()}
+          title="Downvote weak content. Long-press for negative reactions."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "downvote"
               ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"

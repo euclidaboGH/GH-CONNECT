@@ -91,16 +91,21 @@ system-only and votes must not mint GHC (see `README.md`).
 | 63 | `20261015_ghpv_curator_calibration_apply.sql` | apply |
 | 64 | `20261016_ghpv_active_weight_set_semantics.sql` | apply |
 | 65 | `20261017_ghpv_settlement_engine.sql` | apply |
-| 66 | `20261018_ghpv_calibration_bounds.sql` | apply |
-| 67 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | apply |
-| 68 | `20261020_ghpv_soft_delete_atomic.sql` | apply |
-| 69 | `20261021_gh_social_notifications_types_extend.sql` | apply |
-| 70 | `20261022_gh_content_rewards.sql` | apply |
-| 71 | `20261023_gh_profile_content_library.sql` | apply after review |
-| 72 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | apply after review |
-| 73 | `202610240004_gh_story_creator_upgrade.sql` | apply after review |
-| 74 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | apply after review; follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` and test two accounts |
-| 75 | `202610240006_gh_story_reactions.sql` | apply after review; adds durable story reactions and counts; verify owner/self-reaction and blocked-user protections |
+| 66 | `202610180001_ghc_curation_rewards.sql` | apply after review; testnet only; requires the existing economy ledger, spendable-balance RPC, reputation state, and curation schema |
+| 67 | `202610180002_gh_curation_pipeline_atomic.sql` | apply after 66; testnet only; atomically wires vote, reward decision, and GHPV active weight |
+| 68 | `20261018_ghpv_calibration_bounds.sql` | apply |
+| 69 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | apply |
+| 70 | `20261020_ghpv_soft_delete_atomic.sql` | apply |
+| 71 | `20261021_gh_social_notifications_types_extend.sql` | apply |
+| 72 | `20261022_gh_content_rewards.sql` | apply |
+| 73 | `20261023_gh_profile_content_library.sql` | apply after review |
+| 74 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | apply after review |
+| 75 | `202610240004_gh_story_creator_upgrade.sql` | apply after review |
+| 76 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | apply after review; follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` and test two accounts |
+| 77 | `202610240006_gh_story_reactions.sql` | apply after review; adds durable story reactions and counts; verify owner/self-reaction and blocked-user protections |
+| 78 | `202610240007_gh_post_created_notifications.sql` | apply after review; durable post-created notifications |
+| 79 | `202610180003_reputation_event_integrity.sql` | apply after 202610180002; testnet only; requires gh_reputation_events |
+| 80 | `202610180004_curation_self_vote_guard.sql` | apply after 202610180003; testnet only; self-curation rejected |
 
 ## After apply (read-only checks)
 
@@ -120,3 +125,9 @@ SELECT has_function_privilege('anon', 'public.gh_community_join(text,text)', 'ex
 ## Vercel Preview
 
 Point Preview env at this Testnet Supabase + Testnet Pi credentials (`NEXT_PUBLIC_PI_SANDBOX=true`). For the messaging reliability upgrade, set `NEXT_PUBLIC_MESSAGING_DURABLE=true` in Preview after the new migration is applied, then follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` before enabling it in Production.
+
+
+## Reputation and curation integrity follow-up (release 0.60.6)
+
+After confirming the prerequisites and that migrations `202610180001_ghc_curation_rewards.sql` and `202610180002_gh_curation_pipeline_atomic.sql` have been applied successfully to **testnet**, apply `202610180003_reputation_event_integrity.sql`. This final migration depends on `gh_reputation_events` from `20260929_gh_reputation.sql`. It adds a trigger to enforce the canonical point values on reputation events. Verify with the new `scripts/test-reputation-curation-integrity.mjs` and then perform live multi-account tests. Do not apply to mainnet as part of this step. The previous self-vote restriction is superseded by `202610180005_allow_self_curation.sql`: creators may self-curate for encouragement, but this must never qualify as independent settlement evidence or generate GHC/reputation. Apply 004 then 005 on testnet in order, and verify author self-curation toggles correctly, does not create reward claims, and is excluded from any independent-reviewer threshold. The TypeScript and SQL reputation thresholds were also made progressively harder; validate rank parity on testnet. Do not apply these migrations to mainnet without a separate approved rollout.
+

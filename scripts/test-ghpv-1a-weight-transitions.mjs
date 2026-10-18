@@ -81,7 +81,7 @@ const route = fs.readFileSync(
 )
 ok(route.includes("auth.userId"), "session actor")
 ok(route.includes("stripClientAuthority"), "route strips forges")
-ok(route.includes("gh_ghpv_record_curation_weight"), "route records weight")
+ok(route.includes("gh_post_curation_set_with_reward") && route.includes("p_curation_weight: weightedVote.effectiveWeight"), "route sends weight to atomic pipeline")
 ok(!route.includes("computeSettlement"), "settlement not called from vote")
 ok(!/ghc_execute/.test(route), "no ledger on vote path")
 

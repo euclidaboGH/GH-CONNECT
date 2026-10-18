@@ -13,7 +13,7 @@ check("feed engagement hydration fails soft and does not fail feed", feedRoute.i
 const context = read("contexts/ghc-context.tsx")
 check("remote feed maps comment counts, reaction counts and viewer reactions", context.includes("const commentCount = Number(p.commentCount") && context.includes("reactionCounts,") && context.includes("viewerReactions,"))
 const card = read("components/ghc/enhanced-post-card.tsx")
-check("post cards show likes, comments, shares and reaction counts", card.includes("visibleLikeCount") && card.includes("visibleCommentCount") && card.includes("visibleShareCount") && card.includes("visibleReactionEntries"))
+check("post cards show comments, shares and non-Like reaction counts without a Like action", !card.includes("visibleLikeCount") && card.includes("visibleCommentCount") && card.includes("visibleShareCount") && card.includes("visibleReactionEntries") && card.includes('type !== "like"'))
 check("post media and card body open full post detail", card.includes("onOpenPost?.(post.id)") && card.includes("onClick={(event) => {\n        const target"))
 const detail = read("components/ghc/post-detail-sheet.tsx")
 check("full post view includes complete content, media, comments and engagement totals", detail.includes("Full post") && detail.includes("Recent comments") && detail.includes("onOpenMedia"))

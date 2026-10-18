@@ -44,6 +44,17 @@ const SUITES = [
   ["scripts/test-social-os-foundation.mjs", "social-os-foundation"],
   ["scripts/test-economy-v12.mjs", "economy-v12"],
   ["scripts/test-pi-payment-durable.mjs", "pi-payment-durable"],
+  ["scripts/test-ghc-curation-reward.mjs", "ghc-curation-reward"],
+  ["scripts/test-like-curation-separation.mjs", "like-curation-separation"],
+  ["scripts/test-notification-attention.mjs", "notification-attention"],
+  ["scripts/test-social-visibility.mjs", "social-visibility"],
+  ["scripts/test-feed-card-layout.mjs", "feed-card-layout"],
+  ["scripts/test-rewards-reliability.mjs", "rewards-reliability"],
+  ["scripts/test-engagement-roster-security.mjs", "engagement-roster-security"],
+  ["scripts/test-story-creator.mjs", "story-creator"],
+  ["scripts/test-post-composer.mjs", "post-composer"],
+  ["scripts/test-social-messaging-upgrade.mjs", "social-messaging-upgrade"],
+  ["scripts/test-messaging-reliability.mjs", "messaging-reliability"],
 ]
 
 function run(script) {

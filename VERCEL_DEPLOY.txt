@@ -87,3 +87,16 @@ After applying supabase/migrations/202610240005_gh_messaging_presence_delivery_r
 Redeploy Preview and test with two authenticated accounts. This requires durable server acceptance before the client treats a message as sent, enables server-backed delivery/read receipts and presence, and makes messaging privacy preferences authoritative. Only add the same variable to Production after the Preview build and two-account tests pass. Keep the Preview and Production Supabase URLs and service-role keys separate.
 
 See supabase/MESSAGING_PRESENCE_DEPLOY.md for the test checklist and the distinction between server acceptance, recipient delivery, and read receipts. Messaging is not end-to-end encrypted and this change does not add push notifications; delivery/presence refresh uses polling while the app is open.
+
+Curation reward engine upgrade (Testnet-first; release 0.60.3)
+-----------------------------------------------------------
+
+1. Review `supabase/migrations/202610180001_ghc_curation_rewards.sql` and reconcile it against the Testnet Supabase migration history. Do not blindly replay migrations and do not apply this migration to Mainnet yet.
+2. Apply the reviewed migration to the Testnet Supabase project only.
+3. Deploy release 0.60.3 to the Vercel Preview environment using Testnet Pi credentials and Testnet Supabase credentials.
+4. Verify authenticated Upvote/Downvote, percentage selection, long-press reactions, duplicate requests, vote toggles, zero balance, restricted accounts, the Africa/Lagos earning-day cap, and wallet ledger refresh with two test accounts.
+5. Confirm the new reward claim table is not accessible to `anon` or `authenticated`, and the reward RPC is executable only by `service_role`.
+6. Run `npm run typecheck`, `npm run lint`, `npm run ci:verify`, and `npm run build` under supported Node.js 24.15+ before promoting the build.
+7. Only consider a separate Mainnet migration after successful Testnet verification and explicit approval. Keep Production environment variables bound to Mainnet and Preview variables bound to Testnet.
+
+The reward is a server-calculated GHC ledger credit, not a transfer or a debit from the voter. The calculation basis is spendable GHC and reputation level; the reward is capped and idempotent per voter/post. The source package and static tests do not prove that the live database migration or end-to-end tests have run.

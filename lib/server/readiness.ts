@@ -244,8 +244,11 @@ export function evaluateReadiness(opts?: {
   })
 
   // --- High: network consistency ---
-  // Production + sandbox flag is a critical misconfiguration (Testnet π / keys on Mainnet host).
-  const sandboxInProduction = Boolean(isProduction && sandbox)
+  // Mainnet Production + sandbox flag is a critical misconfiguration. Vercel Preview uses NODE_ENV=production too, but should remain on Testnet.
+  // NODE_ENV=production is also set for Vercel Preview builds. Vercel Preview is expected to use Pi Testnet, so only the actual Vercel Production target (or
+  // an explicit GHC_ENV=production override) must reject sandbox mode.
+  const isMainnetDeployment = vercelEnv === "production" || process.env.GHC_ENV === "production"
+  const sandboxInProduction = Boolean(isMainnetDeployment && sandbox)
   checks.push({
     id: "pi_network_mode",
     label: "Pi network mode (sandbox vs mainnet)",

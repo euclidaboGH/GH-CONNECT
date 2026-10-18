@@ -56,7 +56,7 @@ assert(econ.includes("VVIP_PRICE_GHC = 300") || econ.includes("300"), "economy f
 assert(existsSync(join(root, "docs/architecture/EIGHT_STEP_PRODUCTION_HARDENING.md")), "docs")
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-assert(pkg.engines?.node === "24.x", "node 24.x")
+assert(pkg.engines?.node === "^22.22.2 || ^24.15.0", "supported Node 22.22.2+ / 24.15.0+ runtimes")
 
 console.log("\n=== RESULTS ===")
 console.log("Passed:", passed)

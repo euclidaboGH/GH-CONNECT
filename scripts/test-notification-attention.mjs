@@ -13,7 +13,8 @@ const messageApi = read('app/api/messaging/conversations/[conversationId]/messag
 const postMigration = read('supabase/migrations/202610240007_gh_post_created_notifications.sql')
 
 const checks = [
-  ['Daily reward is mounted in the active feed', /DailyRewardFeedCard/.test(feed) && /data-ghc-feed-daily-reward/.test(feed)],
+  ['Daily reward is compact in the header, not a persistent feed card', /useDailyClaimStatus/.test(feed) && /Daily reward status is kept compact in the app header/.test(feed) && !/data-ghc-feed-daily-reward/.test(feed)],
+  ['Claim-ready attention notice is deduplicated per user and reward day', /daily-reward-ready-notice/.test(feed) && /Your daily GHC reward is ready to claim/.test(feed) && /ghc:open-rewards/.test(feed)],
   ['Reward remains visible while server status hydrates', /Until the server confirms\s+\/\/ today's status, keep the claim visible/.test(rewards) && /canClaimToday: true/.test(rewards)],
   ['Daily claim remains server-authoritative', /fetch\("\/api\/economy\/rewards\/daily"/.test(rewards)],
   ['Notification center loads durable social activity', /api\/social\/notifications\?limit=60/.test(bell)],
