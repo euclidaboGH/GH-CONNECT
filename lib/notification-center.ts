@@ -293,7 +293,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.tab = "settings"
     const rawSection = typeof data.section === "string" ? data.section : undefined
     if (
-      rawSection === "post" || rawSection === "comments" ||
+      rawSection === "post" ||
       rawSection === "conversation" ||
       rawSection === "transaction" ||
       rawSection === "transfer-request" ||
