@@ -3011,7 +3011,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         parentId: replyToCommentId,
       })
 
-      if (!remote.ok || remote.ok === false) {
+      if (!remote.ok) {
         addToast(
           remote.error ||
             (replyToCommentId ? "Could not post reply" : "Could not post comment"),
