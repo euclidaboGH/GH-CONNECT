@@ -1,8 +1,8 @@
 {
   "name": "gh-connect",
-  "version": "0.59.5",
+  "version": "0.59.6",
   "private": true,
-  "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
+  "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
     "dev": "next dev",
     "build": "ESLINT_USE_FLAT_CONFIG=false next build",
@@ -17,7 +17,7 @@
     "test:daily-wallet": "node scripts/test-daily-claim-wallet-pipeline.mjs",
     "test:release": "node scripts/verify-production-release.mjs",
     "test:safety": "node scripts/scan-production-safety.mjs",
-    "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run test:rewards-reliability && npm run test:engagement-rosters && npm run test:stories && npm run test:post-composer && npm run test:social-messaging && npm run test:messaging-reliability && npm run build",
+    "ci:verify": "npm run typecheck && npm run lint && npm run test:safety && npm run test:vercel-build-repair && npm run test:rewards-reliability && npm run test:engagement-rosters && npm run test:stories && npm run test:post-composer && npm run test:social-messaging && npm run test:messaging-reliability && npm run build",
     "test:idor-checklist": "node scripts/test-idor-isolation.mjs",
     "ops:migration-check": "node scripts/print-migration-checklist.mjs",
     "verify:static": "node scripts/verify-phase14-static.mjs",
@@ -41,7 +41,8 @@
     "test:post-composer": "node scripts/test-post-composer.mjs",
     "test:social-messaging": "node scripts/test-social-messaging-upgrade.mjs",
     "test:messaging-reliability": "node scripts/test-messaging-reliability.mjs",
-    "test:rewards-reliability": "node scripts/test-rewards-reliability.mjs"
+    "test:rewards-reliability": "node scripts/test-rewards-reliability.mjs",
+    "test:vercel-build-repair": "node scripts/test-vercel-build-repair.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

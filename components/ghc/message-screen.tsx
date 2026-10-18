@@ -322,7 +322,7 @@ export function MessageScreen() {
   }, [allMessages, windowSize])
 
   useEffect(() => {
-    if (!selectedId || !selected || markedRef.current === selectedId) return
+    if (!selectedId || selected?.id !== selectedId || markedRef.current === selectedId) return
     markedRef.current = selectedId
     try { void markConversationRead?.(selectedId) } catch { /* */ }
   }, [selectedId, selected?.id, markConversationRead])

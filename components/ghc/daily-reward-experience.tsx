@@ -271,7 +271,7 @@ export function DailyRewardFeedCard({
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, userId, tier, ghc, refreshServerStatus])
+  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, daily.streakDays, userId, tier, ghc, refreshServerStatus])
 
   // Feed only shows the card while a claim is still available.
   // After claim, hide entirely — streak / history live in Rewards Centre.
@@ -436,7 +436,7 @@ export function DailyRewardSheet({
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
+  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, daily.streakDays, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
 
   const handleDismiss = useCallback(() => {
     markDailyRewardDismissed(userId)

@@ -132,7 +132,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       window.removeEventListener("ghc:close-transient-ui", close)
       window.removeEventListener("keydown", onKey)
     }
-  }, [open, onOpenChange, uploadProgress, isPublishing])
+  }, [open, initialMode, onOpenChange, uploadProgress, isPublishing])
 
   useEffect(() => {
     if (open) {

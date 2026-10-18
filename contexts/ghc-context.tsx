@@ -1545,6 +1545,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [state.ready])
 
+  // Define addToast first - it's used by other functions
+  const addToast = useCallback((message: string, type: "success" | "error" | "info") => {
+    const id = generateId()
+    setState((s) => ({ ...s, toasts: [...s.toasts, { id, message, type }] }))
+    setTimeout(() => {
+      setState((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) }))
+    }, 3000)
+  }, [])
+
+
   // Hydrate server-authoritative messaging and online-status privacy. Legacy device settings are
   // seeded only for preference fields not yet configured on the server, so a stale device cannot
   // overwrite a setting that was already saved from another device.
@@ -1732,16 +1742,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [sdk, state.ready, state.profile.onboarded, state.stories])
-
-  // Define addToast first - it's used by other functions
-  const addToast = useCallback((message: string, type: "success" | "error" | "info") => {
-    const id = generateId()
-    setState((s) => ({ ...s, toasts: [...s.toasts, { id, message, type }] }))
-    setTimeout(() => {
-      setState((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) }))
-    }, 3000)
-  }, [])
-
 
 
   // Phase 7: soft profile rehydrate when app returns to foreground
