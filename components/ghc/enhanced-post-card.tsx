@@ -34,6 +34,7 @@ import { authorReputationFromPost } from "@/lib/reputation/display"
 import { isOwnAuthor } from "@/lib/ownership"
 import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
+import { EngagementRosterSheet, type RosterKind } from "./engagement-roster-sheet"
 import { socialRecordAttention, socialSetCuration } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
 import { PostRewardPanel } from "@/components/ghc/post-reward/post-reward-panel"
@@ -134,6 +135,12 @@ function EnhancedPostCardInner({
   const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
+  const [rosterOpen, setRosterOpen] = useState(false)
+  const [rosterKind, setRosterKind] = useState<RosterKind>("likes")
+  const openRoster = (kind: RosterKind) => {
+    setRosterKind(kind)
+    setRosterOpen(true)
+  }
   const seedUp = Number(
     (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ??
       (post as { upvote_count?: number }).upvote_count ??
@@ -779,7 +786,17 @@ function EnhancedPostCardInner({
       {post.engagement && (
         <div className="space-y-1 border-t border-border/40 bg-muted/25 px-3.5 py-1.5 text-[11px] text-muted-foreground">
           <div className="flex justify-between">
-            <span>{post.engagement.views} views</span>
+            <button
+              type="button"
+              className="text-left hover:underline"
+              onClick={() => openRoster("viewers")}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                openRoster("viewers")
+              }}
+            >
+              {post.engagement.views} views
+            </button>
             <span>{post.engagement.saves} saved</span>
           </div>
         </div>
@@ -794,10 +811,25 @@ function EnhancedPostCardInner({
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Upvote content — improves quality ranking and reward eligibility"
+          aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for who upvoted (owner)."
           aria-pressed={curationChoice === "upvote"}
           onClick={() => void handleCuration("upvote")}
-          title="Upvote content quality. Server ranking and reward eligibility may improve — votes never mint GHC on the client."
+          onContextMenu={(e) => {
+            e.preventDefault()
+            openRoster("upvotes")
+          }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            const t = window.setTimeout(() => openRoster("upvotes"), 480)
+            const clear = () => {
+              window.clearTimeout(t)
+              window.removeEventListener("pointerup", clear)
+              window.removeEventListener("pointercancel", clear)
+            }
+            window.addEventListener("pointerup", clear)
+            window.addEventListener("pointercancel", clear)
+          }}
+          title="Upvote content quality. Long-press to see who upvoted (owner). Votes never mint GHC on the client."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "upvote"
               ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -810,10 +842,25 @@ function EnhancedPostCardInner({
         <button
           type="button"
           disabled={curationBusy}
-          aria-label="Downvote content — lowers quality ranking and may reduce reward eligibility"
+          aria-label="Downvote content — lowers quality ranking. Long-press for who downvoted (owner)."
           aria-pressed={curationChoice === "downvote"}
           onClick={() => void handleCuration("downvote")}
-          title="Downvote weak content. Quality ranking and reward eligibility may fall — never client-minted penalties."
+          onContextMenu={(e) => {
+            e.preventDefault()
+            openRoster("downvotes")
+          }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            const t = window.setTimeout(() => openRoster("downvotes"), 480)
+            const clear = () => {
+              window.clearTimeout(t)
+              window.removeEventListener("pointerup", clear)
+              window.removeEventListener("pointercancel", clear)
+            }
+            window.addEventListener("pointerup", clear)
+            window.addEventListener("pointercancel", clear)
+          }}
+          title="Downvote weak content. Long-press to see who downvoted (owner)."
           className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
             curationChoice === "downvote"
               ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
@@ -927,5 +974,13 @@ export function VisibilityReasonTooltip({
         </div>
       </div>
     </div>
+      <EngagementRosterSheet
+        open={rosterOpen}
+        onClose={() => setRosterOpen(false)}
+        kind={rosterKind}
+        postId={post.id}
+      />
+
+
   )
 }

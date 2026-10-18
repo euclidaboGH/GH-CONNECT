@@ -2992,6 +2992,35 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : post
         ),
       }))
+      // Durable dual-write so other accounts can see emoji reactions
+      try {
+        const res = await fetch(
+          `/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/reactions`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              ...IdentityService.getAuthHeaders(),
+            },
+            body: JSON.stringify({ emoji }),
+          }
+        )
+        const body = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          durable?: boolean
+          error?: string
+        }
+        if (!res.ok || body.ok === false) {
+          addToast(
+            body.error || "Reaction saved here — not visible to others until server confirms",
+            "info"
+          )
+        }
+      } catch {
+        addToast("Reaction saved here — server not confirmed", "info")
+      }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not react to comment", "error")

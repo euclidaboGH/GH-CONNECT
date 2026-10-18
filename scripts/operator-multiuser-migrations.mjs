@@ -26,6 +26,7 @@ const MULTIUSER_CRITICAL = [
   { file: "202610150001_gh_post_list_feed_stable_cursor.sql", class: "REQUIRED", why: "Stable feed cursor", mustContain: ["gh_post_list_feed"] },
   { file: "202610150002_gh_comment_stable_cursor.sql", class: "REQUIRED", why: "Comment cursor + create", mustContain: ["gh_comment_list_v2", "gh_comment_create"] },
   { file: "20261017_match_signals_durable.sql", class: "REQUIRED", why: "Match signals", mustContain: ["match_signal"] },
+  { file: "20261018_gh_engagement_rosters.sql", class: "REQUIRED", why: "Reaction/vote/view/story rosters + comment emoji reactions", mustContain: ["gh_list_post_reactions", "gh_list_post_viewers", "gh_comment_reaction_toggle"] },
   { file: "20261021_gh_social_notifications_types_extend.sql", class: "REQUIRED", why: "Extended notif types", mustContain: [] },
 ]
 

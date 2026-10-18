@@ -732,3 +732,70 @@ export async function socialDiscoverPeople(limit = 30): Promise<{
     error: data.error,
   }
 }
+
+
+/** Rosters — who reacted / voted / viewed (server-authoritative). */
+export async function socialListPostReactions(
+  postId: string,
+  reaction = "like",
+  limit = 50
+): Promise<{ ok: boolean; durable: boolean; users: Array<Record<string, unknown>>; error?: string }> {
+  const q = new URLSearchParams({ reaction, limit: String(limit) })
+  const data = await json<{ users?: unknown[] }>(
+    `/api/social/posts/${encodeURIComponent(postId)}/reactions/list?${q}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    users: Array.isArray(data.users) ? (data.users as Array<Record<string, unknown>>) : [],
+    error: data.error,
+  }
+}
+
+export async function socialListPostVotes(
+  postId: string,
+  choice?: "upvote" | "downvote",
+  limit = 50
+): Promise<{ ok: boolean; durable: boolean; users: Array<Record<string, unknown>>; error?: string }> {
+  const q = new URLSearchParams({ limit: String(limit) })
+  if (choice) q.set("choice", choice)
+  const data = await json<{ users?: unknown[] }>(
+    `/api/social/posts/${encodeURIComponent(postId)}/curation/list?${q}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    users: Array.isArray(data.users) ? (data.users as Array<Record<string, unknown>>) : [],
+    error: data.error,
+  }
+}
+
+export async function socialListPostViewers(
+  postId: string,
+  limit = 50
+): Promise<{ ok: boolean; durable: boolean; users: Array<Record<string, unknown>>; error?: string }> {
+  const data = await json<{ users?: unknown[] }>(
+    `/api/social/posts/${encodeURIComponent(postId)}/viewers?limit=${limit}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    users: Array.isArray(data.users) ? (data.users as Array<Record<string, unknown>>) : [],
+    error: data.error,
+  }
+}
+
+export async function socialListStoryViewers(
+  storyId: string,
+  limit = 50
+): Promise<{ ok: boolean; durable: boolean; users: Array<Record<string, unknown>>; error?: string }> {
+  const data = await json<{ users?: unknown[] }>(
+    `/api/social/stories/${encodeURIComponent(storyId)}/viewers?limit=${limit}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    users: Array.isArray(data.users) ? (data.users as Array<Record<string, unknown>>) : [],
+    error: data.error,
+  }
+}
