@@ -337,7 +337,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card overflow-hidden bg-card text-card-foreground cursor-pointer"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 overflow-hidden bg-card text-card-foreground cursor-pointer"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -689,7 +689,7 @@ function EnhancedPostCardInner({
         {/* Media gallery with improved viewing */}
         {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
           <div
-            className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-[1.15rem] sm:aspect-video bg-muted/50 group cursor-pointer"
+            className="relative mb-2 aspect-[4/5] max-h-[24rem] w-full overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem] group cursor-pointer"
             onClick={handleImageTap}
             onMouseDown={handleLongPress}
             onMouseUp={handlePressEnd}
@@ -752,15 +752,14 @@ function EnhancedPostCardInner({
         )}
       </div>
 
-      {/* Always-visible engagement summary and recent comment previews, hydrated with the feed. */}
-      <section className="mx-4 mb-3 rounded-2xl border border-border/50 bg-muted/20 px-3 py-2.5" aria-label="Post engagement">
+      {/* Compact engagement summary. Comment text stays inside the dedicated comments sheet. */}
+      <section className="mx-4 mb-2 px-1 py-1" aria-label="Post engagement">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5"><span aria-hidden>❤️</span><strong className="tabular-nums text-foreground">{visibleLikeCount.toLocaleString()}</strong><span>likes</span></span>
-          <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="inline-flex items-center gap-1.5 hover:text-foreground"><MessageCircle size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleCommentCount.toLocaleString()}</strong><span>comments</span></button>
+          <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="inline-flex items-center gap-1.5 font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-md" aria-label={`View ${visibleCommentCount.toLocaleString()} comments`}><MessageCircle size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleCommentCount.toLocaleString()}</strong><span>{visibleCommentCount === 1 ? "comment" : "comments"}</span></button>
           <span className="inline-flex items-center gap-1.5"><Share2 size={13} aria-hidden /><strong className="tabular-nums text-foreground">{visibleShareCount.toLocaleString()}</strong><span>shares</span></span>
         </div>
-        {visibleReactionEntries.length > 0 ? <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Reaction counts">{visibleReactionEntries.map(([type, count]) => <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card px-2 py-1 text-[11px] font-semibold text-foreground"><span>{reactionEmoji[type] || "✨"}</span><span className="tabular-nums">{Number(count).toLocaleString()}</span></span>)}</div> : null}
-        {Array.isArray(post.comments) && post.comments.length > 0 ? <div className="mt-2 space-y-1.5 border-t border-border/40 pt-2">{post.comments.slice(-2).map((comment) => <button key={comment.id} type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="block w-full truncate text-left text-xs text-muted-foreground hover:text-foreground"><strong className="text-foreground">{comment.authorName || "Member"}</strong><span className="ml-1.5">{comment.text}</span></button>)}{visibleCommentCount > post.comments.length ? <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="text-[11px] font-bold text-emerald-700 hover:underline dark:text-emerald-300">View all {visibleCommentCount.toLocaleString()} comments</button> : null}</div> : visibleCommentCount > 0 ? <button type="button" onClick={(event) => { event.stopPropagation(); onComment(post.id) }} className="mt-2 border-t border-border/40 pt-2 text-left text-[11px] font-bold text-emerald-700 hover:underline dark:text-emerald-300">View {visibleCommentCount.toLocaleString()} comments</button> : null}
+        {visibleReactionEntries.length > 0 ? <div className="mt-1.5 flex flex-wrap gap-1" aria-label="Reaction counts">{visibleReactionEntries.slice(0, 5).map(([type, count]) => <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground"><span>{reactionEmoji[type] || "✨"}</span><span className="tabular-nums">{Number(count).toLocaleString()}</span></span>)}</div> : null}
       </section>
 
       {/* Engagement stats */}
@@ -785,7 +784,7 @@ function EnhancedPostCardInner({
 
       {/* Primary actions — curation · comments · save · share */}
       <div
-        className="flex items-center gap-1 border-t border-border/40 px-3 py-2.5"
+        className="flex items-center gap-1 border-t border-border/40 px-3 py-2"
         role="toolbar"
         aria-label="Content quality and post actions"
       >
@@ -860,9 +859,7 @@ function EnhancedPostCardInner({
         >
           <MessageCircle size={20} aria-hidden />
           <span className="tabular-nums text-xs font-semibold">
-            {Array.isArray(post.comments)
-              ? post.comments.length
-              : Number(post.engagement?.comments ?? 0)}
+            {visibleCommentCount}
           </span>
         </button>
         <button
@@ -886,14 +883,7 @@ function EnhancedPostCardInner({
         >
           <Share2 size={20} aria-hidden />
         </button>
-        <button
-          type="button"
-          aria-label="More actions"
-          onClick={() => setShowMenu(true)}
-          className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-        >
-          <MoreVertical size={20} aria-hidden />
-        </button>
+
       </div>
 
       {/* Public reward / quality strip — GHC amounts only when server-enabled */}
