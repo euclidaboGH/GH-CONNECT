@@ -68,6 +68,7 @@ export type NotificationDeepLink = {
     | "settings"
   section?:
     | "post"
+    | "comments"
     | "conversation"
     | "transaction"
     | "transfer-request"
@@ -293,7 +294,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.tab = "settings"
     const rawSection = typeof data.section === "string" ? data.section : undefined
     if (
-      rawSection === "post" ||
+      rawSection === "post" || rawSection === "comments" ||
       rawSection === "conversation" ||
       rawSection === "transaction" ||
       rawSection === "transfer-request" ||
