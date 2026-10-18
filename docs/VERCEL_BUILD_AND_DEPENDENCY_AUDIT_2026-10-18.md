@@ -7,13 +7,15 @@
 - Made the message-read effect compare `selected?.id` to `selectedId`, avoiding a dependency on the whole `selected` object while retaining the guard against marking a stale/missing conversation read.
 - Added `initialMode` to the compose event effect's dependencies so a mode change cannot leave stale event-handler behavior.
 - Added `scripts/test-vercel-build-repair.mjs` and the `test:vercel-build-repair` npm script. It is included in `ci:verify` to guard against these regressions.
-- Bumped the app package version to `0.59.6` and kept the root package-lock version aligned.
+- Moved `permanentFailure` and its associated error string to the outer scope of `sendMessage`, so the final return value and optimistic-message reconciliation can read them. This fixes the new TypeScript failure (`Cannot find name 'permanentFailure'`) without suppressing type checks.
+- Extended the regression script to assert the outcome variable is declared once at the correct function scope.
+- Bumped the app package version to `0.59.7` and kept the root package-lock version aligned.
 
 ## Items that cannot be safely repaired by source edits alone
 
 ### 1. `Unknown env config "cache-dir"`
 
-The project's `.npmrc` does not define `cache-dir`. This warning is therefore most likely coming from a Vercel environment variable or an account/project-level npm configuration. In Vercel Project Settings → Environment Variables, look for `NPM_CONFIG_CACHE_DIR` or `npm_config_cache_dir` and remove it. If a custom cache path is genuinely needed, use npm's supported `NPM_CONFIG_CACHE` / `cache` setting instead. Redeploy after changing the setting.
+The project's `.npmrc` contains only `legacy-peer-deps=true`, `fund=false`, `package-lock=true`, and the registry URL; it does not define `cache-dir`. The operator also confirmed that `NPM_CONFIG_CACHE_DIR` and `npm_config_cache_dir` are absent from Vercel Environment Variables. Therefore, do not keep searching for those two exact names. Check for the hyphenated key `npm_config_cache-dir` / `NPM_CONFIG_CACHE-DIR`, a different Vercel Root Directory pointing to another `.npmrc`, or a setting injected by the build environment. If none exists, preserve the warning in the deployment notes and contact Vercel support with the build ID: it is a warning, not the current TypeScript blocker. npm's supported cache option is `cache` / `NPM_CONFIG_CACHE`; do not add an unsupported `cache-dir` key to `.npmrc`.
 
 ### 2. Dependency vulnerabilities and deprecated packages
 
@@ -31,7 +33,7 @@ npm is reporting a lifecycle-script approval notice, not a compilation failure. 
 
 The following local source/regression checks passed in this environment:
 
-- `node scripts/test-vercel-build-repair.mjs` — 7/7 checks
+- `node scripts/test-vercel-build-repair.mjs` — 8/8 checks
 - `node scripts/test-rewards-reliability.mjs` — 24/24 checks
 - `node scripts/test-daily-claim-wallet-pipeline.mjs` — 35/35 checks
 - `node scripts/test-economy-v12.mjs` — 173/173 checks
@@ -39,3 +41,7 @@ The following local source/regression checks passed in this environment:
 - `node scripts/check-jsx-safety.mjs` — 637 files scanned
 
 A full `npm ci`, ESLint run, TypeScript typecheck, Next.js production build, and fresh `npm audit` could not be run here because the npm registry was unreachable and this workspace did not have `node_modules`. These results are not a claim that the full Vercel build has already passed.
+
+## Current build blocker fixed in version 0.59.7
+
+The latest Vercel log showed `contexts/ghc-context.tsx:4378: Cannot find name 'permanentFailure'`. The declaration had been scoped inside an inner `try` region while the final `return !permanentFailure` sat outside that region. The declaration is now placed at the top of the `sendMessage` callback, and the inner duplicate declaration was removed. The offline queue and permanent-vs-retryable failure semantics are otherwise unchanged.

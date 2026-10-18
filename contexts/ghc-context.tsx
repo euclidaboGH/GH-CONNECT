@@ -4171,6 +4171,10 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const sendMessage = useCallback(async (conversationId: string, text: string, replyToMessageId?: string, sharedPostId?: string): Promise<boolean> => {
+    // Keep the final outcome outside the try block so it remains available to
+    // both the optimistic-message reconciliation and the boolean return value.
+    let permanentFailure = false
+    let permanentError = ""
     try {
       if (!messageLimiter.isAllowed(`msg_${conversationId}`)) {
         addToast("You're messaging too fast. Please slow down.", "error")
@@ -4271,8 +4275,6 @@ const dismissMatchCelebration = useCallback(() => {
 
       let serverId: string | null = null
       let durable = false
-      let permanentFailure = false
-      let permanentError = ""
       try {
         const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
         const remote = await apiSendMessageWithRetry(
