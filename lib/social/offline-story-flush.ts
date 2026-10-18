@@ -3,6 +3,19 @@
  */
 import { offlineQueue, withRetry } from "@/lib/network-resilience"
 import { socialCreateStory } from "@/lib/social/client"
+import type { StoryAudience } from "@/lib/ghc-types"
+
+const STORY_AUDIENCES: readonly StoryAudience[] = [
+  "everyone",
+  "followers",
+  "friends",
+  "matches-only",
+  "private",
+]
+
+function isStoryAudience(value: unknown): value is StoryAudience {
+  return typeof value === "string" && STORY_AUDIENCES.some((audience) => audience === value)
+}
 
 export type FlushStoryResult = {
   attempted: number
@@ -44,7 +57,7 @@ export async function flushQueuedStories(): Promise<FlushStoryResult> {
             text: typeof payload.text === "string" ? payload.text : "",
             media,
             background: typeof payload.background === "string" ? payload.background : undefined,
-            audience: typeof payload.audience === "string" ? payload.audience : undefined,
+            audience: isStoryAudience(payload.audience) ? payload.audience : undefined,
             expiresAt:
               typeof payload.expiresAt === "number"
                 ? payload.expiresAt
