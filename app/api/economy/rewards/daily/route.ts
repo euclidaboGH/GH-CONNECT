@@ -7,7 +7,7 @@
  * Client amounts are ignored. Double-submit returns existing success (idempotent).
  */
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { computeDailyClaim } from "@/lib/server/economy/claim-engine"
+import { computeDailyClaim, lagosDayKey, lagosYesterdayKey, loadClaimStreakState } from "@/lib/server/economy/claim-engine"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 import { rpcExecuteDailyClaimV12 } from "@/lib/server/economy/db"
 import {
@@ -35,6 +35,48 @@ import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+/** GET /api/economy/rewards/daily — durable, read-only claim availability. */
+export async function GET(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  if (!isDatabaseConfigured() && !allowMemoryServer()) {
+    return jsonErr(
+      "SERVER_UNAVAILABLE",
+      "Daily reward status requires the durable economy database to be configured.",
+      503
+    )
+  }
+
+  try {
+    const state = await loadClaimStreakState(auth.userId)
+    const today = lagosDayKey()
+    const yesterday = lagosYesterdayKey()
+    const claimedToday = state.lastClaimDayKey === today
+    let cycleDay = 1
+    if (claimedToday) {
+      cycleDay = Math.max(1, Math.min(7, state.cycleDay || 1))
+    } else if (state.lastClaimDayKey === yesterday) {
+      cycleDay = state.cycleDay >= 7 ? 1 : Math.max(1, state.cycleDay + 1)
+    }
+
+    return jsonOk({
+      ok: true,
+      dayKey: today,
+      lastClaimDayKey: state.lastClaimDayKey,
+      claimedToday,
+      claimable: !claimedToday,
+      cycleDay,
+      completedCycles: state.completedCycles,
+      totalSuccessfulClaims: state.totalSuccessfulClaims,
+      economicVersion: state.economicVersion,
+    }, 200, { headers: { "Cache-Control": "no-store, max-age=0" } })
+  } catch {
+    return jsonErr("SERVER_UNAVAILABLE", "Could not load daily reward status. Retry shortly.", 503)
+  }
+}
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -71,7 +113,19 @@ export async function POST(request: Request) {
 
   const computed = await computeDailyClaim({ userId: auth.userId })
   if (!computed.ok) {
-    const status = computed.error === "ALREADY_CLAIMED_TODAY" ? 409 : 400
+    if (computed.error === "ALREADY_CLAIMED_TODAY") {
+      // Idempotent response: a repeated tap must not look like a failed claim.
+      return jsonOk({
+        ok: true,
+        amount: 0,
+        alreadyClaimed: true,
+        idempotent: true,
+        cycleDay: computed.cycleDay,
+        dayKey: computed.dayKey,
+        economicVersion: ECONOMY_VERSION,
+      })
+    }
+    const status = computed.error === "SERVER_UNAVAILABLE" ? 503 : 400
     return jsonErr(computed.error, computed.error, status)
   }
 

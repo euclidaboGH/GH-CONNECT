@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Image as ImageIcon, Video, X, Globe, Users, Lock, MapPin, Tag, FileText } from "lucide-react"
+import { Image as ImageIcon, Video, X, Globe, Users, Lock, FileText, BarChart3, Save } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
-import { upsertPostDraft } from "@/lib/creator/post-drafts"
+import { getPostDraft, removePostDraft, upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
 import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
 import type { StoryItem } from "@/lib/ghc-types"
@@ -60,19 +60,17 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [storyMedia, setStoryMedia] = useState<StoryItem["media"]>(null)
   const [audience, setAudience] = useState<Audience>("public")
   const [showAudience, setShowAudience] = useState(false)
-  const [postPreset, setPostPreset] = useState<"thought" | "question" | "win" | "opportunity" | null>(null)
-  const [scheduleFor, setScheduleFor] = useState<string>("") // datetime-local value
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [storyMode, setStoryMode] = useState<"social" | "professional">("social")
-  const [suggestOpen, setSuggestOpen] = useState(false)
   const [storyAudience, setStoryAudience] = useState<"everyone" | "followers" | "friends" | "private">("followers")
   const [isPublishing, setIsPublishing] = useState(false)
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>("")
   const [promptHint, setPromptHint] = useState(pickComposePrompt)
 
 
-  const DRAFT_KEY = "ghc-post-draft-v1"
   const publishingRef = useRef(false)
+  const activeDraftIdRef = useRef<string | null>(null)
+  const pendingComposeRef = useRef<{ text?: string; draftId?: string } | null>(null)
 
   const communityOptions = (conversations || [])
     .filter(
@@ -95,11 +93,22 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     const onPrefill = (e: Event) => {
       const d = (e as CustomEvent<{ text?: string; body?: string }>).detail || {}
       const pre = String(d.text || d.body || "").trim()
-      if (pre) setText((prev) => (prev ? prev : pre))
+      // A marketplace/chat prefill must not leak into a future unrelated post.
+      if (open && pre) setText((current) => current.trim() ? current : pre)
+    }
+    const onOpenCompose = (e: Event) => {
+      const d = (e as CustomEvent<{ text?: string; draftId?: string; mode?: string }>).detail || {}
+      if (d.mode === "post" && (typeof d.draftId === "string" || typeof d.text === "string")) {
+        pendingComposeRef.current = { text: d.text, draftId: d.draftId }
+      }
     }
     window.addEventListener("ghc:compose-prefill", onPrefill)
-    return () => window.removeEventListener("ghc:compose-prefill", onPrefill)
-  }, [])
+    window.addEventListener("ghc:open-compose", onOpenCompose)
+    return () => {
+      window.removeEventListener("ghc:compose-prefill", onPrefill)
+      window.removeEventListener("ghc:open-compose", onOpenCompose)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -110,7 +119,9 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
     setMode("post")
     const close = () => onOpenChange(false)
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !uploadProgress && !isPublishing) close()
+    }
     window.addEventListener("ghc:tab-change", close)
     window.addEventListener("ghc:close-compose", close)
     window.addEventListener("ghc:close-transient-ui", close)
@@ -121,28 +132,41 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       window.removeEventListener("ghc:close-transient-ui", close)
       window.removeEventListener("keydown", onKey)
     }
-  }, [open, onOpenChange])
+  }, [open, onOpenChange, uploadProgress, isPublishing])
 
   useEffect(() => {
     if (open) {
-      setMode(initialMode)
+      // Stories have a dedicated creator; this surface is always a post composer.
+      setMode("post")
       if (initialMode === "post") {
-        void (async () => {
-          try {
-            const raw =
-              (await piLocalGet("post-draft-v1")) ||
-              (typeof window !== "undefined"
-                ? window.localStorage.getItem("ghc-post-draft-v1")
-                : null)
-            if (raw) {
-              const d = JSON.parse(raw) as { text?: string; audience?: Audience }
-              if (d.text) setText(d.text)
-              if (d.audience) setAudience(d.audience)
+        const pending = pendingComposeRef.current
+        pendingComposeRef.current = null
+        if (pending) {
+          const saved = pending.draftId ? getPostDraft(pending.draftId) : null
+          activeDraftIdRef.current = saved?.id || null
+          setText(saved?.content ?? pending.text ?? "")
+          setSelectedImages(saved?.images?.filter(isDurableMediaUrl) ?? [])
+          setSelectedVideo(saved?.video && isDurableMediaUrl(saved.video) ? saved.video : null)
+          if (saved) setAudience("public")
+        } else {
+          activeDraftIdRef.current = null
+          void (async () => {
+            try {
+              const raw =
+                (await piLocalGet("post-draft-v1")) ||
+                (typeof window !== "undefined"
+                  ? window.localStorage.getItem("ghc-post-draft-v1")
+                  : null)
+              if (raw) {
+                const d = JSON.parse(raw) as { text?: string; audience?: Audience }
+                if (d.text) setText(d.text)
+                if (d.audience) setAudience(d.audience)
+              }
+            } catch {
+              /* ignore */
             }
-          } catch {
-            /* ignore */
-          }
-        })()
+          })()
+        }
       }
       setPromptHint(pickComposePrompt())
       const t = window.setTimeout(() => textareaRef.current?.focus(), 80)
@@ -175,10 +199,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     setText("")
     setSelectedImages([])
     setSelectedVideo(null)
+    setSelectedDoc(null)
+    setSelectedDocName(null)
     setStoryMedia(null)
+    setSelectedCommunityId("")
     setAudience("public")
     setShowAudience(false)
-    setMode(initialMode)
+    setMode("post")
+    activeDraftIdRef.current = null
   }
 
   const readFileAsDataUrl = (file: File, kind: "image" | "video" | "file") =>
@@ -335,12 +363,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const handleVideo = async (file: File | undefined) => {
     if (!file) return
     const sizeMb = file.size / (1024 * 1024)
-    if (sizeMb > 80) {
-      addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
+    try {
+      validateMediaFile(file, "video")
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : "Choose a supported video file", "error")
       return
     }
     if (file.size > 4 * 1024 * 1024) {
-      addToast(mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"), "error")
+      addToast("For now, choose a video under 4 MB. Larger videos need the direct-to-storage upload path.", "error")
       return
     }
     setUploadProgress(
@@ -417,18 +447,28 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handlePublish = async () => {
     if (publishingRef.current || isPublishing || !canPublish) return
+    if (uploadProgress) {
+      addToast("Wait for the media upload to finish before publishing", "info")
+      return
+    }
     publishingRef.current = true
     setIsPublishing(true)
     // Phase 2 — never publish blob: media
-    const dirtyImages = selectedImages.filter((u) => isBlobUrl(u) || !u)
+    const dirtyImages = selectedImages.filter((u) => !isDurableMediaUrl(u))
     if (dirtyImages.length) {
-      addToast("Media still uploading — wait until Ready, then share", "error")
+      addToast("One or more photos are only stored on this device. Reconnect and upload them before publishing.", "error")
       publishingRef.current = false
       setIsPublishing(false)
       return
     }
-    if (selectedVideo && isBlobUrl(selectedVideo)) {
-      addToast("Video still uploading — wait until Ready, then share", "error")
+    if (selectedVideo && !isDurableMediaUrl(selectedVideo)) {
+      addToast("Video is not uploaded yet. Reconnect and upload it before publishing.", "error")
+      publishingRef.current = false
+      setIsPublishing(false)
+      return
+    }
+    if (selectedDoc && !isDurableMediaUrl(selectedDoc)) {
+      addToast("This attachment is stored only on this device. Reconnect and upload it before publishing.", "error")
       publishingRef.current = false
       setIsPublishing(false)
       return
@@ -459,19 +499,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         )
         if (created) {
           try { void piLocalRemove("post-draft-v1"); window.localStorage.removeItem("ghc-post-draft-v1") } catch { /* ignore */ }
-          if (scheduleFor) {
-            try {
-              const when = new Date(scheduleFor).getTime()
-              if (when > Date.now()) {
-                const q = JSON.parse(window.localStorage.getItem("ghc-scheduled-posts") || "[]")
-                q.push({ content: text.trim(), when, at: Date.now() })
-                window.localStorage.setItem("ghc-scheduled-posts", JSON.stringify(q.slice(-20)))
-                addToast("Also saved to local schedule list", "info")
-              }
-            } catch { /* ignore */ }
+          if (activeDraftIdRef.current) {
+            removePostDraft(activeDraftIdRef.current)
+            activeDraftIdRef.current = null
           }
-          setPostPreset(null)
-          setScheduleFor("")
           close()
         }
       } else {
@@ -540,8 +571,9 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <button
           type="button"
           onClick={close}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Close"
+          disabled={isPublishing || Boolean(uploadProgress)}
         >
           <X size={22} />
         </button>
@@ -551,44 +583,15 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         <button
           type="button"
           onClick={() => void handlePublish()}
-          disabled={!canPublish || isPublishing}
-          aria-busy={isPublishing}
+          disabled={!canPublish || isPublishing || Boolean(uploadProgress)}
+          aria-busy={isPublishing || Boolean(uploadProgress)}
           className="min-h-9 rounded-full bg-[var(--gh-green)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
         >
           {isPublishing ? (mode === "post" ? "Posting…" : "Sharing…") : mode === "post" ? "Post" : "Share"}
         </button>
       </header>
 
-      {/* Mode tabs */}
-      <div className="flex shrink-0 border-b border-border/50 bg-card px-3" role="tablist" aria-label="Compose type">
-        {(["post", "story"] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            aria-selected={mode === tab}
-            onClick={() => {
-              if (tab === "story") {
-                onOpenChange(false)
-                window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
-                return
-              }
-              setMode("post")
-              setSelectedImages([])
-              setSelectedVideo(null)
-              setStoryMedia(null)
-            }}
-            className={`min-h-11 flex-1 text-sm font-bold transition ${
-              mode === tab
-                ? "border-b-2 border-[var(--gh-green)] text-[var(--gh-green-deep)]"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab === "post" ? "Post" : "Story"}
-          </button>
-        ))}
-      </div>
-
+      {/* This composer is intentionally post-only. Stories have their own camera-first creator. */}
       {/* Scrollable body — long-form first-class */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
 
@@ -675,55 +678,28 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           )}
 
 
-          {mode === "post" && (
-            <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Post type">
-              {(
-                [
-                  { id: "thought" as const, label: "Thought", hint: "Share an idea…" },
-                  { id: "question" as const, label: "Question", hint: "Ask the community…" },
-                  { id: "win" as const, label: "Win", hint: "Celebrate a win…" },
-                  { id: "opportunity" as const, label: "Opportunity", hint: "Share an opening…" },
-                ]
-              ).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => {
-                    setPostPreset(p.id)
-                    if (!text.trim()) setText("")
-                    const el = textareaRef.current
-                    if (el && !text.trim()) el.placeholder = p.hint
-                  }}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
-                    postPreset === p.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-primary/10"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-              {text.trim() && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      void piLocalSet("post-draft-v1", JSON.stringify({ text, audience, at: Date.now() }))
-                    } catch { /* */ }
-                    try {
-                      upsertPostDraft({
-                        content: text,
-                        images: selectedImages.filter((x) => typeof x === "string"),
-                        video: selectedVideo || null,
-                      })
-                    } catch { /* */ }
-                    addToast("Draft saved on this device", "success")
-                  }}
-                  className="rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"
-                >
-                  Save draft
-                </button>
-              )}
+          {mode === "post" && (text.trim() || selectedImages.length > 0 || selectedVideo || selectedDoc) && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground">Keep this as a draft</p>
+                <p className="text-[11px] text-muted-foreground">Saved privately on this device until you publish.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const saved = upsertPostDraft({
+                    id: activeDraftIdRef.current || undefined,
+                    content: text,
+                    images: selectedImages.filter(isDurableMediaUrl),
+                    video: selectedVideo && isDurableMediaUrl(selectedVideo) ? selectedVideo : null,
+                  })
+                  activeDraftIdRef.current = saved.id
+                  addToast("Draft saved on this device", "success")
+                }}
+                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-muted"
+              >
+                <Save size={14} aria-hidden /> Save draft
+              </button>
             </div>
           )}
 
@@ -761,8 +737,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               onClick={() => {
                 const next = pickComposePrompt()
                 setPromptHint(next)
-                const el = textareaRef.current
-                if (el) el.placeholder = next
+                setText((current) => current.trim() ? current : next)
+                window.setTimeout(() => textareaRef.current?.focus(), 0)
               }}
               className="mb-2 flex w-full items-start gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-left transition hover:bg-emerald-500/10"
             >
@@ -776,21 +752,24 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 <span className="mt-0.5 block text-[13px] font-medium leading-snug text-foreground/90">
                   {promptHint}
                 </span>
-                <span className="mt-1 block text-[10px] text-muted-foreground">Tap to refresh · starts as your placeholder</span>
+                <span className="mt-1 block text-[10px] text-muted-foreground">Tap to start writing from this idea</span>
               </span>
             </button>
           ) : null}
 
           <textarea
             ref={textareaRef}
+            aria-label="Post text"
+            aria-describedby="post-character-count"
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : 5000))}
             placeholder={mode === "post" ? "What's on your mind?" : "Share a moment…"}
             className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-foreground placeholder-gray-400 focus:outline-none"
             rows={5}
           />
-          <p className="text-right text-[11px] text-muted-foreground">
+          <p id="post-character-count" className="text-right text-[11px] text-muted-foreground">
             {text.length}/{mode === "story" ? 500 : 5000}
+          </p>
 
           {(hashSuggestions.length > 0 || mentionSuggestions.length > 0) && (
             <div className="mb-2 flex flex-wrap gap-1.5 rounded-xl border border-border bg-card p-2">
@@ -817,18 +796,6 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </div>
           )}
 
-          {mode === "post" && (
-            <div className="mb-3 rounded-xl border border-dashed border-border bg-muted/30 p-2.5">
-              <label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Schedule (optional)</label>
-              <input
-                type="datetime-local"
-                value={scheduleFor}
-                onChange={(e) => setScheduleFor(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
-              />
-              <p className="mt-1 text-[10px] text-muted-foreground">Leave empty to post now. Scheduled posts stay on this device until publish time.</p>
-            </div>
-          )}
 
           {mode === "story" && (
             <div className="mb-2 flex gap-1.5">
@@ -840,14 +807,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {uploadProgress && (
             <p className="mb-2 text-[11px] font-medium text-primary" role="status">{uploadProgress}</p>
           )}
-          </p>
 
           {/* Media previews */}
           {mode === "post" && selectedImages.length > 0 && (
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {selectedImages.map((src, i) => (
                 <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <img src={src} alt={`Attached photo ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   <button
                     type="button"
                     className="absolute right-1.5 top-1.5 rounded-full bg-black/65 p-1.5 text-white"
@@ -954,9 +920,24 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               type="button"
               onClick={() => setShowAudience((v) => !v)}
               className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-muted px-3 text-xs font-bold text-foreground/90 transition hover:bg-muted/80"
-              aria-label="Audience"
+              aria-label="Choose post audience"
+              title="Choose who can see this post"
             >
               <AudienceIcon size={16} />
+            </button>
+          )}
+          {mode === "post" && (
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                window.dispatchEvent(new CustomEvent("ghc:open-poll"))
+              }}
+              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300"
+              aria-label="Create a poll"
+              title="Create a poll"
+            >
+              <BarChart3 size={16} aria-hidden />
             </button>
           )}
         </div>
@@ -970,7 +951,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         ) : null}
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
           {mode === "post"
-            ? "One post · text, photos, video & files together"
+            ? "Text, photos, video and files in one post · videos currently up to 4 MB"
             : "Stories disappear after 24 hours"}
         </p>
       </footer>

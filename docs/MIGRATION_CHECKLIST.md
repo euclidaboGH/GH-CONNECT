@@ -1,9 +1,9 @@
 # GreenHaven — Migration Checklist (authoritative inventory)
 
-**Generated:** 2026-10-18T02:04:59Z  
+**Generated:** 2026-10-18T02:50:00Z  
 **Canonical path:** `supabase/migrations/*.sql`  
-**On-disk count:** **77**  
-**Classification:** REQUIRED **74** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
+**On-disk count:** **79**  
+**Classification:** REQUIRED **76** · REQUIRES_APPROVAL **1** · PROPOSAL **2**
 
 This document is the **source inventory**. It does **not** mean migrations are applied to Testnet or Production.
 
@@ -32,8 +32,9 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 9. **GHPV judgment → weight → calibration → settlement infra → soft-delete** (20261013 → 20261020)
 10. **Stable feed/comment cursors + durable match signals + engagement rosters** (202610150001 → 20261018)
 11. **Notification types + content rewards + profile library + roster visibility + story creator** (20261021 → 202610240004)
+12. **Messaging delivery receipts + presence + server-enforced privacy + unread counts** (`202610240005`; apply after reviewing `supabase/MESSAGING_PRESENCE_DEPLOY.md`)
 
-**Operator note:** Review migration dependencies and the actual database schema before applying. Apply to Testnet first, run verification queries and feature tests, then promote the same reviewed migrations to Mainnet. The story creator migration stores text-story themes and implements audience visibility for everyone, followers and reciprocal follows. `matches-only` deliberately fails closed until a canonical server-side match relation is available. This inventory is not a record of applied migrations.
+**Operator note:** Review migration dependencies and the actual database schema before applying. Apply to Testnet first, run verification queries and feature tests, then promote the same reviewed migrations to Mainnet. The story creator migration stores text-story themes and implements audience visibility for everyone, followers and reciprocal follows. `202610240005_gh_messaging_presence_delivery_receipts.sql` adds private per-recipient receipts, expiring presence, server-side inbound messaging/online-status privacy and an unread-count RPC. Apply it to Testnet first and follow `supabase/MESSAGING_PRESENCE_DEPLOY.md`. This inventory is not a record of applied migrations.
 
 ---
 
@@ -119,6 +120,7 @@ Do **not** drop tables, disable RLS, or run all files blindly.
 | 76 | `20261023_gh_profile_content_library.sql` | REQUIRED | Profile library search; viewer-authorized. |
 | 77 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REQUIRED | Security follow-up: reaction rosters respect post visibility and blocks. |
 | 78 | `202610240004_gh_story_creator_upgrade.sql` | REQUIRED | Persists text-story backgrounds and enforces everyone/follower/mutual-follow audience visibility; matches-only fails closed until canonical server match relation is available. |
+| 79 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | REQUIRED | Per-recipient sent/delivered/read receipts, online/typing presence, server-enforced messaging and online-status privacy, unread-count RPC. Testnet-first; see `supabase/MESSAGING_PRESENCE_DEPLOY.md`. |
 
 ---
 

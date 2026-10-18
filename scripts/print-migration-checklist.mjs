@@ -69,6 +69,7 @@ Staging order (REQUIRED groups, oldest first):
 9) GHPV judgment → weight → calibration → settlement infra (20261013 → 20261020)
 10) Notification types + content rewards tables (20261021 → 20261022)
 11) Profile content library search (20261023; additive social read RPC, no economy coupling)
+12) Messaging delivery receipts + presence + server privacy + unread counts (202610240005; Testnet-first)
 
 GHPV settlement is system-only; votes must not mint GHC.
 Profile content library is additive social infrastructure; it does not change economy or payment rules.

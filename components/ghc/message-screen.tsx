@@ -20,11 +20,23 @@ import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
+import { apiTouchConversationPresence } from "@/lib/messaging/server-messaging-sync"
 
 const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
 
 type InboxFilter = "all" | "dms" | "unread" | "communities"
+type PeerPresence = { userId: string; online: boolean; lastSeenAt: number | null; isTyping: boolean }
+
+function formatLastSeen(lastSeenAt: number | null | undefined): string {
+  if (!lastSeenAt || !Number.isFinite(lastSeenAt)) return "Last seen unavailable"
+  const elapsed = Math.max(0, Date.now() - lastSeenAt)
+  if (elapsed < 60_000) return "Last seen just now"
+  if (elapsed < 60 * 60_000) return `Last seen ${Math.floor(elapsed / 60_000)} min ago`
+  if (elapsed < 24 * 60 * 60_000) return `Last seen ${Math.floor(elapsed / (60 * 60_000))} hr ago`
+  if (elapsed < 7 * 24 * 60 * 60_000) return `Last seen ${Math.floor(elapsed / (24 * 60 * 60_000))} d ago`
+  return `Last seen ${new Date(lastSeenAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+}
 
 function isCommunityConversation(c: Conversation): boolean {
   const any = c as Conversation & {
@@ -68,6 +80,10 @@ export function MessageScreen() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [replyPreview, setReplyPreview] = useState<string | null>(null)
+  const [peerPresence, setPeerPresence] = useState<PeerPresence | null>(null)
+  const [presenceSynced, setPresenceSynced] = useState(false)
+  const typingActiveRef = useRef(false)
+  const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const durablePreferred = isDurableMessagingEnabled()
   const bottomRef = useRef<HTMLDivElement>(null)
   const markedRef = useRef<string | null>(null)
@@ -217,23 +233,99 @@ export function MessageScreen() {
     return Array.isArray(raw) ? raw : []
   }, [selected])
 
+  const stopTyping = useCallback(() => {
+    if (typingIdleTimerRef.current) {
+      clearTimeout(typingIdleTimerRef.current)
+      typingIdleTimerRef.current = null
+    }
+    const wasTyping = typingActiveRef.current
+    typingActiveRef.current = false
+    if (wasTyping && selectedId) void apiTouchConversationPresence(selectedId, "stop_typing").catch(() => null)
+  }, [selectedId])
+
+  const handleDraftChange = useCallback((value: string) => {
+    setDraft(value)
+    if (!selectedId || !value.trim()) {
+      stopTyping()
+      return
+    }
+    if (!typingActiveRef.current) {
+      typingActiveRef.current = true
+      void apiTouchConversationPresence(selectedId, "typing").catch(() => null)
+    }
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current)
+    typingIdleTimerRef.current = setTimeout(() => {
+      typingActiveRef.current = false
+      typingIdleTimerRef.current = null
+      void apiTouchConversationPresence(selectedId, "stop_typing").catch(() => null)
+    }, 1800)
+  }, [selectedId, stopTyping])
+
+  // Poll only while a thread is open. The server returns presence only for active
+  // conversation members and expires online/typing leases automatically.
+  useEffect(() => {
+    if (!selectedId) {
+      setPeerPresence(null)
+      setPresenceSynced(false)
+      return
+    }
+    setPeerPresence(null)
+    setPresenceSynced(false)
+    let disposed = false
+    let inFlight = false
+    const syncPresence = async () => {
+      if (disposed || inFlight || document.visibilityState !== "visible") return
+      inFlight = true
+      try {
+        const response = await apiTouchConversationPresence(selectedId, typingActiveRef.current ? "typing" : "heartbeat")
+        if (!disposed && response?.ok && Array.isArray(response.presence)) {
+          const peerId = selected?.participantId
+          const peer = (response.presence as PeerPresence[]).find((item) => item.userId === peerId) || (response.presence as PeerPresence[])[0] || null
+          setPeerPresence(peer)
+          setPresenceSynced(true)
+        }
+      } catch { /* Presence must never block sending or reading messages. */ }
+      finally { inFlight = false }
+    }
+    void syncPresence()
+    const interval = window.setInterval(() => void syncPresence(), 5000)
+    return () => {
+      disposed = true
+      window.clearInterval(interval)
+      stopTyping()
+    }
+  }, [selectedId, selected?.participantId, stopTyping])
+
+  // Refresh durable messages so sender-side sent/delivered/read receipts update without reopening the chat.
+  useEffect(() => {
+    if (!selectedId) return
+    let disposed = false
+    const refresh = async () => {
+      if (disposed || document.visibilityState !== "visible") return
+      try { await loadConversationMessages?.(selectedId) } catch { /* next poll can recover */ }
+    }
+    const interval = window.setInterval(() => void refresh(), 7000)
+    return () => { disposed = true; window.clearInterval(interval) }
+  }, [selectedId, loadConversationMessages])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void markConversationRead?.(selectedId)
+    }, 15_000)
+    return () => window.clearInterval(interval)
+  }, [selectedId, markConversationRead])
+
   const messages: Message[] = useMemo(() => {
     if (allMessages.length <= windowSize) return allMessages
     return allMessages.slice(-windowSize)
   }, [allMessages, windowSize])
 
   useEffect(() => {
-    if (!selectedId || !selected) return
-    if (markedRef.current === selectedId) return
-    const needsMark = Boolean(selected.unread) || (selected.unreadCount || 0) > 0
+    if (!selectedId || !selected || markedRef.current === selectedId) return
     markedRef.current = selectedId
-    if (!needsMark) return
-    try {
-      void markConversationRead?.(selectedId)
-    } catch {
-      /* */
-    }
-  }, [selectedId, selected, markConversationRead])
+    try { void markConversationRead?.(selectedId) } catch { /* */ }
+  }, [selectedId, selected?.id, markConversationRead])
 
   useEffect(() => {
     if (!selectedId) return
@@ -244,6 +336,7 @@ export function MessageScreen() {
   }, [selectedId, messages.length])
 
   const openThread = useCallback((id: string) => {
+    stopTyping()
     startTransition(() => {
       setSelectedId(id)
       setDraft("")
@@ -252,9 +345,10 @@ export function MessageScreen() {
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     })
-  }, [])
+  }, [stopTyping])
 
   const closeThread = useCallback(() => {
+    stopTyping()
     startTransition(() => {
       setSelectedId(null)
       setDraft("")
@@ -262,30 +356,43 @@ export function MessageScreen() {
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
     })
-  }, [])
+  }, [stopTyping])
 
   const handleSend = useCallback(async () => {
     const text = draft.trim()
     if (!text || !selectedId || sending) return
     setSending(true)
     setDraft("")
+    stopTyping()
     const replyingTo = replyToId
     setReplyToId(null)
     setReplyPreview(null)
     try {
-      if (replyingTo) {
-        await replyToMessage(selectedId, replyingTo, text)
-      } else {
-        await sendMessage?.(selectedId, text)
+      const accepted = replyingTo
+        ? await replyToMessage(selectedId, replyingTo, text)
+        : await sendMessage?.(selectedId, text)
+      if (accepted === false || accepted === undefined) {
+        setDraft(text)
+        if (replyingTo) {
+          setReplyToId(replyingTo)
+          const parent = allMessages.find((m) => m.id === replyingTo)
+          setReplyPreview((parent?.text || "").slice(0, 80))
+        }
+        return
       }
-      setStatusMsg(isOffline ? "Saved locally — will sync when online" : "Message sent")
+      setStatusMsg(isOffline ? "Queued — will sync when online" : "Message sent")
       window.setTimeout(() => setStatusMsg(null), 2000)
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
       })
     } catch {
-      // Restore draft so the user can retry; avoid silent failure
+      // Restore draft and reply context so the user can retry safely.
       setDraft(text)
+      if (replyingTo) {
+        setReplyToId(replyingTo)
+        const parent = allMessages.find((m) => m.id === replyingTo)
+        setReplyPreview((parent?.text || "").slice(0, 80))
+      }
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:toast", {
@@ -303,7 +410,7 @@ export function MessageScreen() {
     } finally {
       setSending(false)
     }
-  }, [draft, selectedId, sending, sendMessage, replyToMessage, replyToId, isOffline])
+  }, [draft, selectedId, sending, sendMessage, replyToMessage, replyToId, isOffline, allMessages, stopTyping])
 
   useEffect(() => {
     if (!selectedId) return
@@ -345,8 +452,9 @@ export function MessageScreen() {
         <ChatHeader
           participantName={selected.groupName || selected.participantName || "Chat"}
           participantPhoto={selected.groupPhoto || selected.participantPhoto || ""}
-          isOnline={Boolean(selected.online)}
-          isTyping={Boolean(selected.isTyping)}
+          isOnline={presenceSynced ? Boolean(peerPresence?.online) : Boolean(selected.online)}
+          isTyping={presenceSynced ? Boolean(peerPresence?.isTyping) : Boolean(selected.isTyping)}
+          lastSeenLabel={presenceSynced ? formatLastSeen(peerPresence?.lastSeenAt) : "Last seen unavailable"}
           isCommunity={isCommunity}
           onBack={closeThread}
           onOpenProfile={() => {
@@ -436,9 +544,15 @@ export function MessageScreen() {
                           setSending(true)
                           setStatusMsg("Retrying…")
                           try {
-                            await sendMessage?.(selectedId, msg.text)
-                            setStatusMsg("Sent")
-                            window.setTimeout(() => setStatusMsg(null), 1500)
+                            const accepted = await sendMessage?.(selectedId, msg.text, msg.replyTo)
+                            if (accepted) {
+                              setStatusMsg("Sent")
+                              window.setTimeout(() => setStatusMsg(null), 1500)
+                            } else {
+                              setDraft(msg.text)
+                              setStatusMsg("Retry not confirmed — edit and send again")
+                              window.setTimeout(() => setStatusMsg(null), 2500)
+                            }
                           } catch {
                             setDraft(msg.text)
                             setStatusMsg("Retry failed — edit and send again")
@@ -483,7 +597,7 @@ export function MessageScreen() {
           ) : null}
           <MessageInput
             messageText={draft}
-            onMessageChange={setDraft}
+            onMessageChange={handleDraftChange}
             onSendMessage={() => void handleSend()}
             onEmojiClick={() => {
               /* MessageInput owns the emoji sheet */

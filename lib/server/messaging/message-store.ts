@@ -20,6 +20,7 @@ export type DurableConversation = {
   lastMessageAt: number | null
   lastMessagePreview: string | null
   memberIds: string[]
+  unreadCount?: number
 }
 
 export type DurableMessage = {
@@ -34,11 +35,17 @@ export type DurableMessage = {
   deletedAt: number | null
   deletedBy: string | null
   isPinned?: boolean
+  replyTo?: string
+  replyToPreview?: { senderName: string; text: string }
+  sharedPostId?: string
+  deliveredAt?: number | null
+  readAt?: number | null
 }
 
 const memConv = new Map<string, DurableConversation>()
 const memMembers = new Map<string, Set<string>>() // convId -> user ids
 const memMessages = new Map<string, DurableMessage[]>() // convId -> messages
+const memPresence = new Map<string, { lastSeenAt: number; onlineUntil: number; typingConversationId?: string; typingUntil?: number }>()
 
 function dbConfigured() {
   return hasPrivilegedDatabase()
@@ -136,9 +143,31 @@ export async function listConversationsForUser(
       const convRes = await rest<Array<Record<string, unknown>>>(convQ)
       if (convRes.ok && Array.isArray(convRes.data)) {
         const out: DurableConversation[] = []
+        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(
+          `gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`
+        )
+        const membersByConversation = new Map<string, string[]>()
+        if (memberRows.ok && Array.isArray(memberRows.data)) {
+          for (const member of memberRows.data) {
+            const list = membersByConversation.get(member.conversation_id) || []
+            list.push(member.gh_user_id)
+            membersByConversation.set(member.conversation_id, list)
+          }
+        }
+        const conversationIds = convRes.data.map((row) => String(row.id || "")).filter(Boolean)
+        const unreadResult = conversationIds.length
+          ? await rest<Array<{ conversation_id: string; unread_count: number | string }>>("rpc/gh_messaging_unread_counts", {
+              method: "POST",
+              body: JSON.stringify({ p_user_id: uid, p_conversation_ids: conversationIds }),
+            })
+          : { ok: true, status: 200, data: [] as Array<{ conversation_id: string; unread_count: number | string }> }
+        const unreadCounts = new Map<string, number>()
+        if (unreadResult.ok && Array.isArray(unreadResult.data)) {
+          for (const item of unreadResult.data) unreadCounts.set(item.conversation_id, Math.max(0, Number(item.unread_count) || 0))
+        }
         for (const row of convRes.data) {
           const id = String(row.id || "")
-          const members = await listMemberIds(id)
+          const members = membersByConversation.get(id) || []
           out.push({
             id,
             kind: (row.kind as ConversationKind) || "direct",
@@ -154,6 +183,7 @@ export async function listConversationsForUser(
                 ? String(row.last_message_preview)
                 : null,
             memberIds: members,
+            ...(unreadResult.ok && Array.isArray(unreadResult.data) ? { unreadCount: unreadCounts.get(id) || 0 } : {}),
           })
         }
         return out
@@ -182,27 +212,216 @@ async function listMemberIds(conversationId: string): Promise<string[]> {
   return [...(memMembers.get(conversationId) || [])]
 }
 
+export type MessagingAudience = "everyone" | "matches-only" | "no-one"
+export type OnlineStatusAudience = "everyone" | "matches-only" | "hidden"
+export type DirectMessagePermission = { allowed: true } | { allowed: false; error: "BLOCKED" | "PRIVACY_RESTRICTED" | "PRIVACY_SETTINGS_UNCONFIGURED" | "STORE_UNAVAILABLE" }
+
+export async function getMessagingPreference(userId: string): Promise<{
+  whoCanMessage: MessagingAudience
+  onlineStatus: OnlineStatusAudience
+  configured: boolean
+  whoCanMessageConfigured: boolean
+  onlineStatusConfigured: boolean
+} | null> {
+  const uid = String(userId || "").trim()
+  if (!uid) return null
+  if (!dbConfigured()) return isProd() ? null : { whoCanMessage: "everyone", onlineStatus: "everyone", configured: true, whoCanMessageConfigured: true, onlineStatusConfigured: true }
+  const result = await rest<Array<{ who_can_message: string; who_can_message_configured: boolean; online_status: string; online_status_configured: boolean }>>(
+    `gh_messaging_preferences?user_id=eq.${encodeURIComponent(uid)}&select=who_can_message,who_can_message_configured,online_status,online_status_configured&limit=1`
+  )
+  if (!result.ok || !Array.isArray(result.data)) return null
+  const row = result.data[0]
+  if (!row) return { whoCanMessage: "everyone", onlineStatus: "everyone", configured: false, whoCanMessageConfigured: false, onlineStatusConfigured: false }
+  const whoCanMessage = row.who_can_message
+  const onlineStatus = row.online_status
+  if ((whoCanMessage !== "everyone" && whoCanMessage !== "matches-only" && whoCanMessage !== "no-one") || (onlineStatus !== "everyone" && onlineStatus !== "matches-only" && onlineStatus !== "hidden")) return null
+  const whoCanMessageConfigured = Boolean(row.who_can_message_configured)
+  const onlineStatusConfigured = Boolean(row.online_status_configured)
+  return { whoCanMessage, onlineStatus, configured: whoCanMessageConfigured, whoCanMessageConfigured, onlineStatusConfigured }
+}
+
+export async function setMessagingPreference(input: {
+  userId: string
+  whoCanMessage?: MessagingAudience
+  onlineStatus?: OnlineStatusAudience
+  onlyIfUnconfigured?: boolean
+}): Promise<{ ok: true; durable: boolean } | { ok: false; error: string }> {
+  const uid = String(input.userId || "").trim()
+  const hasWho = input.whoCanMessage !== undefined
+  const hasOnline = input.onlineStatus !== undefined
+  if (!uid || (!hasWho && !hasOnline) || (hasWho && !["everyone", "matches-only", "no-one"].includes(input.whoCanMessage as string)) || (hasOnline && !["everyone", "matches-only", "hidden"].includes(input.onlineStatus as string))) return { ok: false, error: "INVALID_PREFERENCE" }
+  if (!dbConfigured()) return isProd() ? { ok: false, error: "STORE_UNAVAILABLE" } : { ok: true, durable: false }
+  const updatedAt = new Date().toISOString()
+  if (input.onlyIfUnconfigured) {
+    const current = await rest<Array<{ who_can_message_configured: boolean; online_status_configured: boolean }>>(
+      `gh_messaging_preferences?user_id=eq.${encodeURIComponent(uid)}&select=who_can_message_configured,online_status_configured&limit=1`
+    )
+    if (!current.ok || !Array.isArray(current.data)) return { ok: false, error: "PREFERENCE_READ_FAILED" }
+    const row = current.data[0]
+    if (!row) {
+      const body: Record<string, unknown> = { user_id: uid, updated_at: updatedAt }
+      if (hasWho) Object.assign(body, { who_can_message: input.whoCanMessage, who_can_message_configured: true })
+      if (hasOnline) Object.assign(body, { online_status: input.onlineStatus, online_status_configured: true })
+      const inserted = await rest("gh_messaging_preferences", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: JSON.stringify(body) })
+      return inserted.ok ? { ok: true, durable: true } : { ok: false, error: "PREFERENCE_SAVE_FAILED" }
+    }
+    if (hasWho && !row.who_can_message_configured) {
+      const saved = await rest(`gh_messaging_preferences?user_id=eq.${encodeURIComponent(uid)}&who_can_message_configured=eq.false`, {
+        method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ who_can_message: input.whoCanMessage, who_can_message_configured: true, updated_at: updatedAt }),
+      })
+      if (!saved.ok) return { ok: false, error: "PREFERENCE_SAVE_FAILED" }
+    }
+    if (hasOnline && !row.online_status_configured) {
+      const saved = await rest(`gh_messaging_preferences?user_id=eq.${encodeURIComponent(uid)}&online_status_configured=eq.false`, {
+        method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ online_status: input.onlineStatus, online_status_configured: true, updated_at: updatedAt }),
+      })
+      if (!saved.ok) return { ok: false, error: "PREFERENCE_SAVE_FAILED" }
+    }
+    return { ok: true, durable: true }
+  }
+  const body: Record<string, unknown> = { user_id: uid, updated_at: updatedAt }
+  if (hasWho) Object.assign(body, { who_can_message: input.whoCanMessage, who_can_message_configured: true })
+  if (hasOnline) Object.assign(body, { online_status: input.onlineStatus, online_status_configured: true })
+  const result = await rest("gh_messaging_preferences", {
+    method: "POST",
+    prefer: "resolution=merge-duplicates,return=minimal",
+    body: JSON.stringify(body),
+  })
+  return result.ok ? { ok: true, durable: true } : { ok: false, error: "PREFERENCE_SAVE_FAILED" }
+}
+
+async function getMutuallyConnectedUserIds(viewerId: string, subjectIds: string[]): Promise<Set<string> | null> {
+  const viewer = String(viewerId || "").trim()
+  const subjects = Array.from(new Set(subjectIds.map((id) => String(id || "").trim()).filter((id) => id && id !== viewer)))
+  const connected = new Set<string>()
+  if (!viewer || !subjects.length) return connected
+  if (!dbConfigured()) return isProd() ? null : connected
+  const inList = subjects.map((id) => encodeURIComponent(id)).join(",")
+  const follows = await rest<Array<{ follower_id: string; following_id: string }>>(
+    `gh_follows?or=(and(follower_id.eq.${encodeURIComponent(viewer)},following_id.in.(${inList})),and(follower_id.in.(${inList}),following_id.eq.${encodeURIComponent(viewer)}))&select=follower_id,following_id&limit=1000`
+  )
+  if (!follows.ok || !Array.isArray(follows.data)) return null
+  const viewerFollows = new Set(follows.data.filter((row) => row.follower_id === viewer).map((row) => row.following_id))
+  const followsViewer = new Set(follows.data.filter((row) => row.following_id === viewer).map((row) => row.follower_id))
+  for (const subject of subjects) if (viewerFollows.has(subject) && followsViewer.has(subject)) connected.add(subject)
+  const remaining = subjects.filter((subject) => !connected.has(subject))
+  if (!remaining.length) return connected
+  const remainingIn = remaining.map((id) => encodeURIComponent(id)).join(",")
+  const matches = await rest<Array<{ from_user_id: string; to_user_id: string; signal: string }>>(
+    `ghc_match_signals?or=(and(from_user_id.eq.${encodeURIComponent(viewer)},to_user_id.in.(${remainingIn}),signal.in.(like,superlike)),and(from_user_id.in.(${remainingIn}),to_user_id.eq.${encodeURIComponent(viewer)},signal.in.(like,superlike)))&select=from_user_id,to_user_id,signal&limit=1000`
+  )
+  // If match signals are unavailable, reciprocal follows already verified above remain valid;
+  // other peers fail closed rather than being treated as matches.
+  if (!matches.ok || !Array.isArray(matches.data)) return connected
+  const viewerLikes = new Set(matches.data.filter((row) => row.from_user_id === viewer && (row.signal === "like" || row.signal === "superlike")).map((row) => row.to_user_id))
+  const peersLikeViewer = new Set(matches.data.filter((row) => row.to_user_id === viewer && (row.signal === "like" || row.signal === "superlike")).map((row) => row.from_user_id))
+  for (const subject of remaining) if (viewerLikes.has(subject) && peersLikeViewer.has(subject)) connected.add(subject)
+  return connected
+}
+
+async function areUsersMutuallyConnected(a: string, b: string): Promise<boolean | null> {
+  const connected = await getMutuallyConnectedUserIds(a, [b])
+  return connected === null ? null : connected.has(b)
+}
+
+async function getVisiblePresencePeerIds(viewerId: string, subjectIds: string[]): Promise<Set<string>> {
+  const viewer = String(viewerId || "").trim()
+  const subjects = Array.from(new Set(subjectIds.map((id) => String(id || "").trim()).filter((id) => id && id !== viewer)))
+  const visible = new Set<string>()
+  if (!viewer || !subjects.length) return visible
+  if (!dbConfigured()) {
+    if (!isProd()) for (const subject of subjects) visible.add(subject)
+    return visible
+  }
+  const inList = subjects.map((id) => encodeURIComponent(id)).join(",")
+  const [preferences, blocks] = await Promise.all([
+    rest<Array<{ user_id: string; online_status: string; online_status_configured: boolean }>>(
+      `gh_messaging_preferences?user_id=in.(${inList})&select=user_id,online_status,online_status_configured&limit=1000`
+    ),
+    rest<Array<{ blocker_id: string; blocked_id: string }>>(
+      `ghc_user_blocks?or=(and(blocker_id.eq.${encodeURIComponent(viewer)},blocked_id.in.(${inList})),and(blocker_id.in.(${inList}),blocked_id.eq.${encodeURIComponent(viewer)}))&select=blocker_id,blocked_id&limit=1000`
+    ),
+  ])
+  if (!preferences.ok || !Array.isArray(preferences.data) || !blocks.ok || !Array.isArray(blocks.data)) return visible
+  const preferenceById = new Map(preferences.data.map((row) => [row.user_id, row]))
+  const blocked = new Set<string>()
+  for (const row of blocks.data) {
+    if (row.blocker_id === viewer) blocked.add(row.blocked_id)
+    if (row.blocked_id === viewer) blocked.add(row.blocker_id)
+  }
+  const matchesOnly: string[] = []
+  for (const subject of subjects) {
+    if (blocked.has(subject)) continue
+    const preference = preferenceById.get(subject)
+    if (!preference || !preference.online_status_configured) continue
+    if (preference.online_status === "everyone") visible.add(subject)
+    else if (preference.online_status === "matches-only") matchesOnly.push(subject)
+  }
+  if (matchesOnly.length) {
+    const connected = await getMutuallyConnectedUserIds(viewer, matchesOnly)
+    if (connected) for (const subject of connected) visible.add(subject)
+  }
+  return visible
+}
+
+export async function canReceiveDirectMessage(senderId: string, recipientId: string): Promise<DirectMessagePermission> {
+  const sender = String(senderId || "").trim()
+  const recipient = String(recipientId || "").trim()
+  if (!sender || !recipient || sender === recipient) return { allowed: false, error: "PRIVACY_RESTRICTED" }
+  if (dbConfigured()) {
+    const knownUser = await rest<Array<{ gh_user_id: string }>>(
+      `gh_pi_identities?gh_user_id=eq.${encodeURIComponent(recipient)}&select=gh_user_id&limit=1`
+    )
+    if (!knownUser.ok || !Array.isArray(knownUser.data)) return { allowed: false, error: "STORE_UNAVAILABLE" }
+    if (!knownUser.data.length) return { allowed: false, error: "PRIVACY_RESTRICTED" }
+  } else if (isProd()) {
+    return { allowed: false, error: "STORE_UNAVAILABLE" }
+  }
+  if (await areUsersBlocked(sender, recipient)) return { allowed: false, error: "BLOCKED" }
+  const preference = await getMessagingPreference(recipient)
+  if (!preference) return { allowed: false, error: "STORE_UNAVAILABLE" }
+  // Legacy settings were device-local. Until the recipient's first authenticated session
+  // migrates them to the server, deny new DMs rather than assuming they accept everyone.
+  if (!preference.whoCanMessageConfigured) return { allowed: false, error: "PRIVACY_SETTINGS_UNCONFIGURED" }
+  if (preference.whoCanMessage === "no-one") return { allowed: false, error: "PRIVACY_RESTRICTED" }
+  if (preference.whoCanMessage === "matches-only") {
+    const connected = await areUsersMutuallyConnected(sender, recipient)
+    if (connected === null) return { allowed: false, error: "STORE_UNAVAILABLE" }
+    if (!connected) return { allowed: false, error: "PRIVACY_RESTRICTED" }
+  }
+  return { allowed: true }
+}
+
+/** Respect the subject's online-status privacy separately from their DM privacy. */
+export async function canViewMessagingPresence(viewerId: string, subjectId: string): Promise<boolean> {
+  const viewer = String(viewerId || "").trim()
+  const subject = String(subjectId || "").trim()
+  if (!viewer || !subject || viewer === subject) return false
+  return (await getVisiblePresencePeerIds(viewer, [subject])).has(subject)
+}
+
 export async function createDirectConversation(input: {
   creatorId: string
   otherUserId: string
-}): Promise<DurableConversation | null | { blocked: true }> {
+}): Promise<DurableConversation | null | { denied: "BLOCKED" | "PRIVACY_RESTRICTED" | "PRIVACY_SETTINGS_UNCONFIGURED" | "STORE_UNAVAILABLE" }> {
   const a = String(input.creatorId || "").trim()
   const b = String(input.otherUserId || "").trim()
   if (!a || !b || a === b) return null
 
-  if (await areUsersBlocked(a, b)) {
-    return { blocked: true }
-  }
-
-  // Stable id for direct pairs (sorted) — prevents duplicate DM threads
+  // Stable id for direct pairs (sorted) — prevents duplicate DM threads.
   const pair = [a, b].sort()
   const id = `dm_${createHash("sha256").update(pair.join(":")).digest("hex").slice(0, 24)}`
 
+  // Existing members may reopen/read their established thread even after a privacy change;
+  // the send path independently enforces current recipient policy for every new message.
   if (await isMember(id, a)) {
     const list = await listConversationsForUser(a, { limit: 100 })
     const existing = list.find((c) => c.id === id)
-    if (existing) return existing
+    if (existing && pair.every((memberId) => existing.memberIds.includes(memberId))) return existing
   }
+
+  const permission = await canReceiveDirectMessage(a, b)
+  if (!permission.allowed) return { denied: permission.error }
 
   const t = Date.now()
   const conv: DurableConversation = {
@@ -232,16 +451,18 @@ export async function createDirectConversation(input: {
       console.error("[messaging] create conversation failed", up.status)
       return null
     }
-    for (const uid of pair) {
-      await rest("gh_conversation_members", {
-        method: "POST",
-        prefer: "resolution=merge-duplicates",
-        body: JSON.stringify({
-          conversation_id: id,
-          gh_user_id: uid,
-          role: uid === a ? "owner" : "member",
-        }),
-      })
+    const memberWrites = await Promise.all(pair.map((uid) => rest("gh_conversation_members", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates",
+      body: JSON.stringify({
+        conversation_id: id,
+        gh_user_id: uid,
+        role: uid === a ? "owner" : "member",
+      }),
+    })))
+    if (memberWrites.some((result) => !result.ok) && isProd()) {
+      console.error("[messaging] conversation membership write failed")
+      return null
     }
   } else if (isProd()) {
     return null
@@ -268,14 +489,71 @@ export async function listMessages(input: {
   if (dbConfigured()) {
     let q = `gh_messages?conversation_id=eq.${encodeURIComponent(cid)}&select=*&order=created_at.desc&limit=${limit}`
     if (input.before) {
-      const beforeIso = Number.isFinite(Number(input.before))
-        ? new Date(Number(input.before)).toISOString()
-        : String(input.before)
+      const cursor = String(input.before).trim()
+      const numericCursor = cursor !== "" ? Number(cursor) : Number.NaN
+      let cursorMs: number
+      if (Number.isFinite(numericCursor)) {
+        if (Math.abs(numericCursor) > 8.64e15) return { ok: false, error: "INVALID_CURSOR" }
+        cursorMs = numericCursor
+      } else {
+        cursorMs = Date.parse(cursor)
+      }
+      if (!Number.isFinite(cursorMs) || Math.abs(cursorMs) > 8.64e15) return { ok: false, error: "INVALID_CURSOR" }
+      const beforeIso = new Date(cursorMs).toISOString()
       q += `&created_at=lt.${encodeURIComponent(beforeIso)}`
     }
     const { ok, data } = await rest<Array<Record<string, unknown>>>(q)
     if (ok && Array.isArray(data)) {
-      const messages = data.map(rowToMessage).reverse()
+      const rows = [...data].reverse()
+      const incomingRows = rows
+        .filter((row) => String(row.sender_id || "") !== uid && !row.deleted_at)
+        .map((row) => ({ id: String(row.id || ""), senderId: String(row.sender_id || "") }))
+        .filter((row) => row.id && row.senderId)
+      if (incomingRows.length) await markMessagesDelivered(cid, uid, incomingRows)
+      const ids = rows.map((row) => String(row.id || "")).filter(Boolean)
+      const receiptsByMessage = new Map<string, Array<{ recipient_id: string; delivered_at: string | null; read_at: string | null }>>()
+      if (ids.length) {
+        const inList = ids.map((id) => encodeURIComponent(id)).join(",")
+        const receipts = await rest<Array<{ message_id: string; recipient_id: string; delivered_at: string | null; read_at: string | null }>>(
+          `gh_message_receipts?conversation_id=eq.${encodeURIComponent(cid)}&message_id=in.(${inList})&select=message_id,recipient_id,delivered_at,read_at`
+        )
+        if (receipts.ok && Array.isArray(receipts.data)) {
+          for (const receipt of receipts.data) {
+            const list = receiptsByMessage.get(receipt.message_id) || []
+            list.push(receipt)
+            receiptsByMessage.set(receipt.message_id, list)
+          }
+        }
+      }
+      const members = await listMemberIds(cid)
+      const messages = rows.map((row) => {
+        const message = rowToMessage(row)
+        if (message.deletedAt) {
+          message.status = "deleted"
+          return message
+        }
+        const receipts = receiptsByMessage.get(message.id) || []
+        if (message.senderId === uid) {
+          const recipients = members.filter((memberId) => memberId !== uid)
+          if (recipients.length && receipts.length) {
+            const allRead = recipients.every((recipientId) => receipts.some((receipt) => receipt.recipient_id === recipientId && Boolean(receipt.read_at)))
+            const allDelivered = recipients.every((recipientId) => receipts.some((receipt) => receipt.recipient_id === recipientId && Boolean(receipt.delivered_at)))
+            message.status = allRead ? "read" : allDelivered ? "delivered" : "sent"
+            const readTimes = receipts.filter((receipt) => receipt.read_at).map((receipt) => Date.parse(String(receipt.read_at)))
+            const deliveredTimes = receipts.filter((receipt) => receipt.delivered_at).map((receipt) => Date.parse(String(receipt.delivered_at)))
+            message.readAt = readTimes.length ? Math.max(...readTimes) : null
+            message.deliveredAt = deliveredTimes.length ? Math.max(...deliveredTimes) : null
+          } else {
+            message.status = "sent"
+          }
+        } else {
+          const ownReceipt = receipts.find((receipt) => receipt.recipient_id === uid)
+          message.status = ownReceipt?.read_at ? "read" : ownReceipt?.delivered_at ? "delivered" : "sent"
+          message.deliveredAt = ownReceipt?.delivered_at ? Date.parse(ownReceipt.delivered_at) : null
+          message.readAt = ownReceipt?.read_at ? Date.parse(ownReceipt.read_at) : null
+        }
+        return message
+      })
       return { ok: true, messages }
     }
     if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
@@ -304,7 +582,70 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
     deletedAt: row.deleted_at ? Date.parse(String(row.deleted_at)) : null,
     deletedBy: row.deleted_by != null ? String(row.deleted_by) : null,
     isPinned: Boolean(row.is_pinned),
+    replyTo: typeof (row.meta as Record<string, unknown> | null)?.replyToMessageId === "string"
+      ? String((row.meta as Record<string, unknown>).replyToMessageId)
+      : undefined,
+    replyToPreview: (() => {
+      const meta = row.meta && typeof row.meta === "object" ? row.meta as Record<string, unknown> : {}
+      const preview = meta.replyToPreview && typeof meta.replyToPreview === "object" ? meta.replyToPreview as Record<string, unknown> : null
+      if (!preview) return undefined
+      return { senderName: String(preview.senderName || "Original message").slice(0, 120), text: String(preview.text || "").slice(0, 160) }
+    })(),
+    sharedPostId: (() => {
+      const meta = row.meta && typeof row.meta === "object" ? row.meta as Record<string, unknown> : {}
+      return typeof meta.sharedPostId === "string" ? meta.sharedPostId.slice(0, 180) : undefined
+    })(),
   }
+}
+
+async function validateSharedPostForConversation(input: { senderId: string; conversationId: string; postId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "STORE_UNAVAILABLE" }
+  const postResult = await rest<Array<{ id: string; author_id: string; visibility: string; deleted_at: string | null }>>(
+    `gh_posts?id=eq.${encodeURIComponent(input.postId)}&select=id,author_id,visibility,deleted_at&limit=1`
+  )
+  if (!postResult.ok || !Array.isArray(postResult.data)) return { ok: false, error: "STORE_UNAVAILABLE" }
+  const post = postResult.data[0]
+  if (!post || post.deleted_at) return { ok: false, error: "INVALID_SHARED_POST" }
+  const authorId = String(post.author_id || "")
+  if (!authorId) return { ok: false, error: "INVALID_SHARED_POST" }
+  const members = await listMemberIds(input.conversationId)
+  const recipients = Array.from(new Set(members.filter((memberId) => memberId && memberId !== input.senderId)))
+  if (!recipients.length) return { ok: false, error: "FORBIDDEN" }
+
+  const people = Array.from(new Set([input.senderId, ...recipients])).filter((userId) => userId !== authorId)
+  if (people.length) {
+    const inList = people.map((userId) => encodeURIComponent(userId)).join(",")
+    const blocks = await rest<Array<{ blocker_id: string; blocked_id: string }>>(
+      `ghc_user_blocks?or=(and(blocker_id.eq.${encodeURIComponent(authorId)},blocked_id.in.(${inList})),and(blocker_id.in.(${inList}),blocked_id.eq.${encodeURIComponent(authorId)}))&select=blocker_id,blocked_id&limit=1000`
+    )
+    if (!blocks.ok || !Array.isArray(blocks.data)) return { ok: false, error: "STORE_UNAVAILABLE" }
+    if (blocks.data.length) return { ok: false, error: "SHARED_POST_PRIVATE" }
+  }
+
+  const visibility = String(post.visibility || "")
+  if (visibility === "public") return { ok: true }
+  if (visibility === "private") return { ok: false, error: "SHARED_POST_PRIVATE" }
+  if (visibility !== "followers" && visibility !== "mutuals") return { ok: false, error: "SHARED_POST_PRIVATE" }
+  const audience = people
+  if (!audience.length) return { ok: true }
+  const audienceIn = audience.map((userId) => encodeURIComponent(userId)).join(",")
+  if (visibility === "followers") {
+    const follows = await rest<Array<{ follower_id: string }>>(
+      `gh_follows?following_id=eq.${encodeURIComponent(authorId)}&follower_id=in.(${audienceIn})&select=follower_id&limit=200`
+    )
+    if (!follows.ok || !Array.isArray(follows.data)) return { ok: false, error: "STORE_UNAVAILABLE" }
+    const allowed = new Set(follows.data.map((row) => row.follower_id))
+    return audience.every((userId) => allowed.has(userId)) ? { ok: true } : { ok: false, error: "SHARED_POST_PRIVATE" }
+  }
+  const mutualFollows = await rest<Array<{ follower_id: string; following_id: string }>>(
+    `gh_follows?or=(and(follower_id.in.(${audienceIn}),following_id.eq.${encodeURIComponent(authorId)}),and(follower_id.eq.${encodeURIComponent(authorId)},following_id.in.(${audienceIn})))&select=follower_id,following_id&limit=400`
+  )
+  if (!mutualFollows.ok || !Array.isArray(mutualFollows.data)) return { ok: false, error: "STORE_UNAVAILABLE" }
+  const followsAuthor = new Set(mutualFollows.data.filter((row) => row.following_id === authorId).map((row) => row.follower_id))
+  const followedByAuthor = new Set(mutualFollows.data.filter((row) => row.follower_id === authorId).map((row) => row.following_id))
+  return audience.every((userId) => followsAuthor.has(userId) && followedByAuthor.has(userId))
+    ? { ok: true }
+    : { ok: false, error: "SHARED_POST_PRIVATE" }
 }
 
 export async function appendMessage(input: {
@@ -312,6 +653,8 @@ export async function appendMessage(input: {
   senderId: string
   body: string
   clientMessageId?: string | null
+  replyToMessageId?: string | null
+  sharedPostId?: string | null
 }): Promise<
   | { ok: true; message: DurableMessage; idempotent?: boolean }
   | { ok: false; error: string }
@@ -326,12 +669,48 @@ export async function appendMessage(input: {
   if (!body) return { ok: false, error: "EMPTY_BODY" }
   if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
 
-  // Idempotent replay
+  // Idempotent replay must return an already-persisted message even if privacy changed
+  // between the original send and the client's retry; this never creates a new message.
   if (clientMessageId && dbConfigured()) {
     const q = `gh_messages?conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&client_message_id=eq.${encodeURIComponent(clientMessageId)}&select=*&limit=1`
     const existing = await rest<Array<Record<string, unknown>>>(q)
     if (existing.ok && existing.data?.[0]) {
       return { ok: true, message: rowToMessage(existing.data[0]), idempotent: true }
+    }
+  }
+
+  if (cid.startsWith("dm_")) {
+    const peerId = (await listMemberIds(cid)).find((memberId) => memberId !== uid)
+    if (!peerId) return { ok: false, error: "FORBIDDEN" }
+    const permission = await canReceiveDirectMessage(uid, peerId)
+    if (!permission.allowed) return { ok: false, error: permission.error }
+  }
+
+  const sharedPostId = String(input.sharedPostId || "").trim().slice(0, 180)
+  if (sharedPostId) {
+    if (/[\u0000-\u001f\u007f]/.test(sharedPostId)) return { ok: false, error: "INVALID_SHARED_POST" }
+    const sharePermission = await validateSharedPostForConversation({ senderId: uid, conversationId: cid, postId: sharedPostId })
+    if (!sharePermission.ok) return { ok: false, error: sharePermission.error }
+  }
+
+  const replyToMessageId = String(input.replyToMessageId || "").trim().slice(0, 180)
+  let replyToPreview: { senderName: string; text: string } | undefined
+  if (replyToMessageId) {
+    let parent: { sender_id?: string; body?: string; deleted_at?: string | null } | null = null
+    if (dbConfigured()) {
+      const q = `gh_messages?id=eq.${encodeURIComponent(replyToMessageId)}&conversation_id=eq.${encodeURIComponent(cid)}&deleted_at=is.null&select=sender_id,body,deleted_at&limit=1`
+      const lookup = await rest<Array<Record<string, unknown>>>(q)
+      if (!lookup.ok) return { ok: false, error: "STORE_UNAVAILABLE" }
+      const row = lookup.data?.[0]
+      if (row) parent = { sender_id: String(row.sender_id || ""), body: String(row.body || ""), deleted_at: row.deleted_at as string | null | undefined }
+    } else {
+      const row = (memMessages.get(cid) || []).find((m) => m.id === replyToMessageId && !m.deletedAt)
+      if (row) parent = { sender_id: row.senderId, body: row.body }
+    }
+    if (!parent || parent.deleted_at) return { ok: false, error: "REPLY_TARGET_NOT_FOUND" }
+    replyToPreview = {
+      senderName: parent.sender_id === uid ? "Your message" : "Original message",
+      text: String(parent.body || "").replace(/\s+/g, " ").trim().slice(0, 160),
     }
   }
 
@@ -347,6 +726,9 @@ export async function appendMessage(input: {
     editedAt: null,
     deletedAt: null,
     deletedBy: null,
+    replyTo: replyToMessageId || undefined,
+    replyToPreview,
+    sharedPostId: sharedPostId || undefined,
   }
 
   if (dbConfigured()) {
@@ -361,6 +743,10 @@ export async function appendMessage(input: {
         body,
         status: "sent",
         created_at: new Date(t).toISOString(),
+        meta: {
+          ...(replyToMessageId ? { replyToMessageId, replyToPreview } : {}),
+          ...(sharedPostId ? { sharedPostId } : {}),
+        },
       }),
     })
     if (!ins.ok) {
@@ -391,6 +777,19 @@ export async function appendMessage(input: {
         }),
       }
     )
+    const recipients = (await listMemberIds(cid)).filter((memberId) => memberId !== uid)
+    if (recipients.length) {
+      await rest("gh_message_receipts", {
+        method: "POST",
+        prefer: "resolution=ignore-duplicates,return=minimal",
+        body: JSON.stringify(recipients.map((recipientId) => ({
+          message_id: msg.id,
+          conversation_id: cid,
+          sender_id: uid,
+          recipient_id: recipientId,
+        }))),
+      })
+    }
   } else if (isProd()) {
     return { ok: false, error: "STORE_UNAVAILABLE" }
   }
@@ -457,6 +856,127 @@ export async function softDeleteMessage(input: {
 }
 
 
+async function markMessagesDelivered(conversationId: string, recipientId: string, inbound: Array<{ id: string; senderId: string }>): Promise<boolean> {
+  if (!dbConfigured() || !inbound.length) return false
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return false
+  const senderById = new Map(inbound.map((row) => [row.id, row.senderId]))
+  const ids = Array.from(new Set(inbound.map((row) => row.id).filter(Boolean))).slice(0, 100)
+  const inList = ids.map((id) => encodeURIComponent(id)).join(",")
+  const nowIso = new Date().toISOString()
+  // Mark existing pending receipts first; never reset an existing read receipt.
+  const patched = await rest(
+    `gh_message_receipts?conversation_id=eq.${encodeURIComponent(conversationId)}&recipient_id=eq.${encodeURIComponent(recipientId)}&message_id=in.(${inList})&delivered_at=is.null`,
+    { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ delivered_at: nowIso }) }
+  )
+  if (!patched.ok) return false
+  const existing = await rest<Array<{ message_id: string }>>(
+    `gh_message_receipts?conversation_id=eq.${encodeURIComponent(conversationId)}&recipient_id=eq.${encodeURIComponent(recipientId)}&message_id=in.(${inList})&select=message_id`
+  )
+  if (!existing.ok || !Array.isArray(existing.data)) return false
+  const existingIds = new Set(existing.data.map((row) => row.message_id))
+  const missing = ids.filter((id) => !existingIds.has(id))
+  if (missing.length) {
+    const inserted = await rest("gh_message_receipts", {
+      method: "POST",
+      prefer: "resolution=ignore-duplicates,return=minimal",
+      body: JSON.stringify(missing.map((messageId) => ({ message_id: messageId, conversation_id: conversationId, sender_id: senderById.get(messageId) || "unknown", recipient_id: recipientId, delivered_at: nowIso }))),
+    })
+    if (!inserted.ok) return false
+  }
+  return true
+}
+
+export type ConversationPresence = { userId: string; online: boolean; lastSeenAt: number | null; isTyping: boolean }
+
+/** Update the authenticated user's presence/typing heartbeat. Conversation membership is mandatory for typing. */
+export async function touchMessagingPresence(input: { userId: string; conversationId?: string; action: "heartbeat" | "typing" | "stop_typing" }): Promise<{ ok: true; presence: ConversationPresence[]; durable: boolean } | { ok: false; error: string }> {
+  const uid = String(input.userId || "").trim()
+  const cid = String(input.conversationId || "").trim()
+  if (!uid) return { ok: false, error: "INVALID_USER" }
+  if (cid && !(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+  if (input.action === "typing" && !cid) return { ok: false, error: "CONVERSATION_REQUIRED" }
+  const peers = cid ? (await listMemberIds(cid)).filter((memberId) => memberId !== uid) : []
+  let effectiveAction = input.action
+  if (cid.startsWith("dm_")) {
+    const peerId = peers[0]
+    if (peerId && input.action === "typing") {
+      const permission = await canReceiveDirectMessage(uid, peerId)
+      // A peer's inbound-message restriction or this user's hidden presence must suppress typing,
+      // but must not prevent the current client from refreshing the peer's own presence.
+      if (!permission.allowed || !(await canViewMessagingPresence(peerId, uid))) effectiveAction = "stop_typing"
+    }
+  }
+  const now = Date.now()
+  const record: { user_id: string; last_seen_at: string; online_until: string; updated_at: string; typing_conversation_id?: string | null; typing_until?: string | null } = {
+    user_id: uid,
+    last_seen_at: new Date(now).toISOString(),
+    online_until: new Date(now + 65_000).toISOString(),
+    updated_at: new Date(now).toISOString(),
+  }
+  if (effectiveAction === "typing") {
+    record.typing_conversation_id = cid
+    record.typing_until = new Date(now + 8_000).toISOString()
+  } else if (effectiveAction === "stop_typing") {
+    record.typing_conversation_id = null
+    record.typing_until = null
+  }
+  if (dbConfigured()) {
+    const saved = await rest("gh_user_presence", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=minimal",
+      body: JSON.stringify(record),
+    })
+    if (!saved.ok && isProd()) return { ok: false, error: "PRESENCE_UNAVAILABLE" }
+  } else if (isProd()) {
+    return { ok: false, error: "STORE_UNAVAILABLE" }
+  }
+  const previous = memPresence.get(uid)
+  memPresence.set(uid, {
+    lastSeenAt: now,
+    onlineUntil: now + 65_000,
+    typingConversationId: effectiveAction === "typing" ? cid : effectiveAction === "stop_typing" ? undefined : previous?.typingConversationId,
+    typingUntil: effectiveAction === "typing" ? now + 8_000 : effectiveAction === "stop_typing" ? undefined : previous?.typingUntil,
+  })
+  const presence = await getConversationPresence({ conversationId: cid, userId: uid })
+  return { ok: true, presence, durable: dbConfigured() }
+}
+
+/** Only active members of the same conversation can inspect each other's presence. */
+export async function getConversationPresence(input: { conversationId: string; userId: string }): Promise<ConversationPresence[]> {
+  const cid = String(input.conversationId || "").trim()
+  const uid = String(input.userId || "").trim()
+  if (!cid || !uid || !(await isMember(cid, uid))) return []
+  const now = Date.now()
+  const peers = (await listMemberIds(cid)).filter((memberId) => memberId !== uid).slice(0, 100)
+  const visibleSet = await getVisiblePresencePeerIds(uid, peers)
+  const visiblePeers = peers.filter((peerId) => visibleSet.has(peerId))
+  const records = new Map<string, { last_seen_at?: string; online_until?: string; typing_conversation_id?: string | null; typing_until?: string | null }>()
+  if (dbConfigured() && visiblePeers.length) {
+    const inList = visiblePeers.map((peerId) => encodeURIComponent(peerId)).join(",")
+    const found = await rest<Array<{ user_id: string; last_seen_at: string; online_until: string; typing_conversation_id: string | null; typing_until: string | null }>>(
+      `gh_user_presence?user_id=in.(${inList})&select=user_id,last_seen_at,online_until,typing_conversation_id,typing_until`
+    )
+    if (found.ok && Array.isArray(found.data)) {
+      for (const row of found.data) records.set(row.user_id, row)
+    }
+  }
+  return visiblePeers.map((peerId) => {
+    const row = records.get(peerId)
+    const local = dbConfigured() ? undefined : memPresence.get(peerId)
+    const lastSeenAt = row?.last_seen_at ? Date.parse(row.last_seen_at) : local?.lastSeenAt ?? null
+    const onlineUntil = row?.online_until ? Date.parse(row.online_until) : local?.onlineUntil ?? 0
+    const typingUntil = row ? (row.typing_until ? Date.parse(row.typing_until) : 0) : local?.typingUntil ?? 0
+    const typingConversationId = row ? row.typing_conversation_id : local?.typingConversationId
+    return {
+      userId: peerId,
+      online: onlineUntil > now,
+      lastSeenAt: Number.isFinite(lastSeenAt as number) ? lastSeenAt : null,
+      isTyping: typingConversationId === cid && Number(typingUntil) > now,
+    }
+  })
+}
+
 /** Update last_read_at for the authenticated member only. */
 export async function markConversationRead(input: {
   conversationId: string
@@ -468,15 +988,13 @@ export async function markConversationRead(input: {
   if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
 
   if (dbConfigured()) {
-    const { ok } = await rest(
-      `gh_conversation_members?conversation_id=eq.${encodeURIComponent(cid)}&gh_user_id=eq.${encodeURIComponent(uid)}`,
-      {
-        method: "PATCH",
-        prefer: "return=minimal",
-        body: JSON.stringify({ last_read_at: new Date().toISOString() }),
-      }
-    )
-    if (!ok && isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
+    const marked = await rest<boolean>("rpc/gh_messaging_mark_read", {
+      method: "POST",
+      body: JSON.stringify({ p_user_id: uid, p_conversation_id: cid }),
+    })
+    if ((!marked.ok || marked.data !== true) && isProd()) return { ok: false, error: "RECEIPT_UPDATE_FAILED" }
+  } else if (isProd()) {
+    return { ok: false, error: "STORE_UNAVAILABLE" }
   }
   return { ok: true }
 }
@@ -739,5 +1257,8 @@ export async function areUsersBlocked(a: string, b: string): Promise<boolean> {
     `ghc_user_blocks?or=(and(blocker_id.eq.${encodeURIComponent(x)},blocked_id.eq.${encodeURIComponent(y)}),` +
     `and(blocker_id.eq.${encodeURIComponent(y)},blocked_id.eq.${encodeURIComponent(x)}))&select=blocker_id&limit=1`
   const { ok, data } = await rest<Array<unknown>>(q)
-  return ok && Array.isArray(data) && data.length > 0
+  // Fail closed when the block service is unavailable; do not permit a DM send
+  // merely because a privacy check timed out.
+  if (!ok || !Array.isArray(data)) return true
+  return data.length > 0
 }

@@ -53,7 +53,9 @@ export async function apiListMessages(
 export async function apiSendMessage(
   conversationId: string,
   text: string,
-  clientMessageId: string
+  clientMessageId: string,
+  replyToMessageId?: string,
+  sharedPostId?: string,
 ) {
   const res = await fetch(
     `/api/messaging/conversations/${encodeURIComponent(conversationId)}/messages`,
@@ -61,7 +63,7 @@ export async function apiSendMessage(
       method: "POST",
       credentials: "include",
       headers: authHeaders(),
-      body: JSON.stringify({ body: text, clientMessageId }),
+      body: JSON.stringify({ body: text, clientMessageId, replyToMessageId: replyToMessageId || undefined, sharedPostId: sharedPostId || undefined }),
       cache: "no-store",
     }
   )
@@ -104,10 +106,39 @@ export async function apiSendMessageWithRetry(
   conversationId: string,
   text: string,
   clientMessageId: string,
+  replyToMessageId?: string,
+  sharedPostId?: string,
 ) {
-  const first = await apiSendMessage(conversationId, text, clientMessageId)
+  const first = await apiSendMessage(conversationId, text, clientMessageId, replyToMessageId, sharedPostId)
   if (first.httpOk || first.ok === true) return first
-  if (typeof first.error === "string" && /AUTH|FORBIDDEN|VALIDATION/i.test(first.error)) return first
+  if (typeof first.error === "string" && /AUTH|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET|INVALID_REPLY/i.test(first.error)) return first
   await new Promise((r) => setTimeout(r, 800))
-  return apiSendMessage(conversationId, text, clientMessageId)
+  return apiSendMessage(conversationId, text, clientMessageId, replyToMessageId, sharedPostId)
+}
+
+
+export type MessagingPresenceAction = "heartbeat" | "typing" | "stop_typing"
+
+export async function apiTouchConversationPresence(conversationId: string, action: MessagingPresenceAction) {
+  const res = await fetch(`/api/messaging/conversations/${encodeURIComponent(conversationId)}/presence`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: authHeaders(),
+    body: JSON.stringify({ action }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { httpOk: res.ok, ...body }
+}
+
+export async function apiHeartbeatMessagingPresence() {
+  const res = await fetch("/api/messaging/presence", {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: authHeaders(),
+    body: JSON.stringify({}),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { httpOk: res.ok, ...body }
 }

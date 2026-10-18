@@ -1,4 +1,6 @@
-# Migration Gap Report — Phase 14A
+# Historical Migration Gap Report — Phase 14A (2026-10-09 snapshot)
+
+> This is a dated snapshot, not the current inventory. Use `docs/MIGRATION_CHECKLIST.md` and `supabase/TESTNET_APPLY_ORDER.md` for the current repository list and deployment order. The current project includes additional migrations after this report was generated.
 
 **Generated:** 2026-10-09T20:54:04Z  
 **Scope:** Repository inventory only. **No database connection. No DDL executed.**

@@ -73,26 +73,26 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
     const otherUserId =
       typeof body?.otherUserId === "string" ? body.otherUserId.trim() : ""
-    if (!otherUserId || otherUserId === auth.userId) {
+    if (!otherUserId || otherUserId.length > 180 || /[\u0000-\u001f\u007f]/.test(otherUserId) || otherUserId === auth.userId) {
       return NextResponse.json(
         { ok: false, error: "INVALID_PEER" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
       )
     }
-    // Block checks should be applied by higher-level domain before open;
-    // still refuse empty/self.
+    // The server re-checks reciprocal blocks and the recipient's persisted privacy setting.
 
     const conv = await createDirectConversation({
       creatorId: auth.userId,
       otherUserId,
     })
-    if (conv && "blocked" in conv && conv.blocked) {
+    if (conv && "denied" in conv) {
+      const status = conv.denied === "STORE_UNAVAILABLE" ? 503 : conv.denied === "PRIVACY_SETTINGS_UNCONFIGURED" ? 409 : 403
       return NextResponse.json(
-        { ok: false, error: "BLOCKED" },
-        { status: 403, headers: { "Cache-Control": "no-store" } }
+        { ok: false, error: conv.denied },
+        { status, headers: { "Cache-Control": "no-store" } }
       )
     }
-    if (!conv || ("blocked" in conv && conv.blocked)) {
+    if (!conv) {
       return NextResponse.json(
         { ok: false, error: "CREATE_FAILED" },
         { status: 503, headers: { "Cache-Control": "no-store" } }

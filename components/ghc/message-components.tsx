@@ -406,6 +406,8 @@ function MessageBubbleBase({
     deletedForEveryone?: boolean
     mediaAttachments?: any[]
     status?: "sending" | "sent" | "delivered" | "read" | "failed" | "deleted"
+    deliveredAt?: number | null
+    readAt?: number
   }
   isSentByCurrentUser: boolean
   onReply?: (messageId: string) => void
@@ -519,38 +521,29 @@ function MessageBubbleBase({
               <p className="opacity-80">View original in feed · ref {(message as any).sharedPostId.slice(0, 8)}…</p>
             </div>
           )}
-          <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-100" : "text-muted-foreground"}`}>
+          <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-900 dark:text-emerald-100" : "text-muted-foreground"}`}>
             <span>{timestamp}</span>
             {message.isEdited ? <span>(edited)</span> : null}
             {isSentByCurrentUser && message.status && message.status !== "failed" ? (
               <span
-                className="font-semibold tracking-tight"
+                className={`inline-flex items-center gap-1 font-semibold tracking-tight ${message.status === "read" ? "text-emerald-700 dark:text-emerald-300" : ""}`}
                 aria-label={
-                  message.status === "read"
-                    ? "Read"
-                    : message.status === "delivered"
-                      ? "Delivered"
-                      : message.status === "sending"
-                        ? "Sending"
-                        : "Sent"
+                  message.status === "read" ? "Seen by recipient" :
+                  message.status === "delivered" ? "Delivered to recipient" :
+                  message.status === "sending" ? "Sending message" :
+                  message.status === "sent" ? (message.deliveredAt ? "Delivered to some recipients; waiting on others" : "Sent, not yet delivered") : "Message status"
                 }
                 title={
-                  message.status === "read"
-                    ? "Read"
-                    : message.status === "delivered"
-                      ? "Delivered"
-                      : message.status === "sending"
-                        ? "Sending"
-                        : "Sent"
+                  message.status === "read" ? "Seen by recipient" :
+                  message.status === "delivered" ? "Delivered to recipient" :
+                  message.status === "sending" ? "Sending message" :
+                  message.status === "sent" ? (message.deliveredAt ? "Delivered to some recipients; waiting on others" : "Sent, not yet delivered") : "Message status"
                 }
               >
-                {message.status === "read"
-                  ? "✓✓"
-                  : message.status === "delivered"
-                    ? "✓✓"
-                    : message.status === "sending"
-                      ? "…"
-                      : "✓"}
+                {message.status === "read" ? "Seen ✓✓" :
+                  message.status === "delivered" ? "Delivered ✓✓" :
+                  message.status === "sending" ? "…" :
+                  message.status === "sent" ? (message.deliveredAt ? "Partly delivered ✓" : "Sent · not delivered ✓") : ""}
               </span>
             ) : null}
           </p>

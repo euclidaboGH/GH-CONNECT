@@ -56,7 +56,7 @@ export async function GET(request: Request, ctx: Ctx) {
       before,
     })
     if (!result.ok) {
-      const status = result.error === "FORBIDDEN" ? 403 : 503
+      const status = result.error === "FORBIDDEN" ? 403 : result.error === "INVALID_CURSOR" ? 400 : 503
       return NextResponse.json(
         { ok: false, error: result.error },
         { status, headers: { "Cache-Control": "no-store" } }
@@ -102,6 +102,10 @@ export async function POST(request: Request, ctx: Ctx) {
         { status: 429, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const contentLength = request.headers.get("content-length")
+    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 24 * 1024)) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
     const body = await request.json().catch(() => ({}))
     // Actor is session only — never trust client identity fields
     void body.senderId
@@ -117,20 +121,35 @@ export async function POST(request: Request, ctx: Ctx) {
     }
     const clientMessageId =
       typeof body?.clientMessageId === "string" ? body.clientMessageId : null
+    const replyToMessageId =
+      typeof body?.replyToMessageId === "string" ? body.replyToMessageId.trim() : ""
+    const sharedPostId = typeof body?.sharedPostId === "string" ? body.sharedPostId.trim() : ""
+    if (sharedPostId.length > 180 || /[\u0000-\u001f\u007f]/.test(sharedPostId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_SHARED_POST" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    if (replyToMessageId.length > 180 || /[\u0000-\u001f\u007f]/.test(replyToMessageId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_REPLY_TARGET" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
 
     const result = await appendMessage({
       conversationId,
       senderId: auth.userId,
       body: text,
       clientMessageId,
+      replyToMessageId: replyToMessageId || undefined,
+      sharedPostId: sharedPostId || undefined,
     })
     if (!result.ok) {
       const status =
-        result.error === "FORBIDDEN"
+        result.error === "FORBIDDEN" || result.error === "BLOCKED" || result.error === "PRIVACY_RESTRICTED" || result.error === "SHARED_POST_PRIVATE"
           ? 403
-          : result.error === "EMPTY_BODY"
+          : result.error === "PRIVACY_SETTINGS_UNCONFIGURED"
+            ? 409
+          : result.error === "EMPTY_BODY" || result.error === "INVALID_REPLY_TARGET"
             ? 400
-            : 503
+            : result.error === "REPLY_TARGET_NOT_FOUND" || result.error === "INVALID_SHARED_POST"
+              ? 404
+              : 503
       return NextResponse.json(
         { ok: false, error: result.error },
         { status, headers: { "Cache-Control": "no-store" } }

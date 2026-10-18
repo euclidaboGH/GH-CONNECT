@@ -86,7 +86,6 @@ import {
   handleMessageEdit,
   handleMessageDeletion,
   handleMessageReaction,
-  handleMessageReply,
   handleMessageForwarding,
   handleMessageRead,
   TypingIndicatorManager,
@@ -280,11 +279,11 @@ interface GHCContextType {
   rejectMatch: (userId: string) => Promise<void>
 
   // Messages - unified for both private chats and group chats
-  sendMessage: (conversationId: string, text: string) => Promise<void>
+  sendMessage: (conversationId: string, text: string, replyToMessageId?: string, sharedPostId?: string) => Promise<boolean>
   loadConversationMessages: (conversationId: string) => Promise<{ ok: boolean; count: number; durable?: boolean }>
   editMessage: (conversationId: string, messageId: string, newText: string) => Promise<void>
   deleteMessage: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
-  replyToMessage: (conversationId: string, replyToMessageId: string, text: string) => Promise<void>
+  replyToMessage: (conversationId: string, replyToMessageId: string, text: string) => Promise<boolean>
   forwardMessage: (conversationId: string, messageId: string) => Promise<void>
   addMessageReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>
   removeMessageReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>
@@ -625,6 +624,32 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return IdentityService.subscribe((id) => setIdentityUserId(id.userId))
   }, [])
+
+  // App-wide heartbeat keeps online/last-seen independent of whether the Messages tab is open.
+  useEffect(() => {
+    const userId = String(identityUserId || "")
+    if (!userId || userId === "current-user" || userId === "preview-user") return
+    let disposed = false
+    let inFlight = false
+    const heartbeat = async () => {
+      if (disposed || inFlight || (typeof document !== "undefined" && document.visibilityState !== "visible")) return
+      inFlight = true
+      try {
+        const { apiHeartbeatMessagingPresence } = await import("@/lib/messaging/server-messaging-sync")
+        if (!disposed) await apiHeartbeatMessagingPresence()
+      } catch { /* Presence is best-effort; message delivery never depends on it. */ }
+      finally { inFlight = false }
+    }
+    void heartbeat()
+    const interval = window.setInterval(() => void heartbeat(), 20_000)
+    const onVisible = () => { if (document.visibilityState === "visible") void heartbeat() }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      disposed = true
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [identityUserId])
 
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
 
@@ -1501,6 +1526,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               updatedAt,
               lastMessage: preview || existing?.lastMessage || "",
               lastMessageTime: lastAt,
+              ...(typeof r.unreadCount === "number" && Number.isFinite(r.unreadCount) ? { unreadCount: Math.max(0, r.unreadCount), unread: r.unreadCount > 0 } : {}),
             })
           }
           return {
@@ -1518,6 +1544,123 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [state.ready])
+
+  // Hydrate server-authoritative messaging and online-status privacy. Legacy device settings are
+  // seeded only for preference fields not yet configured on the server, so a stale device cannot
+  // overwrite a setting that was already saved from another device.
+  useEffect(() => {
+    if (!state.ready || !identityUserId || identityUserId === "current-user" || identityUserId === "preview-user") return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const headers = { Accept: "application/json", ...IdentityService.getAuthHeaders() }
+        const response = await fetch("/api/messaging/preferences", { credentials: "include", cache: "no-store", headers })
+        const result = await response.json().catch(() => ({}))
+        if (cancelled || !response.ok || result?.ok !== true || result?.durable !== true) return
+        const whoValid = ["everyone", "matches-only", "no-one"].includes(String(result.whoCanMessage))
+        const onlineValid = ["everyone", "matches-only", "hidden"].includes(String(result.onlineStatus))
+        const seed: Record<string, string | boolean> = { seedIfMissing: true }
+        if (result.whoCanMessageConfigured !== true && ["everyone", "matches-only", "no-one"].includes(String(state.settings.whoCanMessage))) {
+          seed.whoCanMessage = state.settings.whoCanMessage
+        }
+        if (result.onlineStatusConfigured !== true && ["everyone", "matches-only", "hidden"].includes(String(state.settings.onlineStatus))) {
+          seed.onlineStatus = state.settings.onlineStatus
+        }
+        if (whoValid || onlineValid) {
+          setState((current) => ({
+            ...current,
+            settings: {
+              ...current.settings,
+              ...(result.whoCanMessageConfigured === true && whoValid ? { whoCanMessage: result.whoCanMessage } : {}),
+              ...(result.onlineStatusConfigured === true && onlineValid ? { onlineStatus: result.onlineStatus } : {}),
+            },
+          }))
+        }
+        if (Object.keys(seed).some((key) => key !== "seedIfMissing")) {
+          const saved = await fetch("/api/messaging/preferences", {
+            method: "PATCH", credentials: "include", cache: "no-store",
+            headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
+            body: JSON.stringify(seed),
+          })
+          const canonical = await saved.json().catch(() => ({}))
+          if (!cancelled && saved.ok && canonical?.ok === true) {
+            setState((current) => ({
+              ...current,
+              settings: {
+                ...current.settings,
+                ...( ["everyone", "matches-only", "no-one"].includes(String(canonical.whoCanMessage)) ? { whoCanMessage: canonical.whoCanMessage } : {}),
+                ...( ["everyone", "matches-only", "hidden"].includes(String(canonical.onlineStatus)) ? { onlineStatus: canonical.onlineStatus } : {}),
+              },
+            }))
+          } else if (!cancelled && !saved.ok) {
+            addToast("Could not migrate your messaging privacy settings to the server.", "error")
+          }
+        }
+      } catch { /* privacy setting hydration retries on the next app session */ }
+    })()
+    return () => { cancelled = true }
+  }, [state.ready, identityUserId, state.settings.whoCanMessage, state.settings.onlineStatus, addToast])
+
+  // Keep the inbox and message previews fresh while the app is open, without an N+1 DB query per conversation.
+  useEffect(() => {
+    if (!state.ready) return
+    let cancelled = false
+    let inFlight = false
+    const refreshInbox = async () => {
+      if (cancelled || inFlight || (typeof document !== "undefined" && document.visibilityState !== "visible")) return
+      inFlight = true
+      try {
+        const { apiListConversations } = await import("@/lib/messaging/server-messaging-sync")
+        const result = await apiListConversations(40)
+        if (cancelled || !result?.ok || !result.durable || !Array.isArray(result.conversations) || !result.conversations.length) return
+        setState((current) => {
+          const byId = new Map(current.conversations.map((conversation) => [conversation.id, conversation]))
+          for (const remote of result.conversations as Array<Record<string, unknown>>) {
+            const id = String(remote.id || "")
+            if (!id) continue
+            const existing = byId.get(id)
+            const members = Array.isArray(remote.memberIds) ? remote.memberIds.map(String) : existing?.memberIds || existing?.members || []
+            const lastMessageAt = typeof remote.lastMessageAt === "number" && Number.isFinite(remote.lastMessageAt) ? remote.lastMessageAt : existing?.lastMessageTime || Date.now()
+            const updatedAt = typeof remote.updatedAt === "number" && Number.isFinite(remote.updatedAt) ? remote.updatedAt : lastMessageAt
+            const preview = typeof remote.lastMessagePreview === "string" ? remote.lastMessagePreview : existing?.lastMessage || ""
+            byId.set(id, {
+              ...(existing || {
+                id,
+                participantId: members.find((memberId: string) => memberId !== identityUserId) || "",
+                participantName: String(remote.title || "Chat"),
+                participantPhoto: "/placeholder.svg?width=40&height=40",
+                messages: [],
+                lastMessage: "",
+                lastMessageTime: lastMessageAt,
+                unread: false,
+                online: false,
+                conversationType: "private" as const,
+              }),
+              id,
+              participantId: existing?.participantId || members.find((memberId: string) => memberId !== identityUserId) || "",
+              memberIds: members,
+              members,
+              lastMessage: preview,
+              lastMessageTime: lastMessageAt,
+              updatedAt,
+              ...(typeof remote.unreadCount === "number" && Number.isFinite(remote.unreadCount) ? { unreadCount: Math.max(0, remote.unreadCount), unread: remote.unreadCount > 0 } : {}),
+            })
+          }
+          return { ...current, conversations: Array.from(byId.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) }
+        })
+      } catch { /* transient failures recover on the next refresh */ }
+      finally { inFlight = false }
+    }
+    void refreshInbox()
+    const interval = window.setInterval(() => void refreshInbox(), 15_000)
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshInbox() }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [state.ready, identityUserId])
 
   // Save existing user-state slices together after startup restoration.
   useEffect(() => {
@@ -3180,43 +3323,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return ""
   }
 
-  const applyShareResult = (result: import("@/lib/share-service").ShareResult) => {
-    if (!result.ok) return
-    setState((s) => {
-      let conversations = s.conversations
-      if (result.messages?.length) {
-        conversations = s.conversations.map((c) => {
-          const batch = result.messages!.filter((m) => m.conversationId === c.id)
-          if (!batch.length) return c
-          const newMsgs = batch.map((m) => ({
-            id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            senderId: "current-user",
-            text: m.text,
-            createdAt: Date.now(),
-            sharedPostId: m.sharedPostId,
-            status: "sent" as const,
-          }))
-          return {
-            ...c,
-            messages: [...(c.messages || []), ...newMsgs],
-            lastMessage: newMsgs[newMsgs.length - 1]?.text || c.lastMessage,
-            lastMessageTime: Date.now(),
-          }
-        })
-      }
-      let stories = s.stories
-      if (result.story) {
-        stories = [result.story as any, ...(s.stories || [])]
-      }
-      return {
-        ...s,
-        shares: [result.share, ...(s.shares || [])].slice(0, 200),
-        reposts: result.repost ? [result.repost, ...(s.reposts || [])].slice(0, 100) : s.reposts,
-        conversations,
-        stories,
-      }
-    })
-  }
 
   const savePost = async (postId: string, collection?: string) => {
     setState((s) => ({
@@ -3445,6 +3551,28 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }
 
   const updateSettings = async (updates: Partial<Settings>) => {
+    const messagingPrivacyUpdates: Record<string, string> = {}
+    if (updates.whoCanMessage && updates.whoCanMessage !== state.settings.whoCanMessage) messagingPrivacyUpdates.whoCanMessage = updates.whoCanMessage
+    if (updates.onlineStatus && updates.onlineStatus !== state.settings.onlineStatus) messagingPrivacyUpdates.onlineStatus = updates.onlineStatus
+    if (Object.keys(messagingPrivacyUpdates).length) {
+      try {
+        const response = await fetch("/api/messaging/preferences", {
+          method: "PATCH",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
+          body: JSON.stringify(messagingPrivacyUpdates),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok || result?.ok !== true) {
+          addToast("Messaging privacy could not be saved securely. Please try again.", "error")
+          return
+        }
+      } catch {
+        addToast("Messaging privacy could not be saved securely. Please try again.", "error")
+        return
+      }
+    }
     setState((s) => ({ ...s, settings: { ...s.settings, ...updates } }))
   }
 
@@ -3454,8 +3582,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     if (userId === "current-user") return false
     const blocked = new Set([...(state.settings?.blockedUsers || []), ...(state.blockedUsers || [])])
     if (blocked.has(userId)) return false
-    if (state.settings.whoCanMessage === "no-one") return false
-    if (state.settings.whoCanMessage === "matches-only" && !isMatchOrFriend(userId)) return false
+    // whoCanMessage is an inbound privacy setting; the server checks the recipient's saved preference.
     return true
   }
   const canViewStory = (ownerId: string) => ownerId === "current-user" || state.settings.storyVisibility === "everyone" || (state.settings.storyVisibility === "matches-only" && isMatchOrFriend(ownerId))
@@ -3835,7 +3962,7 @@ const dismissMatchCelebration = useCallback(() => {
   const startConversation = useCallback(async (userId: string, userName: string, userPhoto: string): Promise<string | null> => {
     try {
       if (!canMessageUser(userId)) {
-        addToast(state.settings.whoCanMessage === "no-one" ? "Messaging is turned off in your privacy settings." : "This person cannot be messaged with your current privacy settings.", "info")
+        addToast("You cannot start this conversation because of your block settings.", "info")
         return null
       }
       const existingConv = state.conversations.find(c => c.participantId === userId && c.conversationType === "private")
@@ -3967,8 +4094,22 @@ const dismissMatchCelebration = useCallback(() => {
               id: mid,
               senderId: String(raw.senderId || raw.sender_id || ""),
               text: String(raw.body || raw.text || ""),
-              createdAt: Number(raw.createdAt || raw.created_at || Date.now()) || Date.now(),
-              status: "delivered" as const,
+              createdAt: (() => {
+                const stamp = raw.createdAt ?? raw.created_at
+                if (typeof stamp === "number" && Number.isFinite(stamp)) return stamp
+                const parsed = Date.parse(String(stamp || ""))
+                return Number.isFinite(parsed) ? parsed : Date.now()
+              })(),
+              status: (["sending", "sent", "delivered", "read", "failed", "deleted"].includes(String(raw.status)) ? String(raw.status) : "sent") as "sending" | "sent" | "delivered" | "read" | "failed" | "deleted",
+              deliveredAt: typeof raw.deliveredAt === "number" ? raw.deliveredAt : raw.deliveredAt ? Date.parse(String(raw.deliveredAt)) : null,
+              readAt: typeof raw.readAt === "number" ? raw.readAt : raw.readAt ? Date.parse(String(raw.readAt)) : undefined,
+              isDeleted: Boolean(raw.deletedAt || raw.deleted_at || String(raw.status || "") === "deleted"),
+              deletedAt: typeof raw.deletedAt === "number" ? raw.deletedAt : raw.deletedAt || raw.deleted_at ? Date.parse(String(raw.deletedAt || raw.deleted_at)) : undefined,
+              sharedPostId: typeof raw.sharedPostId === "string" ? raw.sharedPostId : undefined,
+              replyTo: typeof raw.replyTo === "string" ? raw.replyTo : undefined,
+              replyToPreview: raw.replyToPreview && typeof raw.replyToPreview === "object"
+                ? raw.replyToPreview as { senderName: string; text: string }
+                : undefined,
             }
           })
           .filter(Boolean) as Array<{
@@ -3976,7 +4117,14 @@ const dismissMatchCelebration = useCallback(() => {
           senderId: string
           text: string
           createdAt: number
-          status: "delivered"
+          status: "sending" | "sent" | "delivered" | "read" | "failed" | "deleted"
+          deliveredAt?: number | null
+          readAt?: number
+          isDeleted?: boolean
+          deletedAt?: number
+          sharedPostId?: string
+          replyTo?: string
+          replyToPreview?: { senderName: string; text: string }
         }>
         setState((s) => ({
           ...s,
@@ -3991,7 +4139,14 @@ const dismissMatchCelebration = useCallback(() => {
                   senderId: String(m.senderId || ""),
                   text: String(m.text || ""),
                   createdAt: Number(m.createdAt) || Date.now(),
-                  status: (m.status as "delivered") || "delivered",
+                  status: m.status || "sent",
+                  deliveredAt: m.deliveredAt,
+                  readAt: m.readAt,
+                  isDeleted: m.isDeleted,
+                  deletedAt: m.deletedAt,
+                  sharedPostId: m.sharedPostId,
+                  replyTo: m.replyTo,
+                  replyToPreview: m.replyToPreview,
                 })
               }
             }
@@ -4015,23 +4170,23 @@ const dismissMatchCelebration = useCallback(() => {
     []
   )
 
-  const sendMessage = useCallback(async (conversationId: string, text: string) => {
+  const sendMessage = useCallback(async (conversationId: string, text: string, replyToMessageId?: string, sharedPostId?: string): Promise<boolean> => {
     try {
       if (!messageLimiter.isAllowed(`msg_${conversationId}`)) {
         addToast("You're messaging too fast. Please slow down.", "error")
-        return
+        return false
       }
 
       const safeText = typeof text === "string" ? text : ""
       if (spamDetection.detectSpamText(safeText)) {
         addToast("Your message was flagged as spam.", "error")
-        return
+        return false
       }
 
       const sanitizedText = String(sanitizeText(safeText, 5000) || "").trim()
       if (!sanitizedText) {
         addToast("Message cannot be empty", "error")
-        return
+        return false
       }
 
       const csrfToken = getCsrfToken()
@@ -4039,19 +4194,37 @@ const dismissMatchCelebration = useCallback(() => {
       const result = await domains.messaging.sendMessage({
         conversationId,
         text: sanitizedText,
+        replyToId: replyToMessageId,
+        sharedPostId,
         offline: !state.isOnline,
       })
       if (!result.ok) {
         addToast(result.error, "error")
-        return
+        return false
       }
 
-      const uiMessage = (result.data as any).uiMessage || {
+      const rawUiMessage = (result.data as any).uiMessage || {
         id: result.data.id,
         senderId: result.data.senderId || "current-user",
         text: sanitizedText,
         createdAt: result.data.createdAt || Date.now(),
         status: state.isOnline ? "sent" : "sending",
+      }
+      const replyParent = replyToMessageId
+        ? (state.conversations || []).find((c) => c.id === conversationId)?.messages?.find((m) => m.id === replyToMessageId)
+        : undefined
+      const uiMessage = {
+        ...rawUiMessage,
+        replyTo: replyToMessageId || rawUiMessage.replyTo,
+        sharedPostId: sharedPostId || rawUiMessage.sharedPostId,
+        replyToPreview: replyParent
+          ? {
+              senderName: replyParent.senderId === IdentityService.getCurrentUserId()
+                ? "Your message"
+                : ((state.conversations || []).find((c) => c.id === conversationId)?.participantName || "Original message"),
+              text: String(replyParent.text || "").replace(/\s+/g, " ").slice(0, 160),
+            }
+          : rawUiMessage.replyToPreview,
       }
 
       setState((s) => ({
@@ -4087,36 +4260,49 @@ const dismissMatchCelebration = useCallback(() => {
             text: sanitizedText,
             csrfToken,
             messageId: result.data.id,
+            replyToMessageId,
+            sharedPostId,
           },
           maxRetries: 3,
         })
         addToast("Message queued — will send when online", "info")
-        return
+        return true
       }
 
       let serverId: string | null = null
       let durable = false
+      let permanentFailure = false
+      let permanentError = ""
       try {
         const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
         const remote = await apiSendMessageWithRetry(
           conversationId,
           sanitizedText,
-          String(uiMessage.id)
+          String(uiMessage.id),
+          replyToMessageId,
+          sharedPostId
         )
         if (remote?.ok && remote.durable) {
           durable = true
           serverId = remote.message?.id ? String(remote.message.id) : null
-        } else if (remote?.ok === false) {
-          offlineQueue.addAction({
-            type: "send_message",
-            payload: {
-              conversationId,
-              text: sanitizedText,
-              csrfToken,
-              messageId: uiMessage.id,
-            },
-            maxRetries: 3,
-          })
+        } else {
+          const remoteError = String(remote?.error || "STORE_UNAVAILABLE")
+          permanentFailure = /AUTH_REQUIRED|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|INVALID|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET_NOT_FOUND/i.test(remoteError)
+          if (permanentFailure) permanentError = remoteError
+          if (!permanentFailure) {
+            offlineQueue.addAction({
+              type: "send_message",
+              payload: {
+                conversationId,
+                text: sanitizedText,
+                csrfToken,
+                messageId: uiMessage.id,
+                replyToMessageId,
+                sharedPostId,
+              },
+              maxRetries: 3,
+            })
+          }
         }
       } catch {
         offlineQueue.addAction({
@@ -4126,13 +4312,16 @@ const dismissMatchCelebration = useCallback(() => {
             text: sanitizedText,
             csrfToken,
             messageId: uiMessage.id,
+            replyToMessageId,
+            sharedPostId,
           },
           maxRetries: 3,
         })
       }
 
       await domains.messaging
-        .setMessageStatus(conversationId, result.data.id, durable ? "delivered" : "sent")
+        // Server acceptance means SENT; only a recipient fetch creates a delivery receipt.
+        .setMessageStatus(conversationId, result.data.id, durable ? "sent" : permanentFailure ? "failed" : "sending")
         .catch(() => null)
       setState((s) => ({
         ...s,
@@ -4145,18 +4334,28 @@ const dismissMatchCelebration = useCallback(() => {
               return {
                 ...m,
                 id: serverId || m.id,
-                status: (durable ? "delivered" : "sent") as "delivered" | "sent",
+                status: (durable ? "sent" : permanentFailure ? "failed" : "sending") as "sent" | "failed" | "sending",
                 senderId: String(
                   m.senderId ||
                     state.profile?.id ||
                     IdentityService.getCurrentUserId() ||
                     "current-user"
                 ),
+                failureReason: permanentFailure ? permanentError || "The server rejected this message." : undefined,
+                failedAt: permanentFailure ? Date.now() : undefined,
               }
             }),
           }
         }),
       }))
+      if (permanentFailure) {
+        const failureMessage = permanentError === "PRIVACY_SETTINGS_UNCONFIGURED"
+          ? "Message not sent: this recipient needs to open GreenHaven once to sync privacy settings."
+          : permanentError === "SHARED_POST_PRIVATE"
+            ? "This post cannot be shared to every selected recipient because of its audience or block settings."
+            : "Message was not sent. Check the conversation permissions and try again."
+        addToast(failureMessage, "error")
+      }
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:new-message", {
@@ -4174,10 +4373,36 @@ const dismissMatchCelebration = useCallback(() => {
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Failed to send message", "error")
+      return false
     }
-  }, [domains, state.isOnline, state.profile, addToast])
+    return !permanentFailure
+  }, [domains, state.isOnline, state.profile, state.conversations, addToast])
 
   
+  const applyShareResult = async (result: import("@/lib/share-service").ShareResult) => {
+    if (!result.ok) return
+    let shareRecord = result.share
+    if (result.messages?.length) {
+      const outcomes = await Promise.all(result.messages.map(async (shared) => ({
+        conversationId: shared.conversationId,
+        ok: await sendMessage(shared.conversationId, shared.text, undefined, shared.sharedPostId),
+      })))
+      const successfulIds = outcomes.filter((item) => item.ok).map((item) => item.conversationId)
+      if (!successfulIds.length) {
+        addToast("The post could not be shared. Check the post's audience and your conversation permissions.", "error")
+        return
+      }
+      if (successfulIds.length !== outcomes.length) addToast("The post was shared to some chats, but not all selected chats.", "error")
+      shareRecord = { ...result.share, destinationId: successfulIds.join(",") }
+    }
+    setState((current) => ({
+      ...current,
+      shares: [shareRecord, ...(current.shares || [])].slice(0, 200),
+      reposts: result.repost ? [result.repost, ...(current.reposts || [])].slice(0, 100) : current.reposts,
+      stories: result.story ? [result.story as any, ...(current.stories || [])] : current.stories,
+    }))
+  }
+
   // Phase 7: flush queued profile updates when online
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -4220,38 +4445,81 @@ const dismissMatchCelebration = useCallback(() => {
       if (typeof navigator !== "undefined" && !navigator.onLine) return
       try {
         const { flushQueuedMessages } = await import("@/lib/messaging/offline-message-flush")
-        const result = await flushQueuedMessages(async ({ conversationId, text, messageId }) => {
+        const result = await flushQueuedMessages(async ({ conversationId, text, messageId, replyToMessageId, sharedPostId }) => {
           try {
             const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
             const remote = await apiSendMessageWithRetry(
               conversationId,
               text,
-              String(messageId || `offline-${Date.now()}`)
+              String(messageId || `offline-${Date.now()}`),
+              replyToMessageId,
+              sharedPostId
             )
-            if (remote?.ok && remote.durable) return { ok: true }
+            if (remote?.ok && remote.durable) {
+              const remoteMessage = remote.message as Record<string, unknown> | undefined
+              const durableId = String(remoteMessage?.id || messageId || "")
+              if (durableId && messageId) {
+                setState((current) => ({
+                  ...current,
+                  conversations: (current.conversations || []).map((conv) => {
+                    if (conv.id !== conversationId) return conv
+                    const messages = (conv.messages || []).map((message) => {
+                      if (message.id !== messageId && message.id !== durableId) return message
+                      return {
+                        ...message,
+                        id: durableId,
+                        text: String(remoteMessage?.body || message.text || text),
+                        senderId: String(remoteMessage?.senderId || remoteMessage?.sender_id || message.senderId || "current-user"),
+                        createdAt: typeof remoteMessage?.createdAt === "number" ? remoteMessage.createdAt : message.createdAt,
+                        status: "sent" as const,
+                        sharedPostId: typeof remoteMessage?.sharedPostId === "string" ? remoteMessage.sharedPostId : sharedPostId || message.sharedPostId,
+                        replyTo: typeof remoteMessage?.replyTo === "string" ? remoteMessage.replyTo : replyToMessageId || message.replyTo,
+                        replyToPreview: remoteMessage?.replyToPreview && typeof remoteMessage.replyToPreview === "object"
+                          ? remoteMessage.replyToPreview as { senderName: string; text: string }
+                          : message.replyToPreview,
+                      }
+                    })
+                    return { ...conv, messages, lastMessage: text, lastMessageTime: Date.now() }
+                  }),
+                }))
+              }
+              return { ok: true }
+            }
+            const remoteError = String(remote?.error || "STORE_UNAVAILABLE")
+            if (isDurableMessagingEnabled()) {
+              const permanent = /AUTH_REQUIRED|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|INVALID|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET_NOT_FOUND/i.test(remoteError)
+              return { ok: false, error: remoteError, permanent }
+            }
           } catch {
-            /* domain fallback */
+            if (isDurableMessagingEnabled()) return { ok: false, error: "STORE_UNAVAILABLE" }
+            /* local fallback is only permitted when durable mode is not required */
           }
           const res = await domains.messaging.sendMessage({
             conversationId,
             text,
+            replyToId: replyToMessageId,
+            sharedPostId,
             offline: false,
           })
           if (!res.ok) return { ok: false, error: res.error }
           // Merge into UI if missing
-          const rawUi = (res.data as { uiMessage?: { id: string; text: string; createdAt?: number; senderId?: string }; id?: string; createdAt?: number; senderId?: string }).uiMessage
+          const rawUi = (res.data as { uiMessage?: { id: string; text: string; createdAt?: number; senderId?: string; replyTo?: string; replyToPreview?: { senderName: string; text: string } }; id?: string; createdAt?: number; senderId?: string }).uiMessage
           const uiMessage: {
             id: string
             senderId: string
             text: string
             createdAt: number
-            status: "delivered"
+            status: "sent"
+            replyTo?: string
+            replyToPreview?: { senderName: string; text: string }
           } = {
             id: String(rawUi?.id || (res.data as { id?: string }).id || `msg-${Date.now()}`),
             senderId: String(rawUi?.senderId || (res.data as { senderId?: string }).senderId || "current-user"),
             text: String(rawUi?.text || text),
             createdAt: Number(rawUi?.createdAt || (res.data as { createdAt?: number }).createdAt || Date.now()),
-            status: "delivered",
+            status: "sent",
+            replyTo: rawUi?.replyTo || replyToMessageId,
+            replyToPreview: rawUi?.replyToPreview,
           }
           setState((s) => ({
             ...s,
@@ -4263,13 +4531,17 @@ const dismissMatchCelebration = useCallback(() => {
                 senderId: string
                 text: string
                 createdAt: number
-                status: "delivered"
+                status: "sent"
+                replyTo?: string
+                replyToPreview?: { senderName: string; text: string }
               } = {
                 id: uiMessage.id,
                 senderId: uiMessage.senderId,
                 text: uiMessage.text,
                 createdAt: uiMessage.createdAt,
-                status: "delivered",
+                status: "sent",
+                replyTo: uiMessage.replyTo,
+                replyToPreview: uiMessage.replyToPreview,
               }
               if (existing.some((m) => m.id === delivered.id || (m.text === text && m.status === "sending"))) {
                 return {
@@ -4282,7 +4554,9 @@ const dismissMatchCelebration = useCallback(() => {
                           senderId: delivered.senderId,
                           text: delivered.text,
                           createdAt: delivered.createdAt,
-                          status: "delivered" as const,
+                          status: "sent" as const,
+                          replyTo: delivered.replyTo,
+                          replyToPreview: delivered.replyToPreview,
                         }
                       : m,
                   ),
@@ -4300,6 +4574,20 @@ const dismissMatchCelebration = useCallback(() => {
           }))
           return { ok: true }
         })
+        if (Array.isArray(result.failedItems) && result.failedItems.length) {
+          const failedAt = Date.now()
+          setState((current) => ({
+            ...current,
+            conversations: (current.conversations || []).map((conv) => ({
+              ...conv,
+              messages: (conv.messages || []).map((message) => {
+                const failure = result.failedItems.find((item) => item.conversationId === conv.id && item.messageId && item.messageId === message.id)
+                return failure ? { ...message, status: "failed" as const, failedAt, failureReason: failure.error } : message
+              }),
+            })),
+          }))
+          addToast(`${result.failedItems.length} message${result.failedItems.length === 1 ? "" : "s"} could not be sent. Review and retry.`, "error")
+        }
         if (result.succeeded > 0) {
           addToast(
             result.succeeded === 1
@@ -4327,7 +4615,6 @@ const dismissMatchCelebration = useCallback(() => {
   const markConversationRead = useCallback(
     async (conversationId: string) => {
       // Skip work when already read — avoids full list remap freezes
-      let alreadyRead = false
       const me = (() => {
         try {
           return IdentityService.getCurrentUserId() || "current-user"
@@ -4338,7 +4625,6 @@ const dismissMatchCelebration = useCallback(() => {
       setState((s) => {
         const current = (s.conversations || []).find((c) => c.id === conversationId)
         if (current && !current.unread && !(current.unreadCount && current.unreadCount > 0)) {
-          alreadyRead = true
           return s
         }
         const now = Date.now()
@@ -4371,7 +4657,7 @@ const dismissMatchCelebration = useCallback(() => {
           }),
         }
       })
-      if (alreadyRead) return
+      // Even if the local inbox was already clear, the server must persist per-message read receipts.
       try {
         await domains.messaging.markRead(conversationId)
       } catch {
@@ -4473,36 +4759,16 @@ const dismissMatchCelebration = useCallback(() => {
   const replyToMessage = useCallback(
     async (conversationId: string, replyToMessageId: string, text: string) => {
       const conv = state.conversations.find((c) => c.id === conversationId)
-      if (!conv) return
-
-      const replyMessage = handleMessageReply(
-        conv.messages.find((m) => m.id === replyToMessageId)!,
-        text,
-        "current-user"
-      )
-      if (!replyMessage) {
-        addToast("Invalid reply message", "error")
-        return
+      const parent = conv?.messages?.find((m) => m.id === replyToMessageId)
+      if (!conv || !parent || parent.isDeleted || parent.isDeletedForEveryone) {
+        addToast("Original message is no longer available", "error")
+        return false
       }
-
-      setState((s) => ({
-        ...s,
-        conversations: s.conversations.map((c) =>
-          c.id === conversationId
-            ? {
-                ...c,
-                messages: [...c.messages, replyMessage],
-                lastMessage: text,
-                lastMessageTime: Date.now(),
-              }
-            : c
-        ),
-      }))
-
-      analytics.trackEvent("message_replied", { conversationId, replyToMessageId }, state.profile.displayName)
-      addToast("Reply sent", "success")
+      const sent = await sendMessage(conversationId, text, replyToMessageId)
+      if (sent) analytics.trackEvent("message_replied", { conversationId, replyToMessageId }, state.profile.displayName)
+      return sent
     },
-    [state.conversations, state.profile.displayName, addToast]
+    [state.conversations, state.profile.displayName, sendMessage, addToast]
   )
 
   const forwardMessage = useCallback(

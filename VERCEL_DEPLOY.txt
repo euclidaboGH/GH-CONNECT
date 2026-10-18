@@ -76,3 +76,14 @@ STATUS NOTE
   Phases 1–13: source-implemented. Phases 14–15: not started.
   Push to GitHub ≠ Vercel Production approval.
   See SAFE_TO_PUSH.md and docs/TESTNET_VERIFICATION_GATE.md.
+
+
+Messaging reliability upgrade (Testnet-first)
+-------------------------------------------
+After applying supabase/migrations/202610240005_gh_messaging_presence_delivery_receipts.sql to the Testnet Supabase project, add this Vercel environment variable for Preview:
+
+  NEXT_PUBLIC_MESSAGING_DURABLE=true
+
+Redeploy Preview and test with two authenticated accounts. This requires durable server acceptance before the client treats a message as sent, enables server-backed delivery/read receipts and presence, and makes messaging privacy preferences authoritative. Only add the same variable to Production after the Preview build and two-account tests pass. Keep the Preview and Production Supabase URLs and service-role keys separate.
+
+See supabase/MESSAGING_PRESENCE_DEPLOY.md for the test checklist and the distinction between server acceptance, recipient delivery, and read receipts. Messaging is not end-to-end encrypted and this change does not add push notifications; delivery/presence refresh uses polling while the app is open.

@@ -418,6 +418,7 @@ export interface Message {
   // Canonical message states (UI must derive from these)
   status?: "sending" | "sent" | "delivered" | "read" | "failed" | "deleted"
   readAt?: number
+  deliveredAt?: number | null
   readBy?: string[] // user ids who read (for groups)
   failedAt?: number
   failureReason?: string

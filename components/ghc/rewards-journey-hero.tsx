@@ -8,21 +8,22 @@ import { IdentityService } from "@/lib/identity/identity-service"
  */
 
 import { useMemo, useState, useCallback, useEffect } from "react"
-import { Award, Flame, Sparkles, Check, Lock } from "lucide-react"
+import { Award, Flame, Sparkles, Check } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import {
   getUserXp,
   xpProgress,
   getDailyStreak,
-  claimDailyStreak,
   DAILY_STREAK_GHC,
   msUntilNextLagosMidnight,
   formatCountdown,
   markDailyClaimedForUi,
+  ghcForCycleDay,
 } from "@/lib/domains/reward-level-domain"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
 import { notifyRewardClaimed } from "@/lib/notifications"
+import { useDailyClaimStatus } from "./use-daily-claim-status"
 
 function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
@@ -46,6 +47,7 @@ export function RewardsJourneyHero({
   const [claimingDaily, setClaimingDaily] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
   const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
+  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId)
 
   const membershipTier = useMemo(() => {
     // Re-read membership status when tick advances after claim/refresh
@@ -63,10 +65,21 @@ export function RewardsJourneyHero({
     return getUserXp(userId)
   }, [userId, tick])
   const prog = useMemo(() => xpProgress(xp), [xp])
-  const daily = useMemo(() => {
+  const localDaily = useMemo(() => {
     void tick
+    void statusRevision
     return getDailyStreak(userId, membershipTier)
-  }, [userId, membershipTier, tick])
+  }, [userId, membershipTier, tick, statusRevision])
+  const daily = useMemo(() => {
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) return localDaily
+    const cycleDay = serverStatus.cycleDay
+    return {
+      ...localDaily,
+      canClaimToday: serverStatus.claimable,
+      displayCycleDay: cycleDay,
+      todayGhc: serverStatus.claimable ? ghcForCycleDay(cycleDay, membershipTier) : 0,
+    }
+  }, [localDaily, serverStatus, membershipTier])
 
   const walletBal = useMemo(() => {
     void tick
@@ -119,14 +132,14 @@ export function RewardsJourneyHero({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        ghc.addToast?.(data.error || data.message || "Claim failed", "error")
-        try { markDailyClaimedForUi(userId) } catch { /* */ }
-      try {
-        notifyRewardClaimed({
-          message: "Daily reward recorded · open Wallet for ledger balance",
-        })
-      } catch { /* */ }
-      setTick((t) => t + 1)
+        if (res.status === 409 || data.code === "ALREADY_CLAIMED_TODAY" || data.alreadyClaimed === true || data.idempotent === true) {
+          try { markDailyClaimedForUi(userId) } catch { /* */ }
+          ghc.addToast?.("Today's reward has already been claimed.", "info")
+        } else {
+          ghc.addToast?.(data.error || data.message || "Claim failed — your reward remains available to retry", "error")
+        }
+        void refreshServerStatus()
+        setTick((t) => t + 1)
         return
       }
       const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
@@ -166,7 +179,7 @@ export function RewardsJourneyHero({
     } finally {
       setClaimingDaily(false)
     }
-  }, [userId, ghc, onClaimed, claimingDaily])
+  }, [userId, ghc, onClaimed, claimingDaily, refreshServerStatus])
 
   const opportunities = [
     {

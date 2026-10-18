@@ -3,7 +3,7 @@
 /**
  * Compact post reward control. Amounts only from server.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import type { ContentRewardPublic } from "@/lib/content-reward/public-types"
 
@@ -31,9 +31,10 @@ export function PostRewardPanel({
 }) {
   const [reward, setReward] = useState<ContentRewardPublic | null>(null)
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
-  const load = useCallback(() => {
+  useEffect(() => {
+    if (!open) return
     let cancelled = false
     setLoading(true)
     void (async () => {
@@ -63,11 +64,7 @@ export function PostRewardPanel({
     return () => {
       cancelled = true
     }
-  }, [postId])
-
-  useEffect(() => {
-    return load()
-  }, [load])
+  }, [open, postId])
 
   const up = reward?.upvoteCount ?? upvoteCount
   const down = reward?.downvoteCount ?? downvoteCount
@@ -148,9 +145,14 @@ export function PostRewardPanel({
                 </p>
               </div>
             ) : (
-              <p className="text-sm tabular-nums">
-                {up} up · {down} down
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm tabular-nums">
+                  {up} up · {down} down
+                </p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Votes help the community surface useful posts; they do not mint GHC by themselves. Any reward shown here must be confirmed by GreenHaven&apos;s server.
+                </p>
+              </div>
             )}
           </div>
         </div>

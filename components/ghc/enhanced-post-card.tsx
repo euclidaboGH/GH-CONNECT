@@ -157,7 +157,6 @@ function EnhancedPostCardInner({
   )
   const [curationBusy, setCurationBusy] = useState(false)
   const lastCurationAtRef = useRef(0)
-  const [judgmentLabel, setJudgmentLabel] = useState<string | null>(null)
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
   useEffect(() => {
@@ -166,37 +165,9 @@ function EnhancedPostCardInner({
   }, [post.id, propUp, propDown])
   const netJudgment = upvoteCount - downvoteCount
 
-  useEffect(() => {
-    let cancelled = false
-
-    const loadCommunityReviewStatus = async () => {
-      try {
-        const { IdentityService } = await import("@/lib/identity/identity-service")
-        const response = await fetch(`/api/social/posts/${encodeURIComponent(post.id)}/ghpv`, {
-          credentials: "include",
-          headers: { ...(IdentityService.getAuthHeaders?.() || {}) },
-        })
-        if (!response.ok) throw new Error(`Community review status request failed (${response.status})`)
-
-        const data = (await response.json()) as { status?: string }
-        if (cancelled) return
-
-        const status = String(data?.status || "open").toLowerCase()
-        if (status === "settled") setJudgmentLabel("Community review complete")
-        else if (status === "unresolved") setJudgmentLabel("Community review unresolved")
-        else if (status === "pending") setJudgmentLabel("Community review in progress")
-        else setJudgmentLabel("Community review open")
-      } catch {
-        // This status is supplementary; failures must not break the post card.
-        if (!cancelled) setJudgmentLabel(null)
-      }
-    }
-
-    void loadCommunityReviewStatus()
-    return () => {
-      cancelled = true
-    }
-  }, [post.id])
+  // Community review status is loaded only on its dedicated detail surface.
+  // Fetching it once per feed card caused an N+1 request storm and the value
+  // was not rendered here; keep feed cards lean and defer that request.
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return

@@ -29,7 +29,7 @@ export async function POST(request: Request, ctx: Ctx) {
       ghUserId: auth.userId,
     })
     if (!result.ok) {
-      const status = result.error === "FORBIDDEN" ? 403 : 400
+      const status = result.error === "FORBIDDEN" ? 403 : result.error === "RECEIPT_UPDATE_FAILED" || result.error === "STORE_UNAVAILABLE" ? 503 : 400
       return NextResponse.json(
         { ok: false, error: result.error },
         { status, headers: { "Cache-Control": "no-store" } }

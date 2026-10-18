@@ -16,18 +16,21 @@ import { getBoundDomainServices } from "@/lib/domains/compat"
 import {
   getDailyStreak,
   claimDailyStreak,
+  markDailyClaimedForUi,
   markDailyRewardDismissed,
   wasDailyRewardDismissed,
   msUntilNextLagosMidnight,
+  lagosDayKey,
   formatCountdown,
-  markDailyClaimedForUi,
   trackForTier,
+  ghcForCycleDay,
   type MembershipTierForTrack,
 } from "@/lib/domains/reward-level-domain"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { notifyRewardClaimed } from "@/lib/notifications"
 import { IdentityService } from "@/lib/identity/identity-service"
 import type { Profile } from "@/lib/ghc-types"
+import { useDailyClaimStatus } from "./use-daily-claim-status"
 
 function resolveUserId(profile?: Profile | null): string {
   const fromIdentity = IdentityService.getCurrentUserId()
@@ -58,145 +61,56 @@ function resolveTier(): MembershipTierForTrack {
   return "free"
 }
 
-async function creditDailyToWallet(
-  userId: string,
-  amount: number,
-  cycleDay: number,
-  rewardDayKey: string
-): Promise<{
+async function creditDailyToWallet(): Promise<{
   ok: boolean
   error?: string
   serverAmount?: number
   alreadyClaimed?: boolean
   cycleDay?: number
 }> {
-  const ref = `daily_checkin:${userId}:${rewardDayKey}`
-  // Prefer server evaluate+claim — amount is NEVER taken from the client
+  // The atomic daily endpoint is the only valid authority for daily claims.
+  // UI previews are intentionally ignored; no generic reward fallback is allowed.
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(IdentityService.getAuthHeaders?.() || {}),
     }
-    const dailyRes = await fetch("/api/economy/rewards/daily", {
+    const response = await fetch("/api/economy/rewards/daily", {
       method: "POST",
       credentials: "include",
       headers,
-      body: JSON.stringify({
-        rewardDayKey,
-        cycleDay,
-      }),
+      body: JSON.stringify({}),
     })
-    if (dailyRes.ok) {
-      const data = (await dailyRes.json().catch(() => ({}))) as {
-        ok?: boolean
-        amount?: number
-        alreadyClaimed?: boolean
-        idempotent?: boolean
-        cycleDay?: number
-      }
+    const data = (await response.json().catch(() => ({}))) as {
+      ok?: boolean
+      amount?: number
+      userAmount?: number
+      alreadyClaimed?: boolean
+      idempotent?: boolean
+      cycleDay?: number
+      error?: string
+      message?: string
+      code?: string
+    }
+    if (response.status === 409 || data.code === "ALREADY_CLAIMED_TODAY") {
+      return { ok: true, alreadyClaimed: true, cycleDay: Number(data.cycleDay) || undefined }
+    }
+    if (!response.ok || data.ok === false) {
       return {
-        ok: true,
-        serverAmount: Number(data.amount) || undefined,
-        alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
-        cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,
+        ok: false,
+        error: data.message || data.error || "Daily claim failed. Your reward remains available to retry.",
       }
     }
-    // 409 already claimed today — safe idempotent success
-    if (dailyRes.status === 409) {
-      return { ok: true, alreadyClaimed: true }
-    }
-
-    const evalRes = await fetch("/api/economy/rewards/evaluate", {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body: JSON.stringify({
-        sourceEvent: "DAILY_CHECKIN",
-        referenceId: ref,
-        metadata: { cycleDay, uiPreviewAmount: amount },
-      }),
-    })
-    if (evalRes.ok) {
-      const data = (await evalRes.json().catch(() => ({}))) as {
-        ok?: boolean
-        holdId?: string
-        amount?: number
-        rewards?: Array<{ id: string }>
-      }
-      const holdId =
-        data.holdId ||
-        data.rewards?.[0]?.id ||
-        ""
-      if (holdId) {
-        const claimRes = await fetch("/api/economy/rewards/claim", {
-          method: "POST",
-          credentials: "include",
-          headers,
-          body: JSON.stringify({ holdId }),
-        })
-        if (claimRes.ok) {
-          const claimed = (await claimRes.json().catch(() => ({}))) as { amount?: number }
-          try { window.dispatchEvent(new CustomEvent("ghc:wallet-refresh")) } catch { /* */ }
-          return { ok: true, serverAmount: Number(claimed.amount || data.amount) || undefined }
-        }
-      }
-      // Evaluate succeeded with idempotent/no hold — treat as ok
-      return { ok: true, serverAmount: Number(data.amount) || undefined }
+    return {
+      ok: true,
+      serverAmount: Number(data.userAmount ?? data.amount) || undefined,
+      alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
+      cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,
     }
   } catch {
-    /* fall through */
-  }
-
-  // Domain path is studio-only fallback — never report success without a server credit
-  // when the daily API was unavailable. Prevents "claimed" UI without ledger write.
-  try {
-    const eco = getBoundDomainServices()?.economy as {
-      evaluateReward?: (input: {
-        sourceEvent: string
-        referenceId?: string
-        metadata?: Record<string, unknown>
-      }) => Promise<{
-        ok: boolean
-        data?: { rewards?: Array<{ id: string; amount: number }> }
-        error?: string
-      }>
-      claimReward?: (id: string) => Promise<{ ok: boolean; error?: string }>
-    } | null
-
-    if (!eco?.evaluateReward) {
-      return {
-        ok: false,
-        error: "Daily reward service unavailable. Check connection and try again.",
-      }
-    }
-
-    const evaluated = await eco.evaluateReward({
-      sourceEvent: "DAILY_CHECKIN",
-      referenceId: ref,
-      metadata: { cycleDay, uiPreviewAmount: amount },
-    })
-
-    if (!evaluated?.ok) {
-      if (String(evaluated?.error || "").toLowerCase().includes("duplicate")) {
-        return { ok: true, alreadyClaimed: true }
-      }
-      return {
-        ok: false,
-        error: evaluated?.error || "Claim could not be completed",
-      }
-    }
-
-    const rewards = evaluated.data?.rewards || []
-    for (const r of rewards) {
-      if (eco.claimReward) {
-        await eco.claimReward(r.id)
-      }
-    }
-    return { ok: true, serverAmount: rewards[0]?.amount }
-  } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "Claim failed — please retry",
+      error: "Could not reach the rewards service. Check your connection and retry; your claim was not confirmed.",
     }
   }
 }
@@ -255,17 +169,29 @@ export function DailyRewardFeedCard({
   const tier = resolveTier()
   const [tick, setTick] = useState<number>(0)
   const [claiming, setClaiming] = useState(false)
+  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId)
   const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
   useEffect(() => {
     const id = window.setInterval(() => setCountdownLabel(formatCountdown(msUntilNextLagosMidnight())), 1000)
     return () => window.clearInterval(id)
   }, [])
 
-  const daily = useMemo(() => {
+  const localDaily = useMemo(() => {
     void tick
     void refreshKey
+    void statusRevision
     return getDailyStreak(userId, tier)
-  }, [userId, tier, tick, refreshKey])
+  }, [userId, tier, tick, refreshKey, statusRevision])
+  const daily = useMemo(() => {
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) return localDaily
+    const cycleDay = serverStatus.cycleDay
+    return {
+      ...localDaily,
+      canClaimToday: serverStatus.claimable,
+      displayCycleDay: cycleDay,
+      todayGhc: serverStatus.claimable ? ghcForCycleDay(cycleDay, tier) : 0,
+    }
+  }, [localDaily, serverStatus, tier])
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
@@ -276,20 +202,24 @@ export function DailyRewardFeedCard({
     setClaiming(true)
     try {
       // Server is authoritative — never optimistically credit from client preview
-      const server = await creditDailyToWallet(
-        userId,
-        daily.todayGhc,
-        daily.displayCycleDay,
-        daily.rewardDayKey
-      )
+      const server = await creditDailyToWallet()
       if (!server.ok) {
-        ghc.addToast?.(server.error || "Claim failed", "error")
-        try { markDailyClaimedForUi(userId) } catch { /* */ }
-      setTick((t) => t + 1)
+        ghc.addToast?.(server.error || "Claim failed — your reward is still available to retry", "error")
+        void refreshServerStatus()
+        setTick((t) => t + 1)
         return
       }
-      // Local streak UX only after server success (does not invent wallet balance)
-      const res = claimDailyStreak(userId, tier)
+      // Only advance local streak/XP after a newly completed server claim.
+      // An idempotent repeat marks the day locally but must not award XP twice.
+      const res = server.alreadyClaimed
+        ? (markDailyClaimedForUi(userId), {
+            ok: true,
+            ghc: 0,
+            xp: 0,
+            streakDays: daily.streakDays,
+            cycleDay: server.cycleDay ?? daily.displayCycleDay,
+          })
+        : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
@@ -341,7 +271,7 @@ export function DailyRewardFeedCard({
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, userId, tier, ghc])
+  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, userId, tier, ghc, refreshServerStatus])
 
   // Feed only shows the card while a claim is still available.
   // After claim, hide entirely — streak / history live in Rewards Centre.
@@ -423,11 +353,23 @@ export function DailyRewardSheet({
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [claiming, setClaiming] = useState(false)
-  const daily = useMemo(() => {
+  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId, open)
+  const localDaily = useMemo(() => {
     // Recompute when sheet opens so claimability is current
     void open
+    void statusRevision
     return getDailyStreak(userId, tier)
-  }, [userId, tier, open])
+  }, [userId, tier, open, statusRevision])
+  const daily = useMemo(() => {
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) return localDaily
+    const cycleDay = serverStatus.cycleDay
+    return {
+      ...localDaily,
+      canClaimToday: serverStatus.claimable,
+      displayCycleDay: cycleDay,
+      todayGhc: serverStatus.claimable ? ghcForCycleDay(cycleDay, tier) : 0,
+    }
+  }, [localDaily, serverStatus, tier])
 
   const handleClaim = useCallback(async () => {
     if (claiming || !daily.canClaimToday) return
@@ -437,17 +379,21 @@ export function DailyRewardSheet({
     }
     setClaiming(true)
     try {
-      const server = await creditDailyToWallet(
-        userId,
-        daily.todayGhc,
-        daily.displayCycleDay,
-        daily.rewardDayKey
-      )
+      const server = await creditDailyToWallet()
       if (!server.ok) {
-        ghc.addToast?.(server.error || "Claim failed", "error")
+        ghc.addToast?.(server.error || "Claim failed — your reward is still available to retry", "error")
+        void refreshServerStatus()
         return
       }
-      const res = claimDailyStreak(userId, tier)
+      const res = server.alreadyClaimed
+        ? (markDailyClaimedForUi(userId), {
+            ok: true,
+            ghc: 0,
+            xp: 0,
+            streakDays: daily.streakDays,
+            cycleDay: server.cycleDay ?? daily.displayCycleDay,
+          })
+        : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
@@ -490,7 +436,7 @@ export function DailyRewardSheet({
     } finally {
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed])
+  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
 
   const handleDismiss = useCallback(() => {
     markDailyRewardDismissed(userId)
@@ -608,7 +554,26 @@ export function DailyRewardHomeExperience() {
     if (wasDailyRewardDismissed(userId)) return
     const t = window.setTimeout(() => setSheetOpen(true), 1600)
     return () => window.clearTimeout(t)
-  }, [userId, tier])
+  }, [userId, tier, refreshKey])
+
+  useEffect(() => {
+    let observedDay = lagosDayKey()
+    const checkRewardDay = () => {
+      const currentDay = lagosDayKey()
+      if (currentDay !== observedDay) {
+        observedDay = currentDay
+        setRefreshKey((key) => key + 1)
+      }
+    }
+    const id = window.setInterval(checkRewardDay, 30_000)
+    window.addEventListener("focus", checkRewardDay)
+    document.addEventListener("visibilitychange", checkRewardDay)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener("focus", checkRewardDay)
+      document.removeEventListener("visibilitychange", checkRewardDay)
+    }
+  }, [])
 
   useEffect(() => {
     const onClaimed = () => setRefreshKey((k) => k + 1)

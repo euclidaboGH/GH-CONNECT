@@ -9,12 +9,15 @@ export type FlushSendMessageFn = (input: {
   conversationId: string
   text: string
   messageId?: string
-}) => Promise<{ ok: boolean; error?: string }>
+  replyToMessageId?: string
+  sharedPostId?: string
+}) => Promise<{ ok: boolean; error?: string; permanent?: boolean }>
 
 export type FlushResult = {
   attempted: number
   succeeded: number
   failed: number
+  failedItems: Array<{ conversationId: string; messageId?: string; error: string }>
 }
 
 /**
@@ -27,17 +30,22 @@ export async function flushQueuedMessages(
   const pending = offlineQueue.getActionsByType("send_message")
   let succeeded = 0
   let failed = 0
+  const failedItems: FlushResult["failedItems"] = []
 
   for (const action of pending) {
     const payload = (action.payload || {}) as {
       conversationId?: string
       text?: string
       messageId?: string
+      replyToMessageId?: string
+      sharedPostId?: string
     }
     const conversationId = String(payload.conversationId || "").trim()
     const text = String(payload.text || "").trim()
     if (!conversationId || !text) {
       offlineQueue.removeAction(action.id)
+      if (conversationId && payload.messageId) failedItems.push({ conversationId, messageId: payload.messageId, error: "INVALID_QUEUED_MESSAGE" })
+      failed++
       continue
     }
 
@@ -47,18 +55,25 @@ export async function flushQueuedMessages(
           send({
             conversationId,
             text,
-            messageId: payload.messageId,
+            messageId: payload.messageId || `offline-${action.id}`,
+            replyToMessageId: payload.replyToMessageId,
+            sharedPostId: payload.sharedPostId,
           }),
         { maxRetries: 2, initialDelayMs: 400, timeoutMs: 15000 },
       )
       if (result?.ok) {
         offlineQueue.removeAction(action.id)
         succeeded++
+      } else if (result?.permanent) {
+        offlineQueue.removeAction(action.id)
+        failedItems.push({ conversationId, messageId: payload.messageId || `offline-${action.id}`, error: result.error || "MESSAGE_REJECTED" })
+        failed++
       } else {
         offlineQueue.incrementRetry(action.id)
         const updated = offlineQueue.getQueue().find((a) => a.id === action.id)
         if (updated && updated.retries >= (updated.maxRetries || 3)) {
           offlineQueue.removeAction(action.id)
+          failedItems.push({ conversationId, messageId: payload.messageId || `offline-${action.id}`, error: result.error || "RETRY_LIMIT_REACHED" })
         }
         failed++
       }
@@ -67,10 +82,11 @@ export async function flushQueuedMessages(
       const updated = offlineQueue.getQueue().find((a) => a.id === action.id)
       if (updated && updated.retries >= (updated.maxRetries || 3)) {
         offlineQueue.removeAction(action.id)
+        failedItems.push({ conversationId, messageId: payload.messageId || `offline-${action.id}`, error: "RETRY_LIMIT_REACHED" })
       }
       failed++
     }
   }
 
-  return { attempted: pending.length, succeeded, failed }
+  return { attempted: pending.length, succeeded, failed, failedItems }
 }

@@ -22,7 +22,7 @@ The last ACL hardening before the later feature migrations is `202609250003_rpc_
 GHPV migrations `20261013`–`20261020` are repository-only until Testnet; settlement is
 system-only and votes must not mint GHC (see `README.md`).
 
-## Selected operational apply sequence (73 listed entries; see `docs/MIGRATION_CHECKLIST.md` for the complete classified inventory)
+## Selected operational apply sequence (74 listed entries; see `docs/MIGRATION_CHECKLIST.md` for the complete classified inventory)
 
 | # | File | Action |
 |---|------|--------|
@@ -99,6 +99,7 @@ system-only and votes must not mint GHC (see `README.md`).
 | 71 | `20261023_gh_profile_content_library.sql` | apply after review |
 | 72 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | apply after review |
 | 73 | `202610240004_gh_story_creator_upgrade.sql` | apply after review |
+| 74 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | apply after review; follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` and test two accounts |
 
 ## After apply (read-only checks)
 
@@ -117,4 +118,4 @@ SELECT has_function_privilege('anon', 'public.gh_community_join(text,text)', 'ex
 
 ## Vercel Preview
 
-Point Preview env at this Testnet Supabase + Testnet Pi credentials (`NEXT_PUBLIC_PI_SANDBOX=true`).
+Point Preview env at this Testnet Supabase + Testnet Pi credentials (`NEXT_PUBLIC_PI_SANDBOX=true`). For the messaging reliability upgrade, set `NEXT_PUBLIC_MESSAGING_DURABLE=true` in Preview after the new migration is applied, then follow `supabase/MESSAGING_PRESENCE_DEPLOY.md` before enabling it in Production.

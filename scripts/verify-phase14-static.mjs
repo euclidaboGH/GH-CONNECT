@@ -19,6 +19,7 @@ const steps = [
   ["test-pi-payment-durable.mjs", "Pi payment durable"],
   ["test-economy-v12.mjs", "Economy v12"],
   ["test-daily-claim-wallet-pipeline.mjs", "Daily claim → wallet"],
+  ["test-rewards-reliability.mjs", "Rewards reliability"],
   ["check-jsx-safety.mjs", "JSX safety"],
   ["print-migration-checklist.mjs", "Migration inventory"],
 ]

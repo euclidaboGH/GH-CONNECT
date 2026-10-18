@@ -39,12 +39,8 @@ import {
   isDurableMessagingEnabled,
   shouldAttemptDurableMessaging,
 } from "../messaging/durable-flag"
-import { apiSendMessage, apiSendMessageWithRetry } from "../messaging/server-messaging-sync"
-import {
-  canMessageUser,
-  buildPermissionContext,
-  type PermissionContext,
-} from "../permission-engine"
+import { apiSendMessageWithRetry } from "../messaging/server-messaging-sync"
+import type { PermissionContext } from "../permission-engine"
 import { canCommunityAction, normalizeRole } from "./community-domain"
 
 /** Canonical product conversation types */
@@ -159,15 +155,8 @@ export function createMessagingDomain(deps: {
       if (!other) return { allowed: false, reason: "Missing recipient" }
       if (deps.isBlocked(other)) return { allowed: false, reason: "You can't message this user" }
 
-      const pctx =
-        deps.getPermissionContext?.() ||
-        buildPermissionContext({
-          currentUserId: actorId,
-          blockedUsers: [],
-        })
-      if (!canMessageUser({ ...pctx, blockedByMe: pctx.blockedByMe }, other)) {
-        return { allowed: false, reason: "Messaging not allowed by privacy settings" }
-      }
+      // `who can message you` is the recipient's preference, not the sender's.
+      // The durable server re-checks the recipient's saved preference on every send.
       return { allowed: true }
     }
 
@@ -216,6 +205,7 @@ export function createMessagingDomain(deps: {
       text: string
       recipientId?: string
       replyToId?: string
+      sharedPostId?: string
       /** Offline path starts as sending */
       offline?: boolean
     }): Promise<MutationResult<DomainMessage & { uiMessage?: Message }>> {
@@ -253,6 +243,7 @@ export function createMessagingDomain(deps: {
             ...prepared,
             status: initialStatus,
             replyTo: i.replyToId || prepared.replyTo,
+            sharedPostId: i.sharedPostId || prepared.sharedPostId,
           }
 
           const msg: DomainMessage & { uiMessage?: Message } = {
@@ -274,7 +265,7 @@ export function createMessagingDomain(deps: {
           // clientMessageId = uiMessage.id for idempotent dedupe on the server.
           // Flag still gates *requiring* durable success for production ops.
           if (shouldAttemptDurableMessaging(i.offline)) {
-            void apiSendMessageWithRetry(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
+            void apiSendMessageWithRetry(i.conversationId, uiMessage.text, uiMessage.id, i.replyToId, i.sharedPostId).then((res) => {
               const ok = Boolean(res && (res as { ok?: boolean }).ok)
               if (!ok) {
                 try {
@@ -534,14 +525,6 @@ export function createMessagingDomain(deps: {
           if (i.kind === "private" && i.participantId && deps.isBlocked(i.participantId)) {
             return "Cannot start chat with blocked user"
           }
-          if (i.kind === "private" && i.participantId) {
-            const pctx =
-              deps.getPermissionContext?.() ||
-              buildPermissionContext({ currentUserId: actorId, blockedUsers: [] })
-            if (!canMessageUser(pctx, i.participantId)) {
-              return "Messaging not allowed by privacy settings"
-            }
-          }
           if ((i.kind === "group" || i.kind === "community") && !(i.name || "").trim()) {
             return "Group name required"
           }
@@ -560,12 +543,16 @@ export function createMessagingDomain(deps: {
               const res = await apiCreateDirectConversation(i.participantId)
               if (res.httpOk && res.ok && res.conversation?.id) {
                 id = String(res.conversation.id)
-              } else if (res.error === "BLOCKED" || res.status === 403) {
-                throw new Error("Cannot start chat with this user")
+              } else if (res.error === "PRIVACY_SETTINGS_UNCONFIGURED") {
+                throw new Error("Cannot start chat: this user needs to open GreenHaven once to sync their privacy settings")
+              } else if (res.error === "BLOCKED" || res.error === "PRIVACY_RESTRICTED" || res.status === 403) {
+                throw new Error("Cannot start chat: this user’s messaging privacy settings do not allow it")
+              } else if (isDurableMessagingEnabled()) {
+                throw new Error("Cannot start chat: a secure conversation could not be created. Please retry when the connection recovers.")
               }
-              // If durable unavailable (studio/offline), keep local id for optimistic UX.
+              // Local-only conversation fallback is allowed only when durable messaging is not required.
             } catch (e) {
-              if (e instanceof Error && e.message.includes("Cannot start")) throw e
+              if (e instanceof Error && e.message.startsWith("Cannot start chat:")) throw e
             }
           }
 

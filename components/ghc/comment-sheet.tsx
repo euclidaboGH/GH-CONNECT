@@ -47,6 +47,8 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const [visibleCount, setVisibleCount] = useState<number>(40)
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({})
   const [sortMode, setSortMode] = useState<"newest" | "oldest">("newest")
+  const [commentsLoadError, setCommentsLoadError] = useState(false)
+  const [reloadVersion, setReloadVersion] = useState(0)
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -68,18 +70,19 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   useEffect(() => {
     if (!open || !post?.id) return
     let cancelled = false
+    setCommentsLoadError(false)
     ;(async () => {
       try {
-        await loadPostComments?.(post.id)
+        const result = await loadPostComments?.(post.id)
+        if (!cancelled && result && result.ok === false) setCommentsLoadError(true)
       } catch {
-        /* */
+        if (!cancelled) setCommentsLoadError(true)
       }
-      if (cancelled) return
     })()
     return () => {
       cancelled = true
     }
-  }, [open, post?.id, loadPostComments])
+  }, [open, post?.id, loadPostComments, reloadVersion])
 
 useEffect(() => {
     if (!open) return
@@ -175,6 +178,8 @@ useEffect(() => {
     try {
       await deleteComment(post.id, commentId)
       addToast("Comment deleted", "info")
+    } catch {
+      addToast("Could not delete comment. Please try again.", "error")
     } finally {
       setBusy(false)
     }
@@ -188,12 +193,13 @@ useEffect(() => {
     try {
       await addCommentReaction(post.id, c.id, emoji)
     } catch {
-      /* silent */
+      addToast("Could not save reaction. Please try again.", "error")
     }
   }
 
-  const reactionCount = (c: PostComment) => {
+  const reactionCount = (c: PostComment, emoji?: string) => {
     const reactions = c.reactions || {}
+    if (emoji) return Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0
     return Object.values(reactions).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
   }
 
@@ -203,7 +209,7 @@ useEffect(() => {
     const isExpanded = expandedThreads[c.id] ?? depth === 0
     const showCollapse = depth === 0 && threadCount > 0
     const visibleReplies = isExpanded || depth > 0 ? replies : []
-    const liked = reactionCount(c) > 0
+    const heartCount = reactionCount(c, "❤️")
 
     return (
       <div
@@ -270,12 +276,12 @@ useEffect(() => {
             <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-muted-foreground">
               <button
                 type="button"
-                className={`inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition ${liked ? "bg-rose-50 text-rose-600" : "hover:bg-muted hover:text-foreground"}`}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition hover:bg-rose-50 hover:text-rose-600"
                 onClick={() => void handleLikeComment(c)}
-                aria-label="Like comment"
+                aria-label={heartCount ? `React with heart; ${heartCount} heart reactions` : "React with heart"}
               >
-                <Heart size={14} className={liked ? "fill-current" : ""} />
-                {liked ? reactionCount(c) : "Like"}
+                <Heart size={14} />
+                {heartCount || "Like"}
               </button>
               <button
                 type="button"
@@ -314,9 +320,13 @@ useEffect(() => {
                 label="Report"
                 targetType="comment"
                 targetId={c.id}
-                onSubmit={(reason) => {
-                  void reportContent("comment", c.id, reason)
-                  addToast("Report submitted", "success")
+                onSubmit={async (reason) => {
+                  try {
+                    await reportContent("comment", c.id, reason)
+                    addToast("Report submitted for review", "success")
+                  } catch {
+                    addToast("Could not submit report. Please try again.", "error")
+                  }
                 }}
                 onBlockAfterReport={(() => {
                   const authorId = c.authorId
@@ -335,11 +345,12 @@ useEffect(() => {
                   <button
                     key={emoji}
                     type="button"
-                    className="rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90"
+                    className="inline-flex min-h-8 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90"
                     onClick={() => void handleLikeComment(c, emoji)}
-                    aria-label={`React ${emoji}`}
+                    aria-label={`React ${emoji}${reactionCount(c, emoji) ? `; ${reactionCount(c, emoji)} reactions` : ""}`}
+                    title={reactionCount(c, emoji) ? `${reactionCount(c, emoji)} reactions` : `React ${emoji}`}
                   >
-                    {emoji}
+                    {emoji}{reactionCount(c, emoji) > 0 ? <span className="text-[10px] text-muted-foreground">{reactionCount(c, emoji)}</span> : null}
                   </button>
                 ))}
               </div>
@@ -419,6 +430,12 @@ useEffect(() => {
         </div>
 
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          {commentsLoadError ? (
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span>Comments could not be refreshed. Showing any comments already available.</span>
+              <button type="button" className="shrink-0 font-bold underline" onClick={() => setReloadVersion((n) => n + 1)}>Retry</button>
+            </div>
+          ) : null}
           {tree.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
