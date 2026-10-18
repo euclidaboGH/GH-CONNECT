@@ -32,6 +32,9 @@ check('message read effect uses selected identity in guard', /if \(!selectedId \
 const compose = read('components/ghc/unified-compose.tsx')
 check('compose mode effect includes initialMode dependency', /\}, \[open, initialMode, onOpenChange, uploadProgress, isPublishing\]\)/.test(compose))
 
+const feedContextType = context.slice(context.indexOf('const GHCFeedContext = createContext<{'), context.indexOf('} | null>(null)', context.indexOf('const GHCFeedContext = createContext<{')))
+check('feed context type exposes loadPostComments used by enhanced feed', /loadPostComments:\s*GHCContextType\[\"loadPostComments\"\]/.test(feedContextType) && /loadPostComments,/.test(context.slice(context.indexOf('const feedValue = useMemo('))))
+
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
 check('package and lockfile versions match', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version)

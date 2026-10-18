@@ -454,6 +454,7 @@ const GHCFeedContext = createContext<{
   archivePost: GHCContextType["archivePost"]
   unarchivePost: GHCContextType["unarchivePost"]
   addComment: GHCContextType["addComment"]
+  loadPostComments: GHCContextType["loadPostComments"]
   editComment: GHCContextType["editComment"]
   deleteComment: GHCContextType["deleteComment"]
   addCommentReaction: GHCContextType["addCommentReaction"]
