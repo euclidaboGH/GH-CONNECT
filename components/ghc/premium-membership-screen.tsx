@@ -237,7 +237,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     method: "pi" | "ghc"
   } | null>(null)
 
-  const [confirmTier, setConfirmTier] = useState<MembershipTierId | null>(null)
+  const [confirmTier, setConfirmTier] = useState<Exclude<MembershipTierId, "free"> | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
   const [expandedPlanBenefits, setExpandedPlanBenefits] = useState<Record<string, boolean>>({})
   const [tick, setTick] = useState<number>(0)
