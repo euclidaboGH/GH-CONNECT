@@ -1356,16 +1356,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               photo: p.avatarUrl || existing?.photo || "/placeholder.svg?width=80&height=80",
               photos: p.avatarUrl ? [p.avatarUrl] : existing?.photos,
               bio: p.bio || existing?.bio || "",
-              location: [p.city, p.country].filter(Boolean).join(", ") || existing?.location || "",
+              location:
+                [p.city, p.country].filter(Boolean).join(", ") ||
+                existing?.location ||
+                "",
               interests: existing?.interests || [],
-              // Keep the required Candidate contract explicit when hydrating remote users.
-              // These fields are presentation metadata; do not infer verification from client data.
               verified: existing?.verified ?? false,
               online: existing?.online ?? false,
               lastSeen: existing?.lastSeen ?? 0,
-              distance: existing?.distance,
-              isSample: false,
-            } satisfies Candidate)
+              coverPhoto: existing?.coverPhoto,
+              profilePhotoHistory: existing?.profilePhotoHistory,
+              coverPhotoHistory: existing?.coverPhotoHistory,
+            })
           }
           // Drop demo seeds when we have real people (production multi-user)
           const merged = Array.from(byId.values()).filter((c) => {
@@ -2647,10 +2649,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         likeCount?: number
         likedByMe?: boolean
       }>).detail
-      const postId = detail?.postId
-      if (typeof postId !== "string" || postId.trim().length === 0) return
-      // Capture the validated ID before entering the state updater. TypeScript
-      // cannot preserve property narrowing on `detail.postId` inside a closure.
+      if (!detail?.postId) return
+      const postId = String(detail.postId)
       setState((s) => {
         let nextLiked = s.likedPostIds || []
         if (typeof detail.likedByMe === "boolean") {

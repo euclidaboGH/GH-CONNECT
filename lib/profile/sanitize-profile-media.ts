@@ -10,28 +10,28 @@ export function isCrossDeviceMediaUrl(url: unknown): boolean {
   return false
 }
 
-export function sanitizeProfileMediaPartial<T extends Record<string, unknown>>(
+type ProfileMediaFields = {
+  photos?: unknown
+  coverPhoto?: unknown
+}
+
+export function sanitizeProfileMediaPartial<T extends ProfileMediaFields>(
   partial: T
 ): T {
-  // Work through a string-keyed record so this sanitizer can safely handle
-  // partial profile payloads whose generic type does not declare media fields.
-  // The spread preserves all unrelated fields and the returned shape remains T.
-  const next: Record<string, unknown> = { ...partial }
+  const next: ProfileMediaFields & Record<string, unknown> = { ...partial }
 
   if (Array.isArray(next.photos)) {
-    next.photos = next.photos
-      .map((value) => String(value))
+    next.photos = (next.photos as unknown[])
+      .map(String)
       .filter(isCrossDeviceMediaUrl)
       .slice(0, 6)
   }
 
-  if (Object.prototype.hasOwnProperty.call(next, "coverPhoto")) {
-    const coverPhoto = next.coverPhoto
-    if (coverPhoto === null || coverPhoto === "") {
-      // Preserve intentional explicit clearing of the cover photo.
-      next.coverPhoto = coverPhoto
-    } else if (!isCrossDeviceMediaUrl(coverPhoto)) {
-      // Omit invalid/local-only cover media instead of persisting it.
+  if ("coverPhoto" in next) {
+    const c = next.coverPhoto
+    if (c === null || c === "") {
+      next.coverPhoto = c as null | ""
+    } else if (!isCrossDeviceMediaUrl(c)) {
       delete next.coverPhoto
     }
   }
