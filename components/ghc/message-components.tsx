@@ -548,16 +548,23 @@ function MessageBubbleBase({
             ) : null}
           </p>
         {message.status === "failed" && isSentByCurrentUser ? (
-          <div className="mt-1 flex items-center justify-end gap-2 px-1">
-            <span className="text-[10px] font-semibold text-red-600">Not delivered</span>
-            {onRetry ? (
-              <button
-                type="button"
-                className="min-h-8 rounded-full bg-red-50 px-2.5 text-[10px] font-bold text-red-700 dark:bg-red-950/40"
-                onClick={() => onRetry(message.id)}
-              >
-                Retry
-              </button>
+          <div className="mt-1 flex flex-col items-end gap-1 px-1">
+            <div className="flex items-center justify-end gap-2">
+              <span className="text-[10px] font-semibold text-red-600">Not delivered</span>
+              {onRetry ? (
+                <button
+                  type="button"
+                  className="min-h-8 rounded-full bg-red-50 px-2.5 text-[10px] font-bold text-red-700 dark:bg-red-950/40"
+                  onClick={() => onRetry(message.id)}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+            {message.failureReason ? (
+              <p className="max-w-[85%] text-right text-[10px] leading-snug text-red-600/90">
+                {String(message.failureReason)}
+              </p>
             ) : null}
           </div>
         ) : null}

@@ -288,7 +288,7 @@ export function ProfileScreen({
   }
 
   return (
-    <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content">
+    <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label="Your GreenHaven profile">
       <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-4 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
         <div className="flex items-center gap-1">

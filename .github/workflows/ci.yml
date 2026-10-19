@@ -20,6 +20,10 @@ jobs:
         with:
           node-version: "24.15.0"
           cache: npm
+      - name: Repository integrity audit
+        run: npm run audit:project-integrity
+      - name: Dependency lock preflight
+        run: node scripts/check-dependency-lock-integrity.mjs
       - name: Install
         run: npm ci --legacy-peer-deps
       - name: JSX safety
@@ -76,6 +80,7 @@ jobs:
       - name: E2E against explicit base URL
         env:
           GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
+          GHC_E2E_COOKIE_A: ${{ secrets.GHC_E2E_COOKIE_A }}
         run: |
           if [ -z "$GHC_E2E_BASE_URL" ]; then
             if [ "$GITHUB_REF" = "refs/heads/testnet" ]; then
@@ -85,7 +90,17 @@ jobs:
             echo "GHC_E2E_BASE_URL not set — skipping optional pull-request browser E2E; this is not release evidence"
             exit 0
           fi
-          npx playwright test --project=chromium
+          npx playwright test --project=chromium --project=mobile-chrome
+      - name: Upload responsive screenshots, traces, and Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-connect-preview-visual-qa-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Operator HTTP smoke
         env:
           GHC_E2E_BASE_URL: ${{ secrets.GHC_E2E_BASE_URL }}
@@ -124,3 +139,13 @@ jobs:
           fi
           npx playwright test --project=chromium
           npm run operator:live-e2e
+      - name: Upload production smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-connect-production-smoke-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

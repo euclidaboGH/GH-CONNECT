@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { WifiOff, Wifi } from "lucide-react"
+import { PendingQueueChip } from "./pending-queue-chip"
 
 /**
  * Non-blocking network status.
@@ -40,7 +41,8 @@ export function OfflineBanner() {
         aria-live="polite"
       >
         <WifiOff size={14} aria-hidden />
-        You&apos;re offline — you can still browse cached content. Actions queue until you&apos;re back.
+        <span>You&apos;re offline — actions queue until you&apos;re back.</span>
+        <PendingQueueChip />
       </div>
     )
   }
@@ -53,7 +55,8 @@ export function OfflineBanner() {
         aria-live="polite"
       >
         <Wifi size={14} aria-hidden />
-        Back online — pending actions will retry when ready
+        <span>Back online — pending actions will retry when ready</span>
+        <PendingQueueChip />
       </div>
     )
   }

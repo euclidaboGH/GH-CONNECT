@@ -13,6 +13,7 @@
  */
 
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
+import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
 import { isMessagingStoreDurable } from "@/lib/server/messaging/message-store"
@@ -353,7 +354,7 @@ export function evaluateReadiness(opts?: {
     ready: strictlyReady,
     status,
     service: "gh-connect",
-    version: process.env.npm_package_version || "0.59.4",
+    version: process.env.npm_package_version || APP_RELEASE_VERSION,
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",

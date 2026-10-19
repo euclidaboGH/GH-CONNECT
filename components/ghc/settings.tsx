@@ -35,6 +35,7 @@ import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+import { APP_RELEASE_VERSION } from "@/lib/app-release"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -295,7 +296,7 @@ export function SettingsScreen({
             <ChevronLeft size={24} />
           </button>
           <h2 className="text-[18px] font-bold">About GreenHaven</h2>
-          <p className="text-[12px] text-muted-foreground">Version 0.59.4</p>
+          <p className="text-[12px] text-muted-foreground">Version {APP_RELEASE_VERSION}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <FoundationStatusCard />
@@ -1172,7 +1173,7 @@ export function SettingsScreen({
         },
         {
           title: "About GreenHaven",
-          subtitle: "Version 0.59.4",
+          subtitle: `Version ${APP_RELEASE_VERSION}`,
           icon: <Info size={20} strokeWidth={1.75} />,
           action: () => goToSection("about"),
           keywords: "about version mission",
@@ -1208,7 +1209,7 @@ export function SettingsScreen({
     .filter((g) => g.items.length > 0)
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven settings">
       <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"

@@ -912,7 +912,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="gh-wallet-shell gh-world-wallet flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-wallet-shell gh-world-wallet flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GHC wallet">
       <WalletHeader
         onBack={onBack}
         onRefresh={() => void refresh()}

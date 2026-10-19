@@ -594,7 +594,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               <div className="mb-1.5 flex gap-2">
                 <input
                   type="text"
-                  placeholder="Search posts, people, hashtags..."
+                  data-ghc-search="1" placeholder="Search posts, people, hashtags..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="flex-1 rounded-full border border-border/70 bg-muted/40 px-4 py-2 text-sm outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"

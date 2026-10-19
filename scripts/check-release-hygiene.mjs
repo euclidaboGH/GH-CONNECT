@@ -22,6 +22,7 @@ const duplicateNames = migrations.filter((name, i) => i > 0 && migrations[i - 1]
 check('migration filenames are unique', duplicateNames.length === 0, duplicateNames.join(', '))
 check('no local secret env files included in release tree', !readdirSync(root).some((name) => /^\.env(\.|$)/.test(name) && name !== '.env.example'), 'only .env.example is allowed in source tree')
 check('CI workflow exists', existsSync(join(root, '.github/workflows/ci.yml')))
+check('CI checks dependency-lock completeness before install', readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8').includes('node scripts/check-dependency-lock-integrity.mjs'))
 check('safe .env.example exists', existsSync(join(root, '.env.example')))
 if (existsSync(join(root, '.env.example'))) {
   const envExample = readFileSync(join(root, '.env.example'), 'utf8')

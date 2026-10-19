@@ -131,3 +131,18 @@ Point Preview env at this Testnet Supabase + Testnet Pi credentials (`NEXT_PUBLI
 
 After confirming the prerequisites and that migrations `202610180001_ghc_curation_rewards.sql` and `202610180002_gh_curation_pipeline_atomic.sql` have been applied successfully to **testnet**, apply `202610180003_reputation_event_integrity.sql`. This final migration depends on `gh_reputation_events` from `20260929_gh_reputation.sql`. It adds a trigger to enforce the canonical point values on reputation events. Verify with the new `scripts/test-reputation-curation-integrity.mjs` and then perform live multi-account tests. Do not apply to mainnet as part of this step. The previous self-vote restriction is superseded by `202610180005_allow_self_curation.sql`: creators may self-curate for encouragement, but this must never qualify as independent settlement evidence or generate GHC/reputation. Apply 004 then 005 on testnet in order, and verify author self-curation toggles correctly, does not create reward claims, and is excluded from any independent-reviewer threshold. The TypeScript and SQL reputation thresholds were also made progressively harder; validate rank parity on testnet. Do not apply these migrations to mainnet without a separate approved rollout.
 
+
+## Phase 20 additions — review separately; do not bulk-apply
+
+- `202610250006_pi_a2u_sdk_execution_orchestration.sql`: durable Pi A2U execution and a global sequence lease. Requires `pi-backend` installed, server-only Pi API key/wallet seed, and a Testnet test plan. The route remains disabled until the exact target schema and provider flow pass.
+- `202610250007_ghc_atomic_seller_payout_settlement.sql`: atomic funded GHC seller payouts from an explicitly configured treasury. It checks eligible completed/verified order allocations and actual spendable GHC. Keep the route disabled until the treasury account and reserve are independently reviewed and funded.
+- Run `supabase/phase20_readonly_preflight.sql` first; compare its migration-history and object results with the actual Supabase project's migration history. After reviewed application, run `supabase/tests/PHASE20_POST_MIGRATION_ASSERTIONS.sql` and follow `supabase/tests/PHASE20_CONCURRENCY_TEST_PLAN.md` on disposable PostgreSQL and Pi Testnet.
+- Do not apply migrations 006/007 based solely on this repository inventory. No live database was accessed or modified during source work.
+
+## Phase 22 additions — review separately; do not bulk-apply
+
+- `202610250008_paystack_ngn_beneficiaries_and_payouts.sql`: adds Paystack NGN beneficiaries, evidence-backed NGN payout obligations, idempotent payout requests, UTC daily limits, signed webhook evidence, provider reconciliation, and audited exception handling. Classify as **REVIEW_REQUIRED**; validate in disposable PostgreSQL and Paystack Test Mode.
+- Run `supabase/phase22_readonly_preflight.sql` before any apply. After a reviewed disposable/Testnet apply, run `supabase/tests/PHASE22_POST_MIGRATION_ASSERTIONS.sql` and follow `supabase/tests/PHASE22_PAYSTACK_BANK_PAYOUT_TEST_PLAN.md`.
+- Existing GHC/PI marketplace orders are not NGN revenue. Do not create NGN obligations from GHC/PI orders, and do not enable bank transfers until a verified NGN revenue source, provider approval, limits, webhook and reconciliation gates have passed.
+- Use `supabase/phase20_ghc_treasury_readonly_preflight.sql` only after its prerequisite migrations are confirmed. A positive balance alone does not prove approved treasury funding; governance/source evidence must be reviewed independently.
+- None of these migrations has been applied to the user's Supabase project during this source-code phase.

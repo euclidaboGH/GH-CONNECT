@@ -958,7 +958,7 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="gh-communities-shell flex h-full min-h-0 flex-col bg-background">
+    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven communities">
       <CollapsingAppHeader
         title="Communities"
         compact={headerCompact}

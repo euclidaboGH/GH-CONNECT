@@ -61,6 +61,7 @@ import {
 } from "@/lib/domains/adapters/community-governance"
 import { offlineSupport } from "@/lib/offline"
 import { offlineQueue, connectionMonitor, withRetry } from "@/lib/network-resilience"
+import { ensureConversation } from "@/lib/messaging/ensure-conversation"
 import { sanitizeText, sanitizeDisplayName, sanitizeHtml } from "@/lib/sanitizer"
 import { getCsrfToken, getCsrfHeader } from "@/lib/csrf-protection"
 import { isRateLimited, recordAuthAttempt, getRemainingAttempts } from "@/lib/auth-rate-limiter"
@@ -1230,28 +1231,32 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                     typeof r.lastMessageAt === "number" && Number.isFinite(r.lastMessageAt)
                       ? r.lastMessageAt
                       : existing?.lastMessageTime || Date.now()
-                  byId.set(id, {
-                    ...(existing || {
-                      id,
-                      participantId: "",
-                      participantName: r.title || "Chat",
-                      participantPhoto: "/placeholder.svg?width=40&height=40",
-                      messages: [],
-                      lastMessage: "",
-                      lastMessageTime: lastAt,
-                      unread: false,
-                      online: false,
-                      conversationType: "private" as const,
-                      unreadCount: 0,
-                    }),
+                  const base: Conversation = existing ?? {
+                    id,
+                    participantId: "",
+                    participantName: String(r.title || "Chat"),
+                    participantPhoto: "/placeholder.svg?width=40&height=40",
+                    messages: [],
+                    lastMessage: "",
+                    lastMessageTime: lastAt,
+                    unread: false,
+                    online: false,
+                    conversationType: "private",
+                    unreadCount: 0,
+                  }
+                  const merged: Conversation = {
+                    ...base,
                     id,
                     lastMessage:
                       typeof r.lastMessagePreview === "string" && r.lastMessagePreview
                         ? r.lastMessagePreview
-                        : existing?.lastMessage || "",
+                        : base.lastMessage || "",
                     lastMessageTime: lastAt,
-                    participantName: existing?.participantName || r.title || "Chat",
-                  })
+                    participantName: base.participantName || String(r.title || "Chat"),
+                    online: base.online ?? false,
+                    conversationType: base.conversationType === "group" ? "group" : "private",
+                  }
+                  byId.set(id, merged)
                 }
                 next.conversations = Array.from(byId.values()).sort(
                   (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
@@ -1405,32 +1410,36 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                   typeof r.lastMessageAt === "number" && Number.isFinite(r.lastMessageAt)
                     ? r.lastMessageAt
                     : existing?.lastMessageTime || Date.now()
-                byId.set(id, {
-                  ...(existing || {
-                    id,
-                    participantId: "",
-                    participantName: r.title || "Chat",
-                    participantPhoto: "/placeholder.svg?width=40&height=40",
-                    messages: [],
-                    lastMessage: "",
-                    lastMessageTime: lastAt,
-                    unread: false,
-                    online: false,
-                    conversationType: "private" as const,
-                    unreadCount: 0,
-                  }),
+                const base: Conversation = existing ?? {
+                  id,
+                  participantId: "",
+                  participantName: String(r.title || "Chat"),
+                  participantPhoto: "/placeholder.svg?width=40&height=40",
+                  messages: [],
+                  lastMessage: "",
+                  lastMessageTime: lastAt,
+                  unread: false,
+                  online: false,
+                  conversationType: "private",
+                  unreadCount: 0,
+                }
+                const merged: Conversation = {
+                  ...base,
                   id,
                   lastMessage:
                     typeof r.lastMessagePreview === "string" && r.lastMessagePreview
                       ? r.lastMessagePreview
-                      : existing?.lastMessage || "",
+                      : base.lastMessage || "",
                   lastMessageTime: lastAt,
                   updatedAt:
                     typeof r.updatedAt === "number" && Number.isFinite(r.updatedAt)
                       ? r.updatedAt
-                      : existing?.updatedAt || lastAt,
-                  participantName: existing?.participantName || r.title || "Chat",
-                })
+                      : base.updatedAt || lastAt,
+                  participantName: base.participantName || String(r.title || "Chat"),
+                  online: base.online ?? false,
+                  conversationType: base.conversationType === "group" ? "group" : "private",
+                }
+                byId.set(id, merged)
               }
               next.conversations = Array.from(byId.values()).sort(
                 (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
@@ -4138,7 +4147,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               conversation.conversationType === "private" &&
               conversation.participantId === candidateId
           )
-          const matchConversation: Conversation = existingConversation || {
+          const matchConversation: Conversation = existingConversation || ensureConversation({
             id: `match-${candidateId}`,
             participantId: candidateId,
             participantName: candidate.name,
@@ -4149,7 +4158,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             unread: false,
             online: Boolean(candidate.online),
             conversationType: "private",
-          }
+          })
           // Dedupe: never add a second match for the same userId
           const priorMatches = (s.matches || []).filter((m) => m.userId !== candidateId)
           return {
@@ -4423,6 +4432,26 @@ const dismissMatchCelebration = useCallback(() => {
         return existingConv.id
       }
 
+      const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+      let durableId: string | null = null
+      if (online) {
+        try {
+          const { apiCreateDirectConversation } = await import("@/lib/messaging/server-messaging-sync")
+          const remote = await apiCreateDirectConversation(userId)
+          if (!remote?.ok || remote.durable === false || !remote.conversation?.id) {
+            addToast(
+              remote?.error || "Could not create conversation on the server",
+              "error"
+            )
+            return null
+          }
+          durableId = String(remote.conversation.id)
+        } catch {
+          addToast("Could not reach the server to start this conversation", "error")
+          return null
+        }
+      }
+
       const result = await domains.messaging.createConversation({
         kind: "private",
         participantId: userId,
@@ -4433,27 +4462,23 @@ const dismissMatchCelebration = useCallback(() => {
         addToast(result.error, "error")
         return null
       }
-      let newConversation = {
+      const newConversation = ensureConversation({
         ...result.data.conversation,
+        id: durableId || result.data.conversation.id,
+        participantId: userId,
+        participantName: userName || result.data.conversation.participantName,
+        participantPhoto: userPhoto || result.data.conversation.participantPhoto,
         online: true,
-      } as Conversation
+        conversationType: "private",
+      })
 
-      // Phase 6: prefer durable conversation id when server creates one
-      try {
-        const { apiCreateDirectConversation } = await import("@/lib/messaging/server-messaging-sync")
-        const remote = await apiCreateDirectConversation(userId)
-        if (remote?.ok && remote.durable && remote.conversation?.id) {
-          const rid = String(remote.conversation.id)
-          newConversation = {
-            ...newConversation,
-            id: rid,
-            participantId: userId,
-            participantName: userName || newConversation.participantName,
-            participantPhoto: userPhoto || newConversation.participantPhoto,
-          }
-        }
-      } catch {
-        /* keep local id */
+      if (!online) {
+        offlineQueue.addAction({
+          type: "create_conversation",
+          payload: { userId, userName, userPhoto, localId: newConversation.id },
+          maxRetries: 3,
+        })
+        addToast("Conversation saved offline — will sync when online", "info")
       }
 
       setState((s) => ({
@@ -4975,6 +5000,29 @@ const dismissMatchCelebration = useCallback(() => {
             listings.succeeded === 1
               ? "Queued listing published"
               : `${listings.succeeded} queued listings published`,
+            "success"
+          )
+        }
+      } catch {
+        /* */
+      }
+      try {
+        const { flushQueuedConversations } = await import("@/lib/messaging/offline-conversation-flush")
+        const convs = await flushQueuedConversations()
+        if (convs.succeeded > 0 && Object.keys(convs.idMap).length > 0) {
+          setState((s) => ({
+            ...s,
+            conversations: (s.conversations || []).map((c) => {
+              const mapped = convs.idMap[c.id]
+              return mapped ? { ...c, id: mapped } : c
+            }),
+          }))
+        }
+        if (convs.succeeded > 0) {
+          addToast(
+            convs.succeeded === 1
+              ? "Queued conversation synced"
+              : `${convs.succeeded} queued conversations synced`,
             "success"
           )
         }

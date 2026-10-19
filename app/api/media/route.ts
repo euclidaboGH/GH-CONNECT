@@ -5,6 +5,7 @@
  * Owner is always session-derived. Paths: {userId}/{generated}.
  * No GHC/Pi/reputation side effects.
  */
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
@@ -84,6 +85,10 @@ export async function POST(request: Request) {
 
   const env = readGhcServerEnv()
   const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
+  // Bucket names come from operator configuration, but still validate before URL construction.
+  if (!/^[a-z0-9][a-z0-9_-]{1,61}[a-z0-9]$/.test(storageBucket)) {
+    return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_CONFIGURATION_INVALID" }, { status: 503 })
+  }
   const hasStorage = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
 
   const contentType = (request.headers.get("content-type") || "").toLowerCase()
@@ -166,17 +171,22 @@ export async function POST(request: Request) {
 
   const widthRaw = form.get("width")
   const heightRaw = form.get("height")
-  const width =
-    widthRaw != null && Number.isFinite(Number(widthRaw)) ? Math.max(0, Math.floor(Number(widthRaw))) : null
-  const height =
-    heightRaw != null && Number.isFinite(Number(heightRaw))
-      ? Math.max(0, Math.floor(Number(heightRaw)))
-      : null
-  const durationRaw = form.get("durationMs")
-  const durationMs =
-    durationRaw != null && Number.isFinite(Number(durationRaw))
-      ? Math.max(0, Math.floor(Number(durationRaw)))
-      : null
+  const parseBoundedInteger = (raw: FormDataEntryValue | null, max: number) => {
+    if (raw == null || raw === "") return { value: null as number | null, valid: true }
+    if (typeof raw !== "string" || !/^\d+$/.test(raw)) return { value: null, valid: false }
+    const value = Number(raw)
+    if (!Number.isSafeInteger(value) || value < 0 || value > max) return { value: null, valid: false }
+    return { value, valid: true }
+  }
+  const parsedWidth = parseBoundedInteger(form.get("width"), 20_000)
+  const parsedHeight = parseBoundedInteger(form.get("height"), 20_000)
+  const parsedDuration = parseBoundedInteger(form.get("durationMs"), 12 * 60 * 60 * 1000)
+  if (!parsedWidth.valid || !parsedHeight.valid || !parsedDuration.valid) {
+    return jsonNoStore({ ok: false, error: "INVALID_MEDIA_METADATA" }, { status: 400 })
+  }
+  const width = parsedWidth.value
+  const height = parsedHeight.value
+  const durationMs = parsedDuration.value
 
   const ext = isFile
     ? "pdf"
@@ -194,7 +204,7 @@ export async function POST(request: Request) {
             ? "gif"
             : "jpg"
 
-  const objectName = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const objectName = `${randomUUID()}.${ext}`
   const objectPath = `${auth.userId}/${objectName}`
 
   try {
@@ -224,9 +234,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // Public object URL when bucket is public; private buckets need signed URLs (deferred).
-    const publicUrl = `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/object/public/${storageBucket}/${objectPath}`
-
+    // New records never persist a public storage URL. The application delivery facade
+    // performs viewer authorization and issues short-lived signed URLs on demand.
     const record = await createMediaAssetRecord({
       ownerId: auth.userId,
       bucket: storageBucket,
@@ -237,17 +246,35 @@ export async function POST(request: Request) {
       width,
       height,
       durationMs,
-      publicUrl,
-      metadata: { source: "api_media_upload" },
+      publicUrl: null,
+      metadata: { source: "api_media_upload", delivery: "authorized-facade" },
     })
 
-    if (!record.ok) {
+    if (!record.ok || !record.id) {
+      // Compensate for a successful object upload when durable metadata creation fails.
+      // This avoids leaving an untracked object behind. Cleanup is best-effort: never
+      // replace the primary failure with a storage cleanup error or expose credentials.
+      try {
+        await fetch(
+          `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/object/${storageBucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+              apikey: env.supabaseServiceRoleKey!,
+            },
+            cache: "no-store",
+          }
+        )
+      } catch {
+        // A scheduled storage reconciliation can remove any object left by a failed cleanup.
+      }
       return jsonNoStore(
         {
           ok: false,
           error: "ASSET_RECORD_FAILED",
           message:
-            "File may have been stored but durable asset record failed. Apply migration 20261001_gh_media_assets.sql.",
+            "The upload could not be finalized because its media record was not saved. Please retry.",
         },
         { status: 503 }
       )
@@ -257,8 +284,8 @@ export async function POST(request: Request) {
       ok: true,
       durable: true,
       mediaId: record.id,
-      path: objectPath,
-      url: publicUrl,
+      // Only the opaque ID and stable application URL leave the server; storage paths are private.
+      url: `${new URL(request.url).origin}/api/media/${encodeURIComponent(record.id)}/content`,
       kind: isFile ? "file" : isVideo ? "video" : "image",
       mime,
       ownerUserId: auth.userId,
@@ -271,7 +298,7 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: "STORAGE_ERROR",
-        message: e instanceof Error ? e.message : "Upload failed",
+        message: "The media service could not complete this upload. Please try again.",
       },
       { status: 503 }
     )

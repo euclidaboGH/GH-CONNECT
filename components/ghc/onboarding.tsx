@@ -110,7 +110,7 @@ const INTEREST_ICONS: Record<string, string> = {
 /** Premium dark shell — deep green-black with soft emerald glow */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#050a08] text-white">
+    <div className="gh-world-onboarding relative flex h-full min-h-0 flex-col overflow-hidden bg-[#050a08] text-white" role="region" aria-label="GreenHaven account setup">
       {/* Ambient glows */}
       <div className="pointer-events-none absolute -left-24 -top-28 h-72 w-72 rounded-full bg-emerald-500/15 blur-[100px]" />
       <div className="pointer-events-none absolute -right-20 top-40 h-64 w-64 rounded-full bg-teal-400/10 blur-[90px]" />

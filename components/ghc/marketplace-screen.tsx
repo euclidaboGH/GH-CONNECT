@@ -883,7 +883,7 @@ export function MarketplaceScreen({
   }
 
   return (
-    <div className="gh-marketplace-shell flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven marketplace">
       <header className="flex shrink-0 flex-col gap-2.5 border-b border-border/50 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button

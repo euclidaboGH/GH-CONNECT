@@ -1,19 +1,9 @@
-# Migration checklist (regenerated 2026-10-18)
-
-**Inventory:** `96` SQL files under `supabase/migrations/`.
-
-Full ordered list: `docs/VERIFIED_MIGRATION_MANIFEST_2026-10-18.txt`.
-
-> Operator: do **not** blindly apply all files. Use `scripts/operator-multiuser-migrations.mjs` for multi-user critical set, Stage 2 gates for financial RPCs, and review REQUIRES_APPROVAL items.
-
----
-
 # GreenHaven — Migration Checklist (generated source inventory)
 
-**Generated:** 2026-10-18 from the canonical migration directory
+**Generated:** 2026-10-19 from the canonical migration directory
 **Canonical path:** `supabase/migrations/*.sql`
-**On-disk count:** **96**
-**Classification:** REQUIRED **75** · REQUIRES_APPROVAL **1** · PROPOSAL **2** · REVIEW_REQUIRED **18**
+**On-disk count:** **105**
+**Classification:** REQUIRED **77** · REQUIRES_APPROVAL **1** · PROPOSAL **2** · REVIEW_REQUIRED **25**
 
 This is a repository inventory only. It does **not** prove that any migration is applied to Testnet or Mainnet.
 
@@ -118,21 +108,30 @@ This is a repository inventory only. It does **not** prove that any migration is
 | 84 | `202610181502_curation_redistribute_balance_funded.sql` | REQUIRED |  |
 | 85 | `20261018_gh_engagement_rosters.sql` | REQUIRED |  |
 | 86 | `20261018_ghpv_calibration_bounds.sql` | REQUIRED |  |
-| 87 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REVIEW_REQUIRED |  |
-| 88 | `20261020_ghpv_soft_delete_atomic.sql` | REVIEW_REQUIRED |  |
-| 89 | `20261021_gh_social_notifications_types_extend.sql` | REVIEW_REQUIRED |  |
-| 90 | `20261022_gh_content_rewards.sql` | REVIEW_REQUIRED |  |
-| 91 | `20261023_gh_profile_content_library.sql` | REVIEW_REQUIRED |  |
-| 92 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REVIEW_REQUIRED | Review visibility and block checks; Testnet two-account validation required. |
-| 93 | `202610240004_gh_story_creator_upgrade.sql` | REVIEW_REQUIRED | Review audience visibility and matching fail-closed behaviour on Testnet. |
-| 94 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | REVIEW_REQUIRED | Testnet-first; follow supabase/MESSAGING_PRESENCE_DEPLOY.md. |
-| 95 | `202610240006_gh_story_reactions.sql` | REVIEW_REQUIRED | Testnet-first; verify owner/block-protected toggle and visible counts. |
-| 96 | `202610240007_gh_post_created_notifications.sql` | REVIEW_REQUIRED | Review notification-type dependency and verify follower delivery on Testnet. |
+| 87 | `202610190002_gh_private_media_references_and_viewer_authz.sql` | REVIEW_REQUIRED | Review function dependencies and test owner/public/follower/mutual/story/profile/message/marketplace/community access and blocked-user denial on two-user Testnet. Backfill is additive; do not flip bucket private until all consumers and legacy assets are reconciled. |
+| 88 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | REVIEW_REQUIRED |  |
+| 89 | `20261020_ghpv_soft_delete_atomic.sql` | REVIEW_REQUIRED |  |
+| 90 | `20261021_gh_social_notifications_types_extend.sql` | REVIEW_REQUIRED |  |
+| 91 | `20261022_gh_content_rewards.sql` | REVIEW_REQUIRED |  |
+| 92 | `20261023_gh_profile_content_library.sql` | REVIEW_REQUIRED |  |
+| 93 | `202610240003_gh_post_reaction_roster_visibility_guard.sql` | REVIEW_REQUIRED | Review visibility and block checks; Testnet two-account validation required. |
+| 94 | `202610240004_gh_story_creator_upgrade.sql` | REVIEW_REQUIRED | Review audience visibility and matching fail-closed behaviour on Testnet. |
+| 95 | `202610240005_gh_messaging_presence_delivery_receipts.sql` | REVIEW_REQUIRED | Testnet-first; follow supabase/MESSAGING_PRESENCE_DEPLOY.md. |
+| 96 | `202610240006_gh_story_reactions.sql` | REVIEW_REQUIRED | Testnet-first; verify owner/block-protected toggle and visible counts. |
+| 97 | `202610240007_gh_post_created_notifications.sql` | REVIEW_REQUIRED | Review notification-type dependency and verify follower delivery on Testnet. |
+| 98 | `202610250001_gh_system_announcements.sql` | REVIEW_REQUIRED | Review announcement API ownership, RLS, and read-state behavior on Preview/Testnet before release. |
+| 99 | `202610250002_gh_post_restore_owner_window.sql` | REQUIRED |  |
+| 100 | `202610250003_gh_lifecycle_payout_quality_foundation.sql` | REQUIRED |  |
+| 101 | `202610250004_gh_verified_tip_settlement_payout_reconciliation.sql` | REVIEW_REQUIRED | Financially critical: validate on disposable PostgreSQL and Testnet. Confirm Pi provider status/recipient/amount/txid and retry idempotency. Records creator payables but does not disburse them; GHC tips remain disabled. Paid seller status now requires provider reconciliation. |
+| 102 | `202610250005_ghc_tip_and_creator_reward_atomic_settlement.sql` | REVIEW_REQUIRED | Financially critical: review ledger signatures and existing schema; canonical two-party transfer locks, precision/idempotency guards, atomic GHC tips and funded creator reward pool require disposable PostgreSQL and Testnet concurrency tests. GHC tip feature flag stays off until verification; reward pool requires explicit operator allowlist and funded ledger balance. |
+| 103 | `202610250006_pi_a2u_sdk_execution_orchestration.sql` | REVIEW_REQUIRED | Financially critical: review official pi-backend SDK integration against the exact Testnet schema. Test interrupted/retried A2U, unrelated incomplete payments, sequence lease expiry, duplicate requests and verified recipient/amount/txid on Testnet before enabling. |
+| 104 | `202610250007_ghc_atomic_seller_payout_settlement.sql` | REVIEW_REQUIRED | Financially critical: GHC seller payouts debit a configured funded treasury and credit the seller atomically. Review ledger schema/eligible-order rules and concurrency/idempotency on disposable PostgreSQL and Testnet. Keep disabled until treasury is funded and verified. |
+| 105 | `202610250008_paystack_ngn_beneficiaries_and_payouts.sql` | REVIEW_REQUIRED | Financially critical provider integration: validate Paystack Test Mode, signed webhook/reconciliation, duplicate/out-of-order events, RLS/grants, obligation reservation and concurrent requests on disposable PostgreSQL. This does not create NGN proceeds from GHC/PI; keep transfers disabled until an audited NGN revenue source exists. |
 
 ## Release-readiness notes (audit 2026-10-18)
 
-- The current inventory contains **96** migration files. Counts and row order are generated from the canonical directory.
-- Migrations dated after 2026-10-18 are not automatically invalid, but their dependencies, approval status, and target-project history must be reviewed before execution.
+- The current inventory contains **105** migration files. Counts and row order are generated from the canonical directory.
+- Migrations dated after 2026-10-19 are not automatically invalid, but their dependencies, approval status, and target-project history must be reviewed before execution.
 - The self-curation policy includes both a guard migration and a later allowance migration. Confirm the final function definition on a disposable clean database and Testnet; self-curation must not count as independent evidence or earn rewards.
 - The marketplace reservation migration remains unverified against PostgreSQL. Do not enable finite-stock production sales until concurrency, payment races, expiry, cancellation, and recovery pass.
 - This checklist is not a deployment approval and is not a record of applied migrations.

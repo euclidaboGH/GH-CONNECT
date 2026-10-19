@@ -97,24 +97,36 @@ export async function POST(request: Request) {
   // Optional durable media IDs (session must own or public_url available)
   let videoFromMedia: string | null = null
   const mediaIds = Array.isArray(body.mediaIds)
-    ? body.mediaIds.map(String).filter(Boolean).slice(0, 10)
+    ? [...new Set(body.mediaIds.map(String).map((s) => s.trim()).filter(Boolean))].slice(0, 10)
     : []
   if (mediaIds.length > 0) {
     const resolved = await resolveMediaAssets(auth.userId, mediaIds)
-    if (resolved.ok) {
-      for (const a of resolved.assets) {
-        const owned = a.owned === true
-        const url = String(a.url || "")
-        if (!owned && !url) continue
-        if (!url) continue
-        if (String(a.kind) === "video" && !videoFromMedia) {
-          videoFromMedia = url
-        } else if (String(a.kind) === "image" && isSafeImageRef(url) && images.length < 10) {
-          images.push(url)
-        }
+    if (!resolved.ok) {
+      return NextResponse.json({ ok: false, error: "MEDIA_RESOLUTION_UNAVAILABLE" }, { status: 503 })
+    }
+    const byId = new Map(resolved.assets.map((a) => [String(a.id || ""), a]))
+    for (const mediaId of mediaIds) {
+      const asset = byId.get(mediaId)
+      // Durable private attachments must belong to the authenticated author.
+      if (!asset || asset.owned !== true || asset.status !== "ready") {
+        return NextResponse.json({ ok: false, error: "MEDIA_NOT_OWNED_OR_READY" }, { status: 403 })
       }
+      const url = `${new URL(request.url).origin}/api/media/${encodeURIComponent(mediaId)}/content`
+      if (String(asset.kind) === "video" && !videoFromMedia) videoFromMedia = url
+      else if (String(asset.kind) === "image" && images.length < 10) images.push(url)
     }
   }
+  // Older composer versions only send the stable delivery URL. Recover the opaque media ID
+  // from that first-party URL so the post gets a durable media relation as well.
+  const mediaIdsFromUrls = [...images, ...(videoFromMedia ? [videoFromMedia] : [])]
+    .map((value) => {
+      try {
+        const parsed = new URL(value, new URL(request.url).origin)
+        const match = parsed.pathname.match(/^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content$/i)
+        return parsed.origin === new URL(request.url).origin ? match?.[1] || "" : ""
+      } catch { return "" }
+    }).filter(Boolean)
+  const durableMediaIds = [...new Set([...mediaIds, ...mediaIdsFromUrls])].slice(0, 20)
 
   const video = videoFromMedia || (body.video ? String(body.video) : null)
   if (video && !isSafeVideoRef(video)) {
@@ -259,6 +271,38 @@ export async function POST(request: Request) {
       { ok: false, error: data.error || "CREATE_REJECTED" },
       { status: 400 }
     )
+  }
+
+  // Persist durable media-ID references after post creation. The RPC re-checks author,
+  // media ownership, readiness and deleted state in one database transaction. On failure,
+  // hide the just-created post rather than leave an unauthorized half-published attachment.
+  if (durableMediaIds.length > 0) {
+    const { readGhcServerEnv } = await import("@/lib/server/economy/env")
+    const env = readGhcServerEnv()
+    let attached = false
+    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+      try {
+        const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_post_media_attach`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+          body: JSON.stringify({ p_actor_id: auth.userId, p_post_id: id, p_media_ids: durableMediaIds }),
+          cache: "no-store",
+        })
+        const result = await response.json().catch(() => null) as { ok?: boolean } | null
+        attached = response.ok && result?.ok === true
+      } catch { attached = false }
+    }
+    if (!attached) {
+      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+        await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(auth.userId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Prefer: "return=minimal" },
+          body: JSON.stringify({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+          cache: "no-store",
+        }).catch(() => undefined)
+      }
+      return NextResponse.json({ ok: false, error: "MEDIA_ATTACH_FAILED", message: "The post was not published because media authorization could not be persisted." }, { status: 503 })
+    }
   }
 
   // Best-effort attach quote_of_post_id when migration 56 is applied

@@ -76,12 +76,14 @@ for (const f of routes) {
       r.includes('validation-key') ||
       r.includes('health/') ||
       // Anonymous, rate-limited analytics intake; events are validated and not persisted.
-      r.includes('analytics/events')
+      r.includes('analytics/events') ||
+      // Paystack's server-to-server transfer webhook authenticates the exact raw body with HMAC-SHA512.
+      (r.includes('webhooks/paystack') && /verifyPaystackSignature\(raw/.test(src) && /INVALID_WEBHOOK_SIGNATURE/.test(src))
     // System ops: internal shared secret (not ordinary user session)
     const systemMutation =
-      r.includes('ghpv/settle') &&
-      /GH_SETTLEMENT_INTERNAL_KEY/.test(src) &&
-      /timingSafeEqual/.test(src)
+      (r.includes('ghpv/settle') && /GH_SETTLEMENT_INTERNAL_KEY/.test(src) && /timingSafeEqual/.test(src)) ||
+      (r.includes('creator-rewards/') && /GHC_CREATOR_REWARD_OPERATOR_KEY/.test(src) && /timingSafeEqual/.test(src)) ||
+      (r.includes('marketplace/payouts/') && /GHC_PAYOUT_RECONCILIATION_KEY/.test(src) && /timingSafeEqual/.test(src))
     if (!publicMutation && !systemMutation && !/resolveAuthenticatedUser|authorize\(/.test(src)) {
       issues.push(`${r}: mutation without resolveAuthenticatedUser/authorize`)
       fail++

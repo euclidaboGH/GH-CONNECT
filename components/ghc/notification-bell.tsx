@@ -155,7 +155,7 @@ export function NotificationBell({
     void (async () => {
       setListLoading(true)
       try {
-        const [socialRes, economyRes, socialCountRes, economyCountRes] = await Promise.all([
+        const [socialRes, economyRes, socialCountRes, economyCountRes, announcementsRes] = await Promise.all([
           fetch("/api/social/notifications?limit=60", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
@@ -168,17 +168,22 @@ export function NotificationBell({
           fetch("/api/economy/notifications/unread-count", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
+          fetch("/api/system/announcements?limit=25", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
         ])
-        const [socialData, economyData, socialCountData, economyCountData] = await Promise.all([
+        const [socialData, economyData, socialCountData, economyCountData, announcementsData] = await Promise.all([
           socialRes?.json().catch(() => ({})) || {},
           economyRes?.json().catch(() => ({})) || {},
           socialCountRes?.json().catch(() => ({})) || {},
           economyCountRes?.json().catch(() => ({})) || {},
+          announcementsRes?.json().catch(() => ({})) || {},
         ]) as [
           { ok?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: number; readAt?: string | null; actorUserId?: string; entityId?: string; entityType?: string; metadata?: Record<string, unknown> }> },
           { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
           { ok?: boolean; unreadCount?: number },
           { ok?: boolean; count?: number },
+          { ok?: boolean; announcements?: Array<{ id?: string; title?: string; body?: string; severity?: string; actionPath?: string | null; publishedAt?: number; read?: boolean }>; unreadCount?: number },
         ]
 
         const socialRows = socialRes?.ok && socialData.ok && Array.isArray(socialData.notifications)
@@ -267,6 +272,18 @@ export function NotificationBell({
           const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
           return !actor || !suppress.has(actor)
         })
+        const mappedAnnouncements: Notification[] = announcementsRes?.ok && announcementsData.ok && Array.isArray(announcementsData.announcements)
+          ? announcementsData.announcements.map((n) => ({
+              id: `announcement:${String(n.id || "")}`,
+              type: "system" as NotificationType,
+              title: String(n.title || "GreenHaven update"),
+              message: String(n.body || ""),
+              icon: n.severity === "critical" || n.severity === "warning" ? "⚠️" : "📢",
+              timestamp: Number(n.publishedAt) || Date.now(),
+              read: Boolean(n.read),
+              data: { durableAnnouncement: true, announcementId: String(n.id || ""), actionPath: n.actionPath || undefined },
+            })).filter((n) => Boolean((n.data as { announcementId?: string }).announcementId))
+          : []
         const durableEconomyVisible = mappedEconomy
         setItems((prev) => {
           const localOnly = prev.filter((x) => {
@@ -274,7 +291,7 @@ export function NotificationBell({
             return !d?.durable && !d?.durableEconomy
           })
           const byId = new Map<string, Notification>()
-          for (const x of [...durableSocialVisible, ...durableEconomyVisible, ...localOnly]) {
+          for (const x of [...durableSocialVisible, ...durableEconomyVisible, ...mappedAnnouncements, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
           return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -285,7 +302,9 @@ export function NotificationBell({
           ? Math.max(0, socialCountData.unreadCount) : mappedSocial.filter((n) => !n.read).length
         const economyUnread = economyCountData.ok && typeof economyCountData.count === "number"
           ? Math.max(0, economyCountData.count) : mappedEconomy.filter((n) => !n.read).length
-        setUnread(localUnread + socialUnread + economyUnread)
+        const announcementUnread = announcementsRes?.ok && announcementsData.ok && typeof announcementsData.unreadCount === "number"
+          ? Math.max(0, announcementsData.unreadCount) : mappedAnnouncements.filter((n) => !n.read).length
+        setUnread(localUnread + socialUnread + economyUnread + announcementUnread)
       } catch {
         setDurableOk(false)
         /* Local-only notifications remain visible if a server store is unavailable. */
@@ -399,11 +418,16 @@ export function NotificationBell({
     // Optimistic UI — durable rows only update after server merge otherwise
     setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
     setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
-    const notificationData = (n.data || {}) as { durable?: boolean; durableEconomy?: boolean }
+    const notificationData = (n.data || {}) as { durable?: boolean; durableEconomy?: boolean; durableAnnouncement?: boolean; announcementId?: string; actionPath?: string }
     if (notificationData.durable && n.id) {
       void fetch("/api/social/notifications", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
+    } else if (notificationData.durableAnnouncement && notificationData.announcementId) {
+      void fetch("/api/system/announcements", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: notificationData.announcementId }),
       }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
     } else if (notificationData.durableEconomy && n.id) {
       void fetch(`/api/economy/notifications/${encodeURIComponent(n.id)}/read`, {
@@ -411,7 +435,11 @@ export function NotificationBell({
       }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
     }
     const link = resolveNotificationDeepLink(n)
-    navigateNotificationDeepLink(link)
+    if (notificationData.actionPath && notificationData.actionPath.startsWith("/") && !notificationData.actionPath.startsWith("//")) {
+      window.location.assign(notificationData.actionPath)
+    } else {
+      navigateNotificationDeepLink(link)
+    }
     onOpenTarget?.(n)
     closePanel()
     // Background reconcile — do not block navigation
@@ -431,6 +459,10 @@ export function NotificationBell({
       }).catch(() => null),
       fetch("/api/economy/notifications/read-all", {
         method: "POST", credentials: "include", headers: { Accept: "application/json" },
+      }).catch(() => null),
+      fetch("/api/system/announcements", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAll: true }),
       }).catch(() => null),
     ]).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
     setItems((prev) => prev.map((x) => ({ ...x, read: true })))

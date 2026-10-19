@@ -26,6 +26,7 @@ import {
   resolveUserIdFromGreenHavenId,
 } from "@/lib/domains/greenhaven-id"
 import { buildReceivePayload, parseReceivePayload } from "@/lib/domains/ghc-receive-payload"
+import { copyTextToClipboard } from "@/lib/product/essentials"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { GhIdentityQr } from "./gh-identity-qr"
 
@@ -73,12 +74,12 @@ export function GreenHavenIdentityCard({
 
 
   const copyId = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(display)
+    const ok = await copyTextToClipboard(display)
+    if (ok) {
       setCopied(true)
       onToast?.("GreenHaven ID copied", "success")
       window.setTimeout(() => setCopied(false), 1600)
-    } catch {
+    } else {
       onToast?.("Could not copy", "error")
     }
   }, [display, onToast])

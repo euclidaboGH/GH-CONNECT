@@ -1,84 +1,95 @@
-/**
- * POST /api/payments/a2u/complete — mark A2U payment complete on Pi after chain txid known.
- *
- * A2U remains admin-gated and incomplete for production exposure (no full chain submit flow).
- * Keep GHC_A2U_ADMIN_KEY unset / feature unexposed until blockchain submission is finished.
- */
+/** Privileged recovery-only completion for an already submitted, durably linked Pi A2U payout. */
+import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { updateOrderStatus } from "@/lib/gh-pay/order-store"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { resolvePiSandbox } from "@/lib/pi-env"
+import type { PiBackendPayment } from "pi-backend"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-const PI_API_BASE = "https://api.minepi.com/v2"
+function reply(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" } })
+}
+function authorized(request: Request): boolean {
+  const expected = Buffer.from(String(process.env.GHC_A2U_ADMIN_KEY || ""), "utf8")
+  const supplied = Buffer.from(String(request.headers.get("x-ghc-a2u-admin-key") || ""), "utf8")
+  return expected.length > 0 && supplied.length === expected.length && timingSafeEqual(supplied, expected)
+}
+function verified(payment: PiBackendPayment, input: { paymentId: string; requestId: string; recipientUid: string; amount: number; txid: string }) {
+  const amount = typeof payment.amount === "number" ? payment.amount : Number(payment.amount)
+  return payment.identifier === input.paymentId && payment.direction === "app_to_user" && payment.network === "Pi Testnet" &&
+    payment.user_uid === input.recipientUid && Number.isFinite(amount) && Math.abs(amount - input.amount) < 1e-8 &&
+    String(payment.metadata?.payoutRequestId || "") === input.requestId && String(payment.metadata?.direction || "") === "a2u" &&
+    payment.transaction?.txid === input.txid && (payment.status?.transaction_verified === true || payment.transaction?.verified === true) &&
+    payment.status?.cancelled !== true && payment.status?.user_cancelled !== true
+}
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
-  if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
+  if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const rl = checkRateLimit("a2u-complete-privileged", 10, 60_000)
+  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  if (process.env.PI_A2U_ENABLED !== "true" || process.env.PI_A2U_TESTNET_ONLY !== "true" || !resolvePiSandbox() || process.env.PI_ENV !== "production") {
+    return reply({ ok: false, error: "PI_A2U_DISABLED" }, 503)
+  }
+  const apiKey = String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
+  const walletSeed = String(process.env.PI_WALLET_PRIVATE_SEED || "").trim()
+  if (!apiKey || !/^S[A-Z2-7]{55}$/.test(walletSeed)) return reply({ ok: false, error: "PI_A2U_SERVER_CREDENTIALS_MISSING" }, 503)
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  if (!body || Array.isArray(body)) return reply({ ok: false, error: "INVALID_BODY" }, 400)
+  const paymentId = String(body.paymentId || "").trim()
+  const txid = String(body.txid || "").trim()
+  const requestId = String(body.payoutRequestId || "").trim()
+  if (!paymentId || paymentId.length > 200 || !txid || txid.length > 300 || !/^spr_[a-f0-9]{16,40}$/i.test(requestId)) {
+    return reply({ ok: false, error: "PAYMENT_ID_TXID_AND_PAYOUT_REQUEST_REQUIRED" }, 400)
   }
 
-  const apiKey = (process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
-  if (!apiKey) {
-    return NextResponse.json({ ok: false, error: "PI_API_KEY not configured" }, { status: 503 })
-  }
-
-  const adminKey = (process.env.GHC_A2U_ADMIN_KEY || process.env.GHC_ADMIN_CREDIT_KEY || "").trim()
-  const provided = (request.headers.get("x-ghc-a2u-admin-key") || "").trim()
-  if (!adminKey || provided !== adminKey) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "FORBIDDEN",
-        message: "A2U complete requires server admin authorization",
-      },
-      { status: 403 }
-    )
-  }
-
-  const body = await request.json().catch(() => ({}))
-  const paymentId = String((body as { paymentId?: unknown }).paymentId || "").trim()
-  const txid = String((body as { txid?: unknown }).txid || "").trim()
-  const orderId =
-    (body as { orderId?: unknown }).orderId != null
-      ? String((body as { orderId?: unknown }).orderId)
-      : ""
-
-  if (!paymentId || !txid) {
-    return NextResponse.json(
-      { ok: false, error: "paymentId and txid required" },
-      { status: 400 }
-    )
-  }
-
-  const res = await fetch(`${PI_API_BASE}/payments/${encodeURIComponent(paymentId)}/complete`, {
-    method: "POST",
-    headers: {
-      Authorization: `Key ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ txid }),
-  })
-
-  const text = await res.text()
-  let data: unknown = null
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  const key = env.supabaseServiceRoleKey
   try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = { raw: text }
-  }
+    const headers = { apikey: key, Authorization: `Bearer ${key}` }
+    const payoutResponse = await fetch(`${base}/rest/v1/gh_seller_payout_requests?${new URLSearchParams({ id: `eq.${requestId}`, select: "id,seller_id,currency,amount,status", limit: "1" })}`, { headers, cache: "no-store", signal: AbortSignal.timeout(15_000) })
+    if (!payoutResponse.ok) return reply({ ok: false, error: "PAYOUT_LOOKUP_UNAVAILABLE" }, 503)
+    const payoutRows = await payoutResponse.json() as Array<{ id: string; seller_id: string; currency: string; amount: number; status: string }>
+    const payout = Array.isArray(payoutRows) ? payoutRows[0] : undefined
+    if (!payout) return reply({ ok: false, error: "PAYOUT_NOT_FOUND" }, 404)
+    if (payout.currency !== "PI" || !["processing", "paid"].includes(payout.status)) return reply({ ok: false, error: "PI_PAYOUT_NOT_PROCESSING" }, 409)
 
-  if (!res.ok) {
-    return NextResponse.json(
-      { ok: false, error: "Pi complete failed", status: res.status, data },
-      { status: 502 }
-    )
-  }
+    const executionResponse = await fetch(`${base}/rest/v1/gh_pi_a2u_executions?${new URLSearchParams({ payout_request_id: `eq.${requestId}`, provider_payment_id: `eq.${paymentId}`, select: "state,txid,recipient_uid,amount,network", limit: "1" })}`, { headers, cache: "no-store", signal: AbortSignal.timeout(15_000) })
+    if (!executionResponse.ok) return reply({ ok: false, error: "A2U_EXECUTION_LOOKUP_UNAVAILABLE" }, 503)
+    const executions = await executionResponse.json() as Array<{ state: string; txid: string | null; recipient_uid: string; amount: number; network: string }>
+    const execution = Array.isArray(executions) ? executions[0] : undefined
+    if (!execution || !["created", "submitted", "completed"].includes(execution.state) || execution.network !== "Pi Testnet" || Number(execution.amount) !== Number(payout.amount) || (execution.txid && execution.txid !== txid)) {
+      return reply({ ok: false, error: "DURABLE_A2U_EXECUTION_BINDING_REQUIRED" }, 409)
+    }
 
-  if (orderId) {
-    updateOrderStatus(orderId, "fulfilled", { paymentId, txid })
-  }
+    const identityResponse = await fetch(`${base}/rest/v1/gh_pi_identities?${new URLSearchParams({ gh_user_id: `eq.${payout.seller_id}`, select: "pi_app_uid", limit: "1" })}`, { headers, cache: "no-store", signal: AbortSignal.timeout(15_000) })
+    if (!identityResponse.ok) return reply({ ok: false, error: "RECIPIENT_IDENTITY_UNAVAILABLE" }, 503)
+    const identities = await identityResponse.json() as Array<{ pi_app_uid: string }>
+    const recipientUid = Array.isArray(identities) ? String(identities[0]?.pi_app_uid || "").trim() : ""
+    if (!recipientUid || recipientUid !== execution.recipient_uid) return reply({ ok: false, error: "VERIFIED_PI_RECIPIENT_REQUIRED" }, 409)
 
-  return NextResponse.json({ ok: true, payment: data, paymentId, txid })
+    const PiBackendModule = await import("pi-backend")
+    const sdk = new PiBackendModule.default(apiKey, walletSeed)
+    const before = await sdk.getPayment(paymentId)
+    if (!verified(before, { paymentId, requestId, recipientUid, amount: Number(payout.amount), txid })) {
+      return reply({ ok: false, error: "PI_A2U_TRANSACTION_NOT_VERIFIED" }, 409)
+    }
+    if (before.status?.developer_completed === true) {
+      return reply({ ok: true, idempotent: true, paymentId, txid, requestId, provider: "pi-backend", network: "Pi Testnet", providerCompleted: true, payoutSettled: false })
+    }
+    const completed = await sdk.completePayment(paymentId, txid)
+    if (!verified(completed, { paymentId, requestId, recipientUid, amount: Number(payout.amount), txid }) || completed.status?.developer_completed !== true) {
+      return reply({ ok: false, error: "PI_A2U_COMPLETION_UNVERIFIED", providerCompleted: false, payoutSettled: false }, 409)
+    }
+    return reply({ ok: true, idempotent: false, paymentId, txid, requestId, provider: "pi-backend", network: "Pi Testnet", providerCompleted: true, payoutSettled: false, message: "Provider completion is verified; rerun the durable payout reconciliation workflow to settle the seller request." })
+  } catch (error) {
+    return reply({ ok: false, error: "PI_A2U_COMPLETION_UNAVAILABLE", retryable: true, detail: error instanceof Error ? error.message.slice(0, 160) : "unknown" }, 503)
+  }
 }

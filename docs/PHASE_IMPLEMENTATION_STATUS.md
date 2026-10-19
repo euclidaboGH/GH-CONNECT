@@ -22,9 +22,9 @@ Static/automated green **does not** imply Testnet verified or production ready.
 
 | Location | Count |
 |----------|------:|
-| `supabase/migrations/*.sql` (canonical files on disk) | **90** |
-| Latest filename in canonical inventory | `202610240007_gh_post_created_notifications.sql` |
-| Classification | **69 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL / 18 REVIEW_REQUIRED** |
+| `supabase/migrations/*.sql` (canonical files on disk) | **105** |
+| Latest filename in canonical inventory | `202610250007_ghc_atomic_seller_payout_settlement.sql` |
+| Classification | **77 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL / 22 REVIEW_REQUIRED** |
 
 Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations. Migration filenames are sequence identifiers, not proof of application date or live status.
 
@@ -78,16 +78,17 @@ Rate limits are **process-local** burst guards, not distributed edge quotas.
 
 ---
 
-## Phase 15
+## Phases 15–19 — Current source state
 
-| Field | Status |
-|-------|--------|
-| **Defined product scope** | **Not selected** — candidates only in `docs/GH_PHASE_15_PREPARATION.md` |
-| **Source implementation** | **Not started** — no Phase 15 code or migrations |
-| **Automated verification** | N/A |
-| **Runtime / Testnet** | N/A |
+| Phase | Source state | Automated source checks | Runtime / Testnet |
+|------:|--------------|-------------------------|-------------------|
+| 15 | Account lifecycle, seller payout workflow, creator reward evaluation ledger and quality signals added | Phase 15 checks | Not verified here |
+| 16 | Private-media account hardening, signed URL delivery and account export/deletion safeguards added | Phase 16 checks | Not verified here |
+| 17 | Durable media references, viewer-aware authorization, verified Pi tip payables and PI payout reconciliation added | Phase 17 checks | Not verified here; no bucket cutover |
+| 18 | Atomic GHC tip settlement and funded creator reward-pool source implementation added; GHC tip flag defaults off | Phase 19 source checks | Not verified here; concurrency suite is a required operator gate |
+| 19 | Financial/media release hardening, migration-history and legacy-media preflight, operator endpoints and release inventory added | Phase 19 checks plus 123/123 repository regression scripts passed on this workspace | Full dependency install/build, Testnet, Pi E2E and live Supabase checks remain unverified |
 
-**Do not invent or implement Phase 15 features** until CI + Testnet + IDOR + Pi E2E gates pass and product selects a single track.
+The repository's full TypeScript, ESLint and Next production build are not claimed as passing in this workspace because the dependency install did not complete. A partial `node_modules` directory is not a valid build environment. The source-level phase tests do not replace PostgreSQL concurrency tests or external-provider evidence.
 
 ---
 
@@ -117,7 +118,7 @@ Engagement paths must **not** call: `ghc_execute_*`, payment complete, membershi
 - GHC per like/view  
 - Reputation purchasable with GHC  
 - Pi staking (official Platform API not confirmed)  
-- Tip / ad **settlement** (intents/verification scaffolds only)  
+- Pi payout Testnet end-to-end verification and any bank/GHC external payout rails without a verified provider/treasury path  
 - Blind application of `*_proposal.sql` migrations  
 - Distributed (Redis/edge) rate limits  
 - Introduction **send** workflow (contract may exist; sending not implemented)  
@@ -140,7 +141,7 @@ See **docs/TESTNET_VERIFICATION_GATE.md**.
 
 **Phases 1–13:** source-complete.  
 **Phase 14:** production hardening (automated).  
-**Phase 15:** preparation only — not implemented.  
+**Phases 15–19:** source upgrades added; live migration, database concurrency, Pi Testnet and production verification remain outstanding.  
 **Production / Mainnet:** not claimed until runtime gates pass.
 
 ---
@@ -149,7 +150,7 @@ See **docs/TESTNET_VERIFICATION_GATE.md**.
 
 - Literal `TODO:` / `FIXME:` markers in application TypeScript: **none found** (last scan).
 - Intentional deferred/fail-closed surfaces: **`docs/DEFERRED_AND_GATED.md`**.
-- Full generated migration inventory (90): **`docs/MIGRATION_CHECKLIST.md`**.
+- Full generated migration inventory (104): **`docs/MIGRATION_CHECKLIST.md`**.
 
 ### Phase 14B — Static security (2026-10-10)
 

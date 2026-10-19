@@ -50,11 +50,11 @@ assert(idx.includes("listPendingConnectionRequests"), "pending helpers exported"
 
 const a2u = readFileSync(join(root, "app/api/payments/a2u/create/route.ts"), "utf8")
 assert(
-  a2u.includes("status: 503") && a2u.includes("PI_API_KEY not configured"),
-  "a2u 503 block complete"
+  a2u.includes("PI_A2U_ENABLED !== \"true\"") && a2u.includes("sdk.submitPayment(") && a2u.includes("sdk.completePayment("),
+  "a2u uses full SDK chain submission behind explicit Testnet-only gates"
 )
 assert(
-  a2u.includes("GHC_A2U_ADMIN_KEY") && a2u.includes("status: 403"),
+  a2u.includes("GHC_A2U_ADMIN_KEY") && a2u.includes(", 403)"),
   "a2u admin gate intact"
 )
 

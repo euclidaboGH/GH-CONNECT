@@ -6,7 +6,7 @@
  * Never manufactures candidates; production filters studio seeds.
  */
 
-import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
+import { useMemo, useState, useCallback, useEffect, useEffect, startTransition } from "react"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"
@@ -105,6 +105,20 @@ export function DiscoveryGridScreen() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [onlineOnly, setOnlineOnly] = useState(false)
+  useEffect(() => {
+    try {
+      const { loadDiscoverFilters, saveDiscoverFilters } = require("@/lib/product/essentials") as typeof import("@/lib/product/essentials")
+      const saved = loadDiscoverFilters()
+      if (saved.onlineOnly) setOnlineOnly(true)
+    } catch { /* */ }
+  }, [])
+  useEffect(() => {
+    try {
+      const { saveDiscoverFilters } = require("@/lib/product/essentials") as typeof import("@/lib/product/essentials")
+      saveDiscoverFilters({ onlineOnly })
+    } catch { /* */ }
+  }, [onlineOnly])
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
   const userInterests = useMemo(
@@ -153,12 +167,16 @@ export function DiscoveryGridScreen() {
         return blob.includes(q)
       })
     }
+    if (onlineOnly) {
+      list = list.filter((c) => Boolean((c as { isOnline?: boolean; online?: boolean }).isOnline || (c as { online?: boolean }).online))
+    }
     return { list, source: result.ok ? result.source : "empty" }
   }, [
     ghc.candidates,
     selectedIntents,
     profileIntents,
     query,
+    onlineOnly,
     userInterests,
     category,
     meId,
@@ -337,7 +355,7 @@ export function DiscoveryGridScreen() {
   const error = ghc.error
 
   return (
-    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content">
+    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Discover people and communities">
       <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -372,6 +390,18 @@ export function DiscoveryGridScreen() {
             onClick={() => setFiltersOpen((v) => !v)}
           >
             <SlidersHorizontal size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setOnlineOnly((v) => !v)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
+              onlineOnly
+                ? "bg-emerald-100 text-emerald-900 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-100"
+                : "bg-muted/40 text-muted-foreground ring-border/60"
+            }`}
+            aria-pressed={onlineOnly}
+          >
+            Online now
           </button>
         </div>
       </header>

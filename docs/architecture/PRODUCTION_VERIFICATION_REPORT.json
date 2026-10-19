@@ -1,86 +1,86 @@
 {
-  "generatedAt": "2026-10-18T12:15:21.245Z",
+  "generatedAt": "2026-10-19T07:49:11.092Z",
   "step": "5",
   "automated": [
     {
       "name": "safety-scan",
       "status": "PASS",
-      "ms": 69
+      "ms": 67
     },
     {
       "name": "authority-map",
       "status": "PASS",
-      "ms": 50
+      "ms": 34
     },
     {
       "name": "community-authority",
       "status": "PASS",
-      "ms": 106
+      "ms": 43
     },
     {
       "name": "trust-authority",
       "status": "PASS",
-      "ms": 30
+      "ms": 33
     },
     {
       "name": "governance-durability",
       "status": "PASS",
-      "ms": 33
+      "ms": 32
     },
     {
       "name": "context-strangler-50.1",
       "status": "PASS",
-      "ms": 37
+      "ms": 34
     },
     {
       "name": "context-strangler-step4",
       "status": "PASS",
-      "ms": 33
+      "ms": 29
     },
     {
       "name": "domain-contracts",
       "status": "PASS",
-      "ms": 38
+      "ms": 29
     },
     {
       "name": "discovery-connections",
       "status": "PASS",
-      "ms": 40
+      "ms": 29
     },
     {
       "name": "unified-connections",
       "status": "PASS",
-      "ms": 32
+      "ms": 28
     },
     {
       "name": "connection-inbox",
       "status": "PASS",
-      "ms": 32
+      "ms": 29
     },
     {
       "name": "connection-ux",
       "status": "PASS",
-      "ms": 30
+      "ms": 33
     },
     {
       "name": "universal-search",
       "status": "PASS",
-      "ms": 34
+      "ms": 30
     },
     {
       "name": "communities",
       "status": "PASS",
-      "ms": 33
+      "ms": 30
     },
     {
       "name": "community-belonging",
       "status": "PASS",
-      "ms": 33
+      "ms": 31
     },
     {
       "name": "community-hub",
       "status": "PASS",
-      "ms": 37
+      "ms": 31
     },
     {
       "name": "community-governance",
@@ -90,67 +90,67 @@
     {
       "name": "community-health",
       "status": "PASS",
-      "ms": 35
+      "ms": 30
     },
     {
       "name": "community-lifecycle",
       "status": "PASS",
-      "ms": 31
+      "ms": 30
     },
     {
       "name": "community-moderation",
       "status": "PASS",
-      "ms": 34
+      "ms": 32
     },
     {
       "name": "community-onboarding",
       "status": "PASS",
-      "ms": 30
+      "ms": 32
     },
     {
       "name": "community-participation-bridge",
       "status": "PASS",
-      "ms": 28
+      "ms": 30
     },
     {
       "name": "community-participation-depth",
       "status": "PASS",
-      "ms": 36
+      "ms": 34
     },
     {
       "name": "community-participation",
       "status": "PASS",
-      "ms": 30
+      "ms": 32
     },
     {
       "name": "community-feed-search",
       "status": "PASS",
-      "ms": 35
+      "ms": 36
     },
     {
       "name": "home-os-audit",
       "status": "PASS",
-      "ms": 36
+      "ms": 28
     },
     {
       "name": "social-experience",
       "status": "PASS",
-      "ms": 33
+      "ms": 31
     },
     {
       "name": "engagement-roster-security",
       "status": "PASS",
-      "ms": 29
+      "ms": 28
     },
     {
       "name": "social-os-foundation",
       "status": "PASS",
-      "ms": 28
+      "ms": 29
     },
     {
       "name": "economy-v12",
       "status": "PASS",
-      "ms": 37
+      "ms": 44
     },
     {
       "name": "pi-payment-durable",
@@ -165,17 +165,17 @@
     {
       "name": "like-curation-separation",
       "status": "PASS",
-      "ms": 29
+      "ms": 31
     },
     {
       "name": "notification-attention",
       "status": "PASS",
-      "ms": 30
+      "ms": 31
     },
     {
       "name": "social-visibility",
       "status": "PASS",
-      "ms": 32
+      "ms": 33
     },
     {
       "name": "feed-card-layout",
@@ -185,12 +185,12 @@
     {
       "name": "rewards-reliability",
       "status": "PASS",
-      "ms": 29
+      "ms": 32
     },
     {
       "name": "engagement-roster-security",
       "status": "PASS",
-      "ms": 30
+      "ms": 28
     },
     {
       "name": "story-creator",
@@ -200,17 +200,17 @@
     {
       "name": "post-composer",
       "status": "PASS",
-      "ms": 29
+      "ms": 32
     },
     {
       "name": "social-messaging-upgrade",
       "status": "PASS",
-      "ms": 33
+      "ms": 32
     },
     {
       "name": "messaging-reliability",
       "status": "PASS",
-      "ms": 34
+      "ms": 32
     }
   ],
   "passCount": 42,

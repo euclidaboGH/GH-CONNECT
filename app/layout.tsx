@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     template: "%s · GreenHaven",
   },
   description:
-    "GreenHaven — global social, matching, community and GHC utility platform on Pi Network",
+    "GreenHaven brings people, communities, creators, commerce and GHC utilities together in one connected ecosystem.",
   applicationName: "GreenHaven",
   authors: [{ name: "GreenHaven" }],
   generator: "GreenHaven",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     siteName: "GreenHaven",
     title: "GreenHaven",
     description:
-      "Connect worldwide for friendships, dating, networking, and meaningful relationships on Pi Network",
+      "A connected ecosystem for people, communities, creators, learning, commerce and GHC utilities on Pi Network",
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -47,8 +47,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#059669" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },

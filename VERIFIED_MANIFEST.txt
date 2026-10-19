@@ -1,12 +1,12 @@
 GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
-project_version=0.61.1
-manifest_date=2026-10-18
-canonical_migrations=96
-classification_required=75
+project_version=0.62.5
+manifest_date=2026-10-19
+canonical_migrations=105
+classification_required=77
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=18
+classification_review_required=25
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -104,6 +104,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=3259 path=supabase/migrations/202610181502_curation_redistribute_balance_funded.sql
 [REQUIRED] size=13820 path=supabase/migrations/20261018_gh_engagement_rosters.sql
 [REQUIRED] size=6996 path=supabase/migrations/20261018_ghpv_calibration_bounds.sql
+[REVIEW_REQUIRED] size=12991 path=supabase/migrations/202610190002_gh_private_media_references_and_viewer_authz.sql
 [REVIEW_REQUIRED] size=2438 path=supabase/migrations/20261019_ghpv_soft_delete_quality_cleanup.sql
 [REVIEW_REQUIRED] size=2725 path=supabase/migrations/20261020_ghpv_soft_delete_atomic.sql
 [REVIEW_REQUIRED] size=3555 path=supabase/migrations/20261021_gh_social_notifications_types_extend.sql
@@ -114,3 +115,11 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=8255 path=supabase/migrations/202610240005_gh_messaging_presence_delivery_receipts.sql
 [REVIEW_REQUIRED] size=3503 path=supabase/migrations/202610240006_gh_story_reactions.sql
 [REVIEW_REQUIRED] size=7467 path=supabase/migrations/202610240007_gh_post_created_notifications.sql
+[REVIEW_REQUIRED] size=2518 path=supabase/migrations/202610250001_gh_system_announcements.sql
+[REQUIRED] size=1918 path=supabase/migrations/202610250002_gh_post_restore_owner_window.sql
+[REQUIRED] size=13203 path=supabase/migrations/202610250003_gh_lifecycle_payout_quality_foundation.sql
+[REVIEW_REQUIRED] size=14803 path=supabase/migrations/202610250004_gh_verified_tip_settlement_payout_reconciliation.sql
+[REVIEW_REQUIRED] size=24405 path=supabase/migrations/202610250005_ghc_tip_and_creator_reward_atomic_settlement.sql
+[REVIEW_REQUIRED] size=9021 path=supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql
+[REVIEW_REQUIRED] size=8241 path=supabase/migrations/202610250007_ghc_atomic_seller_payout_settlement.sql
+[REVIEW_REQUIRED] size=34739 path=supabase/migrations/202610250008_paystack_ngn_beneficiaries_and_payouts.sql

@@ -22,6 +22,10 @@ export type PiPaymentDTO = {
   transaction?: { txid?: string; verified?: boolean } | null
   from_uid?: string
   user_uid?: string
+  direction?: "user_to_app" | "app_to_user"
+  network?: "Pi Network" | "Pi Testnet" | string
+  from_address?: string
+  to_address?: string
   metadata?: Record<string, unknown>
   [key: string]: unknown
 }

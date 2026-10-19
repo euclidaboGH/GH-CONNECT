@@ -20,9 +20,58 @@ import {
   getPiApiKey,
 } from "@/lib/server/payments/pi-api"
 import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+async function settleVerifiedCreatorTip(intent: {
+  id: string; userId: string; amount: number; currency: string; purpose: string;
+  providerPaymentId?: string | null; txid?: string | null; metadata?: Record<string, unknown>;
+}, paymentId: string, requestedTxid: string) {
+  if (intent.purpose !== "creator_earning" || intent.metadata?.flow !== "creator_tip") {
+    return { applicable: false as const }
+  }
+  const tipIntentId = String(intent.metadata?.tipIntentId || "").trim()
+  if (!tipIntentId || intent.currency !== "PI" || !Number.isFinite(intent.amount) || intent.amount <= 0) {
+    return { applicable: true as const, ok: false as const, error: "TIP_INTENT_BINDING_INVALID" }
+  }
+  // Re-query Pi even on retries. A locally completed intent alone is not enough evidence
+  // to create a creator payable after an ambiguous provider response.
+  const verification = await piGetPayment(paymentId)
+  const payment = verification.payment
+  const providerTxid = String(payment?.transaction?.txid || "").trim()
+  const providerVerified = Boolean(payment?.status?.developer_completed) &&
+    Boolean(payment?.status?.transaction_verified || payment?.transaction?.verified) &&
+    amountsMatch(intent.amount, payment?.amount) &&
+    Boolean(providerTxid) && providerTxid === requestedTxid
+  if (!verification.ok || !payment || !providerVerified) {
+    return { applicable: true as const, ok: false as const, error: "PI_TIP_COMPLETION_NOT_VERIFIED" }
+  }
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { applicable: true as const, ok: false as const, error: "TIP_SETTLEMENT_UNAVAILABLE" }
+  }
+  try {
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_settle_verified`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+      body: JSON.stringify({
+        p_tip_intent_id: tipIntentId, p_tipper_id: intent.userId,
+        p_payment_intent_id: intent.id, p_provider_payment_id: paymentId,
+        p_txid: providerTxid, p_verified_amount: Number(payment.amount), p_provider_completed: true,
+      }),
+      cache: "no-store",
+    })
+    const result = await response.json().catch(() => null) as { ok?: boolean; error?: string; status?: string; creatorPaid?: boolean; settlementId?: string; idempotent?: boolean } | null
+    if (!response.ok || result?.ok !== true) {
+      return { applicable: true as const, ok: false as const, error: result?.error || "TIP_SETTLEMENT_FAILED" }
+    }
+    return { applicable: true as const, ok: true as const, result }
+  } catch {
+    return { applicable: true as const, ok: false as const, error: "TIP_SETTLEMENT_UNAVAILABLE" }
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -103,6 +152,10 @@ export async function POST(request: Request) {
           /* grant is best-effort on idempotent path; client recovery remains */
         }
       }
+      const tipSettlement = await settleVerifiedCreatorTip(intent, paymentId, intent.txid || txid)
+      if (tipSettlement.applicable && !tipSettlement.ok) {
+        return NextResponse.json({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+      }
       return NextResponse.json({
         ok: true,
         idempotent: true,
@@ -110,6 +163,7 @@ export async function POST(request: Request) {
         paymentId,
         txid: intent.txid || txid,
         membership: membershipGrant,
+        tipSettlement: tipSettlement.applicable && tipSettlement.ok ? tipSettlement.result : undefined,
       })
     }
 
@@ -123,6 +177,14 @@ export async function POST(request: Request) {
       })
 
       const lookup = await piGetPayment(paymentId)
+      if (intent.purpose === "creator_earning" && intent.metadata?.flow === "creator_tip") {
+        const observedTxid = String(lookup.payment?.transaction?.txid || "").trim()
+        if (!lookup.ok || !lookup.payment || !amountsMatch(intent.amount, lookup.payment.amount) ||
+            !lookup.payment.status?.transaction_verified && !lookup.payment.transaction?.verified ||
+            (observedTxid && observedTxid !== txid)) {
+          return NextResponse.json({ ok: false, error: "PI_TIP_PAYMENT_NOT_VERIFIED", retryable: true }, { status: 409 })
+        }
+      }
       if (lookup.ok && lookup.payment) {
         if (!amountsMatch(intent.amount, lookup.payment.amount)) {
           await transitionIntent(intent.id, "FAILED", {
@@ -181,6 +243,12 @@ export async function POST(request: Request) {
         : null) ||
       (await loadByProviderPaymentId(paymentId)) ||
       getByProviderPaymentId(paymentId)
+    if (completedIntent) {
+      const tipSettlement = await settleVerifiedCreatorTip(completedIntent, paymentId, completedIntent.txid || txid)
+      if (tipSettlement.applicable && !tipSettlement.ok) {
+        return NextResponse.json({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+      }
+    }
     const grantUserId = auth.userId
     if (completedIntent && grantUserId && completedIntent.userId === grantUserId) {
       try {

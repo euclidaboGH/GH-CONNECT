@@ -20,6 +20,8 @@ import {
   ImagePlus,
   Loader2,
 } from "lucide-react"
+import { SafeTextWithLinks } from "./safe-external-links"
+import { absoluteTimeLabel, formatRelativeTime } from "@/lib/product/essentials"
 import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
@@ -668,7 +670,7 @@ function EnhancedPostCardInner({
             >
               {contentParts.map((part, idx) => {
                 if (typeof part === "string") {
-                  return <span key={idx}>{part}</span>
+                  return <SafeTextWithLinks key={idx} text={part} />
                 }
                 if (part.type === "hashtag") {
                   return (

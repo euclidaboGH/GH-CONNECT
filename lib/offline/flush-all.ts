@@ -7,6 +7,7 @@ export type FlushAllResult = {
   stories: { attempted: number; succeeded: number; failed: number }
   deletes: { attempted: number; succeeded: number; failed: number }
   listings: { attempted: number; succeeded: number; failed: number }
+  conversations?: { attempted: number; succeeded: number; failed: number }
   messages?: { attempted?: number; succeeded?: number; failed?: number }
 }
 
@@ -24,6 +25,7 @@ export async function flushAllOfflineQueues(options?: {
   let stories = empty
   let deletes = empty
   let listings = empty
+  let conversations = empty
   let messages: FlushAllResult["messages"]
 
   try {
@@ -64,5 +66,13 @@ export async function flushAllOfflineQueues(options?: {
     }
   }
 
-  return { posts, stories, deletes, listings, messages }
+  try {
+    const { flushQueuedConversations } = await import("@/lib/messaging/offline-conversation-flush")
+    const c = await flushQueuedConversations()
+    conversations = { attempted: c.attempted, succeeded: c.succeeded, failed: c.failed }
+  } catch {
+    /* */
+  }
+
+  return { posts, stories, deletes, listings, conversations, messages }
 }

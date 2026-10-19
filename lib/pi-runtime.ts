@@ -75,8 +75,18 @@ function loadScriptOnce(src: string, timeoutMs: number): Promise<void> {
       return
     }
     const existing = document.querySelector(`script[src="${src}"]`)
-    if (existing && getWindowPi()) {
+    if (getWindowPi()) {
       resolve()
+      return
+    }
+    // The root layout loads the official SDK before interactive. If a caller
+    // races that load, wait for the existing script rather than injecting a
+    // second copy of the Pi SDK into the document.
+    if (existing) {
+      void waitForPi(timeoutMs, 150).then((ready) => {
+        if (ready) resolve()
+        else reject(new Error(`Pi SDK script did not expose window.Pi within ${timeoutMs}ms`))
+      })
       return
     }
     const script = document.createElement("script")
@@ -135,12 +145,13 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
           "Pi SDK (window.Pi) is not available. Open GreenHaven inside Pi Browser with the registered app URL."
         )
       }
-      if (typeof Pi.init === "function") {
-        await (Pi.init as (cfg: { version: string; sandbox: boolean }) => Promise<void> | void)({
-          version: "2.0",
-          sandbox: getPiSandbox(),
-        })
+      if (typeof Pi.init !== "function") {
+        throw new Error("Official Pi SDK is present but Pi.init is unavailable; refusing to call other Pi SDK methods")
       }
+      await (Pi.init as (cfg: { version: string; sandbox: boolean }) => Promise<void> | void)({
+        version: "2.0",
+        sandbox: getPiSandbox(),
+      })
       initialized = true
     })().catch((err) => {
       initPromise = null

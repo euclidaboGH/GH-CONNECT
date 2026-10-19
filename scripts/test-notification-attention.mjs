@@ -19,7 +19,7 @@ const checks = [
   ['Daily claim remains server-authoritative', /fetch\("\/api\/economy\/rewards\/daily"/.test(rewards)],
   ['Notification center loads durable social activity', /api\/social\/notifications\?limit=60/.test(bell)],
   ['Notification center loads durable GHC/economy alerts', /api\/economy\/notifications\?limit=60/.test(bell)],
-  ['Notification center combines unread counts instead of overwriting them', /setUnread\(localUnread \+ socialUnread \+ economyUnread\)/.test(bell)],
+  ['Notification center combines local, social, economy, and system-announcement unread counts', /setUnread\(localUnread \+ socialUnread \+ economyUnread \+ announcementUnread\)/.test(bell)],
   ['Durable social alerts can be marked read', /action: "mark_read"/.test(bell)],
   ['Durable economy alerts can be marked read', /api\/economy\/notifications\/\$\{encodeURIComponent\(n\.id\)\}\/read/.test(bell)],
   ['Navigation refreshes attention counts from server endpoints', /api\/social\/notifications\?countOnly=1/.test(app) && /api\/economy\/notifications\/unread-count/.test(app)],

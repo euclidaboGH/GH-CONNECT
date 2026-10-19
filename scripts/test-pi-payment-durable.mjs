@@ -83,7 +83,21 @@ const store2 = readFileSync(join(root, "lib/server/payments/intent-store.ts"), "
 assert(store2.includes("assertDurableWrite") || store2.includes("DURABLE_REQUIRED"), "production fail-closed durable write")
 
 
-console.log("\n6. Phase 14 — payment ownership / complete hardening (static)")
+console.log("\n6. Phase 23 — A2U Testnet recovery and serialization (static)")
+const a2uCreate = readFileSync(join(root, "app/api/payments/a2u/create/route.ts"), "utf8")
+const a2uComplete = readFileSync(join(root, "app/api/payments/a2u/complete/route.ts"), "utf8")
+const a2uMigration = readFileSync(join(root, "supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql"), "utf8")
+assert(a2uCreate.includes('getIncompleteServerPayments'), "A2U create recovers existing incomplete server payments")
+assert(a2uCreate.includes('UNRELATED_INCOMPLETE_A2U_PAYMENT_REQUIRES_REVIEW'), "A2U blocks a second payment when an unrelated incomplete payment exists")
+assert(a2uCreate.includes('gh_pi_a2u_begin_execution') && a2uCreate.includes('gh_pi_a2u_release_sequence_lease'), "A2U execution uses durable sequence lease")
+assert(a2uCreate.includes('payment.network === "Pi Testnet"') && a2uCreate.includes('payment.direction === "app_to_user"'), "A2U provider record is bound to Testnet and app-to-user direction")
+assert(a2uCreate.includes('payment.user_uid === input.recipientUid') && a2uCreate.includes('amountMatches(input.amount, payment.amount)'), "A2U provider record is bound to exact recipient and amount")
+assert(a2uCreate.includes('PI_A2U_COMPLETION_UNVERIFIED') && a2uCreate.includes('p_next_status: "paid"'), "A2U requires verified provider completion before payout settlement")
+assert(a2uComplete.includes('DURABLE_A2U_EXECUTION_BINDING_REQUIRED') && a2uComplete.includes('payoutSettled: false'), "A2U completion recovery remains bound to a durable execution and does not settle by itself")
+assert(a2uMigration.includes('UNIQUE') && a2uMigration.includes('gh_pi_a2u_begin_execution') && a2uMigration.includes('FOR UPDATE'), "A2U migration serializes durable execution and prevents concurrent duplicates")
+assert(a2uMigration.includes('GRANT EXECUTE ON FUNCTION public.gh_pi_a2u_begin_execution(text,text,text) TO service_role'), "A2U execution RPC is service-role only")
+
+console.log("\n7. Phase 14 — payment ownership / complete hardening (static)")
 const complete = readFileSync(join(root, "app/api/payments/complete/route.ts"), "utf8")
 assert(complete.includes("AUTH_REQUIRED") || complete.includes("401"), "complete requires auth")
 assert(complete.includes("INTENT_REQUIRED") || complete.includes("intent"), "complete requires durable intent")

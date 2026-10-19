@@ -1823,3 +1823,427 @@ body {
 }
 
 @keyframes gh-story-progress { from { width: 0%; } to { width: 100%; } }
+
+
+/* ========================================================================
+   GREENHAVEN PREMIUM PRODUCT SYSTEM — PHASE 21
+   A cross-product polish layer for social, wallet, marketplace, messaging,
+   communities, discovery, onboarding and settings. Presentation only.
+   ======================================================================== */
+:root {
+  color-scheme: light;
+  --gh-ref-canvas: #f6f8f7;
+  --gh-ref-surface: #ffffff;
+  --gh-ref-line: rgba(11, 61, 46, .12);
+  --gh-ref-shadow: 0 2px 8px rgba(13, 48, 37, .035), 0 12px 32px rgba(13, 48, 37, .055);
+  --gh-ref-shadow-float: 0 18px 50px rgba(13, 48, 37, .15);
+  --gh-ref-radius-card: 1.35rem;
+  --gh-control-radius: .95rem;
+  --gh-focus-ring: color-mix(in srgb, var(--primary) 38%, transparent);
+  --gh-motion-standard: cubic-bezier(.2, .7, .2, 1);
+}
+
+.dark {
+  color-scheme: dark;
+  --gh-ref-canvas: #0a100d;
+  --gh-ref-surface: #111a15;
+  --gh-ref-line: rgba(167, 211, 187, .14);
+  --gh-ref-shadow: 0 2px 8px rgba(0, 0, 0, .18), 0 12px 32px rgba(0, 0, 0, .16);
+  --gh-ref-shadow-float: 0 18px 50px rgba(0, 0, 0, .4);
+}
+
+/* Keep preset themes legible while allowing their identity to show through. */
+:root[data-theme="violet-bloom"] {
+  --gh-ref-canvas: #f8f6ff;
+  --gh-ref-line: rgba(76, 29, 149, .13);
+}
+:root.dark[data-theme="violet-bloom"] {
+  --gh-ref-canvas: #100c1c;
+  --gh-ref-surface: #1a1428;
+  --gh-ref-line: rgba(196, 181, 253, .16);
+}
+:root[data-theme="ocean-breeze"] {
+  --gh-ref-canvas: #f3fafb;
+  --gh-ref-line: rgba(8, 145, 178, .14);
+}
+:root.dark[data-theme="ocean-breeze"] {
+  --gh-ref-canvas: #071317;
+  --gh-ref-surface: #0d2026;
+  --gh-ref-line: rgba(103, 232, 249, .14);
+}
+:root[data-theme="sunset-gold"] {
+  --gh-ref-canvas: #fcf8f1;
+  --gh-ref-line: rgba(180, 83, 9, .14);
+}
+:root.dark[data-theme="sunset-gold"] {
+  --gh-ref-canvas: #17110a;
+  --gh-ref-surface: #241b10;
+  --gh-ref-line: rgba(251, 191, 36, .16);
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 38%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+body {
+  min-height: 100dvh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  color: var(--primary-foreground);
+  background: color-mix(in srgb, var(--primary) 82%, transparent);
+}
+
+/* Shared controls: consistent hit targets, focus states and restrained motion. */
+:where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+  outline: 3px solid var(--gh-focus-ring);
+  outline-offset: 3px;
+}
+:where(button, input, textarea, select) { accent-color: var(--primary); }
+:where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  border-radius: var(--gh-control-radius);
+  transition: border-color 160ms var(--gh-motion-standard), box-shadow 160ms var(--gh-motion-standard), background-color 160ms var(--gh-motion-standard);
+}
+:where(input:not([type="checkbox"]):not([type="radio"]), textarea, select):focus {
+  border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 13%, transparent);
+  outline: none;
+}
+:where(button, [role="button"]) { -webkit-tap-highlight-color: transparent; }
+:where(button:disabled, input:disabled, textarea:disabled, select:disabled) {
+  cursor: not-allowed;
+  opacity: .62;
+}
+
+/* A unified page canvas; retain custom wallpaper as a soft, non-blocking layer. */
+.gh-app-shell {
+  isolation: isolate;
+  background: var(--gh-ref-canvas) !important;
+}
+
+.gh-app-shell > main { background: transparent !important; }
+.gh-feed-scroll,
+.gh-wallet-shell,
+.gh-marketplace-shell,
+.gh-world-profile,
+.gh-world-discovery,
+.gh-world-marketplace,
+.gh-world-wallet,
+.gh-world-compose { background-color: var(--gh-ref-canvas) !important; }
+
+/* Consistent card rhythm across feature areas without flattening bespoke hero art. */
+.gh-post-card,
+.gh-reference-panel,
+.gh-premium-surface,
+.gh-world-shell [data-surface="card"],
+.gh-world-shell .gh-card {
+  border-color: var(--gh-ref-line);
+  box-shadow: var(--gh-ref-shadow);
+  transition: border-color 180ms var(--gh-motion-standard), box-shadow 180ms var(--gh-motion-standard), transform 180ms var(--gh-motion-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .gh-post-card:hover,
+  .gh-reference-panel:hover,
+  .gh-world-shell [data-surface="card"]:hover {
+    border-color: color-mix(in srgb, var(--primary) 23%, var(--gh-ref-line));
+    box-shadow: 0 5px 18px rgba(13, 48, 37, .045), 0 16px 36px rgba(13, 48, 37, .065);
+  }
+  .dark .gh-post-card:hover,
+  .dark .gh-reference-panel:hover,
+  .dark .gh-world-shell [data-surface="card"]:hover { box-shadow: var(--gh-ref-shadow-float); }
+}
+
+/* Header, tab and navigation polish: clarity first, decorative depth second. */
+.gh-page-header-slim {
+  border-bottom-color: var(--gh-ref-line) !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 92%, transparent) !important;
+  box-shadow: 0 2px 14px rgba(13, 48, 37, .035) !important;
+  backdrop-filter: saturate(1.25) blur(20px);
+}
+.dark .gh-page-header-slim {
+  background: color-mix(in srgb, var(--gh-ref-surface) 92%, transparent) !important;
+  box-shadow: 0 2px 18px rgba(0, 0, 0, .14) !important;
+}
+.gh-bottom-nav {
+  padding-bottom: max(.4rem, env(safe-area-inset-bottom, 0px)) !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 94%, transparent) !important;
+  border-top-color: var(--gh-ref-line) !important;
+  backdrop-filter: saturate(1.35) blur(22px);
+}
+.gh-bottom-nav button { min-height: 2.9rem; }
+.gh-bottom-nav button[aria-current="page"] { font-weight: 750; }
+.gh-bottom-nav button[aria-current="page"] > span:first-child { box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 22%, transparent); }
+
+/* Inputs and search bars feel related in every module. */
+.gh-standard-search,
+.gh-world-shell [role="search"] input,
+.gh-world-shell input[type="search"] {
+  border-color: var(--gh-ref-line);
+  background: color-mix(in srgb, var(--gh-ref-surface) 92%, var(--primary) 8%) !important;
+  color: var(--foreground);
+}
+.dark .gh-standard-search,
+.dark .gh-world-shell [role="search"] input,
+.dark .gh-world-shell input[type="search"] { background: var(--card) !important; }
+.gh-world-shell textarea,
+.gh-world-shell input:not([type="checkbox"]):not([type="radio"]),
+.gh-world-shell select { color: var(--foreground); }
+
+/* Better dialogs/sheets on phones, tablets and desktop; preserve existing mechanics. */
+.gh-premium-dialog,
+.gh-sheet-panel,
+[role="dialog"] > .gh-premium-surface {
+  border-color: var(--gh-ref-line) !important;
+  box-shadow: var(--gh-modal-shadow) !important;
+  overscroll-behavior: contain;
+}
+@media (min-width: 640px) {
+  .gh-premium-dialog,
+  [role="dialog"] > .gh-premium-surface { border-radius: 1.5rem !important; }
+}
+
+/* Content widths grow naturally on wide screens; forms and reading areas stay calm. */
+.gh-feed-column { width: min(100%, 47rem); }
+.gh-world-messages [role="log"] { line-height: 1.55; }
+.gh-world-compose textarea { line-height: 1.65; }
+@media (min-width: 1024px) {
+  .gh-feed-column { width: min(100%, 50rem); }
+  .gh-world-profile .gh-scroll-root { border-radius: 0 0 1.5rem 1.5rem; overflow: clip; }
+}
+@media (min-width: 1440px) {
+  .gh-feed-column { width: min(100%, 52rem); }
+}
+
+/* Empty/loading states use one quiet, accessible shimmer rhythm. */
+@keyframes gh-skeleton-sheen {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+.gh-skeleton,
+[aria-busy="true"] .gh-skeleton {
+  background: linear-gradient(100deg, var(--muted) 20%, color-mix(in srgb, var(--muted) 70%, var(--gh-ref-surface)) 40%, var(--muted) 60%);
+  background-size: 220% 100%;
+  animation: gh-skeleton-sheen 1.6s ease-in-out infinite;
+}
+
+/* Reduce visual motion for users who request it; do not remove state feedback. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .gh-post-card,
+  .gh-reference-panel,
+  .gh-premium-surface,
+  .gh-bottom-nav,
+  .gh-page-header-slim { transition: none !important; }
+}
+
+/* Phase 23 — screen-specific refinements. These selectors intentionally map to
+   individual feature roots, not just generic global elements. */
+.gh-world-settings > :where(header, div:first-child) {
+  border-color: var(--gh-ref-line);
+}
+.gh-world-settings > div:last-child {
+  width: min(100%, 54rem);
+  margin-inline: auto;
+}
+.gh-world-settings > div:nth-child(2) > div {
+  width: min(100%, 54rem);
+  margin-inline: auto;
+}
+.gh-world-settings input[type="search"] {
+  min-height: 2.875rem;
+  border-radius: 1rem;
+}
+.gh-world-settings section > h3 {
+  margin-bottom: .55rem;
+  color: var(--muted-foreground);
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+.gh-world-onboarding {
+  isolation: isolate;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.gh-world-onboarding :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 2.875rem;
+  border-radius: .9rem;
+}
+.gh-discovery-shell .gh-world-discovery-results {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.gh-discovery-shell [role="tablist"] {
+  max-width: 100%;
+  scrollbar-width: none;
+}
+.gh-discovery-shell [role="tablist"]::-webkit-scrollbar { display: none; }
+.gh-profile-shell .gh-world-profile-cover {
+  isolation: isolate;
+  background-color: color-mix(in srgb, var(--primary) 14%, var(--muted));
+}
+.gh-profile-shell .gh-world-profile-identity {
+  overflow-wrap: anywhere;
+}
+.gh-messages-shell [role="log"] {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.gh-messages-shell textarea {
+  max-height: min(8rem, 28dvh);
+  resize: none;
+}
+.gh-communities-shell > :where(header, [role="tablist"]) {
+  border-color: var(--gh-ref-line);
+}
+.gh-communities-shell > :not(header) {
+  width: min(100%, 72rem);
+  margin-inline: auto;
+}
+.gh-marketplace-shell .gh-marketplace-content {
+  scrollbar-gutter: stable;
+}
+.gh-marketplace-shell :where(input, select, textarea) {
+  min-height: 2.875rem;
+  border-radius: .9rem;
+}
+.gh-world-wallet > div:last-child {
+  padding-inline: clamp(.75rem, 2.2vw, 1.25rem);
+}
+.gh-world-wallet .gh-balance-hero {
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: var(--gh-card-shadow-lg);
+}
+.gh-feed-scroll {
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+}
+.gh-feed-column > :where(section, article, [data-post-id]) {
+  min-width: 0;
+}
+.gh-feed-column .gh-post-card {
+  overflow-wrap: anywhere;
+}
+@media (min-width: 640px) {
+  .gh-world-settings > div:last-child { padding-inline: clamp(1rem, 3vw, 2rem); }
+  .gh-world-onboarding .max-w-md { max-width: 34rem; }
+  .gh-marketplace-shell .gh-marketplace-content { padding-inline: clamp(1rem, 2vw, 1.75rem); }
+}
+@media (min-width: 768px) {
+  .gh-discovery-shell .gh-world-discovery-results {
+    padding-inline: clamp(1rem, 2.4vw, 2rem);
+  }
+  .gh-communities-shell > :not(header) { padding-inline: clamp(1rem, 2.5vw, 2rem); }
+  .gh-world-wallet > div:last-child { padding-inline: clamp(1.25rem, 3vw, 2.25rem); }
+}
+@media (min-width: 1024px) {
+  .gh-world-settings > div:last-child { padding-inline: 2.5rem; }
+  .gh-world-messages [role="log"] { max-width: 60rem; }
+  .gh-marketplace-shell .gh-marketplace-content { padding-inline: 2rem; }
+}
+@media (forced-colors: active) {
+  .gh-post-card,
+  .gh-reference-panel,
+  .gh-premium-surface,
+  .gh-world-shell [data-surface="card"] {
+    border: 1px solid CanvasText;
+  }
+  :where(button, a, input, textarea, select, [role="button"]):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px;
+  }
+}
+
+
+/* Phase 24 — device-first visual finish. Keep component logic and financial flows untouched. */
+:root {
+  --gh-visual-gutter: clamp(.75rem, 2.4vw, 1.5rem);
+  --gh-reading-width: 72rem;
+  --gh-focus-outline: 3px solid color-mix(in srgb, var(--gh-green) 78%, transparent);
+}
+
+/* Prevent document-level sideways movement without breaking intentional carousels/tabs. */
+html, body { max-width: 100%; }
+body { overflow-x: clip; }
+.gh-app-shell,
+.gh-app-shell > main,
+.gh-app-shell [role="region"],
+.gh-app-shell [role="main"] { min-width: 0; }
+.gh-app-shell :where(img, video, canvas, svg) { max-width: 100%; }
+.gh-app-shell :where(p, h1, h2, h3, h4, a, button, label, code, pre) { overflow-wrap: anywhere; }
+.gh-app-shell pre { max-width: 100%; overflow-x: auto; }
+
+/* Mobile WebViews and Pi Browser: avoid iOS input zoom, preserve safe-area reachability,
+   and keep controls comfortably tappable without changing domain behavior. */
+@media (max-width: 639px) {
+  .gh-app-shell { min-height: 100dvh; }
+  .gh-app-shell :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  .gh-world-onboarding :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    font-size: max(1rem, 16px);
+    scroll-margin-block: 5rem;
+  }
+  .gh-app-shell :where(button, [role="button"], a) { touch-action: manipulation; }
+  .gh-world-onboarding { min-height: 0; }
+  .gh-world-onboarding > :where(div, main) { min-width: 0; }
+  .gh-world-onboarding :where(input, select, textarea) { width: 100%; max-width: 100%; }
+  .gh-world-profile :where(button, [role="button"]) { max-width: 100%; }
+  .gh-world-profile :where(h1, h2, p, span) { overflow-wrap: anywhere; }
+  .gh-world-messages [role="log"] { min-height: 0; overscroll-behavior: contain; }
+  .gh-world-compose { padding-bottom: max(.5rem, env(safe-area-inset-bottom, 0px)); }
+  .gh-world-marketplace .gh-marketplace-content { min-width: 0; }
+  .gh-world-wallet :where([data-transaction-row], [data-asset-row]) { min-width: 0; }
+  .gh-world-settings :where(section, article) { min-width: 0; }
+  .gh-bottom-nav { padding-inline: max(.25rem, env(safe-area-inset-left, 0px)) max(.25rem, env(safe-area-inset-right, 0px)) !important; }
+}
+
+/* Tablet: retain readable columns while using available space; don't stretch prose edge to edge. */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .gh-feed-column { width: min(calc(100% - 2rem), 48rem); }
+  .gh-world-settings > div:last-child { width: min(100%, 56rem); }
+  .gh-world-profile .gh-scroll-root { width: min(100%, 60rem); margin-inline: auto; }
+  .gh-world-messages [role="log"] { width: min(100%, 58rem); margin-inline: auto; }
+  .gh-world-marketplace .gh-marketplace-content { width: 100%; margin-inline: auto; }
+}
+
+/* Desktop: centered navigation and readable module columns; keep full viewport workspace. */
+@media (min-width: 1024px) {
+  .gh-bottom-nav {
+    width: min(100%, 48rem) !important;
+    margin-inline: auto;
+    border-inline: 1px solid var(--gh-ref-line);
+    border-top-left-radius: 1.25rem;
+    border-top-right-radius: 1.25rem;
+  }
+  .gh-world-settings > div:last-child { width: min(100%, 58rem); margin-inline: auto; }
+  .gh-world-profile .gh-scroll-root { width: min(100%, 64rem); margin-inline: auto; }
+  .gh-world-wallet > div:last-child { width: min(100%, 68rem); margin-inline: auto; }
+  .gh-world-marketplace .gh-marketplace-content { width: min(100%, 76rem); margin-inline: auto; }
+  .gh-world-community > :not(header) { width: min(100%, 76rem); margin-inline: auto; }
+}
+
+/* Keyboard, high contrast, and reduced-motion users get equivalent state feedback. */
+.gh-app-shell :where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+  outline: var(--gh-focus-outline);
+  outline-offset: 3px;
+}
+@media (forced-colors: active) {
+  .gh-app-shell :where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px;
+  }
+  .gh-bottom-nav button[aria-current="page"] { border: 1px solid Highlight; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-app-shell *, .gh-app-shell *::before, .gh-app-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
