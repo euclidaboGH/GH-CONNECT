@@ -6,7 +6,7 @@
  * Never manufactures candidates; production filters studio seeds.
  */
 
-import { useMemo, useState, useCallback, useEffect, useEffect, startTransition } from "react"
+import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"

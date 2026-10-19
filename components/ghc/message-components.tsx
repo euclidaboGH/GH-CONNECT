@@ -408,6 +408,7 @@ function MessageBubbleBase({
     status?: "sending" | "sent" | "delivered" | "read" | "failed" | "deleted"
     deliveredAt?: number | null
     readAt?: number
+    failureReason?: string
   }
   isSentByCurrentUser: boolean
   onReply?: (messageId: string) => void
