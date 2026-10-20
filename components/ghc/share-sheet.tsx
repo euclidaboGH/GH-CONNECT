@@ -74,7 +74,7 @@ export function ShareSheet({
           c.conversationType === "group" &&
           isConversationMember(c, shareContext.currentUserId)
       ),
-    [shareContext.conversations]
+    [shareContext.conversations, shareContext.currentUserId]
   )
   const recent = useMemo(() => privateChats.slice(0, 8), [privateChats])
 
