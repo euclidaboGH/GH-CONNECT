@@ -460,10 +460,12 @@ export function buildSessionCookieHeader(
     `${GH_SESSION_COOKIE}=${rawToken}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    // Pi Browser embeds the app in a cross-site iframe (sandbox.minepi.com).
+    // SameSite=Lax cookies are NOT sent there, so production must use None+Secure(+Partitioned).
+    isProd ? "SameSite=None" : "SameSite=Lax",
     `Max-Age=${maxAge}`,
   ]
-  if (isProd) parts.push("Secure")
+  if (isProd) parts.push("Secure", "Partitioned")
   return parts.join("; ")
 }
 
@@ -474,10 +476,10 @@ export function buildClearSessionCookieHeader(isProduction?: boolean): string {
     `${GH_SESSION_COOKIE}=`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    isProd ? "SameSite=None" : "SameSite=Lax",
     "Max-Age=0",
   ]
-  if (isProd) parts.push("Secure")
+  if (isProd) parts.push("Secure", "Partitioned")
   return parts.join("; ")
 }
 

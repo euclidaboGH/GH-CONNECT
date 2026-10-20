@@ -4,6 +4,7 @@
  */
 
 import { mediaUserMessage } from "@/lib/media/user-messages"
+import { IdentityService } from "@/lib/identity/identity-service"
 
 const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
@@ -136,6 +137,9 @@ export async function uploadDurableMedia(
     const res = await fetch("/api/media", {
       method: "POST",
       credentials: "include",
+      // Bearer fallback: the session cookie can be blocked inside Pi Browser's iframe.
+      // Do not set Content-Type here; the browser must add the multipart boundary.
+      headers: { ...IdentityService.getAuthHeaders() },
       body: form,
     })
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>

@@ -10,6 +10,7 @@ import { AuthLoadingScreen } from "./auth-loading-screen";
 import { ErrorBoundary } from "@/lib/error-boundary";
 import { a11y } from "@/lib/accessibility";
 import { offlineSupport } from "@/lib/offline";
+import "@/lib/auth/install-api-auth-fetch";
 
 function AccessibilitySetup() {
   useEffect(() => {

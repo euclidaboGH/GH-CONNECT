@@ -632,7 +632,7 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
 
 
 export function GHCProvider({ children }: { children: ReactNode }) {
-  const { sdk } = usePiAuth()
+  const { sdk, signOut: piSignOut } = usePiAuth()
   const [identityUserId, setIdentityUserId] = useState(() => IdentityService.getCurrentUserId())
   useEffect(() => {
     return IdentityService.subscribe((id) => setIdentityUserId(id.userId))
@@ -6945,11 +6945,13 @@ const dismissMatchCelebration = useCallback(() => {
       }
       setState(() => createDefaultExtendedState({ ready: true }))
       addToast("Logged out successfully", "success")
+      // Reset the Pi/GH auth layer too, otherwise the app stays "authenticated" and re-logs in on reload
+      piSignOut()
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Error logging out", "error")
     }
-  }, [addToast, state.profile, state.settings, state.posts, state.conversations, domains])
+  }, [addToast, state.profile, state.settings, state.posts, state.conversations, domains, piSignOut])
 
   const createBackup = useCallback(() => {
     try {

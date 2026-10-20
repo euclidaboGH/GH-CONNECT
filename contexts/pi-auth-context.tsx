@@ -129,6 +129,8 @@ interface PiAuthContextType {
   products: Product[] | null;
   restoredPurchases: UserPurchaseBalance[] | null;
   reinitialize: () => Promise<void>;
+  /** Clears the Pi/GH auth state and stops automatic re-login until the user taps Sign in. */
+  signOut: () => void;
   /** Open a local session when Pi SDK is unavailable (Vercel / desktop browser) */
   continueLocalPreview: () => void;
   /** Deterministic auth lifecycle (server verify required before READY) */
@@ -317,6 +319,29 @@ const loadSDKLite = async (): Promise<void> => {
   throw lastError || new Error("Failed to load SDKLite script")
 }
 
+const SIGNED_OUT_KEY = "gh_signed_out";
+let signedOutInMemory = false;
+
+function readSignedOutFlag(): boolean {
+  if (signedOutInMemory) return true;
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(SIGNED_OUT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeSignedOutFlag(value: boolean): void {
+  signedOutInMemory = value;
+  try {
+    if (typeof window === "undefined") return;
+    if (value) window.localStorage.setItem(SIGNED_OUT_KEY, "1");
+    else window.localStorage.removeItem(SIGNED_OUT_KEY);
+  } catch {
+    /* storage blocked (e.g. partitioned iframe): in-memory flag still applies */
+  }
+}
+
 export function PiAuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMessage, setAuthMessage] = useState("Initializing Pi Network...");
@@ -349,6 +374,32 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       const parentCredentials = await requestParentCredentials();
       if (parentCredentials?.accessToken) {
         setAuthMessage("Authenticated via App Studio...");
+        // Establish a GH server session so uploads / profile saves are authorized.
+        // Best effort: on failure we keep the previous local-only behaviour.
+        let bridged: { ghUserId: string; needsOnboarding: boolean } | null = null;
+        try {
+          const r = await fetch("/api/auth/pi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ accessToken: parentCredentials.accessToken }),
+            signal: AbortSignal.timeout?.(8000),
+          });
+          const b = (await r.json().catch(() => ({}))) as {
+            ok?: boolean;
+            needsOnboarding?: boolean;
+            identity?: { piAppUid?: string; ghUserId?: string; onboardingCompleted?: boolean };
+          };
+          if (r.ok && b.ok === true && b.identity?.piAppUid) {
+            const completed = b.identity.onboardingCompleted === true;
+            bridged = {
+              ghUserId: String(b.identity.ghUserId || b.identity.piAppUid),
+              needsOnboarding: completed ? false : Boolean(b.needsOnboarding),
+            };
+          }
+        } catch {
+          /* offline or API unavailable */
+        }
         // Provide local state SDK so profile/onboarding can persist
         const localSdk = createLocalSdkLite(
           parentCredentials.appId || "app-studio-user"
@@ -358,15 +409,23 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         setProducts([]);
         setRestoredPurchases([]);
         IdentityService.setFromPi({
-          uid: parentCredentials.appId || null,
+          uid: bridged?.ghUserId ?? (parentCredentials.appId || null),
           accessToken: parentCredentials.accessToken,
           username: null,
+          ...(bridged
+            ? { verifiedByServer: true, needsOnboarding: bridged.needsOnboarding }
+            : {}),
         });
         setAuthLifecycle((s) =>
           transitionAuth(s, "READY", {
-            onboardingStatus: "required",
-            serverVerified: false,
-            sessionReady: false,
+            onboardingStatus: bridged
+              ? bridged.needsOnboarding
+                ? "required"
+                : "complete"
+              : "required",
+            serverVerified: Boolean(bridged),
+            sessionReady: Boolean(bridged),
+            ghUserId: bridged?.ghUserId ?? null,
             piUid: parentCredentials.appId || undefined,
           })
         );
@@ -828,6 +887,12 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // User explicitly logged out: do not silently sign back in on reload.
+    if (readSignedOutFlag()) {
+      setHasError(true);
+      setAuthMessage("You are signed out. Tap Sign in with Pi to continue.");
+      return undefined;
+    }
     let cancelled = false;
     const hardTimeout = window.setTimeout(() => {
       if (cancelled) return;
@@ -862,6 +927,22 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const signOut = () => {
+    writeSignedOutFlag(true);
+    setIsAuthenticated(false);
+    setSdk(null);
+    setProducts(null);
+    setRestoredPurchases(null);
+    setAuthLifecycle(INITIAL_AUTH_LIFECYCLE);
+    setHasError(true);
+    setAuthMessage("You are signed out. Tap Sign in with Pi to continue.");
+  };
+
+  const reinitialize = async () => {
+    writeSignedOutFlag(false);
+    await initialize();
+  };
+
   const value: PiAuthContextType = {
     isAuthenticated,
     authMessage,
@@ -869,7 +950,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
     sdk,
     products,
     restoredPurchases,
-    reinitialize: initialize,
+    reinitialize,
+    signOut,
     continueLocalPreview,
     authLifecycle,
     onboardingStatus: authLifecycle.onboardingStatus,
