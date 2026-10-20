@@ -605,7 +605,8 @@ useEffect(() => {
                           fileName: file.name,
                         })
                       } else {
-                        addToast(up.userMessage || up.error || "Upload failed", "error")
+                        const fail = up as { ok: false; error?: string; userMessage?: string }
+                        addToast(fail.userMessage || fail.error || "Upload failed", "error")
                       }
                     }
                     setPendingMedia(next)

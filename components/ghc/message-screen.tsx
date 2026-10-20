@@ -677,11 +677,15 @@ export function MessageScreen() {
                           } catch { /* */ }
                         },
                       })
-                      if (!up.ok || !up.url) {
+                      if (!up.ok || !("url" in up && up.url)) {
+                        const failMsg =
+                          !up.ok
+                            ? (up.userMessage || up.error || "Upload failed") + (up.error ? ` (${up.error})` : "")
+                            : "Upload failed"
                         window.dispatchEvent(
                           new CustomEvent("ghc:toast", {
                             detail: {
-                              message: (up.userMessage || up.error || "Upload failed") + (up.error ? ` (${up.error})` : ""),
+                              message: failMsg,
                               type: "error",
                             },
                           })
