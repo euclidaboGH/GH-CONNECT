@@ -7,12 +7,13 @@
 import { useEffect, useState } from "react"
 import { Gift, X } from "lucide-react"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
-import { useGHCShell } from "@/contexts/ghc-context"
+import { useGHCShell, useGHCProfile } from "@/contexts/ghc-context"
 import { notifyRewardClaimed } from "@/lib/notifications"
 
 export function DailyClaimPrompt() {
   const shell = useGHCShell()
-  const userId = shell.profile?.id || ""
+  const { profile } = useGHCProfile()
+  const userId = profile?.id || ""
   const { status, refresh } = useDailyClaimStatus(userId)
   const [dismissedDay, setDismissedDay] = useState<string | null>(null)
   const [claiming, setClaiming] = useState(false)
