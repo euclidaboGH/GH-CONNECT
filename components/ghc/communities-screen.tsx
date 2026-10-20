@@ -726,7 +726,9 @@ export function CommunitiesScreen() {
       selected.createdBy === me ||
       selected.createdBy === "current-user" ||
       Boolean(selected.groupRoles?.[me]) ||
-      Boolean(selected.groupRoles?.["current-user"])
+      Boolean(selected.groupRoles?.["current-user"]) ||
+      (selected.members || []).includes(me) ||
+      (selected.members || []).includes("current-user")
     const rules = normalizeRules(selected.rules)
     const rawRole =
       selected.createdBy === me ||

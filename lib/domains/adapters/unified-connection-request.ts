@@ -278,14 +278,21 @@ export async function acceptUnifiedConnectionRequest(
   }
   try {
     window.dispatchEvent(
-      new CustomEvent("ghc:connection-updated", { detail: { action: "accept", fromUserId } })
+      new CustomEvent("ghc:connection-updated", {
+        detail: { action: "accept", fromUserId, peerUserId: fromUserId },
+      })
     )
     window.dispatchEvent(
       new CustomEvent("ghc:social-mutation", {
         detail: { type: "connection_accept", fromUserId, durable: true },
       })
     )
+    window.dispatchEvent(new CustomEvent("ghc:connection-inbox-updated"))
   } catch { /* */ }
+  try {
+    const { reportMissionProgress } = await import("@/lib/missions/progress")
+    await reportMissionProgress("accept_connection", { fromUserId })
+  } catch { /* optional */ }
   return { ok: true, intents: prior?.intents || [] }
 }
 
@@ -296,19 +303,42 @@ export async function declineUnifiedConnectionRequest(
   if (!actorUserId || !fromUserId || actorUserId === fromUserId) {
     return { ok: false, error: "INVALID_PAIR", code: "INVALID_PAIR" }
   }
-  const services = getBoundDomainServices()
-  if (!services?.graph?.rejectFriendRequest) {
-    return { ok: false, error: "GRAPH_UNAVAILABLE", code: "GRAPH_UNAVAILABLE" }
-  }
-  const res = await services.graph.rejectFriendRequest(fromUserId)
-  if (!res.ok) {
-    return { ok: false, error: res.error || "DECLINE_FAILED", code: "DECLINE_FAILED" }
-  }
+
+  // Server-first so the sender's outgoing inbox clears for both accounts
   if (typeof window !== "undefined") {
     try {
-      await postJson("/api/connections/decline", { fromUserId })
-    } catch { /* */ }
+      const { res, data } = await postJson("/api/connections/decline", { fromUserId })
+      if (!res.ok || data?.ok === false || data?.durable === false) {
+        return {
+          ok: false,
+          error: String(data?.error || "DECLINE_NOT_DURABLE"),
+          code: "DECLINE_NOT_DURABLE",
+        }
+      }
+    } catch {
+      return { ok: false, error: "NETWORK_ERROR", code: "NETWORK_ERROR" }
+    }
+  } else {
+    return { ok: false, error: "SERVER_REQUIRED", code: "SERVER_REQUIRED" }
   }
+
+  const services = getBoundDomainServices()
+  if (services?.graph?.rejectFriendRequest) {
+    const res = await services.graph.rejectFriendRequest(fromUserId)
+    if (!res.ok) {
+      console.warn("[connection] session graph lag after durable decline", res.error)
+    }
+  }
+  try {
+    window.dispatchEvent(
+      new CustomEvent("ghc:connection-updated", { detail: { action: "decline", fromUserId } })
+    )
+    window.dispatchEvent(
+      new CustomEvent("ghc:social-mutation", {
+        detail: { type: "connection_decline", fromUserId, durable: true },
+      })
+    )
+  } catch { /* */ }
   return { ok: true }
 }
 

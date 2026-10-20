@@ -245,7 +245,12 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
       const r = await acceptUnifiedConnectionRequest(meId, fromUserId)
       if (!r.ok) ghc.addToast?.(r.error || "Could not accept", "error")
       else {
-        ghc.addToast?.("Connected", "success")
+        // Optimistic remove so the card disappears before re-fetch
+        setServerIncoming((rows) => rows.filter((i) => i.fromUserId !== fromUserId))
+        setServerOutgoing((rows) =>
+          rows.filter((i) => !(i.fromUserId === meId && i.toUserId === fromUserId))
+        )
+        ghc.addToast?.("Connected — they can message you now", "success")
         setTick((n) => n + 1)
       }
     } finally {
@@ -259,6 +264,7 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
       const r = await declineUnifiedConnectionRequest(meId, fromUserId)
       if (!r.ok) ghc.addToast?.(r.error || "Could not decline", "error")
       else {
+        setServerIncoming((rows) => rows.filter((i) => i.fromUserId !== fromUserId))
         ghc.addToast?.("Request declined", "info")
         setTick((n) => n + 1)
       }

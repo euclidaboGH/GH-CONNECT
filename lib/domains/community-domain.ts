@@ -560,6 +560,17 @@ export function createCommunityDomain(deps: {
         mutate: (i) => {
           const community = find(i.communityId)!
           const members = Array.from(new Set([...(community.members || []), actorId]))
+          // Persist role so assertAction(post/chat) works immediately after join
+          deps.setConversations?.((convs) =>
+            convs.map((c) => {
+              if (c.id !== i.communityId) return c
+              return {
+                ...c,
+                members,
+                groupRoles: { ...(c.groupRoles || {}), [actorId]: "member" as const },
+              }
+            })
+          )
           return { communityId: i.communityId, members }
         },
         eventType: "GROUP_JOINED",
@@ -705,7 +716,12 @@ export function createCommunityDomain(deps: {
           const community = find(i.communityId)
           if (!community) return "Community not found"
           const members = community.members || []
-          if (!members.includes(actorId) && community.createdBy !== actorId) {
+          const roles = community.groupRoles || {}
+          const isMember =
+            members.includes(actorId) ||
+            community.createdBy === actorId ||
+            Boolean(roles[actorId])
+          if (!isMember) {
             return "Join this community to post on the board"
           }
           if (!(i.body || "").trim()) return "Write something before posting"

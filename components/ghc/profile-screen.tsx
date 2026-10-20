@@ -204,7 +204,11 @@ export function ProfileScreen({
                 reader.readAsDataURL(compressedBlob)
               })
             } else {
-              throw new Error(uploaded && !uploaded.ok ? uploaded.userMessage : "This upload was not recognized as an image.")
+              throw new Error(
+                uploaded && uploaded.ok === false
+                  ? (uploaded.userMessage || uploaded.error || "Upload failed")
+                  : "This upload was not recognized as an image."
+              )
             }
             const changedAt = Date.now()
             if (kind === "photo") {

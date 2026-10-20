@@ -44,11 +44,11 @@ export async function POST(req: Request) {
     void emitSocialNotification({
       recipientUserId: fromUserId,
       actorUserId: auth.userId,
-      type: "follow",
+      type: "connection",
       entityType: "user",
       entityId: auth.userId,
       title: "Connected",
-      body: "Your connection request was accepted",
+      body: "Your connection request was accepted — you are now connected",
       dedupeKey: `connection_accept:${fromUserId}:${auth.userId}`,
       metadata: { kind: "connection_accept" },
     })

@@ -223,7 +223,12 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         setStoryMode("choose")
         addToast?.(`${type === "image" ? "Photo" : "Video"} ready`, "success")
       } else {
-        addToast?.(mediaUserMessage(uploaded.ok ? "STORAGE_ERROR" : uploaded.error, uploaded.ok ? undefined : uploaded.userMessage), "error")
+        addToast?.(
+          uploaded.ok === false
+            ? (uploaded.userMessage || mediaUserMessage(uploaded.error || "STORAGE_ERROR"))
+            : mediaUserMessage("STORAGE_ERROR"),
+          "error"
+        )
       }
     } catch {
       addToast?.(`Could not prepare this ${type}`, "error")

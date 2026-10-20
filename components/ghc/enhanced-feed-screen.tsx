@@ -1017,7 +1017,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 if (result.link) addToast("Link copied", "success")
                 else if (result.repost) addToast("Shared to your timeline", "success")
                 else if (result.story) addToast("Added to your story", "success")
-                else if (result.messages?.length) addToast("Sent", "success")
+                else if (result.messages?.length) {
+                  const n = result.messages.length
+                  addToast(n > 1 ? `Shared to ${n} communities/chats` : "Shared to community", "success")
+                }
                 else if (!durableOk) addToast("Could not sync share to server", "error")
                 else addToast("Shared", "success")
               })()

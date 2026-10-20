@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.62.11",
+  "version": "0.63.7",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -112,7 +112,8 @@
     "test:pi-backend-lock-repair": "node scripts/test-pi-backend-lock-repair.mjs",
     "test:media-direct": "node scripts/test-media-direct-upload.mjs",
     "operator:live-e2e-media-dm": "node scripts/operator-live-e2e-media-dm.mjs",
-    "verify:economy-stage1": "node scripts/verify-economy-stage1-gates.mjs"
+    "verify:economy-stage1": "node scripts/verify-economy-stage1-gates.mjs",
+    "operator:phase5-gate": "node scripts/operator-phase5-gate.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

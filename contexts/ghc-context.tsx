@@ -588,6 +588,8 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
     const likes = Number(p.likes ?? p.like_count ?? p.likeCount ?? 0) || 0
     const shares = Number(p.shares ?? p.share_count ?? 0) || 0
     const viewCount = Number(p.viewCount ?? p.view_count ?? 0) || 0
+    const upvoteCount = Number(p.upvoteCount ?? p.upvote_count ?? 0) || 0
+    const downvoteCount = Number(p.downvoteCount ?? p.downvote_count ?? 0) || 0
     const createdAt = Number(p.createdAt ?? p.created_at ?? Date.now()) || Date.now()
     const deletedAtRaw = p.deletedAt ?? p.deleted_at
     const deletedAt =
@@ -626,6 +628,8 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
       contentType: (p.contentType || p.content_type) as Post["contentType"],
       shares: shares || undefined,
       viewCount: viewCount || undefined,
+      upvoteCount,
+      downvoteCount,
       quoteOf: p.quoteOf || p.quote_of_post_id ? String(p.quoteOf || p.quote_of_post_id) : undefined,
     } as Post
   }).filter((p) => Boolean(p.id))
@@ -1677,6 +1681,95 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
 
 
+  // Rehydrate social surfaces when the device comes back online
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const onOnline = () => {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:connection-inbox-updated"))
+        window.dispatchEvent(new CustomEvent("ghc:social-mutation", { detail: { type: "online" } }))
+      } catch { /* */ }
+    }
+    window.addEventListener("online", onOnline)
+    return () => window.removeEventListener("online", onOnline)
+  }, [])
+
+  // Phase 3 — keep friends + request inbox coherent after accept/decline on any surface
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const rehydrateInbox = async () => {
+      try {
+        const { socialFetchConnectionInbox } = await import("@/lib/social/client")
+        const inbox = await socialFetchConnectionInbox()
+        if (!inbox.ok) return
+        setState((s) => {
+          const myId = String(s.profile?.id || "").trim()
+          const key = (r: { fromUserId: string; toUserId: string }) => `${r.fromUserId}→${r.toUserId}`
+          const byKey = new Map<string, FriendRequest>()
+          if (!inbox.durable) {
+            for (const r of s.friendRequests || []) byKey.set(key(r), r)
+          }
+          for (const r of inbox.incoming || []) {
+            byKey.set(key(r), {
+              id: r.id || `in_${r.fromUserId}`,
+              fromUserId: r.fromUserId,
+              fromUserName: "Member",
+              fromUserPhoto: "",
+              toUserId: r.toUserId || myId,
+              createdAt: r.createdAt || Date.now(),
+            } as FriendRequest)
+          }
+          for (const r of inbox.outgoing || []) {
+            byKey.set(key(r), {
+              id: r.id || `out_${r.toUserId}`,
+              fromUserId: r.fromUserId || myId,
+              fromUserName: s.profile?.displayName || "You",
+              fromUserPhoto: s.profile?.photos?.[0] || "",
+              toUserId: r.toUserId,
+              createdAt: r.createdAt || Date.now(),
+            } as FriendRequest)
+          }
+          return { ...s, friendRequests: Array.from(byKey.values()) }
+        })
+      } catch { /* */ }
+    }
+    const onConnectionUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail || {}
+      const action = String(detail.action || "")
+      const peer = String(detail.fromUserId || detail.peerUserId || "").trim()
+      if (action === "accept" && peer) {
+        setState((s) => {
+          const friends = Array.from(new Set([...(s.friends || []), peer]))
+          const following = Array.from(new Set([...(s.following || []), peer]))
+          const myId = String(s.profile?.id || "").trim()
+          const friendRequests = (s.friendRequests || []).filter(
+            (r) =>
+              !(r.fromUserId === peer && r.toUserId === myId) &&
+              !(r.fromUserId === myId && r.toUserId === peer)
+          )
+          return { ...s, friends, following, friendRequests }
+        })
+      } else if (action === "decline" && peer) {
+        setState((s) => {
+          const myId = String(s.profile?.id || "").trim()
+          const friendRequests = (s.friendRequests || []).filter(
+            (r) =>
+              !(r.fromUserId === peer && r.toUserId === myId) &&
+              !(r.fromUserId === myId && r.toUserId === peer)
+          )
+          return { ...s, friendRequests }
+        })
+      }
+      void rehydrateInbox()
+    }
+    window.addEventListener("ghc:connection-updated", onConnectionUpdated as EventListener)
+    window.addEventListener("ghc:connection-inbox-updated", rehydrateInbox as EventListener)
+    return () => {
+      window.removeEventListener("ghc:connection-updated", onConnectionUpdated as EventListener)
+      window.removeEventListener("ghc:connection-inbox-updated", rehydrateInbox as EventListener)
+    }
+  }, [])
+
   // Cross-account discovery: merge server profiles into candidates (real gh_user_id)
   useEffect(() => {
     if (!state.ready) return
@@ -1709,6 +1802,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               coverPhoto: existing?.coverPhoto,
               profilePhotoHistory: existing?.profilePhotoHistory,
               coverPhotoHistory: existing?.coverPhotoHistory,
+              distance: existing?.distance,
+              isSample: false,
             })
           }
           // Drop demo seeds when we have real people (production multi-user)
@@ -2513,6 +2608,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       notificationSystem.addNotification("share", "Posted", "Your post is live on Feed", "✓", { open: "feed", section: "post" })
       if (durableStatus === "ok") {
         addToast("Post published", "success")
+        try {
+          const { reportMissionProgress } = await import("@/lib/missions/progress")
+          const m = await reportMissionProgress("first_post", { postId: publishedPost.id })
+          if (m.ok && m.grantedGhc && m.grantedGhc > 0) {
+            addToast(m.message || `Mission · ₲ ${m.grantedGhc}`, "success")
+          }
+        } catch { /* */ }
         // Phase 2: revalidate feed so other sessions/devices converge faster
         try {
           const { socialFetchFeed } = await import("@/lib/social/client")
@@ -3012,10 +3114,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     try {
       if (replyToCommentId) {
         const post = state.posts.find((p) => p.id === postId)
-        const parentExists = post?.comments?.some((c) => c.id === replyToCommentId)
+        let parentExists = Boolean(post?.comments?.some((c) => c.id === replyToCommentId))
         if (!parentExists) {
-          addToast("Original comment was removed", "error")
-          return
+          // Parent may only exist on server (cross-account thread)
+          try {
+            const { socialListComments } = await import("@/lib/social/client")
+            const remoteThread = await socialListComments(postId, { limit: 80 })
+            parentExists = (remoteThread.comments || []).some(
+              (c) => String((c as { id?: string }).id || "") === replyToCommentId
+            )
+            if (!parentExists && remoteThread.durable) {
+              addToast("Original comment was removed", "error")
+              return
+            }
+          } catch {
+            /* allow server to validate on write */
+          }
         }
       }
 
@@ -3127,7 +3241,56 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       } catch {
         /* */
       }
+      // Reconcile thread from server so ids/order match other accounts
+      try {
+        const { socialListComments } = await import("@/lib/social/client")
+        const thread = await socialListComments(postId, { limit: 80 })
+        if (thread.ok && Array.isArray(thread.comments) && thread.comments.length > 0) {
+          const mapped = thread.comments.map((c) => ({
+            id: String((c as { id?: string }).id || ""),
+            authorId: String((c as { authorId?: string }).authorId || ""),
+            authorName: String((c as { authorName?: string }).authorName || "Member"),
+            authorPhoto: String((c as { authorPhoto?: string }).authorPhoto || ""),
+            text: String((c as { text?: string }).text || ""),
+            createdAt: Number((c as { createdAt?: number }).createdAt) || Date.now(),
+            replyTo: (c as { parentId?: string; replyTo?: string }).parentId || (c as { replyTo?: string }).replyTo,
+            replies: [] as [],
+            reactions: {},
+            reactionCounts: {},
+            mediaAttachments: Array.isArray((c as { mediaAttachments?: unknown }).mediaAttachments)
+              ? (c as { mediaAttachments: unknown[] }).mediaAttachments
+              : undefined,
+          })).filter((c) => c.id)
+          setState((s) => ({
+            ...s,
+            posts: s.posts.map((post) => {
+              if (post.id !== postId) return post
+              return {
+                ...post,
+                comments: mapped as typeof post.comments,
+                engagement: normalizeEngagementMetrics(post.engagement, {
+                  comments: mapped.length,
+                }),
+              }
+            }),
+          }))
+          broadcastPostEngagement({
+            postId,
+            kind: "comment",
+            commentCount: mapped.length,
+          })
+        }
+      } catch { /* non-fatal */ }
       addToast(replyToCommentId ? "Reply posted" : "Comment posted", "success")
+      if (!replyToCommentId) {
+        try {
+          const { reportMissionProgress } = await import("@/lib/missions/progress")
+          const m = await reportMissionProgress("first_comment", { postId })
+          if (m.ok && m.completed && !m.alreadyCompleted && typeof m.grantedGhc === "number" && m.grantedGhc > 0) {
+            addToast(`Mission reward · ₲ ${m.grantedGhc.toFixed(2)}`, "success")
+          }
+        } catch { /* optional */ }
+      }
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -4387,6 +4550,13 @@ const dismissMatchCelebration = useCallback(() => {
         /* */
       }
       addToast("Friend request sent — they will see it in their inbox", "success")
+      try {
+        const { reportMissionProgress } = await import("@/lib/missions/progress")
+        const m = await reportMissionProgress("send_connection", { toUserId: userId })
+        if (m.ok && m.grantedGhc && m.grantedGhc > 0) {
+          addToast(m.message || `Mission · ₲ ${m.grantedGhc}`, "success")
+        }
+      } catch { /* */ }
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error adding friend", "error")
@@ -6092,6 +6262,13 @@ const dismissMatchCelebration = useCallback(() => {
         markJoined(communityId)
         if (durableOk !== false) {
           addToast("Joined community", "success")
+          try {
+            const { reportMissionProgress } = await import("@/lib/missions/progress")
+            const m = await reportMissionProgress("join_community", { communityId })
+            if (m.ok && m.grantedGhc && m.grantedGhc > 0) {
+              addToast(m.message || `Mission · ₲ ${m.grantedGhc}`, "success")
+            }
+          } catch { /* */ }
         }
         analytics.trackEvent("community_joined", { communityId }, state.profile.displayName)
         return true
@@ -6472,14 +6649,81 @@ const dismissMatchCelebration = useCallback(() => {
       kind: "text" | "question" | "resource" = "text"
     ): Promise<boolean> => {
       try {
-        const result = await domains.community.createBoardPost(communityId, { body, kind })
-        if (!result.ok) {
-          addToast(result.error, "error")
+        const text = String(body || "").trim()
+        if (!text) {
+          addToast("Write something before posting", "error")
           return false
         }
+        // Membership gate (local + domain)
+        const conv = state.conversations.find((c) => c.id === communityId)
+        const me = IdentityService.getCurrentUserId() || state.profile?.id || ""
+        const isMember =
+          Boolean(conv) &&
+          (conv!.createdBy === me ||
+            (conv!.members || []).includes(me) ||
+            Boolean(conv!.groupRoles?.[me]) ||
+            conv!.createdBy === "current-user")
+        if (conv && !isMember) {
+          addToast("Join this community before posting on the board", "error")
+          return false
+        }
+
+        // Server-first: durable social post scoped to community
+        let durableId: string | null = null
+        let durableOk = false
+        if (typeof navigator === "undefined" || navigator.onLine) {
+          try {
+            const { socialCreatePost } = await import("@/lib/social/client")
+            const remote = await socialCreatePost({
+              content: text,
+              communityId,
+              visibility: "community",
+              type: kind === "question" ? "text" : "text",
+            } as Parameters<typeof socialCreatePost>[0] & { communityId: string; visibility: string })
+            if (remote.ok && remote.durable && remote.post?.id) {
+              durableOk = true
+              durableId = String(remote.post.id)
+            } else if (remote.ok === false) {
+              addToast(
+                remote.error === "NOT_A_MEMBER"
+                  ? "Join this community on the server before posting"
+                  : remote.error || "Could not publish board post",
+                "error"
+              )
+              return false
+            }
+          } catch {
+            addToast("Could not reach the server to publish board post", "error")
+            return false
+          }
+        } else {
+          addToast("You're offline — board posts require a connection", "error")
+          return false
+        }
+
+        const result = await domains.community.createBoardPost(communityId, { body: text, kind })
+        if (!result.ok) {
+          // Server already accepted — keep local board in sync for UI
+          if (!durableOk) {
+            addToast(result.error, "error")
+            return false
+          }
+        }
         const post = {
-          ...result.data.post,
+          ...(result.ok ? result.data.post : {
+            id: durableId || `bpost_${Date.now().toString(36)}`,
+            communityId,
+            authorId: me || "current-user",
+            authorName: state.profile.displayName || "You",
+            body: text,
+            kind,
+            createdAt: Date.now(),
+            likes: 0,
+            comments: 0,
+          }),
+          id: durableId || (result.ok ? result.data.post.id : `bpost_${Date.now().toString(36)}`),
           authorName: state.profile.displayName || "You",
+          durable: durableOk,
         }
         setState((s) => ({
           ...s,
@@ -6489,19 +6733,19 @@ const dismissMatchCelebration = useCallback(() => {
             return {
               ...c,
               boardPosts: [post, ...existing],
-              lastMessage: body.slice(0, 80),
+              lastMessage: text.slice(0, 80),
               lastMessageTime: post.createdAt,
             }
           }),
         }))
-        addToast("Posted to board", "success")
+        addToast(durableOk ? "Posted to community board" : "Posted to board", "success")
         return true
       } catch (err) {
         addToast("Could not post", "error")
         return false
       }
     },
-    [state.profile.displayName, addToast, domains]
+    [state.profile, state.conversations, addToast, domains]
   )
 
   const replyToBoardPost = useCallback(

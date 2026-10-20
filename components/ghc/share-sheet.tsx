@@ -23,6 +23,8 @@ import type { Post, Conversation } from "@/lib/ghc-types"
 import type { ShareVisibility } from "@/lib/share-types"
 import {
   ShareService,
+  isConversationMember,
+  isCommunityConversation,
   type ShareContext,
   type ShareResult,
 } from "@/lib/share-service"
@@ -66,7 +68,12 @@ export function ShareSheet({
     [shareContext.conversations]
   )
   const groups = useMemo(
-    () => shareContext.conversations.filter((c) => c.conversationType === "group"),
+    () =>
+      shareContext.conversations.filter(
+        (c) =>
+          c.conversationType === "group" &&
+          isConversationMember(c, shareContext.currentUserId)
+      ),
     [shareContext.conversations]
   )
   const recent = useMemo(() => privateChats.slice(0, 8), [privateChats])
@@ -108,7 +115,7 @@ export function ShareSheet({
       } else if (tab === "private") {
         result = ShareService.shareToPrivateChats(shareContext, post.id, selectedIds, caption)
       } else if (tab === "group") {
-        result = ShareService.shareToGroupChats(shareContext, post.id, selectedIds, caption)
+        result = ShareService.shareToCommunities(shareContext, post.id, selectedIds, caption)
       } else {
         result = ShareService.copyPostLink(shareContext, post.id)
         if (result.ok && result.link) {
@@ -157,7 +164,7 @@ export function ShareSheet({
     { id: "timeline", label: "Timeline", icon: <Newspaper size={14} /> },
     { id: "story", label: "Story", icon: <Circle size={14} /> },
     { id: "private", label: "Chat", icon: <MessageCircle size={14} /> },
-    { id: "group", label: "Group", icon: <Users size={14} /> },
+    { id: "group", label: "Communities", icon: <Users size={14} /> },
     { id: "link", label: "Link", icon: <Link2 size={14} /> },
   ]
 
@@ -326,7 +333,7 @@ export function ShareSheet({
                   <p className="text-xs text-muted-foreground">
                     {tab === "private"
                       ? "No private conversations yet."
-                      : "You're not in any groups yet."}
+                      : "Join a community first, then share posts into it."}
                   </p>
                   {tab === "private" && onFindPeople && (
                     <button

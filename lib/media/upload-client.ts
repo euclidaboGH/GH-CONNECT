@@ -274,6 +274,13 @@ async function uploadViaDirect(
   }
 }
 
+
+/** Safe message for failed uploads (success branch has no userMessage). */
+export function mediaUploadErrorMessage(up: DurableMediaResult, fallback = "Upload failed"): string {
+  if (up.ok) return fallback
+  return String(up.userMessage || up.error || fallback)
+}
+
 export async function uploadDurableMedia(
   file: File | Blob,
   meta?: {

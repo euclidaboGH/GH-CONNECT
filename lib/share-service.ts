@@ -47,6 +47,23 @@ export interface ShareError {
   code: "NOT_FOUND" | "DELETED" | "BLOCKED" | "PRIVATE" | "NO_RECIPIENT" | "DENIED"
 }
 
+
+/** True when user is a joined community/group member (roles or members list). */
+export function isConversationMember(c: Conversation | undefined, userId: string): boolean {
+  if (!c || !userId) return false
+  if (c.createdBy === userId) return true
+  const members = (c as { members?: string[] }).members || []
+  if (members.includes(userId)) return true
+  const roles = (c as { groupRoles?: Record<string, string> }).groupRoles || {}
+  return Boolean(roles[userId])
+}
+
+export function isCommunityConversation(c: Conversation | undefined): boolean {
+  if (!c || c.conversationType !== "group") return false
+  const any = c as { kind?: string; communityId?: string; groupName?: string }
+  return any.kind === "community" || Boolean(any.communityId) || Boolean(any.groupName)
+}
+
 function findPost(posts: Post[], postId: string) {
   return posts.find((p) => p.id === postId)
 }
@@ -218,10 +235,18 @@ export function shareToGroupChats(
   const { post } = gate
   const groupIds = conversationIds.filter((cid) => {
     const c = ctx.conversations.find((x) => x.id === cid)
-    return c && c.conversationType === "group"
+    return (
+      c &&
+      c.conversationType === "group" &&
+      isConversationMember(c, ctx.currentUserId)
+    )
   })
   if (!groupIds.length) {
-    return { ok: false, error: "No valid groups selected.", code: "NO_RECIPIENT" }
+    return {
+      ok: false,
+      error: "Join a community first, then share into communities you belong to.",
+      code: "NO_RECIPIENT",
+    }
   }
   const share = baseShare(post, ctx.currentUserId, "group_chat", groupIds.join(","), caption)
   const body = caption?.trim() || "Shared a post 👇"
@@ -249,11 +274,37 @@ export function copyPostLink(ctx: ShareContext, postId: string): ShareResult | S
   return { ok: true, share, link, analytics: analytics(share) }
 }
 
+
+
+/**
+ * Share a post into joined communities as chat messages (membership required).
+ * Alias of group share with stricter community-only filter.
+ */
+export function shareToCommunities(
+  ctx: ShareContext,
+  postId: string,
+  conversationIds: string[],
+  caption?: string
+): ShareResult | ShareError {
+  const communityOnly = conversationIds.filter((cid) => {
+    const c = ctx.conversations.find((x) => x.id === cid)
+    return c && isCommunityConversation(c) && isConversationMember(c, ctx.currentUserId)
+  })
+  if (!communityOnly.length) {
+    // Fall back to membership-filtered group chats (private groups + communities)
+    return shareToGroupChats(ctx, postId, conversationIds, caption)
+  }
+  return shareToGroupChats(ctx, postId, communityOnly, caption)
+}
+
 export const ShareService = {
   canSharePost,
   shareToTimeline,
   shareToStory,
   shareToPrivateChats,
   shareToGroupChats,
+  shareToCommunities,
   copyPostLink,
+  isConversationMember,
+  isCommunityConversation,
 }

@@ -40,11 +40,11 @@ export async function GET(request: Request) {
   try {
     const base = env.supabaseUrl.replace(/\/$/, "")
     // Prefer onboarded profiles; exclude actor
+    // All registered profiles (not only onboarded=true) so new KYC'd users appear
     const url =
       `${base}/rest/v1/gh_user_profiles` +
-      `?onboarded=eq.true` +
-      `&gh_user_id=neq.${encodeURIComponent(auth.userId)}` +
-      `&select=gh_user_id,display_name,username,bio,photos,city,country,updated_at` +
+      `?gh_user_id=neq.${encodeURIComponent(auth.userId)}` +
+      `&select=gh_user_id,display_name,username,bio,photos,city,country,interests,updated_at,onboarded` +
       `&order=updated_at.desc` +
       `&limit=${limit}`
 
@@ -92,6 +92,10 @@ export async function GET(request: Request) {
         avatarUrl: avatar,
         city: row.city ? String(row.city) : "",
         country: row.country ? String(row.country) : "",
+        interests: Array.isArray(row.interests)
+          ? (row.interests as unknown[]).map(String).slice(0, 12)
+          : [],
+        onboarded: row.onboarded === true,
       }
     }).filter((p) => p.userId)
 

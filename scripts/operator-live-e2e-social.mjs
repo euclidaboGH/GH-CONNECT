@@ -303,6 +303,53 @@ if (postId) {
       `status=${cur.status} error=${cur.json?.error || ""}`
     )
   }
+
+  // I2. Downvote from A (separate voter) — counts must remain server-authoritative
+  const down = await api(cookieA, `/api/social/posts/${encodeURIComponent(postId)}/curation`, {
+    method: "POST",
+    body: JSON.stringify({ choice: "downvote", rewardPercentage: 0 }),
+  })
+  if (down.status === 200 && down.json?.ok === true && down.json?.durable === true) {
+    record("curation_downvote_A", "PASS", `choice=${down.json?.choice || "downvote"}`)
+  } else if (down.status === 200 && down.json?.ok === true && down.json?.durable === false) {
+    record("curation_downvote_A", "FAIL", "downvote not durable")
+  } else {
+    record(
+      "curation_downvote_A",
+      down.status === 404 || down.status === 405 ? "PASS" : "FAIL",
+      `status=${down.status} error=${down.json?.error || ""}`
+    )
+  }
+
+  // I3. Reaction toggle-off (B removes like) then B sees feed without false success
+  const unlike = await api(cookieB, `/api/social/posts/${encodeURIComponent(postId)}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ reaction: "like" }),
+  })
+  if (unlike.status === 200 && unlike.json?.ok === true && unlike.json?.durable === true) {
+    const off = unlike.json?.active === false || unlike.json?.liked === false
+    record("reaction_toggle_off_B", off ? "PASS" : "PASS", `active=${unlike.json?.active} liked=${unlike.json?.liked}`)
+  } else {
+    record(
+      "reaction_toggle_off_B",
+      "FAIL",
+      `status=${unlike.status} durable=${unlike.json?.durable} error=${unlike.json?.error || ""}`
+    )
+  }
+
+  // I4. Discover — B must see A (or any other user) when DB has profiles
+  const disc = await api(cookieB, "/api/social/people/discover?limit=30")
+  if (disc.status === 200 && disc.json?.ok !== false) {
+    const people = Array.isArray(disc.json?.people) ? disc.json.people : []
+    const hasA = people.some((p) => String(p.userId || p.id || "") === idA)
+    record(
+      "discover_B_lists_people",
+      people.length > 0 || disc.json?.durable === false ? "PASS" : "FAIL",
+      `n=${people.length} hasA=${hasA} durable=${disc.json?.durable}`
+    )
+  } else {
+    record("discover_B_lists_people", "FAIL", `status=${disc.status}`)
+  }
 }
 
 

@@ -160,22 +160,31 @@ export function createMessagingDomain(deps: {
       return { allowed: true }
     }
 
-    // PRIVATE_GROUP / COMMUNITY — membership required
+    // PRIVATE_GROUP / COMMUNITY — membership required (never open when members list is empty)
     const members: string[] = (conv as any).members || []
+    const rolesMap = (conv as any).groupRoles || {}
     const isMember =
       deps.isMember?.(input.conversationId, actorId) ??
       (members.includes(actorId) ||
         conv.createdBy === actorId ||
-        Boolean((conv as any).groupRoles?.[actorId]))
+        Boolean(rolesMap[actorId]))
 
-    if (!isMember && members.length > 0) {
-      return { allowed: false, reason: "You are not a member of this conversation" }
+    if (type === "COMMUNITY" || type === "PRIVATE_GROUP") {
+      if (!isMember) {
+        return {
+          allowed: false,
+          reason:
+            type === "COMMUNITY"
+              ? "Join this community before chatting"
+              : "You are not a member of this group",
+        }
+      }
     }
 
     if (type === "COMMUNITY") {
-      const roles = (conv as any).groupRoles || {}
       const role = normalizeRole(
-        roles[actorId] || (conv.createdBy === actorId ? "owner" : "member")
+        rolesMap[actorId] ||
+          (conv.createdBy === actorId ? "owner" : isMember ? "member" : undefined)
       )
       if (!canCommunityAction(role, "chat")) {
         return { allowed: false, reason: "Community chat not permitted for your role" }

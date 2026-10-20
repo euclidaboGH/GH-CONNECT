@@ -110,6 +110,22 @@ export function MessageScreen() {
     }
   }, [])
 
+
+  // Soft realtime: poll open thread while visible (does not replace server push)
+  useEffect(() => {
+    if (!selectedId || typeof loadConversationMessages !== "function") return
+    let cancelled = false
+    const tick = () => {
+      if (cancelled || document.visibilityState === "hidden") return
+      void loadConversationMessages(selectedId).catch(() => {})
+    }
+    const id = window.setInterval(tick, 8000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [selectedId, loadConversationMessages])
+
   useEffect(() => {
     if (!selectedId) return
     const onVis = () => {
@@ -659,7 +675,7 @@ export function MessageScreen() {
                   const files = Array.from(input.files || []).slice(0, 4)
                   if (!files.length || !selectedId) return
                   try {
-                    const { uploadDurableMedia } = await import("@/lib/media/upload-client")
+                    const { uploadDurableMedia, mediaUploadErrorMessage } = await import("@/lib/media/upload-client")
                     for (const file of files) {
                       const kind = file.type.startsWith("image/")
                         ? "image"
@@ -680,7 +696,7 @@ export function MessageScreen() {
                       if (!up.ok || !("url" in up && up.url)) {
                         const failMsg =
                           !up.ok
-                            ? (up.userMessage || up.error || "Upload failed") + (up.error ? ` (${up.error})` : "")
+                            ? mediaUploadErrorMessage(up)
                             : "Upload failed"
                         window.dispatchEvent(
                           new CustomEvent("ghc:toast", {

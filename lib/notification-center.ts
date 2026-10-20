@@ -323,7 +323,8 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
   } else if (
     n.type === "friend_request" ||
     n.type === "connection_request" ||
-    (n as { type?: string }).type === "connection_request"
+    (n as { type?: string }).type === "connection_request" ||
+    (n as { type?: string }).type === "connection"
   ) {
     // Connection request inbox — Matches tab hosts the inbox overlay
     link.open = "matches"
@@ -334,6 +335,14 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
         String((n.data as { actorUserId?: string; fromUserId?: string } | undefined)?.actorUserId ||
           (n.data as { fromUserId?: string } | undefined)?.fromUserId ||
           "")
+      if (actor) link.userId = actor
+    }
+  } else if ((n as { type?: string }).type === "connection_accept") {
+    link.open = "matches"
+    link.tab = "matches"
+    link.section = "matches"
+    if (!link.userId) {
+      const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
       if (actor) link.userId = actor
     }
   } else if (n.type === "follow") {

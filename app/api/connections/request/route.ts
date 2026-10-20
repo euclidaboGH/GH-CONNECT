@@ -80,11 +80,11 @@ export async function POST(req: Request) {
     void emitSocialNotification({
       recipientUserId: toUserId,
       actorUserId: auth.userId,
-      type: "follow",
+      type: "connection",
       entityType: "user",
       entityId: auth.userId,
       title: "Connection request",
-      body: "Someone wants to connect with you on GreenHaven",
+      body: "New connection request — open Matches → Requests to respond",
       dedupeKey: `connection_request:${auth.userId}:${toUserId}`,
       metadata: { kind: "connection_request", intents, source: body.source || "discover" },
     })
@@ -123,13 +123,14 @@ export async function GET(req: Request) {
       Accept: "application/json",
     }
     // Incoming: to_user_id = me, pending
+    // status pending (and legacy open/requested if present)
+    const statusFilter = "status=in.(pending,open,requested)"
     const inUrl =
       `${base}/rest/v1/ghc_connection_requests` +
-      `?to_user_id=eq.${encodeURIComponent(uid)}&status=eq.pending&select=*&order=created_at.desc&limit=50`
-    // Outgoing: from_user_id = me, pending
+      `?to_user_id=eq.${encodeURIComponent(uid)}&${statusFilter}&select=*&order=created_at.desc&limit=50`
     const outUrl =
       `${base}/rest/v1/ghc_connection_requests` +
-      `?from_user_id=eq.${encodeURIComponent(uid)}&status=eq.pending&select=*&order=created_at.desc&limit=50`
+      `?from_user_id=eq.${encodeURIComponent(uid)}&${statusFilter}&select=*&order=created_at.desc&limit=50`
     const [inRes, outRes] = await Promise.all([
       fetch(inUrl, { headers, cache: "no-store" }),
       fetch(outUrl, { headers, cache: "no-store" }),

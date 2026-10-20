@@ -196,7 +196,7 @@ export function NotificationBell({
           const socialType = String(n.type || "")
           const type = (
             socialType === "follow" ? "follow"
-            : socialType === "friend_request" || socialType === "connection_request" ? "friend_request"
+            : socialType === "friend_request" || socialType === "connection_request" || socialType === "connection" || socialType === "connection_accept" ? "friend_request"
             : socialType === "post_created" ? "system"
             : socialType === "post_like" || socialType === "like" || socialType === "upvote" || socialType === "post_upvote" || socialType === "downvote" || socialType === "post_downvote" || socialType === "curation" || socialType === "post_curation" ? "like"
             : socialType === "post_comment" || socialType === "comment_reply" || socialType === "reply" || socialType === "comment" || socialType === "mention" ? "comment"
@@ -241,7 +241,15 @@ export function NotificationBell({
               conversationId,
               fromUserId: n.actorUserId,
               userId: meta.userId || n.actorUserId,
-              open: type === "message" ? "messages" : meta.open,
+              open: type === "message" ? "messages"
+                : socialType === "connection_accept" ? "matches"
+                : socialType === "connection" || socialType === "connection_request" || socialType === "friend_request" ? "matches"
+                : meta.open,
+              section: socialType === "connection" || socialType === "connection_request" || socialType === "friend_request"
+                ? "connection_requests"
+                : socialType === "connection_accept"
+                  ? "matches"
+                  : meta.section,
               socialType,
             },
           }

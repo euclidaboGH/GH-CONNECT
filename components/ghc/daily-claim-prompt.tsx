@@ -100,7 +100,7 @@ export function DailyClaimPrompt() {
 /** Call after a successful server claim to notify the user clearly. */
 export function reportDailyClaimSuccess(amountLabel: string) {
   try {
-    notifyRewardClaimed({ amountLabel })
+    notifyRewardClaimed({ message: `Daily rewards claimed — ${amountLabel}`, amountLabel })
     window.dispatchEvent(
       new CustomEvent("ghc:toast", {
         detail: {

@@ -9,6 +9,7 @@ import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { getPostDraft, removePostDraft, upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
+import { mediaUploadErrorMessage } from "@/lib/media/upload-client"
 import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
@@ -254,7 +255,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               addToast(
                 up.ok
                   ? mediaUserMessage("STORAGE_ERROR")
-                  : up.userMessage || mediaUserMessage(up.error),
+                  : mediaUploadErrorMessage(up),
                 "error"
               )
               return
@@ -296,7 +297,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             if (up.ok && up.url && isDurableMediaUrl(up.url)) {
               images.push(up.url)
             } else if (!up.ok) {
-              addToast((up.userMessage || mediaUserMessage(up.error || "STORAGE_ERROR")) + (up.error ? ` (${up.error})` : ""), "error")
+              addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
             } else {
               addToast(mediaUserMessage("STORAGE_ERROR"), "error")
             }
@@ -350,7 +351,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setSelectedDocName(file.name || "attachment")
         addToast("File attached", "success")
       } else if (!up.ok) {
-        addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
+        addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
       }
     } catch {
       addToast(mediaUserMessage("NETWORK", "Unable to attach file"), "error")
@@ -389,7 +390,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           setStoryMedia({ type: "video", url: up.url })
         } else {
           // Blob URLs are local to this browser session and must never be published as durable media.
-          addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
+          addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
           return
         }
         setSelectedImages([])
@@ -406,7 +407,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         return
       }
       // Never persist a blob: URL in a post; it cannot be fetched by other users or after reload.
-      addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
+      addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
     } catch {
       addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
     } finally {

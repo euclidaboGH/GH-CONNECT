@@ -89,12 +89,27 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   useEffect(() => {
     if (!open || !post?.id) return
     const onMut = (ev: Event) => {
-      const d = (ev as CustomEvent<{ postId?: string }>).detail
+      const d = (ev as CustomEvent<{ postId?: string; type?: string }>).detail
       if (!d?.postId || d.postId !== post.id) return
       void loadPostComments?.(post.id)
     }
     window.addEventListener("ghc:social-mutation", onMut as EventListener)
-    return () => window.removeEventListener("ghc:social-mutation", onMut as EventListener)
+    window.addEventListener("ghc:post-engagement", onMut as EventListener)
+    return () => {
+      window.removeEventListener("ghc:social-mutation", onMut as EventListener)
+      window.removeEventListener("ghc:post-engagement", onMut as EventListener)
+    }
+  }, [open, post?.id, loadPostComments])
+
+  // Soft realtime while the sheet is open (cross-account new comments/replies)
+  useEffect(() => {
+    if (!open || !post?.id || typeof loadPostComments !== "function") return
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return
+      void loadPostComments(post.id)
+    }
+    const id = window.setInterval(tick, 12000)
+    return () => window.clearInterval(id)
   }, [open, post?.id, loadPostComments])
 
 useEffect(() => {
