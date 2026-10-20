@@ -6268,6 +6268,8 @@ const dismissMatchCelebration = useCallback(() => {
             const m = await reportMissionProgress("join_community", { communityId })
             if (m.ok && m.grantedGhc && m.grantedGhc > 0) {
               addToast(m.message || `Mission · ₲ ${m.grantedGhc}`, "success")
+            } else if (m.ok && m.completed) {
+              addToast(m.message || "Mission progress saved", "info")
             }
           } catch { /* */ }
         }

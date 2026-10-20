@@ -174,6 +174,21 @@ export function ProfileScreen({
           }
           void (async () => {
             let imageUrl = ""
+            try {
+              if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem("ghc.media.health.warned")) {
+                const h = await fetch("/api/media/health", { credentials: "include", cache: "no-store" })
+                const hj = await h.json().catch(() => ({}))
+                if (h.ok && hj && hj.ok === false) {
+                  sessionStorage.setItem("ghc.media.health.warned", "1")
+                  ghc.addToast?.(
+                    "Photo storage is not fully configured yet — uploads may stay on this device only.",
+                    "info"
+                  )
+                }
+              }
+            } catch {
+              /* */
+            }
             // Accept high-resolution source images, then compress before the Vercel
             // proxy upload so profile media stays below the durable-upload ceiling.
             const compressedDataUrl = await compressImageFile(file, {
@@ -204,11 +219,13 @@ export function ProfileScreen({
                 reader.readAsDataURL(compressedBlob)
               })
             } else {
-              throw new Error(
+              const detail =
                 uploaded && uploaded.ok === false
                   ? (uploaded.userMessage || uploaded.error || "Upload failed")
                   : "This upload was not recognized as an image."
-              )
+              // Prefer explicit toast so the red banner matches durable-media diagnostics
+              ghc.addToast?.(detail, "error")
+              throw new Error(detail)
             }
             const changedAt = Date.now()
             if (kind === "photo") {

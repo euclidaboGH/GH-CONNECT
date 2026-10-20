@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { ensureCommunityMember } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,10 +43,19 @@ export async function POST(_request: Request, ctx: Ctx) {
       code === "BANNED" ? 403 : code === "NOT_FOUND" ? 404 : 503
     return NextResponse.json({ ok: false, error: code }, { status })
   }
+  const status = data?.status || "active"
+  // Active members get chat membership so group messaging is not FORBIDDEN
+  if (status === "active") {
+    await ensureCommunityMember({
+      communityId,
+      userId: auth.userId,
+      role: "member",
+    })
+  }
   return NextResponse.json({
     ok: true,
     durable: true,
-    status: data?.status || "active",
+    status,
   })
 }
 

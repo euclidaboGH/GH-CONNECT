@@ -8,6 +8,7 @@ import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { feesRequireSettlement, quoteCommunityCreateFee } from "@/lib/server/fees/pilot-fee-policy"
+import { ensureCommunityConversation } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -136,5 +137,11 @@ export async function POST(request: Request) {
       { status: 409 }
     )
   }
+  // Chat channel + membership so the creator can message immediately
+  await ensureCommunityConversation({
+    communityId: String(row.id),
+    ownerId: auth.userId,
+    title: name,
+  })
   return NextResponse.json({ ok: true, durable: true, community: row })
 }

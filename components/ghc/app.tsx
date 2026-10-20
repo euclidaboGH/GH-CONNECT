@@ -20,6 +20,7 @@ import { OfflineBanner } from "./offline-banner"
 import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { SessionResumeToast } from "./session-resume-toast"
+import { NetworkStatusStrip } from "./network-status-strip"
 import { GlobalHotkeys } from "./global-hotkeys"
 import { PaymentRecoveryListener } from "./payment-recovery-listener"
 import { afterFirstPaint } from "@/lib/mobile-performance"
@@ -1262,6 +1263,7 @@ export function GHConnectApp() {
       <ProfileStorySection creatorHost />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3">
+        <NetworkStatusStrip />
         {visibleToasts.map((toast) => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}

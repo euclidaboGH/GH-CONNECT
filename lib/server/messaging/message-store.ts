@@ -530,6 +530,116 @@ export async function createDirectConversation(input: {
   return conv
 }
 
+
+/** Ensure a community/group conversation exists and owner is a member. */
+export async function ensureCommunityConversation(input: {
+  communityId: string
+  ownerId: string
+  title?: string | null
+}): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
+  const cid = String(input.communityId || "").trim()
+  const uid = String(input.ownerId || "").trim()
+  if (!cid || !uid) return { ok: false, error: "INVALID_INPUT" }
+
+  if (await isMember(cid, uid)) {
+    return { ok: true, conversationId: cid }
+  }
+
+  const now = Date.now()
+  if (dbConfigured()) {
+    await rest("gh_conversations", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=representation",
+      body: JSON.stringify({
+        id: cid,
+        kind: "community",
+        title: input.title ? String(input.title).slice(0, 120) : null,
+        created_by: uid,
+        updated_at: new Date(now).toISOString(),
+      }),
+    })
+    const mem = await rest("gh_conversation_members", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates",
+      body: JSON.stringify({
+        conversation_id: cid,
+        gh_user_id: uid,
+        role: "owner",
+      }),
+    })
+    if (!mem.ok && mem.status !== 409) {
+      if (isProd()) console.error("[messaging] ensure community membership failed", mem.status)
+      return { ok: false, error: "MEMBERSHIP_WRITE_FAILED" }
+    }
+  } else if (isProd()) {
+    return { ok: false, error: "STORE_UNAVAILABLE" }
+  }
+
+  const set = memMembers.get(cid) || new Set<string>()
+  set.add(uid)
+  memMembers.set(cid, set)
+  if (!memConv.has(cid)) {
+    memConv.set(cid, {
+      id: cid,
+      kind: "community",
+      title: input.title || null,
+      createdBy: uid,
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      memberIds: [uid],
+    })
+  }
+  return { ok: true, conversationId: cid }
+}
+
+/** Add an active member to a community conversation (idempotent). */
+export async function ensureCommunityMember(input: {
+  communityId: string
+  userId: string
+  role?: "owner" | "member" | "admin"
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cid = String(input.communityId || "").trim()
+  const uid = String(input.userId || "").trim()
+  if (!cid || !uid) return { ok: false, error: "INVALID_INPUT" }
+  if (await isMember(cid, uid)) return { ok: true }
+
+  if (dbConfigured()) {
+    const exists = await rest<Array<{ id: string }>>(
+      `gh_conversations?id=eq.${encodeURIComponent(cid)}&select=id&limit=1`
+    )
+    if (exists.ok && Array.isArray(exists.data) && exists.data.length === 0) {
+      await rest("gh_conversations", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates",
+        body: JSON.stringify({
+          id: cid,
+          kind: "community",
+          created_by: uid,
+          updated_at: new Date().toISOString(),
+        }),
+      })
+    }
+    const mem = await rest("gh_conversation_members", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates",
+      body: JSON.stringify({
+        conversation_id: cid,
+        gh_user_id: uid,
+        role: input.role || "member",
+      }),
+    })
+    if (!mem.ok && mem.status !== 409) {
+      return { ok: false, error: "MEMBERSHIP_WRITE_FAILED" }
+    }
+  }
+  const set = memMembers.get(cid) || new Set<string>()
+  set.add(uid)
+  memMembers.set(cid, set)
+  return { ok: true }
+}
+
 export async function listMessages(input: {
   conversationId: string
   ghUserId: string
@@ -737,7 +847,22 @@ export async function appendMessage(input: {
   if (input.mediaAttachments && Array.isArray(input.mediaAttachments) && input.mediaAttachments.length && !mediaAttachments.length) {
     return { ok: false, error: "INVALID_ATTACHMENTS" }
   }
-  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+  if (!(await isMember(cid, uid))) {
+    // Heal: community creators often have social membership without chat membership
+    if (dbConfigured()) {
+      const convRow = await rest<Array<{ id: string; kind: string; created_by: string }>>(
+        `gh_conversations?id=eq.${encodeURIComponent(cid)}&select=id,kind,created_by&limit=1`
+      )
+      const row = convRow.ok && Array.isArray(convRow.data) ? convRow.data[0] : null
+      if (row && (row.kind === "community" || row.kind === "group") && String(row.created_by) === uid) {
+        await ensureCommunityConversation({ communityId: cid, ownerId: uid })
+      } else if (!row && (cid.startsWith("comm_") || cid.startsWith("community"))) {
+        // Local community id never written to messaging — create shell for sender
+        await ensureCommunityConversation({ communityId: cid, ownerId: uid })
+      }
+    }
+    if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+  }
 
   // Idempotent replay must return an already-persisted message even if privacy changed
   // between the original send and the client's retry; this never creates a new message.

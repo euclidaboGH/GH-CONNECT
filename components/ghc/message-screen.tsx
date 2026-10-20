@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, memo } from "react"
 import { useGHCMessaging, useGHC } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { userFacingError, toastError } from "@/lib/ux/user-facing-errors"
 import {
   ConversationItem,
   ConversationSearchBar,
@@ -441,6 +442,11 @@ export function MessageScreen() {
           const parent = allMessages.find((m) => m.id === replyingTo)
           setReplyPreview((parent?.text || "").slice(0, 80))
         }
+        toastError(
+          isOffline
+            ? "You are offline. Message kept — send again when online."
+            : "Message could not be delivered. If this is a community chat, open Communities and rejoin, then try again."
+        )
         return
       }
       setStatusMsg(isOffline ? "Queued — will sync when online" : "Message sent")
@@ -462,7 +468,7 @@ export function MessageScreen() {
             detail: {
               message: isOffline
                 ? "You are offline. Message kept in the composer — send again when online."
-                : "Message couldn't be confirmed. Check your connection and try again.",
+                : userFacingError("FORBIDDEN", "Message couldn't be confirmed. Check your connection and try again."),
               type: "error",
             },
           })

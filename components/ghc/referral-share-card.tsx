@@ -22,6 +22,11 @@ export function ReferralShareCard({
 }) {
   const [state, setState] = useState<CodeState>({ status: "loading" })
   const [copied, setCopied] = useState(false)
+  const [referrerGhId, setReferrerGhId] = useState("")
+  const [referrerStatus, setReferrerStatus] = useState<
+    "idle" | "submitting" | "locked" | "error"
+  >("idle")
+  const [referrerMessage, setReferrerMessage] = useState("")
 
   const load = useCallback(async () => {
     setState({ status: "loading" })
@@ -56,6 +61,19 @@ export function ReferralShareCard({
     void load()
   }, [load])
 
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+      const locked = window.localStorage.getItem("ghc.referral.locked")
+      if (locked === "1") {
+        setReferrerStatus("locked")
+        setReferrerMessage("Referral locked in.")
+      }
+    } catch {
+      /* */
+    }
+  }, [])
+
   const shareUrl =
     state.status === "ready"
       ? typeof window !== "undefined"
@@ -88,6 +106,49 @@ export function ReferralShareCard({
       }
     } catch {
       /* user cancel */
+    }
+  }
+
+  async function submitReferrerGreenHavenId() {
+    const value = referrerGhId.trim().toUpperCase()
+    if (!value || referrerStatus === "locked" || referrerStatus === "submitting") return
+    setReferrerStatus("submitting")
+    setReferrerMessage("")
+    try {
+      const res = await fetch("/api/referral/attribute", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(IdentityService.getAuthHeaders?.() || {}),
+        },
+        body: JSON.stringify({ greenHavenId: value }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.ok === false) {
+        setReferrerStatus("error")
+        setReferrerMessage(
+          String(
+            data?.message ||
+              data?.error ||
+              "Could not save that GreenHaven ID. Check it and try once more."
+          )
+        )
+        return
+      }
+      setReferrerStatus("locked")
+      setReferrerMessage(
+        String(data?.message || "Referral saved. This cannot be changed.")
+      )
+      try {
+        window.localStorage.setItem("ghc.referral.locked", "1")
+      } catch {
+        /* */
+      }
+    } catch {
+      setReferrerStatus("error")
+      setReferrerMessage("Network error — try again.")
     }
   }
 
@@ -146,6 +207,44 @@ export function ReferralShareCard({
           </div>
         </div>
       )}
+
+      <div className="mt-4 border-t border-border/60 pt-3">
+        <h4 className="text-xs font-semibold text-foreground">Who invited you?</h4>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          Enter their GreenHaven ID once (for example GH-1JYHGG). Wrong IDs are rejected. You cannot edit after submit.
+        </p>
+        {referrerStatus === "locked" ? (
+          <p className="mt-2 text-xs font-medium text-emerald-700" role="status">
+            {referrerMessage || "Referral locked in."}
+          </p>
+        ) : (
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={referrerGhId}
+              onChange={(e) => setReferrerGhId(e.target.value)}
+              placeholder="GH-XXXXXXXX"
+              disabled={referrerStatus === "submitting"}
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium uppercase tracking-wide outline-none focus:ring-2 focus:ring-emerald-500/40"
+              autoComplete="off"
+              maxLength={40}
+            />
+            <button
+              type="button"
+              onClick={() => void submitReferrerGreenHavenId()}
+              disabled={referrerStatus === "submitting" || !referrerGhId.trim()}
+              className="shrink-0 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {referrerStatus === "submitting" ? "Saving…" : "Submit once"}
+            </button>
+          </div>
+        )}
+        {referrerStatus === "error" && referrerMessage ? (
+          <p className="mt-1.5 text-[11px] text-red-600" role="alert">
+            {referrerMessage}
+          </p>
+        ) : null}
+      </div>
     </section>
   )
 }
