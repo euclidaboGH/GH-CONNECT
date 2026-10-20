@@ -291,18 +291,31 @@ useEffect(() => {
                 <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}
                       {Array.isArray(c.mediaAttachments) && c.mediaAttachments.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {c.mediaAttachments.slice(0, 4).map((m) =>
-                            m.type === "image" ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img key={m.id || m.url} src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover" />
-                            ) : m.type === "video" ? (
-                              <video key={m.id || m.url} src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
-                            ) : (
-                              <a key={m.id || m.url} href={m.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-                                {m.fileName || "Attachment"}
+                          {c.mediaAttachments.slice(0, 4).map((m) => {
+                            const kind = String(m.type || "file")
+                            if (kind === "image" || kind === "gif") {
+                              return (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img key={m.id || m.url} src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover" />
+                              )
+                            }
+                            if (kind === "video") {
+                              return (
+                                <video key={m.id || m.url} src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                              )
+                            }
+                            return (
+                              <a
+                                key={m.id || m.url}
+                                href={m.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary underline"
+                              >
+                                {(m as { fileName?: string }).fileName || (kind === "voice" ? "Voice note" : "Attachment")}
                               </a>
                             )
-                          )}
+                          })}
                         </div>
                       ) : null}</p>
               )}

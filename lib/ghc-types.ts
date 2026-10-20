@@ -291,12 +291,13 @@ export interface PostComment {
   isEdited?: boolean
   editedAt?: number
   editedBy?: string
-  // Media attachments (images, GIFs, voice)
+  // Media attachments (images, GIFs, video, files, voice)
   mediaAttachments?: Array<{
     id: string
-    type: "image" | "gif" | "voice"
+    type: "image" | "gif" | "voice" | "video" | "file"
     url: string
-    duration?: number // seconds for voice
+    fileName?: string
+    duration?: number // seconds for voice/video
     thumbnail?: string
     size?: number // bytes
     mimeType?: string
