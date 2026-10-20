@@ -1704,7 +1704,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (!inbox.ok) return
         setState((s) => {
           const myId = String(s.profile?.id || "").trim()
-          const key = (r: { fromUserId: string; toUserId: string }) => `${r.fromUserId}→${r.toUserId}`
+          const key = (r: { fromUserId: string; toUserId?: string }) =>
+            `${String(r.fromUserId || "").trim()}→${String(r.toUserId || myId || "").trim()}`
           const byKey = new Map<string, FriendRequest>()
           if (!inbox.durable) {
             for (const r of s.friendRequests || []) byKey.set(key(r), r)
