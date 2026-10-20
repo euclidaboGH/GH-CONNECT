@@ -39,6 +39,8 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     addToast,
     loadPostComments,} = useGHC()
   const [text, setText] = useState("")
+  const [pendingMedia, setPendingMedia] = useState<Array<{ id: string; type: "image" | "video" | "file"; url: string; fileName?: string }>>([])
+  const [mediaBusy, setMediaBusy] = useState(false)
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
@@ -142,11 +144,12 @@ useEffect(() => {
 
   const handleSubmit = async () => {
     const value = text.trim()
-    if (!value || busy || submittingRef.current || !post?.id) return
+    if ((!value && !pendingMedia.length) || busy || submittingRef.current || !post?.id) return
     submittingRef.current = true
     setBusy(true)
     try {
-      await addComment(post.id, value, replyToId || undefined)
+      await addComment(post.id, value, replyToId || undefined, pendingMedia.length ? pendingMedia : undefined)
+      setPendingMedia([])
       try {
         await loadPostComments?.(post.id)
       } catch {
@@ -285,7 +288,23 @@ useEffect(() => {
                   </div>
                 </div>
               ) : (
-                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}</p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}
+                      {Array.isArray(c.mediaAttachments) && c.mediaAttachments.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {c.mediaAttachments.slice(0, 4).map((m) =>
+                            m.type === "image" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img key={m.id || m.url} src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover" />
+                            ) : m.type === "video" ? (
+                              <video key={m.id || m.url} src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                            ) : (
+                              <a key={m.id || m.url} href={m.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                                {m.fileName || "Attachment"}
+                              </a>
+                            )
+                          )}
+                        </div>
+                      ) : null}</p>
               )}
             </div>
 
@@ -521,7 +540,71 @@ useEffect(() => {
               </span>
             )}
           </div>
+          {pendingMedia.length > 0 ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {pendingMedia.map((m) => (
+                <div key={m.id} className="relative">
+                  {m.type === "image" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  ) : (
+                    <span className="rounded-lg border border-border px-2 py-1 text-[10px]">{m.fileName || m.type}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="absolute -right-1 -top-1 rounded-full bg-black/70 px-1 text-[10px] text-white"
+                    onClick={() => setPendingMedia((prev) => prev.filter((x) => x.id !== m.id))}
+                    aria-label="Remove attachment"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="flex items-end gap-2">
+            <button
+              type="button"
+              disabled={mediaBusy || pendingMedia.length >= 4}
+              className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 disabled:opacity-40"
+              aria-label="Attach media to comment"
+              onClick={() => {
+                const input = document.createElement("input")
+                input.type = "file"
+                input.accept = "image/*,video/*"
+                input.multiple = true
+                input.onchange = async () => {
+                  const files = Array.from(input.files || []).slice(0, 4 - pendingMedia.length)
+                  if (!files.length) return
+                  setMediaBusy(true)
+                  try {
+                    const { uploadDurableMedia } = await import("@/lib/media/upload-client")
+                    const next = [...pendingMedia]
+                    for (const file of files) {
+                      if (next.length >= 4) break
+                      const kind = file.type.startsWith("video/") ? "video" : "image"
+                      const up = await uploadDurableMedia(file)
+                      if (up.ok && up.url) {
+                        next.push({
+                          id: `catt_${Date.now().toString(36)}_${next.length}`,
+                          type: kind as "image" | "video",
+                          url: up.url,
+                          fileName: file.name,
+                        })
+                      } else {
+                        addToast(up.userMessage || up.error || "Upload failed", "error")
+                      }
+                    }
+                    setPendingMedia(next)
+                  } finally {
+                    setMediaBusy(false)
+                  }
+                }
+                input.click()
+              }}
+            >
+              +
+            </button>
             <LazyImage
               src={profile.photos?.[0] || "/placeholder.svg?width=32&height=32"}
               alt={profile.displayName || "You"}
@@ -546,7 +629,7 @@ useEffect(() => {
             />
             <button
               type="button"
-              disabled={!text.trim() || busy}
+              disabled={(!text.trim() && !pendingMedia.length) || busy || mediaBusy}
               onClick={() => void handleSubmit()}
               className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition enabled:hover:bg-emerald-700 disabled:bg-gray-300"
               aria-label="Post comment"

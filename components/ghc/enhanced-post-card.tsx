@@ -385,7 +385,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 overflow-hidden bg-card text-card-foreground cursor-pointer"
+      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 overflow-hidden bg-card text-card-foreground cursor-pointer overflow-x-hidden max-w-full"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -393,7 +393,7 @@ function EnhancedPostCardInner({
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+      <div className="flex items-center justify-between px-3 pb-2 pt-3 sm:px-4 sm:pt-4">
         <div className="flex flex-1 items-center gap-2.5">
           <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${displayAuthor}'s profile`}>
             <LazyImage
@@ -658,7 +658,7 @@ function EnhancedPostCardInner({
       )}
 
       {/* Content with rich formatting */}
-      <div className="px-4 pb-3 pt-1">
+      <div className="px-3 pb-2.5 pt-1 sm:px-4 sm:pb-3">
         {detectSpecialPost(post.content) ? (
           <SpecialPostBody content={post.content || ""} />
         ) : (
@@ -840,130 +840,141 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — curation · comments · save · share */}
+      {/* Primary actions — mobile-safe density: never clip share/save */}
       <div
-        className="flex items-center gap-1 border-t border-border/40 px-3 py-2"
+        className="border-t border-border/40 px-2 py-2 sm:px-3"
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <label className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] leading-none text-muted-foreground" title="Curation weight only; this setting does not issue GHC">
-          <span>Vote weight</span>
-          <select
-            aria-label="Curation vote weight percentage; does not issue GHC"
-            value={rewardPercentage}
-            disabled={curationBusy}
-            onChange={(e) => setRewardPercentage(Number(e.target.value))}
-            className="h-7 max-w-[4.4rem] rounded-md border border-border bg-background px-1 text-xs font-semibold text-foreground"
-          >
-            <option value={0}>0%</option>
-            <option value={25}>25%</option>
-            <option value={50}>50%</option>
-            <option value={75}>75%</option>
-            <option value={100}>100%</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={curationBusy}
-          aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for positive reactions."
-          aria-pressed={curationChoice === "upvote"}
-          onClick={(e) => {
-            if (curationLongPressTriggeredRef.current) {
-              curationLongPressTriggeredRef.current = false
-              e.preventDefault()
-              return
-            }
-            void handleCuration("upvote")
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            openRoster("upvotes")
-          }}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            startCurationLongPress("positive")
-          }}
-          onPointerUp={() => endCurationLongPress()}
-          onPointerCancel={() => endCurationLongPress(true)}
-          onPointerLeave={() => endCurationLongPress()}
-          title="Upvote content quality. Long-press for positive reactions. Reward calculation is server-authoritative."
-          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
-            curationChoice === "upvote"
-              ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
-              : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
-          }`}
-        >
-          <ThumbsUp size={18} strokeWidth={2.25} aria-hidden />
-          <span className="tabular-nums">{upvoteCount}</span>
-        </button>
-        <button
-          type="button"
-          disabled={curationBusy}
-          aria-label="Downvote content — lowers quality ranking. Long-press for negative reactions."
-          aria-pressed={curationChoice === "downvote"}
-          onClick={(e) => {
-            if (curationLongPressTriggeredRef.current) {
-              curationLongPressTriggeredRef.current = false
-              e.preventDefault()
-              return
-            }
-            void handleCuration("downvote")
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            openRoster("downvotes")
-          }}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            startCurationLongPress("negative")
-          }}
-          onPointerUp={() => endCurationLongPress()}
-          onPointerCancel={() => endCurationLongPress(true)}
-          onPointerLeave={() => endCurationLongPress()}
-          title="Downvote weak content. Long-press for negative reactions."
-          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-[0.97] ${
-            curationChoice === "downvote"
-              ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
-              : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
-          }`}
-        >
-          <ThumbsDown size={18} strokeWidth={2.25} aria-hidden />
-          <span className="tabular-nums">{downvoteCount}</span>
-        </button>
-        <div className="mx-0.5 h-6 w-px shrink-0 bg-border/70" aria-hidden />
-        <button
-          type="button"
-          aria-label="Comment"
-          onClick={() => onComment(post.id)}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-        >
-          <MessageCircle size={20} aria-hidden />
-          <span className="tabular-nums text-xs font-semibold">
-            {visibleCommentCount}
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label={isSaved ? "Unsave" : "Save"}
-          aria-pressed={isSaved}
-          onClick={() => onSave(post.id)}
-          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full transition active:scale-95 ${
-            isSaved
-              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-              : "text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          <Bookmark size={20} fill={isSaved ? "currentColor" : "none"} aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label="Share"
-          onClick={() => onShare(post.id)}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-        >
-          <Share2 size={20} aria-hidden />
-        </button>
+        <div className="flex min-w-0 w-full flex-wrap items-center gap-y-1.5">
+          {/* Curation cluster — shrinks first on narrow screens */}
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <label
+              className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
+              title="Curation weight only; this setting does not issue GHC"
+            >
+              <span className="sr-only sm:not-sr-only sm:inline">Weight</span>
+              <select
+                aria-label="Curation vote weight percentage; does not issue GHC"
+                value={rewardPercentage}
+                disabled={curationBusy}
+                onChange={(e) => setRewardPercentage(Number(e.target.value))}
+                className="h-8 max-w-[3.75rem] rounded-md border border-border bg-background px-0.5 text-[11px] font-semibold text-foreground sm:max-w-[4.4rem] sm:text-xs"
+              >
+                <option value={0}>0%</option>
+                <option value={25}>25%</option>
+                <option value={50}>50%</option>
+                <option value={75}>75%</option>
+                <option value={100}>100%</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={curationBusy}
+              aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for positive reactions."
+              aria-pressed={curationChoice === "upvote"}
+              onClick={(e) => {
+                if (curationLongPressTriggeredRef.current) {
+                  curationLongPressTriggeredRef.current = false
+                  e.preventDefault()
+                  return
+                }
+                void handleCuration("upvote")
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                openRoster("upvotes")
+              }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                startCurationLongPress("positive")
+              }}
+              onPointerUp={() => endCurationLongPress()}
+              onPointerCancel={() => endCurationLongPress(true)}
+              onPointerLeave={() => endCurationLongPress()}
+              title="Upvote content quality. Long-press for positive reactions. Reward calculation is server-authoritative."
+              className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
+                curationChoice === "upvote"
+                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
+                  : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
+              }`}
+            >
+              <ThumbsUp size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
+              <span className="tabular-nums">{upvoteCount}</span>
+            </button>
+            <button
+              type="button"
+              disabled={curationBusy}
+              aria-label="Downvote weak content. Long-press for negative reactions."
+              aria-pressed={curationChoice === "downvote"}
+              onClick={(e) => {
+                if (curationLongPressTriggeredRef.current) {
+                  curationLongPressTriggeredRef.current = false
+                  e.preventDefault()
+                  return
+                }
+                void handleCuration("downvote")
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                openRoster("downvotes")
+              }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                startCurationLongPress("negative")
+              }}
+              onPointerUp={() => endCurationLongPress()}
+              onPointerCancel={() => endCurationLongPress(true)}
+              onPointerLeave={() => endCurationLongPress()}
+              title="Downvote weak content. Long-press for negative reactions."
+              className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
+                curationChoice === "downvote"
+                  ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
+                  : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
+              }`}
+            >
+              <ThumbsDown size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
+              <span className="tabular-nums">{downvoteCount}</span>
+            </button>
+          </div>
 
+          {/* Response cluster — never shrinks away; share/save always visible */}
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <div className="mx-0.5 hidden h-5 w-px bg-border/70 xs:block sm:mx-1 sm:h-6" aria-hidden />
+            <button
+              type="button"
+              aria-label="Comment"
+              onClick={() => onComment(post.id)}
+              className="inline-flex h-9 min-h-9 min-w-9 items-center justify-center gap-0.5 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95 sm:h-10 sm:min-w-10"
+            >
+              <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
+              <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
+                {visibleCommentCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={isSaved ? "Unsave" : "Save"}
+              aria-pressed={isSaved}
+              onClick={() => onSave(post.id)}
+              className={`inline-flex h-9 min-h-9 min-w-9 items-center justify-center rounded-full transition active:scale-95 sm:h-10 sm:min-w-10 ${
+                isSaved
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Share"
+              onClick={() => onShare(post.id)}
+              className="inline-flex h-9 min-h-9 min-w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95 sm:h-10 sm:min-w-10"
+            >
+              <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Public reward / quality strip — GHC amounts only when server-enabled */}

@@ -354,7 +354,7 @@ export function RewardsCentreScreen({
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border/60 bg-card/95 px-3 py-3 backdrop-blur-md">
         <button
           type="button"

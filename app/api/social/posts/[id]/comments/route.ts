@@ -72,11 +72,42 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}))
   const text = String(body.text || body.content || "").trim()
-  if (!text) {
-    return NextResponse.json({ ok: false, error: "EMPTY_COMMENT" }, { status: 400 })
-  }
   if (text.length > 2000) {
     return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400 })
+  }
+
+  // Durable media only — max 4 https URLs (never blob:/data:)
+  const rawMedia = Array.isArray(body.mediaAttachments)
+    ? body.mediaAttachments
+    : Array.isArray(body.media)
+      ? body.media
+      : []
+  const media = rawMedia.slice(0, 4).map((item: unknown, i: number) => {
+    if (!item || typeof item !== "object") return null
+    const o = item as Record<string, unknown>
+    const url = String(o.url || "").trim()
+    if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.length > 2048) return null
+    try {
+      const u = new URL(url)
+      if (u.protocol !== "https:" && u.protocol !== "http:") return null
+    } catch {
+      return null
+    }
+    const typeRaw = String(o.type || "image").toLowerCase()
+    const type = typeRaw === "image" || typeRaw === "video" || typeRaw === "file" ? typeRaw : "image"
+    return {
+      id: String(o.id || `catt_${i}`).slice(0, 80),
+      type,
+      url,
+      fileName: o.fileName != null ? String(o.fileName).slice(0, 180) : undefined,
+    }
+  }).filter(Boolean)
+
+  if (rawMedia.length > 0 && media.length === 0) {
+    return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENTS" }, { status: 400 })
+  }
+  if (!text && media.length === 0) {
+    return NextResponse.json({ ok: false, error: "EMPTY_COMMENT" }, { status: 400 })
   }
 
   // Ownership: authorId is always session user — never trust body.authorId / body.userId
@@ -90,9 +121,10 @@ export async function POST(
     authorId: auth.userId,
     authorName: String(actorProfile?.displayName || auth.username || "Member").slice(0, 120),
     authorPhoto: String(actorProfile?.photos?.[0] || "").slice(0, 2000),
-    text,
+    text: text || (media.length ? (media[0] as { type?: string }).type === "video" ? "🎥 Video" : "📷 Photo" : ""),
     parentId: body.parentId || body.replyTo || null,
     createdAt: Date.now(),
+    media,
   }
 
   if (!socialDbConfigured()) {

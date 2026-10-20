@@ -17,6 +17,7 @@ import { ConsentGate } from "./consent-gate"
 import { BrandLogo } from "./brand-logo"
 import { ThemeApplier } from "./theme-applier"
 import { OfflineBanner } from "./offline-banner"
+import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { SessionResumeToast } from "./session-resume-toast"
 import { GlobalHotkeys } from "./global-hotkeys"
@@ -972,6 +973,7 @@ export function GHConnectApp() {
       data-nav-hidden={bottomNavHidden ? "true" : "false"}
       data-nav-in-flow="true"
     >
+      <DailyClaimPrompt />
       <OfflineBanner />
       <PaymentRecoveryListener />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}

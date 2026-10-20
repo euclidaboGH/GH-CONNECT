@@ -198,8 +198,8 @@ export function NotificationBell({
             socialType === "follow" ? "follow"
             : socialType === "friend_request" || socialType === "connection_request" ? "friend_request"
             : socialType === "post_created" ? "system"
-            : socialType === "post_like" || socialType === "like" || socialType === "curation" || socialType === "post_curation" ? "like"
-            : socialType === "post_comment" || socialType === "comment_reply" || socialType === "comment" || socialType === "mention" ? "comment"
+            : socialType === "post_like" || socialType === "like" || socialType === "upvote" || socialType === "post_upvote" || socialType === "downvote" || socialType === "post_downvote" || socialType === "curation" || socialType === "post_curation" ? "like"
+            : socialType === "post_comment" || socialType === "comment_reply" || socialType === "reply" || socialType === "comment" || socialType === "mention" ? "comment"
             : socialType === "share" ? "share"
             : socialType === "match" ? "match"
             : socialType === "message" || socialType === "new_message" || socialType === "dm" || socialType === "chat" ? "message"
@@ -225,6 +225,7 @@ export function NotificationBell({
             icon:
               type === "message" ? "✉️"
               : socialType.includes("like") ? "❤️"
+              : socialType.includes("upvote") || socialType.includes("downvote") ? "▲"
               : socialType.includes("comment") ? "💬"
               : socialType.includes("connection") || socialType.includes("friend") ? "🤝"
               : "🔔",

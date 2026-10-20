@@ -813,7 +813,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             />
           ) : (
             displayPosts.map((rankedPost) => (
-            <div key={rankedPost.post.id} className="cv-auto">
+            <div key={rankedPost.post.id} className="cv-auto min-w-0 max-w-full">
               <PostErrorBoundary postId={rankedPost.post.id}>
                 <EnhancedPostCard
                   post={rankedPost.post}

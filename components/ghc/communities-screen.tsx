@@ -750,7 +750,7 @@ export function CommunitiesScreen() {
           ? "member"
           : "guest"
     return (
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-w-0 max-w-full min-h-0 flex-col">
         <PremiumCommunityHub
           key={hubKey}
           community={{

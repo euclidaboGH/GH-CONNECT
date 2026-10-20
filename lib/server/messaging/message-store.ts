@@ -23,6 +23,15 @@ export type DurableConversation = {
   unreadCount?: number
 }
 
+export type DurableMediaAttachment = {
+  id: string
+  type: "image" | "video" | "file"
+  url: string
+  fileName?: string
+  mimeType?: string
+  sizeBytes?: number
+}
+
 export type DurableMessage = {
   id: string
   conversationId: string
@@ -38,6 +47,7 @@ export type DurableMessage = {
   replyTo?: string
   replyToPreview?: { senderName: string; text: string }
   sharedPostId?: string
+  mediaAttachments?: DurableMediaAttachment[]
   deliveredAt?: number | null
   readAt?: number | null
 }
@@ -67,6 +77,53 @@ function previewOf(body: string) {
   const t = body.replace(/\s+/g, " ").trim()
   return t.slice(0, 140)
 }
+function isHttpOrStorageUrl(url: string): boolean {
+  const u = String(url || "").trim()
+  if (!u || u.length > 2048) return false
+  if (u.startsWith("blob:") || u.startsWith("data:")) return false
+  try {
+    const parsed = new URL(u)
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+  } catch {
+    return false
+  }
+}
+
+function normalizeAttachments(
+  raw: unknown
+): DurableMediaAttachment[] {
+  if (!Array.isArray(raw)) return []
+  const out: DurableMediaAttachment[] = []
+  for (const item of raw.slice(0, 4)) {
+    if (!item || typeof item !== "object") continue
+    const o = item as Record<string, unknown>
+    const url = String(o.url || "").trim()
+    if (!isHttpOrStorageUrl(url)) continue
+    const typeRaw = String(o.type || "file").toLowerCase()
+    const type: DurableMediaAttachment["type"] =
+      typeRaw === "image" || typeRaw === "video" || typeRaw === "file" ? typeRaw : "file"
+    const id = String(o.id || "").trim().slice(0, 80) || newId("att")
+    const fileName = o.fileName != null ? String(o.fileName).slice(0, 180) : undefined
+    const mimeType = o.mimeType != null ? String(o.mimeType).slice(0, 120) : undefined
+    const sizeBytes = typeof o.sizeBytes === "number" && Number.isFinite(o.sizeBytes)
+      ? Math.max(0, Math.floor(o.sizeBytes))
+      : undefined
+    out.push({ id, type, url, fileName, mimeType, sizeBytes })
+  }
+  return out
+}
+
+function mediaPreviewLabel(atts: DurableMediaAttachment[]): string {
+  if (!atts.length) return ""
+  const first = atts[0]
+  if (atts.length === 1) {
+    if (first.type === "image") return "📷 Photo"
+    if (first.type === "video") return "🎥 Video"
+    return `📎 ${first.fileName || "File"}`
+  }
+  return `📎 ${atts.length} attachments`
+}
+
 
 async function rest<T>(
   path: string,
@@ -582,6 +639,11 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
     deletedAt: row.deleted_at ? Date.parse(String(row.deleted_at)) : null,
     deletedBy: row.deleted_by != null ? String(row.deleted_by) : null,
     isPinned: Boolean(row.is_pinned),
+    mediaAttachments: (() => {
+      const meta = row.meta && typeof row.meta === "object" ? (row.meta as Record<string, unknown>) : {}
+      const atts = normalizeAttachments(meta.attachments ?? meta.mediaAttachments)
+      return atts.length ? atts : undefined
+    })(),
     replyTo: typeof (row.meta as Record<string, unknown> | null)?.replyToMessageId === "string"
       ? String((row.meta as Record<string, unknown>).replyToMessageId)
       : undefined,
@@ -655,18 +717,26 @@ export async function appendMessage(input: {
   clientMessageId?: string | null
   replyToMessageId?: string | null
   sharedPostId?: string | null
+  mediaAttachments?: DurableMediaAttachment[] | null
 }): Promise<
   | { ok: true; message: DurableMessage; idempotent?: boolean }
   | { ok: false; error: string }
 > {
   const cid = String(input.conversationId || "").trim()
   const uid = String(input.senderId || "").trim()
-  const body = String(input.body || "").trim().slice(0, 8000)
+  const mediaAttachments = normalizeAttachments(input.mediaAttachments)
+  let body = String(input.body || "").trim().slice(0, 8000)
+  if (!body && mediaAttachments.length) {
+    body = mediaPreviewLabel(mediaAttachments)
+  }
   const clientMessageId = input.clientMessageId
     ? String(input.clientMessageId).trim().slice(0, 80)
     : null
 
-  if (!body) return { ok: false, error: "EMPTY_BODY" }
+  if (!body && !mediaAttachments.length) return { ok: false, error: "EMPTY_BODY" }
+  if (input.mediaAttachments && Array.isArray(input.mediaAttachments) && input.mediaAttachments.length && !mediaAttachments.length) {
+    return { ok: false, error: "INVALID_ATTACHMENTS" }
+  }
   if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
 
   // Idempotent replay must return an already-persisted message even if privacy changed
@@ -728,7 +798,8 @@ export async function appendMessage(input: {
     deletedBy: null,
     replyTo: replyToMessageId || undefined,
     replyToPreview,
-    sharedPostId: sharedPostId || undefined,
+    mediaAttachments: mediaAttachments.length ? mediaAttachments : undefined,
+      sharedPostId: sharedPostId || undefined,
   }
 
   if (dbConfigured()) {
@@ -746,6 +817,7 @@ export async function appendMessage(input: {
         meta: {
           ...(replyToMessageId ? { replyToMessageId, replyToPreview } : {}),
           ...(sharedPostId ? { sharedPostId } : {}),
+          ...(mediaAttachments.length ? { attachments: mediaAttachments } : {}),
         },
       }),
     })

@@ -194,7 +194,7 @@ function ListingCard({
             decoding="async"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
+          <div className="flex h-full min-w-0 max-w-full w-full items-center justify-center">
             <span className="gh-icon-tile flex h-12 w-12 items-center justify-center rounded-2xl">
               <Package size={22} strokeWidth={2} aria-hidden />
             </span>

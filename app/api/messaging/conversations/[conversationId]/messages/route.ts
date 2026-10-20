@@ -132,6 +132,38 @@ export async function POST(request: Request, ctx: Ctx) {
       return NextResponse.json({ ok: false, error: "INVALID_REPLY_TARGET" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
 
+    // Durable media only: https URLs, max 4. Never accept blob:/data: from clients.
+    const rawAtts = Array.isArray(body?.mediaAttachments) ? body.mediaAttachments : Array.isArray(body?.attachments) ? body.attachments : []
+    const mediaAttachments = rawAtts.slice(0, 4).map((item: unknown, i: number) => {
+      if (!item || typeof item !== "object") return null
+      const o = item as Record<string, unknown>
+      const url = String(o.url || "").trim()
+      if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.length > 2048) return null
+      try {
+        const u = new URL(url)
+        if (u.protocol !== "https:" && u.protocol !== "http:") return null
+      } catch {
+        return null
+      }
+      const typeRaw = String(o.type || "file").toLowerCase()
+      const type = typeRaw === "image" || typeRaw === "video" || typeRaw === "file" ? typeRaw : "file"
+      return {
+        id: String(o.id || `att_${i}`).slice(0, 80),
+        type,
+        url,
+        fileName: o.fileName != null ? String(o.fileName).slice(0, 180) : undefined,
+        mimeType: o.mimeType != null ? String(o.mimeType).slice(0, 120) : undefined,
+        sizeBytes: typeof o.sizeBytes === "number" ? o.sizeBytes : undefined,
+      }
+    }).filter(Boolean)
+
+    if (rawAtts.length > 0 && mediaAttachments.length === 0) {
+      return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENTS" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    if (!text && mediaAttachments.length === 0) {
+      return NextResponse.json({ ok: false, error: "EMPTY_BODY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+
     const result = await appendMessage({
       conversationId,
       senderId: auth.userId,
@@ -139,6 +171,7 @@ export async function POST(request: Request, ctx: Ctx) {
       clientMessageId,
       replyToMessageId: replyToMessageId || undefined,
       sharedPostId: sharedPostId || undefined,
+      mediaAttachments: mediaAttachments.length ? mediaAttachments as any : undefined,
     })
     if (!result.ok) {
       const status =
@@ -146,7 +179,7 @@ export async function POST(request: Request, ctx: Ctx) {
           ? 403
           : result.error === "PRIVACY_SETTINGS_UNCONFIGURED"
             ? 409
-          : result.error === "EMPTY_BODY" || result.error === "INVALID_REPLY_TARGET"
+          : result.error === "EMPTY_BODY" || result.error === "INVALID_ATTACHMENTS" || result.error === "INVALID_REPLY_TARGET"
             ? 400
             : result.error === "REPLY_TARGET_NOT_FOUND" || result.error === "INVALID_SHARED_POST"
               ? 404

@@ -1,6 +1,7 @@
 /**
  * Client helper: upload optimized file to durable /api/media.
- * Prefer media references over inline data URLs in posts/stories/messages.
+ * Small files: multipart via Vercel (≤ ~3.75MB).
+ * Larger files: signed direct-to-storage upload (bypasses Vercel body limit).
  */
 
 import { mediaUserMessage } from "@/lib/media/user-messages"
@@ -8,6 +9,10 @@ import { IdentityService } from "@/lib/identity/identity-service"
 
 const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
+/** Align with server MAX_VIDEO / elevated file limits for direct path. */
+const MAX_DIRECT_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_DIRECT_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_DIRECT_FILE_BYTES = 25 * 1024 * 1024
 
 /** Compress oversized images in-browser before they reach the constrained API proxy. */
 async function compressOversizedImage(file: File | Blob): Promise<Blob> {
@@ -36,7 +41,13 @@ async function compressOversizedImage(file: File | Blob): Promise<Blob> {
     if (!context) throw new Error("OPTIMIZE_FAILED")
 
     const sourceMaxDimension = Math.max(originalWidth, originalHeight)
-    const dimensions = [...new Set([sourceMaxDimension, 1920, 1600, 1280, 1024, 900, 720, 640, 512, 400].filter((value) => value <= sourceMaxDimension))]
+    const dimensions = [
+      ...new Set(
+        [sourceMaxDimension, 1920, 1600, 1280, 1024, 900, 720, 640, 512, 400].filter(
+          (value) => value <= sourceMaxDimension
+        )
+      ),
+    ]
     const qualities = [0.82, 0.74, 0.66, 0.58]
     let best: Blob | null = null
     for (const maxDimension of dimensions) {
@@ -49,14 +60,20 @@ async function compressOversizedImage(file: File | Blob): Promise<Blob> {
       context.drawImage(source, 0, 0, canvas.width, canvas.height)
       for (const quality of qualities) {
         const candidate = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("OPTIMIZE_FAILED")), "image/jpeg", quality)
+          canvas.toBlob(
+            (blob) => (blob ? resolve(blob) : reject(new Error("OPTIMIZE_FAILED"))),
+            "image/jpeg",
+            quality
+          )
         })
-        best = candidate
+        if (!best || candidate.size < best.size) best = candidate
         if (candidate.size <= SAFE_PROXY_UPLOAD_BYTES) return candidate
       }
     }
     if (best && best.size <= MAX_PROXY_UPLOAD_BYTES) return best
-    throw new Error("MEDIA_DIRECT_UPLOAD_REQUIRED")
+    // Still large after compress — caller may use direct upload with original/best
+    if (best) return best
+    throw new Error("OPTIMIZE_FAILED")
   } catch (error) {
     if (error instanceof Error && error.message === "MEDIA_DIRECT_UPLOAD_REQUIRED") throw error
     throw new Error("OPTIMIZE_FAILED")
@@ -82,52 +99,26 @@ export type DurableMediaResult =
       clientCompress?: boolean
     }
 
-export async function uploadDurableMedia(
-  file: File | Blob,
+function authHeaders(): Record<string, string> {
+  try {
+    return { ...IdentityService.getAuthHeaders() }
+  } catch {
+    return {}
+  }
+}
+
+async function uploadViaProxy(
+  uploadFile: Blob,
+  uploadName: string,
   meta?: {
     width?: number
     height?: number
     durationMs?: number
-    fileName?: string
     onProgress?: (label: string) => void
   }
 ): Promise<DurableMediaResult> {
-  // Vercel Functions cap request bodies at 4.5 MB. Keep the actual file below
-  // 4 MB to leave room for multipart overhead. Oversized images are compressed
-  // client-side; video and other files require the future direct/resumable path.
-  let uploadFile = file
-  let uploadName = meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
-  if (uploadFile.size > MAX_PROXY_UPLOAD_BYTES) {
-    if (uploadFile.type.startsWith("image/")) {
-      try {
-        meta?.onProgress?.("Compressing photo…")
-        uploadFile = await compressOversizedImage(uploadFile)
-        uploadName = uploadName.replace(/\.[^.]+$/, "") + ".jpg"
-      } catch (error) {
-        const code = error instanceof Error ? error.message : "OPTIMIZE_FAILED"
-        return {
-          ok: false,
-          durable: false,
-          error: code,
-          userMessage: mediaUserMessage(code),
-          clientCompress: true,
-        }
-      }
-    }
-    if (uploadFile.size > MAX_PROXY_UPLOAD_BYTES) {
-      return {
-        ok: false,
-        durable: false,
-        error: "MEDIA_DIRECT_UPLOAD_REQUIRED",
-        userMessage: mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"),
-        clientCompress: uploadFile !== file,
-      }
-    }
-  }
-
   const form = new FormData()
-  const name = uploadName
-  form.append("file", uploadFile, name)
+  form.append("file", uploadFile, uploadName)
   if (meta?.width != null) form.append("width", String(meta.width))
   if (meta?.height != null) form.append("height", String(meta.height))
   if (meta?.durationMs != null) form.append("durationMs", String(meta.durationMs))
@@ -137,9 +128,7 @@ export async function uploadDurableMedia(
     const res = await fetch("/api/media", {
       method: "POST",
       credentials: "include",
-      // Bearer fallback: the session cookie can be blocked inside Pi Browser's iframe.
-      // Do not set Content-Type here; the browser must add the multipart boundary.
-      headers: { ...IdentityService.getAuthHeaders() },
+      headers: { ...authHeaders() },
       body: form,
     })
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
@@ -149,8 +138,7 @@ export async function uploadDurableMedia(
         durable: true,
         mediaId: String(data.mediaId || data.path || data.url),
         url: String(data.url),
-        kind:
-          data.kind === "video" ? "video" : data.kind === "file" ? "file" : "image",
+        kind: data.kind === "video" ? "video" : data.kind === "file" ? "file" : "image",
       }
     }
     const code = String(data.error || `HTTP_${res.status}`)
@@ -169,4 +157,196 @@ export async function uploadDurableMedia(
       userMessage: mediaUserMessage("NETWORK"),
     }
   }
+}
+
+async function uploadViaDirect(
+  file: Blob,
+  mimeType: string,
+  uploadName: string,
+  meta?: {
+    width?: number
+    height?: number
+    durationMs?: number
+    onProgress?: (label: string) => void
+  }
+): Promise<DurableMediaResult> {
+  meta?.onProgress?.("Preparing secure upload…")
+  try {
+    const intentRes = await fetch("/api/media/direct-upload-intent", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...authHeaders(),
+      },
+      body: JSON.stringify({
+        mimeType,
+        byteSize: file.size,
+        fileName: uploadName,
+      }),
+    })
+    const intent = (await intentRes.json().catch(() => ({}))) as Record<string, unknown>
+    if (!intentRes.ok || intent.ok !== true || !intent.uploadUrl || !intent.objectPath) {
+      const code = String(intent.error || `HTTP_${intentRes.status}`)
+      return {
+        ok: false,
+        durable: false,
+        error: code,
+        userMessage: mediaUserMessage(code, String(intent.message || "") || undefined),
+      }
+    }
+
+    meta?.onProgress?.("Uploading…")
+    const putHeaders: Record<string, string> = {
+      "Content-Type": mimeType || "application/octet-stream",
+    }
+    if (intent.token) {
+      putHeaders["x-upsert"] = "false"
+    }
+    const putRes = await fetch(String(intent.uploadUrl), {
+      method: "PUT",
+      headers: putHeaders,
+      body: file,
+    })
+    // Some Supabase deployments expect POST to signed URL
+    if (!putRes.ok) {
+      const postRes = await fetch(String(intent.uploadUrl), {
+        method: "POST",
+        headers: putHeaders,
+        body: file,
+      })
+      if (!postRes.ok) {
+        return {
+          ok: false,
+          durable: false,
+          error: "STORAGE_UPLOAD_FAILED",
+          userMessage: mediaUserMessage("STORAGE_UPLOAD_FAILED"),
+        }
+      }
+    }
+
+    meta?.onProgress?.("Finalizing…")
+    const completeRes = await fetch("/api/media/direct-upload-complete", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...authHeaders(),
+      },
+      body: JSON.stringify({
+        objectPath: intent.objectPath,
+        bucket: intent.bucket,
+        mimeType,
+        kind: intent.kind,
+        byteSize: file.size,
+        width: meta?.width,
+        height: meta?.height,
+        durationMs: meta?.durationMs,
+      }),
+    })
+    const complete = (await completeRes.json().catch(() => ({}))) as Record<string, unknown>
+    if (completeRes.ok && complete.ok === true && complete.url) {
+      return {
+        ok: true,
+        durable: true,
+        mediaId: String(complete.mediaId || complete.url),
+        url: String(complete.url),
+        kind:
+          complete.kind === "video" ? "video" : complete.kind === "file" ? "file" : "image",
+      }
+    }
+    const code = String(complete.error || `HTTP_${completeRes.status}`)
+    return {
+      ok: false,
+      durable: false,
+      error: code,
+      userMessage: mediaUserMessage(code, String(complete.message || "") || undefined),
+    }
+  } catch {
+    return {
+      ok: false,
+      durable: false,
+      error: "NETWORK",
+      userMessage: mediaUserMessage("NETWORK"),
+    }
+  }
+}
+
+export async function uploadDurableMedia(
+  file: File | Blob,
+  meta?: {
+    width?: number
+    height?: number
+    durationMs?: number
+    fileName?: string
+    onProgress?: (label: string) => void
+  }
+): Promise<DurableMediaResult> {
+  const mimeType =
+    (file.type || "").toLowerCase() ||
+    (meta?.fileName?.match(/\.pdf$/i) ? "application/pdf" : "application/octet-stream")
+  let uploadFile: Blob = file
+  let uploadName =
+    meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
+
+  const isImage = mimeType.startsWith("image/")
+  const isVideo = mimeType.startsWith("video/")
+  const maxDirect = isImage
+    ? MAX_DIRECT_IMAGE_BYTES
+    : isVideo
+      ? MAX_DIRECT_VIDEO_BYTES
+      : MAX_DIRECT_FILE_BYTES
+
+  if (uploadFile.size > maxDirect) {
+    return {
+      ok: false,
+      durable: false,
+      error: "FILE_TOO_LARGE",
+      userMessage: mediaUserMessage(
+        "FILE_TOO_LARGE",
+        `Maximum is ${Math.round(maxDirect / (1024 * 1024))}MB for this type.`
+      ),
+    }
+  }
+
+  // Prefer proxy for small files (simpler, one round-trip)
+  if (uploadFile.size > SAFE_PROXY_UPLOAD_BYTES && isImage) {
+    try {
+      meta?.onProgress?.("Compressing photo…")
+      const compressed = await compressOversizedImage(uploadFile)
+      uploadFile = compressed
+      uploadName = uploadName.replace(/\.[^.]+$/, "") + ".jpg"
+    } catch {
+      // Fall through to direct upload with original
+    }
+  }
+
+  if (uploadFile.size <= SAFE_PROXY_UPLOAD_BYTES) {
+    const proxy = await uploadViaProxy(uploadFile, uploadName, meta)
+    if (proxy.ok) return proxy
+    // If proxy fails for size-related reasons, try direct
+    if (
+      proxy.error === "FILE_TOO_LARGE" ||
+      proxy.error === "MEDIA_DIRECT_UPLOAD_REQUIRED" ||
+      proxy.error.startsWith("HTTP_413")
+    ) {
+      return uploadViaDirect(
+        uploadFile,
+        isImage && uploadName.endsWith(".jpg") ? "image/jpeg" : mimeType,
+        uploadName,
+        meta
+      )
+    }
+    return proxy
+  }
+
+  // Large file → direct-to-storage
+  return uploadViaDirect(
+    uploadFile,
+    isImage && uploadName.endsWith(".jpg") ? "image/jpeg" : mimeType,
+    uploadName,
+    meta
+  )
 }

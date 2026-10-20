@@ -52,7 +52,7 @@ function isCommunityConversation(c: Conversation): boolean {
 
 export function MessageScreen() {
   const messaging = useGHCMessaging()
-  const { conversations: rawConversations, sendMessage,
+  const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
   const { deleteMessage, replyToMessage } = useGHC()
   const ghc = {
@@ -651,14 +651,58 @@ export function MessageScreen() {
             }}
             onAttachmentClick={() => {
               try {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:toast", {
-                    detail: {
-                      message: "Attachments are not available yet.",
-                      type: "info",
-                    },
-                  })
-                )
+                const input = document.createElement("input")
+                input.type = "file"
+                input.accept = "image/*,video/*,.pdf,.doc,.docx,.txt,.zip"
+                input.multiple = true
+                input.onchange = async () => {
+                  const files = Array.from(input.files || []).slice(0, 4)
+                  if (!files.length || !selectedId) return
+                  try {
+                    const { uploadDurableMedia } = await import("@/lib/media/upload-client")
+                    for (const file of files) {
+                      const kind = file.type.startsWith("image/")
+                        ? "image"
+                        : file.type.startsWith("video/")
+                          ? "video"
+                          : "file"
+                      const up = await uploadDurableMedia(file, {
+                        onProgress: (label) => {
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:toast", {
+                                detail: { message: String(label || "Uploading…"), type: "info" },
+                              })
+                            )
+                          } catch { /* */ }
+                        },
+                      })
+                      if (!up.ok || !up.url) {
+                        window.dispatchEvent(
+                          new CustomEvent("ghc:toast", {
+                            detail: {
+                              message: (up.userMessage || up.error || "Upload failed") + (up.error ? ` (${up.error})` : ""),
+                              type: "error",
+                            },
+                          })
+                        )
+                        continue
+                      }
+                      if (typeof sendMediaMessage === "function") {
+                        await sendMediaMessage(selectedId, up.url, kind as "image" | "video" | "file", file.name)
+                      }
+                    }
+                  } catch {
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:toast", {
+                          detail: { message: "Could not attach media", type: "error" },
+                        })
+                      )
+                    } catch { /* */ }
+                  }
+                }
+                input.click()
               } catch { /* */ }
             }}
             disabled={sending}

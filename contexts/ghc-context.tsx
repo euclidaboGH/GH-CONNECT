@@ -229,7 +229,7 @@ interface GHCContextType {
   editPost: (postId: string, newContent: string, media?: { images?: string[]; video?: string | null }) => Promise<void>
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
-  addComment: (postId: string, text: string, replyToCommentId?: string) => Promise<void>
+  addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<void>
   loadPostComments: (postId: string) => Promise<{ ok: boolean; count: number; durable?: boolean; error?: string }>
   editComment: (postId: string, commentId: string, newText: string) => Promise<void>
   deleteComment: (postId: string, commentId: string) => Promise<void>
@@ -422,6 +422,7 @@ const GHCDiscoveryContext = createContext<{
 const GHCMessagingContext = createContext<{
   conversations: Conversation[]
   sendMessage: GHCContextType["sendMessage"]
+  sendMediaMessage: GHCContextType["sendMediaMessage"]
   loadConversationMessages: GHCContextType["loadConversationMessages"]
   markConversationRead: GHCContextType["markConversationRead"]
   pinConversation: GHCContextType["pinConversation"]
@@ -2994,9 +2995,17 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const addComment = async (postId: string, text: string, replyToCommentId?: string) => {
+  const addComment = async (
+    postId: string,
+    text: string,
+    replyToCommentId?: string,
+    mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>
+  ) => {
     const normalizedText = sanitizeText(text, 500).trim()
-    if (!normalizedText) {
+    const safeMedia = (mediaAttachments || [])
+      .filter((a) => a && a.url && !String(a.url).startsWith("blob:") && !String(a.url).startsWith("data:"))
+      .slice(0, 4)
+    if (!normalizedText && !safeMedia.length) {
       addToast("Comment cannot be empty", "error")
       return
     }
@@ -3014,10 +3023,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       const { socialAddComment } = await import("@/lib/social/client")
       const profile = state.profile
       const remote = await socialAddComment(postId, {
-        text: normalizedText,
+        text: normalizedText || (safeMedia[0]?.type === "video" ? "🎥 Video" : "📷 Photo"),
         authorName: profile?.displayName || profile?.username || "Member",
         authorPhoto: profile?.photos?.[0] || "",
         parentId: replyToCommentId,
+        mediaAttachments: safeMedia.length ? safeMedia : undefined,
       })
 
       if (!remote.ok) {
@@ -3058,6 +3068,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             ""
         ),
         text: String((remoteComment as { text?: string }).text || normalizedText),
+        mediaAttachments: Array.isArray((remoteComment as { mediaAttachments?: unknown }).mediaAttachments)
+          ? (remoteComment as { mediaAttachments: Array<{ id: string; type: "image" | "video" | "file"; url: string; fileName?: string }> }).mediaAttachments
+          : safeMedia.length
+            ? safeMedia.map((a, i) => ({
+                id: String(a.id || `catt_${i}`),
+                type: a.type,
+                url: a.url,
+                fileName: a.fileName,
+              }))
+            : undefined,
         createdAt: Number((remoteComment as { createdAt?: number }).createdAt) || Date.now(),
         replyTo:
           replyToCommentId ||
@@ -3211,6 +3231,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         authorName: String((c as { authorName?: string }).authorName || "Member"),
         authorPhoto: String((c as { authorPhoto?: string }).authorPhoto || ""),
         text: String((c as { text?: string }).text || ""),
+        mediaAttachments: Array.isArray((c as { mediaAttachments?: unknown }).mediaAttachments)
+          ? ((c as { mediaAttachments: Array<{ id: string; type: "image" | "video" | "file"; url: string; fileName?: string }> }).mediaAttachments)
+          : undefined,
         createdAt: Number((c as { createdAt?: number }).createdAt) || Date.now(),
         replyTo: (c as { parentId?: string; replyTo?: string }).parentId
           || (c as { replyTo?: string }).replyTo
@@ -4587,6 +4610,19 @@ const dismissMatchCelebration = useCallback(() => {
               replyToPreview: raw.replyToPreview && typeof raw.replyToPreview === "object"
                 ? raw.replyToPreview as { senderName: string; text: string }
                 : undefined,
+              mediaAttachments: Array.isArray(raw.mediaAttachments)
+                ? (raw.mediaAttachments as Array<Record<string, unknown>>)
+                    .slice(0, 4)
+                    .map((a) => ({
+                      id: String(a.id || ""),
+                      type: (["image", "video", "file"].includes(String(a.type))
+                        ? String(a.type)
+                        : "file") as "image" | "video" | "file",
+                      url: String(a.url || ""),
+                      fileName: a.fileName != null ? String(a.fileName) : undefined,
+                    }))
+                    .filter((a) => a.url && !a.url.startsWith("blob:") && !a.url.startsWith("data:"))
+                : undefined,
             }
           })
           .filter(Boolean) as Array<{
@@ -5581,36 +5617,121 @@ const dismissMatchCelebration = useCallback(() => {
 
   const sendMediaMessage = useCallback(
     async (conversationId: string, mediaUrl: string, type: "image" | "file" | "video", fileName?: string) => {
-      // Durable messaging API is text-only; do not claim durable delivery for attachments.
-      if (isDurableMessagingEnabled()) {
-        addToast("Media messages are not available with durable messaging yet", "error")
+      const url = String(mediaUrl || "").trim()
+      // Fail closed: never claim cross-device delivery for blob/data URLs.
+      if (!url || url.startsWith("blob:") || url.startsWith("data:")) {
+        addToast("Upload the file to the server first, then send it in chat", "error")
         return
       }
-      const message: Message = {
+      try {
+        const { isDurableMediaUrl } = await import("@/lib/media/durable-url")
+        if (!isDurableMediaUrl(url) && !/^https?:\/\//i.test(url)) {
+          addToast("Only server-stored media can be sent in chat", "error")
+          return
+        }
+      } catch { /* */ }
+
+      const text =
+        type === "image" ? "📷 Photo" : type === "video" ? "🎥 Video" : `📎 ${fileName || "File"}`
+      const clientMessageId = generateId()
+      const attachment = {
         id: generateId(),
-        senderId: "current-user",
-        text: type === "image" ? "📷 Sent a photo" : type === "video" ? "🎥 Sent a video" : `📎 ${fileName || "File"}`,
+        type,
+        url,
+        fileName,
+      }
+      const optimistic: Message = {
+        id: clientMessageId,
+        senderId: state.profile?.id || IdentityService.getCurrentUserId?.() || "me",
+        text,
         createdAt: Date.now(),
         status: "sending",
-        mediaAttachments: [{ id: generateId(), type, url: mediaUrl, fileName }],
+        mediaAttachments: [attachment],
       }
-
       setState((s) => ({
         ...s,
         conversations: s.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, messages: [...c.messages, message], lastMessage: message.text, lastMessageTime: Date.now() }
+            ? {
+                ...c,
+                messages: [...(c.messages || []), optimistic],
+                lastMessage: text,
+                lastMessageTime: Date.now(),
+              }
             : c
         ),
       }))
 
-      analytics.trackEvent("media_sent", { conversationId, type }, state.profile.displayName)
-      addToast(
-        `${type === "image" ? "Photo" : type === "video" ? "Video" : "File"} is device-local only — text messaging is durable`,
-        "success"
-      )
+      try {
+        const { apiSendMessage } = await import("@/lib/messaging/server-messaging-sync")
+        const res = await apiSendMessage(
+          conversationId,
+          text,
+          clientMessageId,
+          undefined,
+          undefined,
+          [attachment]
+        )
+        if (!res.httpOk || res.ok === false) {
+          setState((s) => ({
+            ...s,
+            conversations: s.conversations.map((c) =>
+              c.id === conversationId
+                ? {
+                    ...c,
+                    messages: (c.messages || []).map((m) =>
+                      m.id === clientMessageId ? { ...m, status: "failed" as const } : m
+                    ),
+                  }
+                : c
+            ),
+          }))
+          addToast(
+            typeof res.error === "string" ? `Could not send media (${res.error})` : "Could not send media message",
+            "error"
+          )
+          return
+        }
+        const serverMsg = res.message as { id?: string } | undefined
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId
+              ? {
+                  ...c,
+                  messages: (c.messages || []).map((m) =>
+                    m.id === clientMessageId
+                      ? {
+                          ...m,
+                          id: serverMsg?.id || m.id,
+                          status: "sent" as const,
+                          mediaAttachments: [attachment],
+                        }
+                      : m
+                  ),
+                }
+              : c
+          ),
+        }))
+        analytics.trackEvent("media_sent", { conversationId, type, durable: true }, state.profile.displayName)
+      } catch {
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId
+              ? {
+                  ...c,
+                  messages: (c.messages || []).map((m) =>
+                    m.id === clientMessageId ? { ...m, status: "failed" as const } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+        addToast("Could not send media message", "error")
+      }
     },
-    [state.profile.displayName, state.conversations, addToast]
+    [state.profile?.id, state.profile.displayName, addToast]
   )
 
   const scheduleMessage = useCallback(
@@ -7482,6 +7603,7 @@ const dismissMatchCelebration = useCallback(() => {
     () => ({
       conversations: visibleSession.conversations,
       sendMessage,
+      sendMediaMessage,
       loadConversationMessages,
       markConversationRead,
       pinConversation,
@@ -7513,6 +7635,7 @@ const dismissMatchCelebration = useCallback(() => {
       visibleSession.conversations,
       state.profile,
       sendMessage,
+      sendMediaMessage,
       loadConversationMessages,
       markConversationRead,
       pinConversation,

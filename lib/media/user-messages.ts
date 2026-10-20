@@ -18,7 +18,7 @@ export function mediaUserMessage(code: string | undefined, fallback?: string): s
     case "FILE_TOO_LARGE":
       return "This file is too large for GreenHaven. Please choose a smaller file."
     case "MEDIA_DIRECT_UPLOAD_REQUIRED":
-      return "This file is still too large for the current upload route after optimization. Please choose a smaller file; large-file direct upload is not enabled yet."
+      return "This file needs a secure direct upload. Please stay online and try again — large photos and videos up to 80MB are supported when connected."
     case "MEDIA_STORAGE_UNAVAILABLE":
     case "ASSET_RECORD_FAILED":
     case "STORAGE_ERROR":

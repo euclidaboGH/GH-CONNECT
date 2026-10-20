@@ -135,3 +135,5 @@ This is a repository inventory only. It does **not** prove that any migration is
 - The self-curation policy includes both a guard migration and a later allowance migration. Confirm the final function definition on a disposable clean database and Testnet; self-curation must not count as independent evidence or earn rewards.
 - The marketplace reservation migration remains unverified against PostgreSQL. Do not enable finite-stock production sales until concurrency, payment races, expiry, cancellation, and recovery pass.
 - This checklist is not a deployment approval and is not a record of applied migrations.
+
+- 202610200002_gh_comment_media_attachments.sql — comment media jsonb + list/create RPC (REQUIRED for comment attachments)

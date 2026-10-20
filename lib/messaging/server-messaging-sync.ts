@@ -56,6 +56,14 @@ export async function apiSendMessage(
   clientMessageId: string,
   replyToMessageId?: string,
   sharedPostId?: string,
+  mediaAttachments?: Array<{
+    id?: string
+    type: "image" | "video" | "file"
+    url: string
+    fileName?: string
+    mimeType?: string
+    sizeBytes?: number
+  }>,
 ) {
   const res = await fetch(
     `/api/messaging/conversations/${encodeURIComponent(conversationId)}/messages`,
@@ -63,7 +71,13 @@ export async function apiSendMessage(
       method: "POST",
       credentials: "include",
       headers: authHeaders(),
-      body: JSON.stringify({ body: text, clientMessageId, replyToMessageId: replyToMessageId || undefined, sharedPostId: sharedPostId || undefined }),
+      body: JSON.stringify({
+        body: text,
+        clientMessageId,
+        replyToMessageId: replyToMessageId || undefined,
+        sharedPostId: sharedPostId || undefined,
+        mediaAttachments: mediaAttachments?.length ? mediaAttachments : undefined,
+      }),
       cache: "no-store",
     }
   )

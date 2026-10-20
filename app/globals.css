@@ -2247,3 +2247,20 @@ body { overflow-x: clip; }
     transition-duration: .01ms !important;
   }
 }
+
+/* 2026-10-20 — ensure engagement toolbar never clips share/save on narrow phones */
+.gh-post-card {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box;
+}
+.gh-post-card [role="toolbar"] {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 400px) {
+  .gh-post-card [role="toolbar"] {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}

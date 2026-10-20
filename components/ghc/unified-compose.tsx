@@ -245,19 +245,28 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           })
           if (up.ok && up.url && isDurableMediaUrl(up.url)) {
             setStoryMedia({ type: "image", url: up.url })
-          } else if (isSmallDataUrl(dataUrl)) {
-            setStoryMedia({ type: "image", url: dataUrl })
-            addToast("Photo saved for this device only — reconnect to upload durably", "info")
           } else {
-            addToast(mediaUserMessage(up.ok ? "STORAGE_ERROR" : up.error, up.ok ? undefined : up.userMessage), "error")
-            return
+            const offline = typeof navigator !== "undefined" && navigator.onLine === false
+            if (offline && isSmallDataUrl(dataUrl)) {
+              setStoryMedia({ type: "image", url: dataUrl })
+              addToast("You're offline — photo saved as a draft on this device until you reconnect", "info")
+            } else {
+              addToast(
+                up.ok
+                  ? mediaUserMessage("STORAGE_ERROR")
+                  : up.userMessage || mediaUserMessage(up.error),
+                "error"
+              )
+              return
+            }
           }
         } catch {
-          if (isSmallDataUrl(dataUrl)) {
+          const offline = typeof navigator !== "undefined" && navigator.onLine === false
+          if (offline && isSmallDataUrl(dataUrl)) {
             setStoryMedia({ type: "image", url: dataUrl })
-            addToast("Photo saved for this device only — reconnect to upload durably", "info")
+            addToast("You're offline — photo saved as a draft on this device until you reconnect", "info")
           } else {
-            addToast(mediaUserMessage("NETWORK"), "error")
+            addToast(mediaUserMessage("NETWORK") + " — try again when connected", "error")
             return
           }
         }
@@ -286,23 +295,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             })
             if (up.ok && up.url && isDurableMediaUrl(up.url)) {
               images.push(up.url)
-            } else if (!up.ok && (up.error === "FILE_TOO_LARGE" || up.error === "INLINE_TOO_LARGE")) {
-              addToast(mediaUserMessage(up.error), "error")
             } else if (!up.ok) {
-              if (isSmallDataUrl(dataUrl)) {
-                images.push(dataUrl)
-                addToast("Photo on this device only — reconnect to upload for everyone", "info")
-              } else {
-                addToast(mediaUserMessage(up.error || "STORAGE_ERROR", up.userMessage), "error")
-              }
+              addToast((up.userMessage || mediaUserMessage(up.error || "STORAGE_ERROR")) + (up.error ? ` (${up.error})` : ""), "error")
+            } else {
+              addToast(mediaUserMessage("STORAGE_ERROR"), "error")
             }
           } catch {
-            if (isSmallDataUrl(dataUrl)) {
-              images.push(dataUrl)
-              addToast("Photo on this device only — reconnect to upload for everyone", "info")
-            } else {
-              addToast(mediaUserMessage("NETWORK"), "error")
-            }
+            addToast(mediaUserMessage("NETWORK") + " — photo not attached. Check connection and retry.", "error")
           }
         }
         if (images.length) {
@@ -324,11 +323,11 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     if (!file || mode !== "post") return
     setUploadProgress(MEDIA_PROGRESS.preparingFile)
     try {
-      if (file.size > 8 * 1024 * 1024) {
+      if (file.size > 25 * 1024 * 1024) {
         addToast(mediaUserMessage("FILE_TOO_LARGE"), "error")
         return
       }
-      if (file.size > 4 * 1024 * 1024) {
+      if (file.size > 25 * 1024 * 1024) {
         addToast(mediaUserMessage("MEDIA_DIRECT_UPLOAD_REQUIRED"), "error")
         return
       }
@@ -369,8 +368,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       addToast(error instanceof Error ? error.message : "Choose a supported video file", "error")
       return
     }
-    if (file.size > 4 * 1024 * 1024) {
-      addToast("For now, choose a video under 4 MB. Larger videos need the direct-to-storage upload path.", "error")
+    if (file.size > 80 * 1024 * 1024) {
+      addToast("Video is too large (max 80 MB). Please choose a shorter clip.", "error")
       return
     }
     setUploadProgress(
@@ -456,19 +455,19 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     // Phase 2 — never publish blob: media
     const dirtyImages = selectedImages.filter((u) => !isDurableMediaUrl(u))
     if (dirtyImages.length) {
-      addToast("One or more photos are only stored on this device. Reconnect and upload them before publishing.", "error")
+      addToast("Photos did not finish uploading to the server. Remove them, stay online, and re-attach. Tip: open /api/media/health while signed in if this keeps failing.", "error")
       publishingRef.current = false
       setIsPublishing(false)
       return
     }
     if (selectedVideo && !isDurableMediaUrl(selectedVideo)) {
-      addToast("Video is not uploaded yet. Reconnect and upload it before publishing.", "error")
+      addToast("Video is not uploaded yet. Wait for Ready, or re-attach the video while online.", "error")
       publishingRef.current = false
       setIsPublishing(false)
       return
     }
     if (selectedDoc && !isDurableMediaUrl(selectedDoc)) {
-      addToast("This attachment is stored only on this device. Reconnect and upload it before publishing.", "error")
+      addToast("Attachment is not uploaded yet. Re-attach the file while online.", "error")
       publishingRef.current = false
       setIsPublishing(false)
       return
@@ -951,7 +950,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         ) : null}
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
           {mode === "post"
-            ? "Text, photos, video and files in one post · videos currently up to 4 MB"
+            ? "Text, photos, video and files in one post · photos up to 25 MB · videos up to 80 MB"
             : "Stories disappear after 24 hours"}
         </p>
       </footer>

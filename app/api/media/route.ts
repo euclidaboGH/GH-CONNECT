@@ -29,7 +29,7 @@ const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
 const ALLOWED_FILE = new Set(["application/pdf", "application/x-pdf"])
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024
-const MAX_FILE_BYTES = 8 * 1024 * 1024
+const MAX_FILE_BYTES = 25 * 1024 * 1024
 
 function sniffMime(buf: Buffer): string | null {
   if (buf.length < 12) return null
