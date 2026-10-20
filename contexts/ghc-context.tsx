@@ -6678,9 +6678,10 @@ const dismissMatchCelebration = useCallback(() => {
             const remote = await socialCreatePost({
               content: text,
               communityId,
-              visibility: "community",
+              // Board posts are scoped by communityId; visibility stays feed-compatible.
+              visibility: "public",
               type: kind === "question" ? "text" : "text",
-            } as Parameters<typeof socialCreatePost>[0] & { communityId: string; visibility: string })
+            } as Partial<import("@/lib/ghc-types").Post> & { content: string; communityId: string })
             if (remote.ok && remote.durable && remote.post?.id) {
               durableOk = true
               durableId = String(remote.post.id)
