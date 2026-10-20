@@ -338,9 +338,10 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
       if (actor) link.userId = actor
     }
   } else if ((n as { type?: string }).type === "connection_accept") {
+    // Open Matches; section must be a declared NotificationLink section (not tab name)
     link.open = "matches"
     link.tab = "matches"
-    link.section = "matches"
+    link.section = "connection_requests"
     if (!link.userId) {
       const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
       if (actor) link.userId = actor
