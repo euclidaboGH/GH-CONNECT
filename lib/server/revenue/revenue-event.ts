@@ -103,7 +103,8 @@ export async function appendVerifiedCompanyRevenueEvent(
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "REVENUE_STORE_UNAVAILABLE" }
 
   try {
-    const endpoint = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_company_revenue_event_append`
+    const baseUrl = env.supabaseUrl.endsWith("/") ? env.supabaseUrl.slice(0, -1) : env.supabaseUrl
+    const endpoint = `${baseUrl}/rest/v1/rpc/gh_company_revenue_event_append`
     const body = JSON.stringify({
       p_idempotency_key: input.idempotencyKey.trim(),
       p_source_provider: input.sourceProvider,

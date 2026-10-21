@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const revenue = readFileSync(new URL('../lib/server/revenue/revenue-event.ts', import.meta.url), 'utf8')
-assert.match(revenue, /supabaseUrl\.replace\(\/\\\/\$\/, ""\)/, 'Revenue endpoint must remove one trailing slash with valid TypeScript regex syntax')
+assert.match(revenue, /supabaseUrl\.endsWith\("\/"\) \? env\.supabaseUrl\.slice\(0, -1\) : env\.supabaseUrl/, 'Revenue endpoint must trim a trailing slash without a parser-sensitive regex')
 assert.match(revenue, /rest\/v1\/rpc\/gh_company_revenue_event_append/, 'Revenue RPC endpoint must remain intact')
 
 for (const path of ['../.github/workflows/ci.yml', '../.github/workflows/repair-npm-lock.yml']) {
