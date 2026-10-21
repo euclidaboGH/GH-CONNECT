@@ -2283,7 +2283,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate on profile id + after Pi identity ready
   }, [state.profile?.id])
 
-  const updateProfile = async (updates: Partial<Profile>) => {
+  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
     try {
       // UX-layer validation (compatibility); domain re-validates on mutate path
       if (updates.displayName && !validation.isValidName(updates.displayName)) {
@@ -2388,9 +2388,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Failed to update profile", "error")
     }
-  }
+  }, [addToast, state.profile])
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = useCallback(async () => {
     try {
       const result = await domains.identity.completeOnboarding()
       if (!result.ok) {
@@ -2458,9 +2458,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Onboarding could not be completed. Please try again.", "error")
     }
-  }
+  }, [domains, addToast, state.profile])
 
-  const switchLocalProfile = (localId: string) => {
+  const switchLocalProfile = useCallback((localId: string) => {
     const profile = findLocalProfile(localId)
     if (!profile) return
     setActiveLocalProfileId(localId)
@@ -2477,7 +2477,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...otherLocals,
       ],
     }))
-  }
+  }, [addToast])
 
   const createLocalProfile = (profile: Partial<Profile>) => {
     // Identity domain builds the record; local-profiles API persists it
@@ -2496,7 +2496,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const createPost = async (
+  const createPost = useCallback(async (
     content: string,
     images: string[],
     video: string | null,
@@ -2652,10 +2652,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       addToast("Failed to create post", "error")
       return false
     }
-  }
+  }, [addToast, state.profile, state.posts])
 
   /** Durable multi-reaction (like, love, support, …). Server is authority when configured. */
-  const reactToPost = async (postId: string, reaction: string = "like") => {
+  const reactToPost = useCallback(async (postId: string, reaction: string = "like") => {
     const isLike = reaction === "like" || !reaction
     const normalized = (reaction || "like").trim() || "like"
     try {
@@ -2773,11 +2773,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       addToast("Could not update reaction", "error")
     }
-  }
+  }, [addToast])
 
-  const likePost = async (postId: string) => {
+  const likePost = useCallback(async (postId: string) => {
     return reactToPost(postId, "like")
-  }
+  }, [reactToPost])
 
   const getDomainState = useCallback(() => ({
     profile: state.profile,
@@ -2826,6 +2826,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         currentUserId: IdentityService.getCurrentUserId(),
         onReportPersist: (report) => {
           try {
+            // recordModerationReport is defined later in this component; invoked only on user action.
             recordModerationReport?.(report.targetType, report.targetId, report.reason)
           } catch { /* */ }
         },
@@ -2834,6 +2835,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           setState((s) => ({ ...s, conversations: updater(s.conversations || []) }))
         },
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recordModerationReport is declared below; getDomainState is stable
     [getDomainState, identityUserId]
   )
 
@@ -3061,7 +3063,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const deletePost = async (postId: string) => {
+  const deletePost = useCallback(async (postId: string) => {
     try {
       const previous = state.posts.find((p) => p.id === postId)
       const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
@@ -3102,9 +3104,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete post", "error")
     }
-  }
+  }, [addToast, state.posts])
 
-  const addComment = async (
+  const addComment = useCallback(async (
     postId: string,
     text: string,
     replyToCommentId?: string,
@@ -3306,7 +3308,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       addToast("Could not post comment", "error")
     }
-  }
+  }, [addToast, state.profile, state.posts])
 
 
 
@@ -3449,7 +3451,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const editPost = async (
+  const editPost = useCallback(async (
     postId: string,
     newContent: string,
     media?: { images?: string[]; video?: string | null }
@@ -3508,9 +3510,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not update post", "error")
     }
-  }
+  }, [addToast, state.posts, state.profile, domains])
 
-  const archivePost = async (postId: string) => {
+  const archivePost = useCallback(async (postId: string) => {
     const post = state.posts.find((p) => p.id === postId)
     if (!post) {
       addToast("Post not found", "error")
@@ -3557,9 +3559,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       addToast("Could not reach the server to archive this post", "error")
     }
-  }
+  }, [addToast, state.posts])
 
-  const unarchivePost = async (postId: string) => {
+  const unarchivePost = useCallback(async (postId: string) => {
     const post = state.posts.find((p) => p.id === postId)
     if (!post) {
       addToast("Post not found", "error")
@@ -3605,7 +3607,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       addToast("Could not reach the server to restore this post", "error")
     }
-  }
+  }, [addToast, state.posts])
 
   const editComment = async (postId: string, commentId: string, newText: string) => {
     const normalized = (newText || "").trim()
@@ -4191,7 +4193,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     await followUser(userId)
   }
 
-  const updateSettings = async (updates: Partial<Settings>) => {
+  const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     const messagingPrivacyUpdates: Record<string, string> = {}
     if (updates.whoCanMessage && updates.whoCanMessage !== state.settings.whoCanMessage) messagingPrivacyUpdates.whoCanMessage = updates.whoCanMessage
     if (updates.onlineStatus && updates.onlineStatus !== state.settings.onlineStatus) messagingPrivacyUpdates.onlineStatus = updates.onlineStatus
@@ -4215,7 +4217,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
     }
     setState((s) => ({ ...s, settings: { ...s.settings, ...updates } }))
-  }
+  }, [addToast, state.settings])
 
   const isMatchOrFriend = (userId: string) => state.matches.some((match) => match.userId === userId) || state.friends.includes(userId)
   const canViewProfile = (userId: string) => userId === "current-user" || state.settings.profileVisibility === "everyone" || (state.settings.profileVisibility === "matches-only" && isMatchOrFriend(userId))
