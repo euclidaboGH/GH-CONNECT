@@ -9,7 +9,7 @@ import { compressImageFile } from "@/lib/media/compress-image"
 import { uploadDurableMedia, isMediaStorageUnavailable, mediaUploadErrorMessage } from "@/lib/media/upload-client"
 import { getPostDraft, removePostDraft, upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
-import { isDurableMediaUrl, isBlobUrl } from "@/lib/media/durable-url"
+import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
