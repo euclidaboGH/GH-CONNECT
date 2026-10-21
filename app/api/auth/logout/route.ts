@@ -23,9 +23,25 @@ export async function POST(request: Request) {
     if (token) {
       const session = await validateSession(token, { touch: false })
       if (session?.id) {
-        await revokeStepUpsForSession(session.id)
+        const revoked = await revokeSessionByToken(token)
+        if (!revoked) {
+          const res = NextResponse.json(
+            { ok: false, loggedOut: false, error: "SESSION_REVOCATION_UNAVAILABLE" },
+            { status: 503, headers: { "Cache-Control": "no-store" } }
+          )
+          res.headers.append("Set-Cookie", buildClearSessionCookieHeader())
+          return res
+        }
+        const stepUpsRevoked = await revokeStepUpsForSession(session.id)
+        if (!stepUpsRevoked) {
+          const res = NextResponse.json(
+            { ok: false, loggedOut: false, error: "STEP_UP_REVOCATION_UNAVAILABLE" },
+            { status: 503, headers: { "Cache-Control": "no-store" } }
+          )
+          res.headers.append("Set-Cookie", buildClearSessionCookieHeader())
+          return res
+        }
       }
-      await revokeSessionByToken(token)
     }
 
     const res = NextResponse.json(
@@ -40,8 +56,8 @@ export async function POST(request: Request) {
       err instanceof Error ? err.message : "unknown"
     )
     const res = NextResponse.json(
-      { ok: true, loggedOut: true },
-      { status: 200, headers: { "Cache-Control": "no-store" } }
+      { ok: false, loggedOut: false, error: "SESSION_REVOCATION_UNAVAILABLE" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
     res.headers.append("Set-Cookie", buildClearSessionCookieHeader())
     return res

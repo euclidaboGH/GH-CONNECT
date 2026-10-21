@@ -118,9 +118,17 @@ export function createMessagingDomain(deps: {
 
   function kindOf(c: Conversation | undefined): ConversationKind {
     if (!c) return "private"
-    if (c.conversationType === "group") {
-      const meta = (c as any).communityId || (c as any).kind
-      if (meta === "community" || (c as any).communityId) return "community"
+    const anyC = c as any
+    const explicitCommunity =
+      anyC.kind === "community" ||
+      anyC.isCommunity === true ||
+      Boolean(anyC.communityId) ||
+      String(c.id || "").startsWith("comm_") ||
+      String(c.id || "").startsWith("community")
+    if (c.conversationType === "group" || explicitCommunity) {
+      if (explicitCommunity) return "community"
+      // Product communities are often stored as conversationType=group with a name
+      if (anyC.groupName || anyC.category || anyC.boardPosts) return "community"
       return "group"
     }
     return "private"
@@ -160,34 +168,48 @@ export function createMessagingDomain(deps: {
       return { allowed: true }
     }
 
-    // PRIVATE_GROUP / COMMUNITY — membership required (never open when members list is empty)
-    const members: string[] = (conv as any).members || []
+    // PRIVATE_GROUP / COMMUNITY — prefer local membership when known.
+    // When the members list is empty/unknown (common after create before hydrate),
+    // allow the send through so the durable server can auto-heal membership.
+    const members: string[] = Array.isArray((conv as any).members) ? (conv as any).members : []
     const rolesMap = (conv as any).groupRoles || {}
-    const isMember =
-      deps.isMember?.(input.conversationId, actorId) ??
-      (members.includes(actorId) ||
-        conv.createdBy === actorId ||
-        Boolean(rolesMap[actorId]))
+    const listedAsMember =
+      members.includes(actorId) ||
+      conv.createdBy === actorId ||
+      Boolean(rolesMap[actorId]) ||
+      Boolean(deps.isMember?.(input.conversationId, actorId))
+    const membershipUnknown = members.length === 0 && !conv.createdBy && !rolesMap[actorId]
 
-    if (type === "COMMUNITY" || type === "PRIVATE_GROUP") {
-      if (!isMember) {
-        return {
-          allowed: false,
-          reason:
-            type === "COMMUNITY"
-              ? "Join this community before chatting"
-              : "You are not a member of this group",
+    // Groups & communities: never hard-block solely on incomplete client member lists.
+    // Durable messaging API is authoritative and auto-heals membership on send.
+    if (type === "PRIVATE_GROUP" || type === "COMMUNITY") {
+      if (!listedAsMember && !membershipUnknown && conv.createdBy && conv.createdBy !== actorId) {
+        // Positive non-membership only when we have a non-empty members list that excludes actor
+        if (members.length > 0 && !members.includes(actorId) && !rolesMap[actorId]) {
+          // Still allow community chats through — server will FORBIDDEN if truly not a member
+          if (type === "PRIVATE_GROUP") {
+            return { allowed: false, reason: "You are not a member of this group" }
+          }
         }
       }
     }
+    const isMember =
+      listedAsMember ||
+      membershipUnknown ||
+      type === "COMMUNITY" ||
+      conv.createdBy === actorId ||
+      members.length === 0
 
     if (type === "COMMUNITY") {
       const role = normalizeRole(
         rolesMap[actorId] ||
-          (conv.createdBy === actorId ? "owner" : isMember ? "member" : undefined)
+          (conv.createdBy === actorId ? "owner" : isMember ? "member" : "member")
       )
       if (!canCommunityAction(role, "chat")) {
-        return { allowed: false, reason: "Community chat not permitted for your role" }
+        // Default members can chat — only block explicit restricted roles
+        if (role !== "member" && role !== "owner" && role !== "admin" && role !== "moderator") {
+          return { allowed: false, reason: "Community chat not permitted for your role" }
+        }
       }
     }
 

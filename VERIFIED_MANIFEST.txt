@@ -1,12 +1,12 @@
 GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
-project_version=0.62.5
-manifest_date=2026-10-19
-canonical_migrations=105
+project_version=0.63.25
+manifest_format_version=1
+canonical_migrations=109
 classification_required=77
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=25
+classification_review_required=29
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -16,6 +16,8 @@ CLASSIFICATION_POLICY:
   REQUIRES_APPROVAL   = product/security review before apply
   PROPOSAL            = do NOT apply without explicit written approval
   REVIEW_REQUIRED     = unreconciled or sequencing-sensitive; validate on disposable PostgreSQL/Testnet first
+
+APPLICATION_GUARD: Supabase CLI does not enforce this classification metadata. Do not run db push while any pending migration is unreviewed, a proposal, or awaiting approval.
 
 ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=13456 path=supabase/migrations/20260821_ghc_economy_ledger.sql
@@ -85,8 +87,9 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=2258 path=supabase/migrations/202610150003_ghc_wallet_snapshot_spendable.sql
 [REQUIRED] size=3106 path=supabase/migrations/20261015_ghpv_curator_calibration_apply.sql
 [REQUIRED] size=6885 path=supabase/migrations/20261016_ghpv_active_weight_set_semantics.sql
-[REQUIRED] size=8903 path=supabase/migrations/20261017_ghpv_settlement_engine.sql
-[REQUIRED] size=2211 path=supabase/migrations/20261017_match_signals_durable.sql
+[REQUIRED] size=8907 path=supabase/migrations/202610170001_ghpv_settlement_engine.sql
+[REQUIRED] size=2211 path=supabase/migrations/202610170002_match_signals_durable.sql
+[REQUIRED] size=7004 path=supabase/migrations/202610170003_ghpv_calibration_bounds.sql
 [REQUIRED] size=10464 path=supabase/migrations/202610180001_ghc_curation_rewards.sql
 [REVIEW_REQUIRED] size=3512 path=supabase/migrations/202610180002_gh_curation_pipeline_atomic.sql
 [REVIEW_REQUIRED] size=2157 path=supabase/migrations/202610180003_reputation_event_integrity.sql
@@ -96,28 +99,31 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=5142 path=supabase/migrations/202610180009_ghc_daily_claim_only_issuance.sql
 [REVIEW_REQUIRED] size=3086 path=supabase/migrations/202610180010_atomic_membership_purchase.sql
 [REVIEW_REQUIRED] size=15706 path=supabase/migrations/202610180011_atomic_marketplace_inventory_reservation.sql
+[REQUIRED] size=13820 path=supabase/migrations/202610180012_gh_engagement_rosters.sql
 [REQUIRED] size=4434 path=supabase/migrations/202610181200_marketplace_stale_payment_claim_recovery.sql
 [REQUIRED] size=5339 path=supabase/migrations/202610181300_membership_orphaned_purchase_recovery.sql
 [REQUIRED] size=4992 path=supabase/migrations/202610181400_transfer_pair_orphan_recovery.sql
 [REQUIRED] size=10086 path=supabase/migrations/202610181500_referral_programme.sql
 [REQUIRED] size=3484 path=supabase/migrations/202610181501_issuance_guard_referral_and_curation_redistribute.sql
 [REQUIRED] size=3259 path=supabase/migrations/202610181502_curation_redistribute_balance_funded.sql
-[REQUIRED] size=13820 path=supabase/migrations/20261018_gh_engagement_rosters.sql
-[REQUIRED] size=6996 path=supabase/migrations/20261018_ghpv_calibration_bounds.sql
 [REVIEW_REQUIRED] size=12991 path=supabase/migrations/202610190002_gh_private_media_references_and_viewer_authz.sql
 [REVIEW_REQUIRED] size=2438 path=supabase/migrations/20261019_ghpv_soft_delete_quality_cleanup.sql
+[REQUIRED] size=4141 path=supabase/migrations/202610200002_gh_comment_media_attachments.sql
 [REVIEW_REQUIRED] size=2725 path=supabase/migrations/20261020_ghpv_soft_delete_atomic.sql
+[REQUIRED] size=8959 path=supabase/migrations/202610210001_company_revenue_event_journal.sql
+[REVIEW_REQUIRED] size=951 path=supabase/migrations/202610210002_pi_payment_intent_idempotency_lookup.sql
+[REVIEW_REQUIRED] size=10617 path=supabase/migrations/202610210003_pi_payment_intent_atomic_transitions.sql
 [REVIEW_REQUIRED] size=3555 path=supabase/migrations/20261021_gh_social_notifications_types_extend.sql
 [REVIEW_REQUIRED] size=9096 path=supabase/migrations/20261022_gh_content_rewards.sql
 [REVIEW_REQUIRED] size=7964 path=supabase/migrations/20261023_gh_profile_content_library.sql
 [REVIEW_REQUIRED] size=2854 path=supabase/migrations/202610240003_gh_post_reaction_roster_visibility_guard.sql
 [REVIEW_REQUIRED] size=4346 path=supabase/migrations/202610240004_gh_story_creator_upgrade.sql
 [REVIEW_REQUIRED] size=8255 path=supabase/migrations/202610240005_gh_messaging_presence_delivery_receipts.sql
-[REVIEW_REQUIRED] size=3503 path=supabase/migrations/202610240006_gh_story_reactions.sql
+[REVIEW_REQUIRED] size=4430 path=supabase/migrations/202610240006_gh_story_reactions.sql
 [REVIEW_REQUIRED] size=7467 path=supabase/migrations/202610240007_gh_post_created_notifications.sql
 [REVIEW_REQUIRED] size=2518 path=supabase/migrations/202610250001_gh_system_announcements.sql
-[REQUIRED] size=1918 path=supabase/migrations/202610250002_gh_post_restore_owner_window.sql
-[REQUIRED] size=13203 path=supabase/migrations/202610250003_gh_lifecycle_payout_quality_foundation.sql
+[REVIEW_REQUIRED] size=1918 path=supabase/migrations/202610250002_gh_post_restore_owner_window.sql
+[REVIEW_REQUIRED] size=13203 path=supabase/migrations/202610250003_gh_lifecycle_payout_quality_foundation.sql
 [REVIEW_REQUIRED] size=14803 path=supabase/migrations/202610250004_gh_verified_tip_settlement_payout_reconciliation.sql
 [REVIEW_REQUIRED] size=24405 path=supabase/migrations/202610250005_ghc_tip_and_creator_reward_atomic_settlement.sql
 [REVIEW_REQUIRED] size=9021 path=supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql

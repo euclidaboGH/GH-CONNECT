@@ -14,6 +14,8 @@
 
 import { NextResponse } from "next/server"
 import { verifyPiAccessToken } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { createHash } from "node:crypto"
 import {
   findOrCreateFromVerifiedPi,
   touchLastSeen,
@@ -30,6 +32,20 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
+    const forwardedParts = (request.headers.get("x-forwarded-for") || "").split(",").map((part) => part.trim()).filter(Boolean)
+    const forwarded = forwardedParts.length ? forwardedParts[forwardedParts.length - 1] : ""
+    const clientIp = request.headers.get("x-real-ip")?.trim() || forwarded || "unknown"
+    const rate = checkRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000)
+    if (!rate.ok) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED", retryAfterSec: rate.retryAfterSec },
+        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rate.retryAfterSec) } }
+      )
+    }
+    const contentLength = Number(request.headers.get("content-length") || 0)
+    if (Number.isFinite(contentLength) && contentLength > 16_384) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
     const body = await request.json().catch(() => ({}))
     const accessToken =
       typeof body.accessToken === "string" ? body.accessToken.trim() : ""

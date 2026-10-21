@@ -28,6 +28,9 @@ check('Testnet E2E cannot silently skip without configured URL', workflow.includ
 check('pull-request E2E skip is explicitly not release evidence', workflow.includes('this is not release evidence'))
 check('CI runs inventory consistency and Phase 1 guardrails', workflow.includes('npm run check:migration-inventory') && workflow.includes('node scripts/test-phase1-release-readiness.mjs'))
 check('inventory consistency check is available as package script', packageJson.scripts['check:migration-inventory'] === 'node scripts/generate-migration-inventory.mjs --check')
+check('runtime preflight is available and wired into CI', packageJson.scripts['check:runtime'] === 'node scripts/check-node-runtime.mjs' && workflow.includes('npm run check:runtime'))
+check('runtime contract tests are registered', packageJson.scripts['test:runtime-contract'] === 'node scripts/test-node-runtime.mjs')
+check('local CI helper checks runtime before dependency install', packageJson.scripts.ci.startsWith('npm run check:runtime && npm ci'))
 check('live migration application is explicitly not implied by inventory', checklist.includes('does **not** prove that any migration is applied to Testnet or Mainnet'))
 
 let failed = 0

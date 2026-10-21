@@ -6,11 +6,10 @@ import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
-import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { uploadDurableMedia, isMediaStorageUnavailable, mediaUploadErrorMessage } from "@/lib/media/upload-client"
 import { getPostDraft, removePostDraft, upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
-import { mediaUploadErrorMessage } from "@/lib/media/upload-client"
-import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
+import { isDurableMediaUrl, isBlobUrl } from "@/lib/media/durable-url"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
@@ -248,9 +247,15 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             setStoryMedia({ type: "image", url: up.url })
           } else {
             const offline = typeof navigator !== "undefined" && navigator.onLine === false
-            if (offline && isSmallDataUrl(dataUrl)) {
+            const storageDown = !up.ok && isMediaStorageUnavailable(up.error)
+            if ((offline || storageDown) && isSmallDataUrl(dataUrl, 1_800_000)) {
               setStoryMedia({ type: "image", url: dataUrl })
-              addToast("You're offline — photo saved as a draft on this device until you reconnect", "info")
+              addToast(
+                storageDown
+                  ? "Server photo storage is offline — moment kept on this device for now"
+                  : "You're offline — photo saved on this device until you reconnect",
+                "info"
+              )
             } else {
               addToast(
                 up.ok
@@ -296,6 +301,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             })
             if (up.ok && up.url && isDurableMediaUrl(up.url)) {
               images.push(up.url)
+            } else if ((!up.ok && isMediaStorageUnavailable(up.error)) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+              if (isSmallDataUrl(dataUrl, 1_800_000)) {
+                images.push(dataUrl)
+                addToast("Photo kept on this device — server storage not available yet", "info")
+              } else {
+                addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
+              }
             } else if (!up.ok) {
               addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
             } else {
@@ -369,8 +381,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       addToast(error instanceof Error ? error.message : "Choose a supported video file", "error")
       return
     }
-    if (file.size > 80 * 1024 * 1024) {
-      addToast("Video is too large (max 80 MB). Please choose a shorter clip.", "error")
+    if (file.size > 40 * 1024 * 1024) {
+      addToast("Video is too large (max 40 MB). Please choose a shorter clip.", "error")
       return
     }
     setUploadProgress(
@@ -951,7 +963,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         ) : null}
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
           {mode === "post"
-            ? "Text, photos, video and files in one post · photos up to 25 MB · videos up to 80 MB"
+            ? "Text, photos, video and files in one post · photos up to 25 MB · videos up to 40 MB"
             : "Stories disappear after 24 hours"}
         </p>
       </footer>

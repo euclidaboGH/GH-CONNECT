@@ -124,6 +124,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [feedBootstrapped, setFeedBootstrapped] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMorePosts, setHasMorePosts] = useState(true)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
   const [likedPosts, setLikedPosts] = useState<string[]>([])
   // Keep the visible liked state tied to the authenticated server-hydrated feed,
@@ -182,32 +183,50 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
 
   const loadMorePosts = useCallback(async () => {
-    if (isLoadingMore) return
+    if (isLoadingMore || !hasMorePosts) return
+    // Reveal already-hydrated posts locally before requesting another server page.
+    if (displayedPostsCount < rankedPosts.length) {
+      setDisplayedPostsCount((prev) => Math.min(rankedPosts.length, prev + MOBILE_PAGE_SIZES.feed))
+      return
+    }
+
+    const sorted = [...(posts || [])].sort((a, b) => {
+      const timeDelta = (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+      return timeDelta || String(b.id).localeCompare(String(a.id))
+    })
+    const oldestPost = sorted.length ? sorted[sorted.length - 1] : null
+    const oldest = oldestPost ? Number(oldestPost.createdAt) || 0 : 0
+    if (!oldestPost?.id) {
+      // Initial feed hydration may not have completed when the sentinel first enters view.
+      // Keep pagination eligible until the first hydration attempt has settled.
+      if (posts.length === 0 && !feedBootstrapped) return
+      setHasMorePosts(false)
+      return
+    }
+    if (oldest <= 0 || typeof refreshFeed !== "function") {
+      setHasMorePosts(false)
+      return
+    }
+
     try {
       setIsLoadingMore(true)
-      const sorted = [...(posts || [])].sort((a, b) => {
-        const timeDelta = (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-        return timeDelta || String(b.id).localeCompare(String(a.id))
-      })
-      const oldestPost = sorted.length ? sorted[sorted.length - 1] : null
-      const oldest = oldestPost ? Number(oldestPost.createdAt) || 0 : 0
-      if (oldest > 0 && oldestPost?.id && typeof refreshFeed === "function") {
-        const page = await refreshFeed({ before: oldest, beforeId: String(oldestPost.id), append: true, limit: 20 })
-        if (page.ok && (page.appended || 0) > 0) {
-          setDisplayedPostsCount((prev) => prev + Math.min(20, page.appended || 20))
-          return
-        }
+      const page = await refreshFeed({ before: oldest, beforeId: String(oldestPost.id), append: true, limit: 20 })
+      if (!page.ok) throw new Error(page.error || "Could not load older posts")
+      const fetchedCount = Math.max(0, Number(page.appended) || 0)
+      if (fetchedCount === 0) {
+        setHasMorePosts(false)
+        return
       }
-      // Local window expand when server has no older page
-      setDisplayedPostsCount((prev) => prev + MOBILE_PAGE_SIZES.feed)
+      setDisplayedPostsCount((prev) => prev + Math.min(20, fetchedCount))
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to load more posts")
       console.error("[Load More Error]", err)
-      addToast("Failed to load more posts.", "error")
+      addToast("Failed to load more posts. Please try again.", "error")
     } finally {
       setIsLoadingMore(false)
     }
-  }, [addToast, isLoadingMore, posts, refreshFeed])
+  }, [addToast, displayedPostsCount, feedBootstrapped, hasMorePosts, isLoadingMore, posts, rankedPosts.length, refreshFeed])
+
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -224,7 +243,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
 
     return () => observer.disconnect()
-  }, [isLoadingMore, displayedPostsCount, loadMorePosts, rankedPosts.length])
+  }, [hasMorePosts, isLoadingMore, displayedPostsCount, loadMorePosts, rankedPosts.length])
 
   // Rank posts based on filter
   useEffect(() => {
@@ -326,6 +345,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       setFeedStatusMsg("Refreshing feed…")
       setFeedError(null)
       const result = await refreshFeed()
+      if (result.ok) setHasMorePosts(true)
       if (!result.ok) {
         const err = new Error(result.error || "Failed to refresh feed")
         setFeedError(err)
@@ -552,7 +572,16 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             <PremiumSurfaceActions />
             <button
               type="button"
-              onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ } }}
+              onClick={() => {
+                try {
+                  if (dailyClaim.status?.claimable) {
+                    window.localStorage.removeItem("ghc-daily-claim-dismissed-day")
+                    window.dispatchEvent(new CustomEvent("ghc:open-daily-claim"))
+                  } else {
+                    window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
+                  }
+                } catch { /* */ }
+              }}
               aria-label={dailyClaim.status?.claimable ? "Daily GHC reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily GHC reward claimed today" : "Open daily GHC rewards"}
               title={dailyClaim.status?.claimable ? "Daily reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily reward claimed today" : "Daily rewards"}
               className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold transition hover:bg-muted ${dailyClaim.status?.claimable ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-border/60 text-foreground/80"}`}
@@ -581,14 +610,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
         secondary={
           <>
-            {rewardReadyNotice && dailyClaim.status?.claimable ? (
-              <div role="status" className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-foreground">
-                <span aria-hidden className="text-base">◈</span>
-                <span className="min-w-0 flex-1 font-medium">Your daily GHC reward is ready to claim.</span>
-                <button type="button" className="min-h-8 shrink-0 rounded-full bg-emerald-600 px-3 font-bold text-white hover:bg-emerald-700" onClick={() => { setRewardReadyNotice(false); try { window.dispatchEvent(new CustomEvent("ghc:open-rewards")) } catch { /* */ } }}>Claim now</button>
-                <button type="button" className="min-h-8 px-1 text-muted-foreground" aria-label="Dismiss reward notice" onClick={() => setRewardReadyNotice(false)}>×</button>
-              </div>
-            ) : null}
+            {/* Daily claim uses fixed modal (DailyClaimPrompt) — do not push header/content */}
             {/* header search only */}
             {isSearchOpen && searchQuery && (
               <div className="mb-1.5 flex gap-2">
@@ -653,6 +675,36 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         }
       />
 
+      {rewardReadyNotice && (
+        <div
+          className="mx-3 mt-2 flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="mt-0.5 text-emerald-700 dark:text-emerald-300" aria-hidden>◈</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Your daily GHC reward is ready to claim</p>
+            <button
+              type="button"
+              className="mt-1 text-xs font-semibold text-emerald-800 underline underline-offset-2 dark:text-emerald-200"
+              onClick={() => {
+                setRewardReadyNotice(false)
+                window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
+              }}
+            >
+              Open rewards
+            </button>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss daily reward notice"
+            className="rounded-full px-2 py-1 text-muted-foreground hover:bg-background/60"
+            onClick={() => setRewardReadyNotice(false)}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="sr-only" role="status" aria-live="polite">
         {feedStatusMsg || (isRefreshing ? "Refreshing feed" : "")}
@@ -910,10 +962,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           )}
 
           {/* Infinite scroll trigger */}
-          {displayedPostsCount < rankedPosts.length && <div ref={observerTargetRef} className="h-10" />}
+          {hasMorePosts && <div ref={observerTargetRef} className="h-10" aria-hidden="true" />}
 
-          {/* End of feed */}
-          {displayedPostsCount < rankedPosts.length && rankedPosts.length > 0 && (
+          {/* Pagination stays available while the local list is expanded or the server may have older posts. */}
+          {(displayedPostsCount < rankedPosts.length || hasMorePosts) && rankedPosts.length > 0 && (
             <div className="flex justify-center py-3">
               <button
                 type="button"
@@ -926,7 +978,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             </div>
           )}
 
-          {displayedPostsCount >= rankedPosts.length && rankedPosts.length > 0 && (
+          {displayedPostsCount >= rankedPosts.length && !hasMorePosts && rankedPosts.length > 0 && (
             <div
               className="mx-1 rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-gradient-to-b from-emerald-50/70 to-background px-5 py-8 text-center dark:border-emerald-900/50 dark:from-emerald-950/30"
               role="status"

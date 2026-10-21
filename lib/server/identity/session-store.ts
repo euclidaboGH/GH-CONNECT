@@ -253,7 +253,8 @@ export async function createSession(input: {
   const uaHash = hashUserAgent(input.userAgent)
   const t = now()
 
-  // Soft de-dupe: revoke same-device prior sessions in memory
+  // Soft de-dupe same-device sessions. When the durable store is configured,
+  // persist each revocation before changing local state or issuing a new token.
   for (const [hash, existing] of memByHash) {
     if (
       existing.ghUserId === ghUserId &&
@@ -262,12 +263,13 @@ export async function createSession(input: {
       uaHash &&
       existing.userAgentHash === uaHash
     ) {
+      if (dbConfigured()) {
+        const persisted = await dbPatch(existing.id, { revoked_at: new Date(t).toISOString() })
+        if (!persisted) throw new Error("SESSION_REVOCATION_UNAVAILABLE")
+      }
       const revoked = { ...existing, revokedAt: t }
       memByHash.set(hash, revoked)
       memById.set(existing.id, revoked)
-      if (dbConfigured()) {
-        void dbPatch(existing.id, { revoked_at: new Date(t).toISOString() })
-      }
     }
   }
 
@@ -391,13 +393,17 @@ export async function revokeSessionByToken(rawToken: string): Promise<boolean> {
   if (rec.revokedAt != null) return true
 
   const revokedAt = now()
+  if (dbConfigured()) {
+    const persisted = await dbPatch(rec.id, { revoked_at: new Date(revokedAt).toISOString() })
+    if (!persisted) {
+      // Durable storage is authoritative; do not report successful logout/revoke
+      // when another instance could still validate the persisted session.
+      return false
+    }
+  }
   const updated = { ...rec, revokedAt }
   memByHash.set(tokenHash, updated)
   memById.set(updated.id, updated)
-
-  if (dbConfigured()) {
-    await dbPatch(rec.id, { revoked_at: new Date(revokedAt).toISOString() })
-  }
   return true
 }
 
@@ -407,41 +413,43 @@ export async function revokeSessionByToken(rawToken: string): Promise<boolean> {
 export async function revokeAllSessionsForUser(ghUserId: string): Promise<number> {
   const uid = String(ghUserId || "").trim()
   if (!uid) return 0
-  let count = 0
+
+  const sessions = await listSessionsForUser(uid)
+  const active = sessions.filter((rec) => rec.ghUserId === uid && rec.revokedAt == null)
   const t = now()
-  for (const [hash, rec] of memByHash) {
-    if (rec.ghUserId === uid && rec.revokedAt == null) {
-      const updated = { ...rec, revokedAt: t }
-      memByHash.set(hash, updated)
-      memById.set(rec.id, updated)
-      count++
-      if (dbConfigured()) {
-        void dbPatch(rec.id, { revoked_at: new Date(t).toISOString() })
-      }
-    }
-  }
-  // DB-wide revoke for rows not in memory
+
   if (dbConfigured()) {
     const env = readGhcServerEnv()
-    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
-      try {
-        const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`
-        await fetch(url, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: env.supabaseServiceRoleKey,
-            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          },
-          body: JSON.stringify({ revoked_at: new Date(t).toISOString() }),
-          cache: "no-store",
-        })
-      } catch {
-        /* */
-      }
+    if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+      throw new Error("SESSION_REVOCATION_UNAVAILABLE")
+    }
+    try {
+      const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ revoked_at: new Date(t).toISOString() }),
+        cache: "no-store",
+      })
+      if (!response.ok) throw new Error("durable revoke returned non-success")
+    } catch {
+      // Do not mutate the local cache or claim success if the shared store did
+      // not confirm revocation. Other app instances rely on this durable state.
+      throw new Error("SESSION_REVOCATION_UNAVAILABLE")
     }
   }
-  return count
+
+  for (const rec of active) {
+    const updated = { ...rec, revokedAt: t }
+    memByHash.set(rec.tokenHash, updated)
+    memById.set(rec.id, updated)
+  }
+  return active.length
 }
 
 // ---------------------------------------------------------------------------
@@ -627,12 +635,16 @@ export async function revokeSessionByIdForUser(
   if (rec.revokedAt != null) return "ok"
 
   const t = now()
+  if (dbConfigured()) {
+    const persisted = await dbPatch(sid, { revoked_at: new Date(t).toISOString() })
+    if (!persisted) {
+      // Do not claim revocation if the authoritative cross-instance write failed.
+      throw new Error("SESSION_REVOCATION_UNAVAILABLE")
+    }
+  }
   const updated = { ...rec, revokedAt: t }
   memById.set(sid, updated)
   memByHash.set(rec.tokenHash, updated)
-  if (dbConfigured()) {
-    await dbPatch(sid, { revoked_at: new Date(t).toISOString() })
-  }
   console.info("[session] SESSION_REVOKED", { userId: uid, sessionId: sid.slice(0, 8) })
   return "ok"
 }

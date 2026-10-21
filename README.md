@@ -1,6 +1,8 @@
 # GreenHaven (GH Connect)
 
-## Implementation status — source baseline 0.62.2 (2026-10-19)
+## Current implementation status — source baseline 0.63.25 (2026-10-21)
+
+This README contains both current release guidance and dated product-phase notes. For the authoritative live source/test/runtime status, use [`docs/PROJECT_TRUTH.md`](docs/PROJECT_TRUTH.md) and [`docs/PHASE_IMPLEMENTATION_STATUS.md`](docs/PHASE_IMPLEMENTATION_STATUS.md). Historical phase entries describe their original snapshots and are not current release approval.
 
 - Social, messaging, communities, wallet, Pi payments, and GHC ledger are implemented in source.
 - GHPV (curation, active weights, settlement, calibration, soft-delete cleanup) is implemented in source. Migrations `20261013`–`20261020` are repository-only until Testnet.
@@ -11,16 +13,17 @@
 - All new provider payout features remain disabled until dependency-lock/build verification, migrations, provider Test Mode tests, database concurrency tests, and funding-source verification pass. See `PHASE_22_PAYSTACK_NGN_BANK_PAYOUTS_2026-10-19.md` and `RELEASE_GATE_PHASE22.md`.
 - The private `gh-media` bucket cutover remains blocked: reconcile all legacy/unregistered URLs and verify every media-bearing consumer on Testnet before changing bucket visibility.
 - Typecheck, lint, and production build could not be completed in this packaging environment because npm dependencies were unavailable from the local cache and registry access timed out. Source regression tests passed; do not treat them as a production build claim.
+- Stabilization Phase 3 hardens durable step-up/session revocation failure behavior and conservatively reclassifies future-dated migrations. Current migration inventory: 109 SQL files — 77 REQUIRED, 1 REQUIRES_APPROVAL, 2 PROPOSAL, 29 REVIEW_REQUIRED. Remote migration history is not reconciled here; do not run `supabase db push` while pending migrations remain unreviewed. See `STABILIZATION-PHASE-3-IMPLEMENTATION-REPORT.md`.
 
 
 Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.
 
 
-## Maintenance / Phase 14 (as of 2026-10-10)
+## Maintenance / Phase 14 — historical context (as of 2026-10-10)
 
 | Item | Status |
 |------|--------|
-| Migration inventory | **70** files — `docs/MIGRATION_CHECKLIST.md` |
+| Migration inventory | Historical count: 70 files as of 2026-10-10; current generated inventory is in `docs/MIGRATION_CHECKLIST.md` |
 | Static security suites | `npm run verify:static` |
 | Design tokens runtime | **`app/globals.css`** (only stylesheet; the unused `styles/globals.css` copy was removed) |
 | Typecheck / production build | Operator machine — sandbox may OOM on `npm ci` |
@@ -117,7 +120,7 @@ The existing domain-validation path is `https://<your-domain>/validation-key.txt
 - Build: `npm run build`
 - Node: `24.15.0` or later in the supported 24.x line (see `.nvmrc` and `package.json` engines)
 - Configure Preview/Testnet and Production/Mainnet values separately in Vercel; never upload `.env` files or commit secrets
-- Current release is not cleared for deployment until `RELEASE_GATE_PHASE25.md` passes
+- Current release is not cleared for deployment until the current readiness gates in `docs/PROJECT_TRUTH.md` and `docs/TESTNET_VERIFICATION_GATE.md` pass
 
 ## Safety
 
@@ -145,13 +148,13 @@ See `docs/GH_PROFILE_CONTENT_LIBRARY.md` for the feature specification, authoriz
 - Run `npm run audit:profile-connected-v2` as an additional static gate. This complements, but does not replace, full typecheck/lint/build and Testnet verification.
 
 
-## Current audit snapshot (2026-10-19)
+## Historical audit snapshot (2026-10-19)
 
 See `GREENHAVEN_0.61.1_AUDIT_AND_10_GAPS.md` for the source-only audit, ten material gaps, verification limits, and safe release gates. The restore migration is repository-only until its target Supabase migration history is reconciled and the migration is reviewed and applied on Testnet.
 
 ## Phase 20 payout adapters (2026-10-19)
 
-- A2U execution uses the Pi Core Team-maintained `pi-backend@0.1.3` Node.js SDK behind explicit Testnet-only feature flags and durable global sequence serialization. Its transitive dependency graph is still missing from `package-lock.json` because registry access failed; keep the adapter disabled until the lock is refreshed and end-to-end Testnet evidence passes.
+- A2U execution uses the Pi Core Team-maintained `pi-backend@0.1.3` Node.js SDK behind explicit Testnet-only feature flags and durable global sequence serialization. The committed lockfile contains the official package metadata and required `axios` / `stellar-sdk` entries (verified by `scripts/verify-pi-backend-lock.mjs`). Keep the adapter disabled until a clean supported-runtime install and end-to-end Testnet evidence pass.
 - GHC seller payout settlement uses a configured funded treasury and atomic paired ledger entries; it remains disabled by default.
 - Bank/fiat seller payout requests remain rejected until a provider is selected and its beneficiary verification, credentials, webhook verification, and reconciliation are implemented.
 - Review `PHASE_20_PI_A2U_AND_SELLER_PAYOUTS_2026-10-19.md`, then run `supabase/phase20_readonly_preflight.sql` before deciding whether migrations 006/007 are safe for the target project.
@@ -161,21 +164,21 @@ See `GREENHAVEN_0.61.1_AUDIT_AND_10_GAPS.md` for the source-only audit, ten mate
 
 Phase 21 adds a shared cross-product design-system layer for responsive surfaces, theme-aware light/dark colors, keyboard focus, form controls, navigation, cards, dialogs, reduced-motion behavior and the recoverable error screen. It also restores mobile pinch-zoom accessibility. Existing feature flows, Pi authentication, financial authority and payment gates are preserved.
 
-See `PHASE_21_PREMIUM_PRODUCT_POLISH_2026-10-19.md`, `RELEASE_NOTES_0.62.1.md`, and `SAFE_TO_PUSH_PHASE21.md` for exact scope and release blockers. **This is not a production-cleared build:** the `pi-backend` dependency lock graph still needs a registry-connected refresh, followed by clean install, typecheck, lint and production build. Live Pi Testnet, Supabase concurrency/migration and payout provider validation also remain outstanding.
+See `PHASE_21_PREMIUM_PRODUCT_POLISH_2026-10-19.md`, `RELEASE_NOTES_0.62.1.md`, and `SAFE_TO_PUSH_PHASE21.md` for exact scope and release blockers. **This is not a production-cleared build:** the committed `pi-backend` dependency lock entries pass source-level verification, but clean install, typecheck, lint and production build remain required. Live Pi Testnet, Supabase concurrency/migration and payout provider validation also remain outstanding.
 
 
 ## Phase 22 — Paystack NGN bank payout adapter (0.62.2)
 
 Phase 22 adds server-only Paystack bank discovery and account resolution, step-up-protected beneficiary registration, privacy-preserving account fingerprints, obligation-backed payout requests, deterministic transfer references, signed webhook verification, and provider API reconciliation. It does not treat GHC or PI as NGN and does not create a payout obligation from an unsupported source. Bank transfers remain disabled by default.
 
-Run `node scripts/test-phase22-paystack-bank-payouts.mjs` for source-level adapter checks. Review `supabase/phase22_readonly_preflight.sql`, `supabase/phase20_ghc_treasury_readonly_preflight.sql`, `supabase/tests/PHASE22_POST_MIGRATION_ASSERTIONS.sql`, and `supabase/tests/PHASE22_PAYSTACK_BANK_PAYOUT_TEST_PLAN.md` before any database operation. The `pi-backend` dependency graph still needs a registry-connected lock refresh; see `RELEASE_GATE_PHASE22.md`.
+Run `node scripts/test-phase22-paystack-bank-payouts.mjs` for source-level adapter checks. Review `supabase/phase22_readonly_preflight.sql`, `supabase/phase20_ghc_treasury_readonly_preflight.sql`, `supabase/tests/PHASE22_POST_MIGRATION_ASSERTIONS.sql`, and `supabase/tests/PHASE22_PAYSTACK_BANK_PAYOUT_TEST_PLAN.md` before any database operation. The committed `pi-backend` lock entries pass the repository verifier; clean install and provider/Testnet gates remain outstanding. See `RELEASE_GATE_PHASE22.md`.
 
 
 ## Phase 23 — Screen-by-screen premium and Pi compliance review (0.62.3)
 
 Phase 23 adds per-screen refinements for Feed, Discover, Profile, Messages, Communities, Marketplace, Wallet, Settings and onboarding across narrow/mobile and wider layouts; semantic screen landmarks; forced-colors support; responsive input sizing; and dynamic app-version presentation in Settings. It also hardens the official Pi SDK runtime so `Pi.init()` must succeed before U2A payment methods run, prevents duplicate SDK script injection during load races, validates Pi amount precision/memo bounds, and reserves app/engine/intent metadata keys.
 
-Read `PI_CORE_TEAM_COMPLIANCE_REVIEW_2026-10-19.md` and `PHASE_23_SCREEN_BY_SCREEN_REVIEW_2026-10-19.md`. The Pi A2U adapter remains gated: `pi-backend@0.1.3` is published from the Pi Core Team `pi-apps/pi-nodejs` repository, but the dependency lock graph and Testnet end-to-end evidence are still outstanding before enabling. The screen review is source-based until clean install/build and real-device/Pi Browser visual checks can run.
+Read `PI_CORE_TEAM_COMPLIANCE_REVIEW_2026-10-19.md` and `PHASE_23_SCREEN_BY_SCREEN_REVIEW_2026-10-19.md`. The Pi A2U adapter remains gated: `pi-backend@0.1.3` is published from the Pi Core Team `pi-apps/pi-nodejs` repository, but clean-install verification and Testnet end-to-end evidence are still outstanding before enabling. The screen review is source-based until clean install/build and real-device/Pi Browser visual checks can run.
 
 ## Phase 24 — responsive visual QA (0.62.4)
 
@@ -185,9 +188,38 @@ Phase 24 remains **not cleared for production** until the real dependency lock i
 
 ## Phase 25 — repository cleanup and deployment readiness (0.62.5)
 
-Run `npm run audit:project-integrity` before preparing a GitHub Desktop commit. It checks local imports, literal internal links, npm script targets, version alignment, Vercel build/install configuration, single-owner security headers, Git ignore rules, and generated/secret artifacts. Phase 25 removes duplicate global security headers from Next config, expands `.gitignore` to exclude common local signing-key containers, and fixes the readiness endpoint so it no longer reports the stale 0.59.4 version when `npm_package_version` is absent. **This is not a deployment clearance:** the `pi-backend@0.1.3` dependency graph is still missing from the lockfile, so the supported-runtime lock refresh, clean install, typecheck, lint, CI, build, provider tests and browser evidence remain required. See `PHASE_25_REPOSITORY_CLEANUP_AND_DEPLOYMENT_READINESS_2026-10-19.md` and `RELEASE_GATE_PHASE25.md`.
+Run `npm run audit:project-integrity` before preparing a GitHub Desktop commit. It checks local imports, literal internal links, npm script targets, version alignment, Vercel build/install configuration, single-owner security headers, Git ignore rules, and generated/secret artifacts. Phase 25 removes duplicate global security headers from Next config, expands `.gitignore` to exclude common local signing-key containers, and fixes the readiness endpoint so it no longer reports the stale 0.59.4 version when `npm_package_version` is absent. **This is not a deployment clearance:** the committed `pi-backend@0.1.3` lock entries pass source-level verification, but clean install, typecheck, lint, CI, build, provider tests and browser evidence remain required. See `PHASE_25_REPOSITORY_CLEANUP_AND_DEPLOYMENT_READINESS_2026-10-19.md` and `RELEASE_GATE_PHASE25.md`.
 
 
 ## Phase 26 — official Pi SDK lockfile recovery
 
-The official `pi-backend@0.1.3` runtime dependency must remain installed for Pi A2U. If its lock graph is missing, do not hand-edit `package-lock.json` or remove the SDK. Use Node 24.15.0 and follow `PHASE_26_PI_BACKEND_LOCKFILE_RECOVERY_2026-10-19.md`, either regenerating the lock locally from the npm registry or manually running **Actions → Repair npm lockfile**. The workflow opens a lockfile-only PR only after the clean install and full `npm run ci:verify` pass. This workflow does not deploy or mutate production systems.
+The official `pi-backend@0.1.3` runtime dependency must remain installed for Pi A2U. The committed lock graph currently passes `scripts/verify-pi-backend-lock.mjs`; do not regenerate it unless that check or a clean install identifies a concrete defect. If recovery is needed later, use Node 24.15.0 and follow `PHASE_26_PI_BACKEND_LOCKFILE_RECOVERY_2026-10-19.md` or **Actions → Repair npm lockfile**. The workflow opens a lockfile-only PR only after the clean install and full `npm run ci:verify` pass. This workflow does not deploy or mutate production systems.
+
+## Engineering audit and launch readiness
+
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Repository ownership map: [`docs/engineering/REPOSITORY_MAP.md`](docs/engineering/REPOSITORY_MAP.md)
+- Ten-phase stabilization and global launch programme: [`docs/engineering/10_PHASE_GLOBAL_LAUNCH_REMEDIATION_PLAN.md`](docs/engineering/10_PHASE_GLOBAL_LAUNCH_REMEDIATION_PLAN.md)
+
+Do not treat static/source checks as live Testnet or production certification. Follow the status vocabulary and operator gates in `docs/PHASE_IMPLEMENTATION_STATUS.md` before enabling financial flows or approving a release.
+
+
+## 10-phase remediation — Phase 1 progress (2026-10-21)
+
+Phase 1 adds an explicit Node.js runtime preflight (`npm run check:runtime`) and boundary regression tests (`npm run test:runtime-contract`). The check matches the supported Node ranges declared in `package.json` and `.nvmrc`; GitHub Actions checks runtime compatibility before dependency installation. See [`PHASE-1-IMPLEMENTATION-REPORT.md`](PHASE-1-IMPLEMENTATION-REPORT.md) and [`PHASE-1-REMAINING-GATES.md`](PHASE-1-REMAINING-GATES.md). Source-level checks pass, but clean install, typecheck, lint, and production build still require a registry-connected run on Node 24.15.0. This is not production or Mainnet clearance.
+
+
+### Phase 3 security hardening — follow-up
+
+- Step-up validation now checks the durable store before trusting cached authorization proofs whenever a privileged database is configured; storage errors fail closed.
+- Step-up revocation is durable-first and returns an explicit result; logout and session-revocation APIs do not claim success when step-up invalidation cannot be confirmed.
+- Same-device and all-session revocation paths persist before mutating local cache. This remains source-level hardening until multi-instance runtime tests pass.
+- Migration inventory is 109 SQL files: 77 `REQUIRED` candidates, 1 `REQUIRES_APPROVAL`, 2 `PROPOSAL`, and 29 `REVIEW_REQUIRED`. The proposal/approval/review files are not certified usable for deployment. Do not run `supabase db push` until Testnet and Mainnet histories are separately reconciled and each pending migration has explicit review/approval evidence.
+
+### Remote migration-history reconciliation gate
+
+Before any Testnet/Mainnet migration action, capture each environment's `supabase migration list` output separately and run `scripts/reconcile-remote-migration-histories.mjs`. The checker is read-only and deliberately blocks unresolved duplicate filename versions; see `docs/REMOTE_MIGRATION_RECONCILIATION.md`. Do not run `supabase db push` while migration identity or approval questions remain open.
+
+## Security hardening review (2026-10-21)
+
+The latest source-level review and changes for JWT claim validation, profile lifecycle authorization, API mutation origin checks, Pi-auth throttling, and regression evidence are documented in [`docs/SECURITY_AUDIT_HARDENING_2026-10-21.md`](docs/SECURITY_AUDIT_HARDENING_2026-10-21.md). These checks do not replace clean CI, disposable PostgreSQL execution, live Testnet multi-account tests, or an external penetration test.

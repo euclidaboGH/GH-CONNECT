@@ -90,10 +90,10 @@ system-only and votes must not mint GHC (see `README.md`).
 | 62 | `20261014_ghpv_curation_weight_and_settle.sql` | apply |
 | 63 | `20261015_ghpv_curator_calibration_apply.sql` | apply |
 | 64 | `20261016_ghpv_active_weight_set_semantics.sql` | apply |
-| 65 | `20261017_ghpv_settlement_engine.sql` | apply |
+| 65 | `202610170001_ghpv_settlement_engine.sql` | apply |
 | 66 | `202610180001_ghc_curation_rewards.sql` | apply after review; testnet only; requires the existing economy ledger, spendable-balance RPC, reputation state, and curation schema |
 | 67 | `202610180002_gh_curation_pipeline_atomic.sql` | apply after 66; testnet only; atomically wires vote, reward decision, and GHPV active weight |
-| 68 | `20261018_ghpv_calibration_bounds.sql` | apply |
+| 68 | `202610170003_ghpv_calibration_bounds.sql` | apply |
 | 69 | `20261019_ghpv_soft_delete_quality_cleanup.sql` | apply |
 | 70 | `20261020_ghpv_soft_delete_atomic.sql` | apply |
 | 71 | `20261021_gh_social_notifications_types_extend.sql` | apply |
@@ -146,3 +146,13 @@ After confirming the prerequisites and that migrations `202610180001_ghc_curatio
 - Existing GHC/PI marketplace orders are not NGN revenue. Do not create NGN obligations from GHC/PI orders, and do not enable bank transfers until a verified NGN revenue source, provider approval, limits, webhook and reconciliation gates have passed.
 - Use `supabase/phase20_ghc_treasury_readonly_preflight.sql` only after its prerequisite migrations are confirmed. A positive balance alone does not prove approved treasury funding; governance/source evidence must be reviewed independently.
 - None of these migrations has been applied to the user's Supabase project during this source-code phase.
+
+## Phase 5 payment-intent concurrency hardening — review separately; do not bulk-apply
+
+These additions are source-only and have **not** been applied to any Supabase project. Reconcile the actual target migration history first; the numeric filename prefix is not evidence of the target's applied state.
+
+1. `202610210002_pi_payment_intent_idempotency_lookup.sql` — adds the service-role-only durable lookup needed to return the same payment intent for concurrent requests using the same idempotency key.
+2. `202610210003_pi_payment_intent_atomic_transitions.sql` — adds row-locked provider binding and state-transition RPCs, blocks late status regressions, and revokes client execution of the original privileged payment-intent RPCs.
+3. Review both migrations together with `supabase/tests/PHASE5_PAYMENT_INTENT_POST_MIGRATION_ASSERTIONS.sql` and execute the scenarios in `supabase/tests/PHASE5_PAYMENT_INTENT_CONCURRENCY_TEST_PLAN.md` on disposable PostgreSQL before applying to the empty Testnet project.
+
+**Do not deploy callers of these RPCs before both migrations are reviewed and applied to the intended Testnet database.** If an RPC is missing, payment binding/transitions now fail closed; this is intentional and must be included in rollout planning. No Mainnet migration or deployment is authorized by this source change.

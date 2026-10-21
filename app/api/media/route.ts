@@ -2,14 +2,16 @@
  * POST /api/media — durable media upload when Supabase storage is configured.
  * GET  /api/media?ids= — resolve owned/public media refs for the session actor.
  *
- * Owner is always session-derived. Paths: {userId}/{generated}.
+ * Owner is always session-derived. Paths: {userId}/{category}/{generated}.
  * No GHC/Pi/reputation side effects.
  */
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { buildOwnedMediaPath, isSafeMediaBucket } from "@/lib/server/media/path-policy.mjs"
 import {
   createMediaAssetRecord,
   resolveMediaAssets,
@@ -24,12 +26,14 @@ function jsonNoStore(body: unknown, init: ResponseInit = {}) {
   return NextResponse.json(body, { ...init, headers })
 }
 
-const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
+const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"])
 const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
-const ALLOWED_FILE = new Set(["application/pdf", "application/x-pdf"])
+const ALLOWED_FILE = new Set(["application/pdf"])
+const ALLOWED_AUDIO = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm", "audio/flac"])
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
-const MAX_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_VIDEO_BYTES = 40 * 1024 * 1024
 const MAX_FILE_BYTES = 25 * 1024 * 1024
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 function sniffMime(buf: Buffer): string | null {
   if (buf.length < 12) return null
@@ -42,10 +46,22 @@ function sniffMime(buf: Buffer): string | null {
     const brand = buf.subarray(8, 12).toString("ascii").toLowerCase()
     if (brand.startsWith("qt")) return "video/quicktime"
     // Do not classify every ISO-BMFF file as video: AVIF also uses an ftyp box.
-    if (["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "dash", "m4v ", "m4a ", "msnv"].includes(brand) || brand.startsWith("3gp")) return "video/mp4"
+    if (brand === "avif" || brand === "avis") return "image/avif"
+    if (["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "dash", "m4v ", "msnv"].includes(brand) || brand.startsWith("3gp")) return "video/mp4"
+    if (brand === "m4a " || brand === "mp4a") return "audio/mp4"
     return null
   }
   if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video/webm"
+  if (buf.length >= 12 && buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WAVE") return "audio/wav"
+  if (buf.subarray(0, 4).toString("ascii") === "fLaC") return "audio/flac"
+  if (buf.subarray(0, 4).toString("ascii") === "OggS") return "audio/ogg"
+  if ((buf[0] === 0xff && (buf[1] & 0xf6) === 0xf0)) return "audio/aac"
+  if (buf.subarray(0, 3).toString("ascii") === "ID3" || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0)) return "audio/mpeg"
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) {
+    const brand = buf.subarray(8, 12).toString("ascii").toLowerCase()
+    if (["m4a ", "mp4a"].includes(brand)) return "audio/mp4"
+    if (brand === "avif" || brand === "avis") return "image/avif"
+  }
   return null
 }
 
@@ -86,7 +102,7 @@ export async function POST(request: Request) {
   const env = readGhcServerEnv()
   const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
   // Bucket names come from operator configuration, but still validate before URL construction.
-  if (!/^[a-z0-9][a-z0-9_-]{1,61}[a-z0-9]$/.test(storageBucket)) {
+  if (!isSafeMediaBucket(storageBucket)) {
     return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_CONFIGURATION_INVALID" }, { status: 503 })
   }
   const hasStorage = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
@@ -123,6 +139,23 @@ export async function POST(request: Request) {
     )
   }
 
+  try {
+    const ensured = await ensureMediaBucket(storageBucket)
+    if (!ensured.ok) {
+      return jsonNoStore(
+        {
+          ok: false,
+          error: "MEDIA_STORAGE_CONFIGURATION_INVALID",
+          message: ensured.error || "Storage bucket could not be prepared.",
+          clientCompress: true,
+        },
+        { status: 503 }
+      )
+    }
+  } catch {
+    /* continue — upload may still work if bucket already exists */
+  }
+
   let form: FormData
   try {
     form = await request.formData()
@@ -140,26 +173,27 @@ export async function POST(request: Request) {
   const head = Buffer.from(await file.slice(0, 16).arrayBuffer())
   const sniffedMime = sniffMime(head)
   if (!sniffedMime) {
-    return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE", message: "The file signature is not a supported image, video or PDF." }, { status: 400 })
+    return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE", message: "The file signature is not a supported image, video, audio file or PDF." }, { status: 400 })
   }
-  if (mime && mime !== sniffedMime) {
+  if (mime && mime !== sniffedMime && !(mime === "audio/webm" && sniffedMime === "video/webm")) {
     // Normalize generic/incorrect client MIME values only when the bytes are a known supported format.
     const genericMime = mime === "application/octet-stream" || mime === "binary/octet-stream"
-    if (genericMime || !(ALLOWED_IMAGE.has(mime) || ALLOWED_VIDEO.has(mime) || ALLOWED_FILE.has(mime))) {
+    if (genericMime || !(ALLOWED_IMAGE.has(mime) || ALLOWED_VIDEO.has(mime) || ALLOWED_FILE.has(mime) || ALLOWED_AUDIO.has(mime))) {
       mime = sniffedMime
     } else {
       return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE", message: "The file type does not match its contents." }, { status: 400 })
     }
-  } else {
+  } else if (!mime || mime === "application/octet-stream" || mime === "binary/octet-stream") {
     mime = sniffedMime
   }
-  if (!ALLOWED_IMAGE.has(mime) && !ALLOWED_VIDEO.has(mime) && !ALLOWED_FILE.has(mime)) {
+  if (!ALLOWED_IMAGE.has(mime) && !ALLOWED_VIDEO.has(mime) && !ALLOWED_FILE.has(mime) && !ALLOWED_AUDIO.has(mime)) {
     return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
   }
   const isImage = ALLOWED_IMAGE.has(mime)
   const isVideo = ALLOWED_VIDEO.has(mime)
   const isFile = ALLOWED_FILE.has(mime)
-  const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES
+  const isAudio = ALLOWED_AUDIO.has(mime)
+  const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : isAudio ? MAX_AUDIO_BYTES : MAX_FILE_BYTES
   if (file.size > maxBytes) {
     return jsonNoStore({ ok: false, error: "FILE_TOO_LARGE" }, { status: 400 })
   }
@@ -188,7 +222,9 @@ export async function POST(request: Request) {
   const height = parsedHeight.value
   const durationMs = parsedDuration.value
 
-  const ext = isFile
+  const ext = isAudio
+    ? (mime === "audio/mpeg" ? "mp3" : mime === "audio/mp4" ? "m4a" : mime === "audio/aac" ? "aac" : mime === "audio/ogg" ? "ogg" : mime === "audio/wav" ? "wav" : mime === "audio/flac" ? "flac" : "webm")
+    : isFile
     ? "pdf"
     : isVideo
       ? mime === "video/webm"
@@ -202,15 +238,20 @@ export async function POST(request: Request) {
           ? "webp"
           : mime === "image/gif"
             ? "gif"
-            : "jpg"
+            : mime === "image/avif"
+              ? "avif"
+              : "jpg"
 
   const objectName = `${randomUUID()}.${ext}`
-  const objectPath = `${auth.userId}/${objectName}`
+  const requestedCategory = String(form.get("category") || "").toLowerCase()
+  const category = requestedCategory === "avatars" && isImage ? "avatars" : isAudio ? "audio" : isFile ? "documents" : isVideo ? "videos" : "images"
+  const objectPath = buildOwnedMediaPath(auth.userId, category, objectName)
+  if (!objectPath) return jsonNoStore({ ok: false, error: "MEDIA_PATH_INVALID" }, { status: 400 })
 
   try {
     const buf = Buffer.from(await file.arrayBuffer())
     const uploadRes = await fetch(
-      `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/object/${storageBucket}/${objectPath}`,
+      `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(storageBucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`,
       {
         method: "POST",
         headers: {
@@ -220,6 +261,8 @@ export async function POST(request: Request) {
           "x-upsert": "false",
         },
         body: buf,
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
       }
     )
     if (!uploadRes.ok) {
@@ -240,14 +283,14 @@ export async function POST(request: Request) {
       ownerId: auth.userId,
       bucket: storageBucket,
       storagePath: objectPath,
-      mediaKind: isFile ? "file" : isVideo ? "video" : "image",
+      mediaKind: isFile || isAudio ? "file" : isVideo ? "video" : "image",
       mimeType: mime,
       byteSize: file.size,
       width,
       height,
       durationMs,
       publicUrl: null,
-      metadata: { source: "api_media_upload", delivery: "authorized-facade" },
+      metadata: { source: "api_media_upload", delivery: "authorized-facade", category },
     })
 
     if (!record.ok || !record.id) {
@@ -264,6 +307,7 @@ export async function POST(request: Request) {
               apikey: env.supabaseServiceRoleKey!,
             },
             cache: "no-store",
+            signal: AbortSignal.timeout(8_000),
           }
         )
       } catch {
@@ -286,7 +330,7 @@ export async function POST(request: Request) {
       mediaId: record.id,
       // Only the opaque ID and stable application URL leave the server; storage paths are private.
       url: `${new URL(request.url).origin}/api/media/${encodeURIComponent(record.id)}/content`,
-      kind: isFile ? "file" : isVideo ? "video" : "image",
+      kind: isFile || isAudio ? "file" : isVideo ? "video" : "image",
       mime,
       ownerUserId: auth.userId,
       width,

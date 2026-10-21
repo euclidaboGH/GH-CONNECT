@@ -18,13 +18,20 @@ Static/automated green **does not** imply Testnet verified or production ready.
 
 ---
 
+## Current source release
+
+- Current package/release version: **0.63.25**.
+- Repository status is source-level only unless a specific runtime/database/provider result is recorded with evidence.
+- Product phase numbers (e.g. Phase 14, Phase 22, Phase 27) are not the same as the separate 10-phase stabilization programme.
+- Stabilization Phase 7–8 were materially reworked on 2026-10-21: feed pagination lifecycle, post-card cleanup, canonical message search, discovery filters/ranking, and bounded search cache. Report: `docs/PHASE_7_8_MASSIVE_REWORK.md`; new source suite: `scripts/test-phase7-8-massive-upgrade.mjs` (28/28 passed locally).
+
 ## Migration count
 
 | Location | Count |
 |----------|------:|
-| `supabase/migrations/*.sql` (canonical files on disk) | **105** |
-| Latest filename in canonical inventory | `202610250007_ghc_atomic_seller_payout_settlement.sql` |
-| Classification | **77 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL / 22 REVIEW_REQUIRED** |
+| `supabase/migrations/*.sql` (canonical files on disk) | **109** |
+| Latest filename in canonical inventory | `202610250008_paystack_ngn_beneficiaries_and_payouts.sql` |
+| Classification | **77 REQUIRED / 1 REQUIRES_APPROVAL / 2 PROPOSAL / 29 REVIEW_REQUIRED** |
 
 Do **not** count `staging-required-migrations/` or `staging-gap-package/` copies as extra canonical migrations. Migration filenames are sequence identifiers, not proof of application date or live status.
 
@@ -150,10 +157,49 @@ See **docs/TESTNET_VERIFICATION_GATE.md**.
 
 - Literal `TODO:` / `FIXME:` markers in application TypeScript: **none found** (last scan).
 - Intentional deferred/fail-closed surfaces: **`docs/DEFERRED_AND_GATED.md`**.
-- Full generated migration inventory (104): **`docs/MIGRATION_CHECKLIST.md`**.
+- Full generated migration inventory (109): **`docs/MIGRATION_CHECKLIST.md`**.
 
 ### Phase 14B — Static security (2026-10-10)
 
 - Social authz test policy fixed (3 false positives on public/system routes)
 - Static suites re-run: social-authz, IDOR, messaging, safety, GHPV, content-reward, Pi payment — pass
 - Detail: `docs/PHASE_14B_STATIC_SECURITY.md`
+
+
+## Phase 27 — Company revenue and global media architecture (source only)
+
+| Area | Source status | Runtime / deployment status |
+|---|---|---|
+| Company revenue journal | Append-only SQL foundation and typed server RPC adapter added; integer minor units, idempotency and provider-event uniqueness | Not applied; no provider flow integrated |
+| Payment reconciliation | Safety boundaries and integration gates documented; existing payment flows unchanged until atomic/outbox handoff is designed per source | Not runtime verified |
+| Cloudflare R2 | Private-storage migration contract for five media categories documented; Supabase remains active | No R2 credentials, bucket, migration, or cutover performed |
+| Release version | `0.63.25` current source baseline; see `package.json` and `docs/PROJECT_TRUTH.md` | Clean install/typecheck/lint/build and live Testnet gates remain required |
+
+Phase 27 does not authorize a live migration or production deployment. The revenue migration is `REVIEW_REQUIRED` and must be tested against disposable PostgreSQL before any Testnet review.
+
+
+## Commercial roadmap — Phase 4: GHC Utility Economy Transparency
+
+| Field | Status |
+|-------|--------|
+| Source implementation | Public read-only policy endpoint and wallet pricing disclosure added in v0.63.20 |
+| Economic rule changes | None; ECONOMY_VERSION 1.2 and current prices remain unchanged |
+| Database migrations | None added or applied in this phase |
+| Automated verification | Phase 4 policy gate plus repository source regression suite |
+| TypeScript / lint / production build | Not verified here; clean dependency install under Node 24.15.0 still required |
+| Runtime / Testnet | Not verified; no deployment or live financial action performed |
+
+This roadmap phase is separate from the older social-platform numbered phases above. The public policy endpoint is intentionally unauthenticated because it exposes only public economic rules and fixed catalog prices; the wallet authorization regression scan explicitly documents and tests this narrow exception.
+
+
+## Product roadmap Phase 5 — Business Monetization Pilot (2026-10-21)
+
+| Field | Status |
+|---|---|
+| Offer catalog and read-only policy endpoint | **Source implemented** |
+| Checkout and paid entitlement activation | **Disabled** |
+| Provider settlement / revenue journal integration | **Not implemented** |
+| Migration applied / deployment | **No** |
+| Runtime / Testnet verification | **Not verified** |
+
+See `docs/PHASE_5_BUSINESS_MONETIZATION_PILOT.md`. This product roadmap phase is distinct from the repository's earlier social-platform phase numbering.

@@ -141,7 +141,7 @@ export async function POST(request: Request, ctx: Ctx) {
       if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.length > 2048) return null
       try {
         const u = new URL(url)
-        if (u.protocol !== "https:" && u.protocol !== "http:") return null
+        if (u.protocol !== "https:") return null
       } catch {
         return null
       }

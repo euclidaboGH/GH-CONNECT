@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { createMediaAssetRecord } from "@/lib/server/media/asset-store"
+import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_UNAVAILABLE" }, { status: 501 })
   }
+  if (!isSafeMediaBucket(storageBucket)) return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_CONFIGURATION_INVALID" }, { status: 503 })
 
   const body = (await request.json().catch(() => ({}))) as {
     objectPath?: string
@@ -44,14 +46,30 @@ export async function POST(request: Request) {
     durationMs?: number
   }
 
-  const objectPath = String(body.objectPath || "").replace(/^\/+/, "")
-  if (!objectPath.startsWith(`${auth.userId}/`)) {
+  const objectPath = String(body.objectPath || "")
+  const parsedPath = parseOwnedMediaPath(auth.userId, objectPath)
+  if (String(body.bucket || storageBucket) !== storageBucket || !parsedPath) {
     return jsonNoStore({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
-  const bucket = String(body.bucket || storageBucket)
-  const mime = String(body.mimeType || "application/octet-stream")
-  const kind =
-    body.kind === "video" ? "video" : body.kind === "file" ? "file" : "image"
+  const bucket = storageBucket
+  const mime = String(body.mimeType || "").toLowerCase()
+  const allowedImages = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"])
+  const allowedVideos = new Set(["video/mp4", "video/webm", "video/quicktime"])
+  const allowedAudio = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm", "audio/flac"])
+  const allowedFiles = new Set(["application/pdf"])
+  const isImage = allowedImages.has(mime)
+  const isVideo = allowedVideos.has(mime)
+  const isAudio = allowedAudio.has(mime)
+  const isFile = allowedFiles.has(mime)
+  const byteSize = Number(body.byteSize)
+  const maxBytes = isImage ? 25 * 1024 * 1024 : isVideo ? 40 * 1024 * 1024 : isAudio || isFile ? 25 * 1024 * 1024 : 0
+  const category = parsedPath.category
+  const expectedCategory = category === "avatars" && isImage ? "avatars" : isAudio ? "audio" : isFile ? "documents" : isVideo ? "videos" : isImage ? "images" : ""
+  const kind = isVideo ? "video" : isImage ? "image" : "file"
+  const metadataError = validateMediaMetadata({ mediaKind: kind, mimeType: mime, byteSize, width: body.width ?? null, height: body.height ?? null, durationMs: body.durationMs ?? null })
+  if (!maxBytes || byteSize > maxBytes || !expectedCategory || category !== expectedCategory || !mediaCategoryMatches(category, kind, mime) || metadataError || !mediaExtensionMatchesMime(parsedPath.fileName, mime)) {
+    return jsonNoStore({ ok: false, error: byteSize > maxBytes ? "FILE_TOO_LARGE" : metadataError || "INVALID_MEDIA_METADATA" }, { status: 400 })
+  }
 
   // Verify object exists
   try {
@@ -66,12 +84,21 @@ export async function POST(request: Request) {
           apikey: env.supabaseServiceRoleKey!,
         },
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       }
     )
-    // Some Supabase versions lack object/info — continue if 404 on info but upload succeeded
-    void head
+    if (!head.ok) {
+      return jsonNoStore({ ok: false, error: "UPLOADED_OBJECT_NOT_VERIFIED", message: "Storage could not verify the uploaded object. Retry completion after confirming the upload." }, { status: 409 })
+    }
+    const info = await head.json().catch(() => null) as Record<string, unknown> | null
+    const metadata = info && typeof info.metadata === "object" && info.metadata ? info.metadata as Record<string, unknown> : {}
+    const storedSize = Number(info?.size ?? info?.contentLength ?? metadata.size ?? metadata.contentLength)
+    const storedMime = String(info?.mimetype ?? info?.contentType ?? metadata.mimetype ?? metadata.contentType ?? "").toLowerCase()
+    if (!Number.isSafeInteger(storedSize) || storedSize !== byteSize || (storedMime && storedMime !== mime)) {
+      return jsonNoStore({ ok: false, error: "UPLOADED_OBJECT_METADATA_MISMATCH" }, { status: 409 })
+    }
   } catch {
-    /* best-effort */
+    return jsonNoStore({ ok: false, error: "UPLOADED_OBJECT_NOT_VERIFIED" }, { status: 503 })
   }
 
   const record = await createMediaAssetRecord({
@@ -80,12 +107,12 @@ export async function POST(request: Request) {
     storagePath: objectPath,
     mediaKind: kind as "image" | "video" | "file",
     mimeType: mime,
-    byteSize: Number(body.byteSize) || 0,
+    byteSize,
     width: typeof body.width === "number" ? body.width : null,
     height: typeof body.height === "number" ? body.height : null,
     durationMs: typeof body.durationMs === "number" ? body.durationMs : null,
     publicUrl: null,
-    metadata: { source: "api_media_direct_upload", delivery: "authorized-facade" },
+    metadata: { source: "api_media_direct_upload", delivery: "authorized-facade", category },
   })
 
   if (!record.ok || !record.id) {

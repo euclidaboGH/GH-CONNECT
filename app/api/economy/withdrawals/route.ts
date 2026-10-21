@@ -12,6 +12,7 @@ import {
   listWithdrawalsForUser,
   minGhcForWithdrawal,
   getApprovedGhcPerPi,
+  areGhcPiWithdrawalsEnabled,
 } from "@/lib/server/economy/withdrawal"
 
 export const runtime = "nodejs"
@@ -22,26 +23,57 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  if (!areGhcPiWithdrawalsEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GHC_WITHDRAWALS_DISABLED",
+        message: "GHC-to-Pi settlement is not available. GHC remains an in-app utility balance unless a separately governed settlement product is approved.",
+      },
+      { status: 503 }
+    )
+  }
   const snap = await rpcWalletSnapshot(auth.userId).catch(() => null)
-  const balance = Number(
-    (snap as { balance?: number } | null)?.balance ??
-      (snap as { available?: number } | null)?.available ??
-      0
-  )
+  const balanceRaw = (snap as { balance?: number } | null)?.balance
+  const balance = Number(balanceRaw)
+  if (!snap || !Number.isFinite(balance) || balance < 0) {
+    return NextResponse.json(
+      { ok: false, error: "WALLET_SNAPSHOT_UNAVAILABLE", message: "Withdrawal eligibility cannot be calculated safely right now." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
   const locked = await fetchLockedGhc(auth.userId)
+  if (locked === null) {
+    return NextResponse.json(
+      { ok: false, error: "WITHDRAWAL_LOCKS_UNAVAILABLE", message: "Withdrawal eligibility cannot be calculated until locked balances are available." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
   const quote = await getWithdrawalQuote(balance, locked)
   const items = await listWithdrawalsForUser(auth.userId)
-  return NextResponse.json({
-    ok: true,
-    quote,
-    withdrawals: items,
-  })
+  if (items === null) {
+    return NextResponse.json(
+      { ok: false, error: "WITHDRAWAL_HISTORY_UNAVAILABLE" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+  return NextResponse.json({ ok: true, quote, withdrawals: items }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  if (!areGhcPiWithdrawalsEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GHC_WITHDRAWALS_DISABLED",
+        message: "GHC-to-Pi settlement is not available. GHC remains an in-app utility balance unless a separately governed settlement product is approved.",
+      },
+      { status: 503 }
+    )
   }
   const body = await request.json().catch(() => ({}))
   const ghcAmount = Number(body.ghcAmount)

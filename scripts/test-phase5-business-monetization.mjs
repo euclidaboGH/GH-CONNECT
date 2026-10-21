@@ -1,0 +1,32 @@
+import assert from "node:assert/strict"
+import { readFileSync, existsSync } from "node:fs"
+
+const read = (p) => readFileSync(p, "utf8")
+const catalogPath = "lib/server/monetization/business-catalog.ts"
+const routePath = "app/api/business/monetization/route.ts"
+assert.ok(existsSync(catalogPath), "server-owned business offer catalog exists")
+assert.ok(existsSync(routePath), "read-only monetization policy endpoint exists")
+const catalog = read(catalogPath)
+const route = read(routePath)
+const pkg = JSON.parse(read("package.json"))
+const lock = JSON.parse(read("package-lock.json"))
+const release = read("lib/app-release.ts")
+assert.match(catalog, /checkoutEnabled: false/, "checkout remains explicitly disabled")
+assert.match(catalog, /paidEntitlementActivationEnabled: false/, "paid entitlements cannot be activated prematurely")
+assert.match(catalog, /companyRevenueJournalConnected: false/, "catalog does not claim revenue integration")
+assert.match(catalog, /priceMinor: null/, "unapproved prices are not fabricated")
+assert.match(catalog, /purchasable: false/, "offers cannot be purchased from the catalog")
+assert.match(catalog, /provider before entitlement activation/, "provider verification is required")
+assert.match(catalog, /GHC utility balances are not payment-provider settlement evidence/, "GHC cannot bypass payment settlement")
+assert.match(catalog, /refunds, chargebacks and two-account Testnet flows/, "release gates include financial and multi-user verification")
+for (const id of ["business_profile_plus", "promoted_listing", "promoted_post", "business_insights"]) assert.ok(catalog.includes(id), `offer ${id} is registered`)
+assert.match(route, /export async function GET\(\)/, "endpoint is read-only GET")
+assert.match(route, /getBusinessMonetizationPolicy\(\)/, "endpoint uses server-owned policy")
+assert.match(route, /Cache-Control.*public, max-age=60/, "public cache is bounded")
+assert.match(route, /X-Content-Type-Options.*nosniff/, "response adds nosniff")
+assert.equal(pkg.version, "0.63.25", "package version bumped")
+assert.equal(lock.version, pkg.version, "lockfile version matches")
+assert.equal(lock.packages[""].version, pkg.version, "lockfile root package version matches")
+assert.match(release, /APP_RELEASE_VERSION = "0\.63\.25"/, "release metadata matches package")
+assert.match(pkg.scripts["ci:verify"], /test:phase5-business-monetization/, "new gate is part of ci:verify")
+console.log("Phase 5 business monetization pilot: 19 assertions passed")

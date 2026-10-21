@@ -14,16 +14,19 @@ export function mediaUserMessage(code: string | undefined, fallback?: string): s
     case "USE_MULTIPART":
       return "We couldn't read that file. Please try again."
     case "UNSUPPORTED_TYPE":
-      return "That file type isn't supported. Try a photo, video, or PDF."
+      return "That file type isn't supported. Try a photo, video, audio file, or PDF."
     case "FILE_TOO_LARGE":
       return "This file is too large for GreenHaven. Please choose a smaller file."
     case "MEDIA_DIRECT_UPLOAD_REQUIRED":
-      return "This file needs a secure direct upload. Please stay online and try again — large photos and videos up to 80MB are supported when connected."
+      return "This file needs a secure direct upload. Please stay online and try again — photos up to 25MB and videos up to 40MB are supported when connected."
     case "MEDIA_STORAGE_UNAVAILABLE":
+    case "MEDIA_STORAGE_CONFIGURATION_INVALID":
     case "ASSET_RECORD_FAILED":
     case "STORAGE_ERROR":
     case "STORAGE_UPLOAD_FAILED":
-      return "Upload isn't available right now. Please try again in a moment."
+    case "HTTP_501":
+    case "HTTP_503":
+      return "Photo storage is not ready on the server yet. Photos can stay on this device for now — ask the operator to set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GH_MEDIA_BUCKET."
     case "NETWORK":
       return "Connection issue while uploading. Check your network and retry."
     case "OPTIMIZE_FAILED":

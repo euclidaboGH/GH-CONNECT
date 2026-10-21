@@ -93,7 +93,8 @@ function clipStr(v: unknown, max: number): string | null {
 export function sanitizeProfileInput(
   ghUserId: string,
   input: Record<string, unknown>,
-  existing?: ServerProfileRecord | null
+  existing?: ServerProfileRecord | null,
+  options: { allowOnboardedChange?: boolean } = {}
 ): ServerProfileRecord {
   const interests = asStringArray(input.interests, MAX_INTERESTS)
   const connectionIntents = asStringArray(
@@ -111,11 +112,11 @@ export function sanitizeProfileInput(
     age = existing.age
   }
 
-  const onboarded =
-    input.onboarded === true ||
-    input.onboarded === false
-      ? Boolean(input.onboarded)
-      : existing?.onboarded ?? false
+  // Onboarding completion is an identity lifecycle decision, not a profile
+  // field. Public profile PATCH requests cannot set or clear it.
+  const onboarded = options.allowOnboardedChange && typeof input.onboarded === "boolean"
+    ? input.onboarded
+    : existing?.onboarded ?? false
 
   // Never accept client balance / tier
   const payloadIn =
@@ -158,7 +159,8 @@ export function sanitizeProfileInput(
       return sanitizeProfileInput(
         ghUserId,
         { ...input, profilePayload: existing?.profilePayload || {} },
-        existing
+        existing,
+        options
       )
     }
   } catch {
@@ -361,12 +363,13 @@ export async function getServerProfile(
  */
 export async function upsertServerProfile(
   ghUserId: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  options: { allowOnboardedChange?: boolean } = {}
 ): Promise<ServerProfileRecord | null> {
   const key = String(ghUserId || "").trim()
   if (!key) return null
   const existing = await getServerProfile(key)
-  const next = sanitizeProfileInput(key, input, existing)
+  const next = sanitizeProfileInput(key, input, existing, options)
 
   if (dbConfigured()) {
     const saved = await dbUpsert(next)

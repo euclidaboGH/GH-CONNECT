@@ -27,7 +27,7 @@ ok(!/console\.(log|error|info).*key/i.test(settle), "does not log key")
 ok(settle.includes("timingSafeEqual"), "constant time")
 ok(settle.includes("SETTLEMENT_DISABLED"), "missing key fail closed")
 
-const snap = fs.readFileSync(path.join(root, "supabase/migrations/20261017_ghpv_settlement_engine.sql"), "utf8")
+const snap = fs.readFileSync(path.join(root, "supabase/migrations/202610170001_ghpv_settlement_engine.sql"), "utf8")
 ok(snap.includes("deleted_at IS NULL"), "deleted posts excluded from snapshot")
 
 console.log(`\nGHPV soft-delete: ${pass} pass, ${fail} fail`)

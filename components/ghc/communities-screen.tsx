@@ -836,6 +836,22 @@ export function CommunitiesScreen() {
             const ok = await inviteCommunityMember(selected.id, userId)
             if (ok) setHubKey((k) => k + 1)
           }}
+          onSetRole={async (userId, role) => {
+            if (!ctx.setGroupRole) {
+              addToast("Role update unavailable", "error")
+              return
+            }
+            await ctx.setGroupRole(selected.id, userId, role)
+            setHubKey((k) => k + 1)
+          }}
+          onRemoveMember={async (userId) => {
+            if (!ctx.removeGroupMember) {
+              addToast("Remove unavailable", "error")
+              return
+            }
+            await ctx.removeGroupMember(selected.id, userId)
+            setHubKey((k) => k + 1)
+          }}
           onLeave={() =>
             handleLeave(selected.id, selected.groupName || selected.participantName)
           }

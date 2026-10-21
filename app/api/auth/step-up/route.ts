@@ -142,9 +142,10 @@ export async function POST(request: Request) {
       "[step-up] failed",
       err instanceof Error ? err.message : "unknown"
     )
+    const durabilityFailure = err instanceof Error && err.message === "STEP_UP_DURABILITY_UNAVAILABLE"
     return NextResponse.json(
-      { ok: false, error: "STEP_UP_FAILED" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { ok: false, error: durabilityFailure ? "STEP_UP_DURABILITY_UNAVAILABLE" : "STEP_UP_FAILED" },
+      { status: durabilityFailure ? 503 : 500, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

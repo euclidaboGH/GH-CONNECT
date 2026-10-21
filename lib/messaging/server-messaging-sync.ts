@@ -156,3 +156,23 @@ export async function apiHeartbeatMessagingPresence() {
   const body = await res.json().catch(() => ({}))
   return { httpOk: res.ok, ...body }
 }
+
+
+/** Ensure current user is a messaging member of a community/group conversation. */
+export async function apiEnsureConversationMember(
+  conversationId: string,
+  title?: string
+): Promise<{ httpOk: boolean; ok?: boolean; member?: boolean; error?: string }> {
+  const res = await fetch(
+    `/api/messaging/conversations/${encodeURIComponent(conversationId)}/ensure-member`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: authHeaders(),
+      body: JSON.stringify(title ? { title } : {}),
+      cache: "no-store",
+    }
+  )
+  const body = await res.json().catch(() => ({}))
+  return { httpOk: res.ok, ...body }
+}

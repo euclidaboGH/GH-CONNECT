@@ -74,7 +74,7 @@ export function WithdrawGhcPanel() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        setError(data.error || "Could not load withdrawal info")
+        setError(data.message || data.error || "Could not load withdrawal info")
         setQuote(null)
         setItems([])
         return

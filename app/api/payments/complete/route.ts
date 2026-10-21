@@ -7,7 +7,6 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getPaymentIntent,
-  getByProviderPaymentId,
   bindProviderPayment,
   transitionIntent,
   loadPaymentIntent,
@@ -100,8 +99,8 @@ export async function POST(request: Request) {
     }
 
     let intent = intentId
-      ? (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
-      : (await loadByProviderPaymentId(paymentId)) || getByProviderPaymentId(paymentId)
+      ? (await loadPaymentIntent(intentId))
+      : (await loadByProviderPaymentId(paymentId))
 
     if (!intent) {
       return NextResponse.json(
@@ -168,31 +167,38 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      await bindProviderPayment(intent.id, paymentId, auth?.userId)
-      await transitionIntent(intent.id, "COMPLETION_PENDING", {
+      const bound = await bindProviderPayment(intent.id, paymentId, auth?.userId)
+      if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
+      const pending = await transitionIntent(intent.id, "COMPLETION_PENDING", {
         actor: auth.userId,
         detail: "Completion requested",
         providerPaymentId: paymentId,
         txid,
       })
+      if (!pending || pending.status !== "COMPLETION_PENDING") {
+        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+      }
+      intent = pending
 
       const lookup = await piGetPayment(paymentId)
-      if (intent.purpose === "creator_earning" && intent.metadata?.flow === "creator_tip") {
-        const observedTxid = String(lookup.payment?.transaction?.txid || "").trim()
-        if (!lookup.ok || !lookup.payment || !amountsMatch(intent.amount, lookup.payment.amount) ||
-            !lookup.payment.status?.transaction_verified && !lookup.payment.transaction?.verified ||
-            (observedTxid && observedTxid !== txid)) {
-          return NextResponse.json({ ok: false, error: "PI_TIP_PAYMENT_NOT_VERIFIED", retryable: true }, { status: 409 })
-        }
+      if (!lookup.ok || !lookup.payment) {
+        return NextResponse.json({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", detail: lookup.error, retryable: true }, { status: 502 })
       }
-      if (lookup.ok && lookup.payment) {
-        if (!amountsMatch(intent.amount, lookup.payment.amount)) {
-          await transitionIntent(intent.id, "FAILED", {
-            actor: "system",
-            detail: "Amount mismatch on complete",
-            error: `expected ${intent.amount} got ${lookup.payment.amount}`,
-          })
-          return NextResponse.json({ ok: false, error: "amount_mismatch" }, { status: 409 })
+      if (!amountsMatch(intent.amount, lookup.payment.amount)) {
+        await transitionIntent(intent.id, "FAILED", {
+          actor: "system",
+          detail: "Amount mismatch on complete",
+          error: `expected ${intent.amount} got ${lookup.payment.amount}`,
+        })
+        return NextResponse.json({ ok: false, error: "amount_mismatch" }, { status: 409 })
+      }
+      if (intent.purpose === "creator_earning" && intent.metadata?.flow === "creator_tip") {
+        const observedTxid = String(lookup.payment.transaction?.txid || "").trim()
+        if (
+          (!lookup.payment.status?.transaction_verified && !lookup.payment.transaction?.verified) ||
+          (observedTxid && observedTxid !== txid)
+        ) {
+          return NextResponse.json({ ok: false, error: "PI_TIP_PAYMENT_NOT_VERIFIED", retryable: true }, { status: 409 })
         }
       }
     }
@@ -221,12 +227,16 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      await transitionIntent(intent.id, "COMPLETED", {
+      const completedIntent = await transitionIntent(intent.id, "COMPLETED", {
         actor: auth.userId,
         detail: "Pi developer completed",
         providerPaymentId: paymentId,
         txid,
       })
+      if (!completedIntent || completedIntent.status !== "COMPLETED") {
+        return NextResponse.json({ ok: false, error: "PAYMENT_COMPLETED_RECONCILIATION_PENDING", paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+      }
+      intent = completedIntent
     }
 
     // Membership entitlement: grant on verified COMPLETED intent (server-authoritative).
@@ -239,10 +249,9 @@ export async function POST(request: Request) {
     } | null = null
     const completedIntent =
       (intent
-        ? (await loadPaymentIntent(intent.id)) || getPaymentIntent(intent.id)
+        ? (await loadPaymentIntent(intent.id))
         : null) ||
-      (await loadByProviderPaymentId(paymentId)) ||
-      getByProviderPaymentId(paymentId)
+      (await loadByProviderPaymentId(paymentId))
     if (completedIntent) {
       const tipSettlement = await settleVerifiedCreatorTip(completedIntent, paymentId, completedIntent.txid || txid)
       if (tipSettlement.applicable && !tipSettlement.ok) {

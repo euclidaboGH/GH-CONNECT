@@ -27,8 +27,23 @@ for (const f of files) {
   const src = fs.readFileSync(f, 'utf8')
   const rel = path.relative(root, f)
 
-  // health may be unauthenticated
+  // Health and explicitly allow-listed read-only policy/proposal endpoints may be public.
+  // Keep the allow-list narrow: a route must expose only server-owned non-account metadata.
+  const publicPolicyRoutes = new Map([
+    ['app/api/economy/policy/route.ts', /getPublicGhcEconomyPolicy/],
+    ['app/api/economy/pi-acquisition-policy/route.ts', /getPiGhcAcquisitionProposal/],
+  ])
   if (rel.includes('/health/')) {
+    pass++
+    continue
+  }
+  if (publicPolicyRoutes.has(rel)) {
+    const expectedProvider = publicPolicyRoutes.get(rel)
+    if (!expectedProvider.test(src) || /resolveAuthenticatedUser|request\.json\(|export async function POST|export async function PUT|export async function DELETE/.test(src)) {
+      issues.push(`${rel}: public policy must be read-only and expose only its approved server-owned policy provider`)
+      fail++
+      continue
+    }
     pass++
     continue
   }

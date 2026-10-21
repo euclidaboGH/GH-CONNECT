@@ -325,6 +325,20 @@ export interface Candidate {
   coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
   /** Optional approximate discovery distance in kilometres when supplied by the server/discovery layer. */
   distance?: number
+  /** Optional profile enrichment fields consumed by discovery/search ranking. */
+  city?: string
+  country?: string
+  profession?: string
+  education?: string
+  joinedAt?: number | string
+  lastActiveAt?: number | string
+  isOnline?: boolean
+  isVerified?: boolean
+  /** Optional aggregate engagement signal used only for discovery ordering. */
+  engagement?: number
+  relationshipGoals?: string[]
+  primaryMode?: string
+  relationshipType?: string | string[]
   /** Marks non-durable/demo discovery entries; server-hydrated people explicitly set this false. */
   isSample?: boolean
 }

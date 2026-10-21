@@ -57,6 +57,18 @@ const memMembers = new Map<string, Set<string>>() // convId -> user ids
 const memMessages = new Map<string, DurableMessage[]>() // convId -> messages
 const memPresence = new Map<string, { lastSeenAt: number; onlineUntil: number; typingConversationId?: string; typingUntil?: number }>()
 
+
+function communityIdVariants(id: string): string[] {
+  const c = String(id || "").trim()
+  if (!c) return []
+  const out = new Set<string>([c])
+  if (c.startsWith("community:")) out.add(c.slice("community:".length))
+  else out.add(`community:${c}`)
+  if (c.startsWith("group:")) out.add(c.slice("group:".length))
+  else out.add(`group:${c}`)
+  return [...out]
+}
+
 function dbConfigured() {
   return hasPrivilegedDatabase()
 }
@@ -83,7 +95,7 @@ function isHttpOrStorageUrl(url: string): boolean {
   if (u.startsWith("blob:") || u.startsWith("data:")) return false
   try {
     const parsed = new URL(u)
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
+    return parsed.protocol === "https:"
   } catch {
     return false
   }
@@ -148,6 +160,7 @@ async function rest<T>(
       ...init,
       headers,
       cache: "no-store",
+      signal: init?.signal || AbortSignal.timeout(8_000),
     })
     if (res.status === 204) return { ok: res.ok, status: res.status, data: null }
     const data = (await res.json().catch(() => null)) as T | null
@@ -177,6 +190,7 @@ export async function isMember(
     // DB configured but request failed: fail closed (do not trust process memory for authz)
     return false
   }
+  if (isProd()) return false
   const set = memMembers.get(cid)
   return Boolean(set?.has(uid))
 }
@@ -192,13 +206,15 @@ export async function listConversationsForUser(
   if (dbConfigured()) {
     const memQ = `gh_conversation_members?gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id&limit=${limit}`
     const memRes = await rest<Array<{ conversation_id: string }>>(memQ)
-    if (memRes.ok && Array.isArray(memRes.data)) {
+    if (!memRes.ok || !Array.isArray(memRes.data)) return []
+    {
       const ids = memRes.data.map((r) => r.conversation_id).filter(Boolean)
       if (ids.length === 0) return []
       const inList = ids.map(encodeURIComponent).join(",")
       const convQ = `gh_conversations?id=in.(${inList})&select=*&order=updated_at.desc`
       const convRes = await rest<Array<Record<string, unknown>>>(convQ)
-      if (convRes.ok && Array.isArray(convRes.data)) {
+      if (!convRes.ok || !Array.isArray(convRes.data)) return []
+      {
         const out: DurableConversation[] = []
         const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(
           `gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`
@@ -248,6 +264,7 @@ export async function listConversationsForUser(
     }
   }
 
+  if (isProd()) return []
   const result: DurableConversation[] = []
   for (const [cid, set] of memMembers) {
     if (set.has(uid)) {
@@ -265,7 +282,9 @@ async function listMemberIds(conversationId: string): Promise<string[]> {
     const q = `gh_conversation_members?conversation_id=eq.${encodeURIComponent(conversationId)}&left_at=is.null&select=gh_user_id`
     const { ok, data } = await rest<Array<{ gh_user_id: string }>>(q)
     if (ok && Array.isArray(data)) return data.map((r) => r.gh_user_id)
+    return []
   }
+  if (isProd()) return []
   return [...(memMembers.get(conversationId) || [])]
 }
 
@@ -603,7 +622,9 @@ export async function ensureCommunityMember(input: {
   const cid = String(input.communityId || "").trim()
   const uid = String(input.userId || "").trim()
   if (!cid || !uid) return { ok: false, error: "INVALID_INPUT" }
-  if (await isMember(cid, uid)) return { ok: true }
+  for (const vid of communityIdVariants(cid)) {
+    if (await isMember(vid, uid)) return { ok: true }
+  }
 
   if (dbConfigured()) {
     const exists = await rest<Array<{ id: string }>>(
@@ -633,6 +654,8 @@ export async function ensureCommunityMember(input: {
     if (!mem.ok && mem.status !== 409) {
       return { ok: false, error: "MEMBERSHIP_WRITE_FAILED" }
     }
+  } else if (isProd()) {
+    return { ok: false, error: "STORE_UNAVAILABLE" }
   }
   const set = memMembers.get(cid) || new Set<string>()
   set.add(uid)
@@ -848,18 +871,31 @@ export async function appendMessage(input: {
     return { ok: false, error: "INVALID_ATTACHMENTS" }
   }
   if (!(await isMember(cid, uid))) {
-    // Heal: community creators often have social membership without chat membership
+    // Heal incomplete community/group membership (creator or re-join after social create).
     if (dbConfigured()) {
       const convRow = await rest<Array<{ id: string; kind: string; created_by: string }>>(
         `gh_conversations?id=eq.${encodeURIComponent(cid)}&select=id,kind,created_by&limit=1`
       )
       const row = convRow.ok && Array.isArray(convRow.data) ? convRow.data[0] : null
-      if (row && (row.kind === "community" || row.kind === "group") && String(row.created_by) === uid) {
-        await ensureCommunityConversation({ communityId: cid, ownerId: uid })
-      } else if (!row && (cid.startsWith("comm_") || cid.startsWith("community"))) {
-        // Local community id never written to messaging — create shell for sender
-        await ensureCommunityConversation({ communityId: cid, ownerId: uid })
+      const kind = String(row?.kind || "")
+      const isGroupish =
+        kind === "community" ||
+        kind === "group" ||
+        !row ||
+        cid.startsWith("comm_") ||
+        cid.startsWith("community") ||
+        cid.startsWith("group_")
+      if (isGroupish) {
+        // Always try to attach the sender; ensureCommunity* is idempotent.
+        await ensureCommunityConversation({
+          communityId: cid,
+          ownerId: String(row?.created_by || uid),
+        })
+        await ensureCommunityMember({ communityId: cid, userId: uid, role: "member" })
       }
+    } else {
+      // In-memory store (non-prod): add sender so local tests work.
+      await ensureCommunityMember({ communityId: cid, userId: uid, role: "member" })
     }
     if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
   }

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     // Also stamp social profile onboarded when durable profile store is available.
     // Client may also PATCH /api/profile/me; dual-write avoids hydrate races.
     try {
-      await upsertServerProfile(updated.ghUserId, { onboarded: true })
+      await upsertServerProfile(updated.ghUserId, { onboarded: true }, { allowOnboardedChange: true })
     } catch {
       /* non-blocking — identity onboardingCompleted remains source of gate */
     }

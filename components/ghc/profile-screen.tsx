@@ -34,7 +34,7 @@ import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
-import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { uploadDurableMedia, isMediaStorageUnavailable } from "@/lib/media/upload-client"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -160,7 +160,7 @@ export function ProfileScreen({
       try {
         const input = document.createElement("input")
         input.type = "file"
-        input.accept = "image/jpeg,image/png,image/webp,image/gif"
+        input.accept = "image/jpeg,image/png,image/webp,image/gif,image/avif"
         input.onchange = () => {
           const file = input.files?.[0]
           if (!file) return
@@ -197,10 +197,10 @@ export function ProfileScreen({
               maxInputBytes: 25 * 1024 * 1024,
             })
             const compressedBlob = await fetch(compressedDataUrl).then((r) => r.blob())
-            const uploaded = offline ? null : await uploadDurableMedia(compressedBlob, { fileName: `${kind}-${Date.now()}.${compressedBlob.type === "image/webp" ? "webp" : "jpg"}` })
+            const uploaded = offline ? null : await uploadDurableMedia(compressedBlob, { fileName: `${kind}-${Date.now()}.${compressedBlob.type === "image/webp" ? "webp" : "jpg"}`, category: "avatars" })
             if (uploaded?.ok && uploaded.kind === "image") {
               imageUrl = uploaded.url
-            } else if (offline || (uploaded && !uploaded.ok && uploaded.error === "MEDIA_STORAGE_UNAVAILABLE")) {
+            } else if (offline || (uploaded && !uploaded.ok && isMediaStorageUnavailable(uploaded.error))) {
               // Offline/local fallback — not visible on other devices until durable upload succeeds.
               ghc.addToast?.(
                 offline

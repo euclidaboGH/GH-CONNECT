@@ -31,6 +31,8 @@ SET search_path = public
 AS $$
 DECLARE
   v_owner text;
+  v_audience text;
+  v_allowed boolean := false;
   v_active boolean;
   v_counts jsonb;
   v_mine jsonb;
@@ -39,7 +41,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'INVALID_REACTION');
   END IF;
 
-  SELECT owner_id INTO v_owner
+  SELECT owner_id, audience INTO v_owner, v_audience
   FROM public.gh_stories
   WHERE id = p_story_id AND status = 'published' AND expires_at > now();
   IF v_owner IS NULL THEN
@@ -53,6 +55,29 @@ BEGIN
     WHERE (b.blocker_id = p_user_id AND b.blocked_id = v_owner)
        OR (b.blocker_id = v_owner AND b.blocked_id = p_user_id)
   ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'NOT_AVAILABLE');
+  END IF;
+
+  -- A known story ID must not bypass the audience rules enforced by the list RPC.
+  -- matches-only remains owner-only until a canonical durable match relation exists.
+  IF v_audience = 'everyone' THEN
+    v_allowed := true;
+  ELSIF v_audience = 'followers' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.gh_follows f
+      WHERE f.follower_id = trim(p_user_id) AND f.following_id = v_owner
+    ) INTO v_allowed;
+  ELSIF v_audience = 'friends' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.gh_follows f1
+      JOIN public.gh_follows f2
+        ON f2.follower_id = f1.following_id
+       AND f2.following_id = f1.follower_id
+      WHERE f1.follower_id = trim(p_user_id)
+        AND f1.following_id = v_owner
+    ) INTO v_allowed;
+  END IF;
+  IF NOT v_allowed THEN
     RETURN jsonb_build_object('ok', false, 'error', 'NOT_AVAILABLE');
   END IF;
 

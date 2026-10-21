@@ -2264,3 +2264,75 @@ body { overflow-x: clip; }
     padding-right: 0.5rem;
   }
 }
+
+/* Phase 25 — product-experience cohesion: interaction, readability and media ergonomics. */
+:root {
+  --gh-interaction-min: 2.75rem;
+  --gh-card-radius: 1.25rem;
+  --gh-content-leading: 1.58;
+  --gh-media-backdrop: color-mix(in srgb, var(--foreground) 5%, var(--background));
+}
+
+.gh-feed-column {
+  min-width: 0;
+  margin-inline: auto;
+}
+.gh-feed-column .gh-post-card {
+  border: 1px solid var(--gh-ref-line);
+  border-radius: var(--gh-card-radius);
+  background: var(--gh-ref-surface, var(--card));
+}
+.gh-post-card:focus-visible {
+  outline: var(--gh-focus-outline, 3px solid var(--ring));
+  outline-offset: 3px;
+}
+.gh-post-card :where(button, a, select) {
+  touch-action: manipulation;
+}
+.gh-post-card [role="toolbar"] button,
+.gh-post-card [role="toolbar"] select {
+  min-height: var(--gh-interaction-min);
+}
+.gh-post-card :where(video, img) {
+  backface-visibility: hidden;
+}
+.gh-post-card :where(p) {
+  line-height: var(--gh-content-leading);
+}
+.gh-post-card [aria-label^="Post image gallery"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.gh-post-card [aria-label="Previous post image"],
+.gh-post-card [aria-label="Next post image"] {
+  min-width: var(--gh-interaction-min);
+  min-height: var(--gh-interaction-min);
+}
+.gh-feed-column [aria-label="Stories from your community"] {
+  min-width: 0;
+}
+.gh-feed-column [aria-label="Stories from your community"] > div:last-child {
+  scrollbar-width: none;
+  scroll-padding-inline: .5rem;
+  overscroll-behavior-inline: contain;
+}
+.gh-feed-column [aria-label="Stories from your community"] > div:last-child::-webkit-scrollbar {
+  display: none;
+}
+.gh-feed-column :where(input, textarea, select, button):focus-visible {
+  outline-offset: 2px;
+}
+@media (min-width: 1024px) {
+  .gh-feed-column { width: min(calc(100% - 2rem), 48rem); }
+  .gh-feed-column .gh-post-card { border-radius: 1.4rem; }
+}
+@media (max-width: 359px) {
+  .gh-feed-column { padding-inline: .35rem; }
+  .gh-post-card [role="toolbar"] { gap: .25rem; }
+  .gh-post-card [role="toolbar"] button { min-width: 2.25rem; }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .gh-post-card { transition: border-color 160ms ease, box-shadow 160ms ease; }
+  .gh-post-card:hover { border-color: color-mix(in srgb, var(--primary) 25%, var(--gh-ref-line)); }
+}

@@ -9,8 +9,6 @@
 import {
   loadPaymentIntent,
   loadByProviderPaymentId,
-  getPaymentIntent,
-  getByProviderPaymentId,
 } from "@/lib/server/payments/intent-store"
 import type { PaymentIntent } from "@/lib/server/payments/intent-types"
 import {
@@ -51,10 +49,10 @@ async function resolveIntent(paymentRef: string): Promise<PaymentIntent | null> 
   const key = String(paymentRef || "").trim()
   if (!key) return null
   const fromId =
-    (await loadPaymentIntent(key)) || getPaymentIntent(key)
+    (await loadPaymentIntent(key))
   if (fromId) return fromId
   const fromProvider =
-    (await loadByProviderPaymentId(key)) || getByProviderPaymentId(key)
+    (await loadByProviderPaymentId(key))
   return fromProvider
 }
 

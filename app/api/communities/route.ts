@@ -103,8 +103,17 @@ export async function POST(request: Request) {
     ? String(body.privacy)
     : "public"
 
+  // Prefer stable client/community id so chat membership and UI conversation share one key
+  const clientId = String(body.id || body.conversationId || "").trim()
+  const stableId =
+    clientId &&
+    clientId.length >= 8 &&
+    clientId.length <= 80 &&
+    /^[a-zA-Z0-9_-]+$/.test(clientId)
+      ? clientId
+      : genId()
   const row = {
-    id: genId(),
+    id: stableId,
     name,
     purpose: String(body.purpose || "").slice(0, 200),
     description: String(body.description || "").slice(0, 2000),
@@ -115,7 +124,7 @@ export async function POST(request: Request) {
     rules: Array.isArray(body.rules) ? body.rules.slice(0, 20) : [],
     tags: Array.isArray(body.tags) ? body.tags.slice(0, 20) : [],
     welcomeMessage: String(body.welcomeMessage || "").slice(0, 500),
-    conversationId: body.conversationId ? String(body.conversationId) : null,
+    conversationId: stableId,
   }
 
   if (!socialDbConfigured()) {

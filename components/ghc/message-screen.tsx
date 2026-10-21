@@ -21,7 +21,7 @@ import type { Conversation, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
-import { apiTouchConversationPresence } from "@/lib/messaging/server-messaging-sync"
+import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib/messaging/server-messaging-sync"
 
 const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
@@ -409,7 +409,21 @@ export function MessageScreen() {
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     })
-  }, [stopTyping])
+    // Heal community/group membership before the user tries to send
+    try {
+      const conv = (rawConversations || []).find((c) => c.id === id)
+      const groupish =
+        conv?.conversationType === "group" ||
+        (conv as { kind?: string; isCommunity?: boolean; communityId?: string } | undefined)?.kind === "community" ||
+        Boolean((conv as { communityId?: string } | undefined)?.communityId) ||
+        id.startsWith("comm_")
+      if (groupish) {
+        void apiEnsureConversationMember(id, conv?.groupName || conv?.participantName).catch(() => {})
+      }
+    } catch {
+      /* */
+    }
+  }, [stopTyping, rawConversations])
 
   const closeThread = useCallback(() => {
     stopTyping()

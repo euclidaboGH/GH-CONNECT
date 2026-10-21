@@ -1,6 +1,6 @@
 # GH Wallet — GHC Withdrawal & Pi Settlement
 
-**Status:** Implemented (source verified; Testnet/operator E2E pending)
+**Status:** DISABLED BY DEFAULT — proposal/source retained; requires explicit governance, legal/platform review, funding controls, and Testnet/operator E2E approval before activation
 **Product:** GreenHaven  
 **Depends on:** Durable GHC ledger, authenticated session, operator/admin controls  
 **Does not depend on:** Phase 2+ social economy, Pi Ads rewards, client-minted balances  
@@ -13,7 +13,7 @@
 
 Users earn or hold **GHC** (GreenHaven Coin) as an **in-app utility balance**.
 
-When they have enough **withdrawable** GHC to equal **at least 100 Pi** at GreenHaven’s approved rate, they can:
+Only if a separately governed settlement product is approved and enabled may eligible users submit a request. The existing reference rate is not authorization to redeem GHC for Pi. Until then, GHC remains an in-app utility balance and the withdrawal endpoint is disabled by default. If approved later, the reviewed product may define a minimum and settlement flow such as:
 
 1. Open **Withdraw GHC**
 2. Confirm their **Pi Network wallet address**
@@ -71,7 +71,7 @@ Locked + Available + Withdrawable accounting ≤ authoritative ledger balance
 
 ## 4. Conversion rate
 
-**Canonical server rate:** `REFERENCE_GHC_PER_PI` in `lib/server/economy/economic-config.ts` (default **100 GHC per 1 π**). This is **not** 1 GHC = 1 π.
+**Reference only:** `REFERENCE_GHC_PER_PI` in `lib/server/economy/economic-config.ts` defaults to 100 GHC per 1 π for legacy design/testing context only. It is not a market rate, redemption promise, or authorization to settle GHC for Pi. The endpoint remains disabled unless `GHC_WITHDRAWALS_ENABLED=true` is explicitly set after all required approvals and release gates.
 
 Cross-check: VIP membership is **150 GHC** and **1.5 π** in GH Pay → same 100:1 reference.
 

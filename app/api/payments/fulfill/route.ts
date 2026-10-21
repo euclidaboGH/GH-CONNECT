@@ -38,8 +38,7 @@ export async function POST(request: Request) {
 
     let intent =
       (intentId ? await loadPaymentIntent(intentId) : null) ||
-      (paymentId ? await loadByProviderPaymentId(paymentId) : null) ||
-      (intentId ? getPaymentIntent(intentId) : null)
+      (paymentId ? await loadByProviderPaymentId(paymentId) : null)
 
     if (!intent) {
       return NextResponse.json(

@@ -16,7 +16,7 @@ export type PaymentIntentStatus =
   | "REFUNDED"
   | "INCOMPLETE"
 
-/** Allowed forward transitions (invalid backwards blocked in store) */
+/** Relative progression ranks for reporting; authoritative transition rules live in intent-transition-policy.mjs and the row-locked SQL RPC. */
 export const PAYMENT_STATUS_RANK: Record<PaymentIntentStatus, number> = {
   CREATED: 0,
   APPROVAL_PENDING: 1,

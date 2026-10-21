@@ -134,6 +134,13 @@ function EnhancedPostCardInner({
   const [contentExpanded, setContentExpanded] = useState(false)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const galleryIdentity = realImages.join("\u001f")
+  useEffect(() => {
+    setImageIndex(0)
+    setShowReactions(false)
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+    pressTimerRef.current = null
+  }, [post.id, galleryIdentity])
   const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
   const [rosterOpen, setRosterOpen] = useState(false)
   const [rosterKind, setRosterKind] = useState<RosterKind>("likes")
@@ -160,6 +167,10 @@ function EnhancedPostCardInner({
   const lastCurationAtRef = useRef(0)
   const curationLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const curationLongPressTriggeredRef = useRef(false)
+  useEffect(() => () => {
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+    if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
+  }, [])
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
   useEffect(() => {
@@ -265,9 +276,11 @@ function EnhancedPostCardInner({
 
   // Phase 2.4 — view / qualified_view (fail-soft, server authoritative)
   useEffect(() => {
+    const postId = post.id
+    visibleSinceRef.current = null
+    qualifiedSentRef.current = false
     const el = containerRef.current
     if (!el || typeof IntersectionObserver === "undefined") return
-    const postId = post.id
     const obs = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
@@ -313,16 +326,17 @@ function EnhancedPostCardInner({
 
   // Long-press for quick reactions
   const handleLongPress = (kind: "positive" | "negative" = "positive") => {
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
     pressTimerRef.current = setTimeout(() => {
+      pressTimerRef.current = null
       setCurationReactionKind(kind)
       setShowReactions(true)
     }, 500)
   }
 
   const handlePressEnd = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current)
-    }
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+    pressTimerRef.current = null
   }
 
   const handleQuickReaction = (reaction: PostReaction) => {
@@ -344,12 +358,12 @@ function EnhancedPostCardInner({
   // Media gallery navigation
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setImageIndex(Math.max(0, imageIndex - 1))
+    setImageIndex((current) => Math.max(0, current - 1))
   }
 
   const handleNextImage = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setImageIndex(Math.min(post.images.length - 1, imageIndex + 1))
+    setImageIndex((current) => Math.min(realImages.length - 1, current + 1))
   }
 
   // Parse hashtags and mentions from content
@@ -385,11 +399,18 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 overflow-hidden bg-card text-card-foreground cursor-pointer overflow-x-hidden max-w-full"
+      data-post-id={post.id} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 max-w-full cursor-pointer overflow-x-hidden overflow-hidden bg-card text-card-foreground focus-visible:outline-none"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
         onOpenPost?.(post.id)
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || !onOpenPost) return
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onOpenPost(post.id)
+        }
       }}
     >
       {/* Header */}
@@ -421,7 +442,7 @@ function EnhancedPostCardInner({
               </p>
               {(() => {
                 const hasVideo = Boolean(post.video)
-                const realImages = (post.images || []).filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))
+                const realImages = (post.images || []).filter((u) => typeof u === "string" && isDurableMediaUrl(u))
                 const hasImage = realImages.length > 0
                 const special = detectSpecialPost(post.content)
                 const isPoll = Boolean((post as Post & { poll?: unknown }).poll) || special === "poll"
@@ -701,10 +722,11 @@ function EnhancedPostCardInner({
             {(post.content?.length || 0) > 220 && (
               <button
                 type="button"
+                aria-expanded={contentExpanded}
                 onClick={() => setContentExpanded((v) => !v)}
-                className="mb-3 text-[13px] font-bold text-[var(--gh-green)] hover:brightness-110"
+                className="mb-3 min-h-9 rounded-lg px-1 text-[13px] font-bold text-[var(--gh-green)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                {contentExpanded ? "Show less" : "more"}
+                {contentExpanded ? "Show less" : "Read more"}
               </button>
             )}
           </>
@@ -735,42 +757,45 @@ function EnhancedPostCardInner({
         )}
 
         {/* Media gallery with improved viewing */}
-        {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
+        {realImages.length > 0 && (
           <div
-            className="relative mb-2 aspect-[4/5] max-h-[24rem] w-full overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem] group cursor-pointer"
+            className="group relative mb-2 aspect-[4/5] max-h-[24rem] w-full cursor-pointer overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem]"
             onClick={handleImageTap}
             onMouseDown={() => handleLongPress("positive")}
             onMouseUp={handlePressEnd}
+            onMouseLeave={handlePressEnd}
             onTouchStart={() => handleLongPress("positive")}
             onTouchEnd={handlePressEnd}
+            onTouchCancel={handlePressEnd}
+            role="group"
+            tabIndex={onOpenPost ? 0 : undefined}
+            aria-label={`Post image gallery, image ${imageIndex + 1} of ${realImages.length}`}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return
+              if ((event.key === "Enter" || event.key === " ") && onOpenPost) {
+                event.preventDefault()
+                onOpenPost(post.id)
+              }
+            }}
           >
             <LazyImage
-              src={(post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))[Math.min(imageIndex, post.images.length - 1)] || post.images[0])}
-              alt={`Post image ${imageIndex + 1}`}
+              src={realImages[Math.min(imageIndex, realImages.length - 1)] || realImages[0]}
+              alt={`Post image ${imageIndex + 1} of ${realImages.length}`}
               className="absolute inset-0 h-full w-full object-cover"
             />
-
-            {/* Navigation arrows */}
-            {post.images.length > 1 && (
+            {realImages.length > 1 && (
               <>
-                <button
-                  onClick={handlePrevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  ←
+                <button type="button" onClick={handlePrevImage} disabled={imageIndex === 0} aria-label="Previous post image" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 disabled:opacity-35 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100">
+                  <span aria-hidden="true">←</span>
                 </button>
-                <button
-                  onClick={handleNextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  →
+                <button type="button" onClick={handleNextImage} disabled={imageIndex >= realImages.length - 1} aria-label="Next post image" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 disabled:opacity-35 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100">
+                  <span aria-hidden="true">→</span>
                 </button>
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white px-2 py-1 rounded-full text-xs">
-                  {imageIndex + 1} / {post.images.length}
+                <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold tabular-nums text-white" aria-live="polite">
+                  {Math.min(imageIndex + 1, realImages.length)} / {realImages.length}
                 </div>
               </>
             )}
-
           </div>
         )}
 

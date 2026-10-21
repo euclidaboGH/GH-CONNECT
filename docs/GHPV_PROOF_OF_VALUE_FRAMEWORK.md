@@ -85,6 +85,6 @@ JCS bounds: 0–100. Per-event delta capped at 2.5. Daily absolute delta capped 
 
 Settlement is a system operation. `POST /api/social/posts/[id]/ghpv/settle` requires `GH_SETTLEMENT_INTERNAL_KEY` and header `x-gh-settlement-key`. If the key is unset the route returns 503. No production cron is configured.
 
-Calibration bounds are enforced in `20261018_ghpv_calibration_bounds.sql`: JCS 0–100, per-event delta ±2.5, unresolved/protected delta forced to 0.
+Calibration bounds are enforced in `202610170003_ghpv_calibration_bounds.sql`: JCS 0–100, per-event delta ±2.5, unresolved/protected delta forced to 0.
 
 Quality status values in `gh_content_quality_state.settlement_status`: open, pending, settled, unresolved, quarantined.

@@ -21,6 +21,27 @@ const allow = '202610180005_allow_self_curation.sql'
 const indexGuard = files.indexOf(guard)
 const indexAllow = files.indexOf(allow)
 const failures = []
+
+// Supabase identifies a migration by the numeric prefix before the first underscore,
+// not by the full filename. Duplicate prefixes must block readiness: renaming a file
+// before reconciling remote Testnet/Mainnet history could make an applied migration
+// appear new or create a local/remote history mismatch.
+const versions = new Map()
+for (const file of files) {
+  const version = (file.match(/^(\d+)_/) || [,''])[1]
+  if (!version) {
+    failures.push(`Migration filename has no numeric version prefix: ${file}`)
+    continue
+  }
+  const sameVersion = versions.get(version) ?? []
+  sameVersion.push(file)
+  versions.set(version, sameVersion)
+}
+for (const [version, sameVersion] of versions) {
+  if (sameVersion.length > 1) {
+    failures.push(`Duplicate Supabase migration version ${version}: ${sameVersion.join(', ')}. Reconcile Testnet and Mainnet histories before renaming or moving either file.`)
+  }
+}
 if (indexGuard < 0 || indexAllow < 0 || indexGuard >= indexAllow) failures.push('Self-curation migration supersession order is missing or incorrect.')
 for (const f of [guard, allow]) {
   if (!files.includes(f)) failures.push(`Required migration missing: ${f}`)

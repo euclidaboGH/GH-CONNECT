@@ -11,6 +11,16 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const WITHDRAWAL_MIN_PI = 100 as const
 
+/**
+ * External GHC→Pi settlement is a separate, explicitly governed product.
+ * Keep disabled unless the operator has reviewed funding, legal/platform
+ * requirements, settlement controls, and production end-to-end tests.
+ * Missing environment configuration always fails closed.
+ */
+export function areGhcPiWithdrawalsEnabled(): boolean {
+  return process.env.GHC_WITHDRAWALS_ENABLED === "true"
+}
+
 export type WithdrawalStatus =
   | "requested"
   | "under_review"
@@ -98,6 +108,7 @@ async function rpcJson(
         },
         body: JSON.stringify(args),
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       }
     )
     const data = (await res.json().catch(() => null)) as unknown
@@ -129,16 +140,17 @@ export async function getWithdrawalQuote(ledgerBalance: number, lockedGhc: numbe
   }
 }
 
-export async function fetchLockedGhc(userId: string): Promise<number> {
+export async function fetchLockedGhc(userId: string): Promise<number | null> {
   const result = await rpcJson("ghc_withdrawal_locked_ghc", { p_user_id: userId })
-  if (!result.ok) return 0
+  if (!result.ok) return null
   const raw = result.data
-  if (typeof raw === "number") return Math.max(0, raw)
+  if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 ? raw : null
   if (raw && typeof raw === "object" && "ghc_withdrawal_locked_ghc" in raw) {
-    return Math.max(0, Number((raw as { ghc_withdrawal_locked_ghc: number }).ghc_withdrawal_locked_ghc))
+    const value = Number((raw as { ghc_withdrawal_locked_ghc: number }).ghc_withdrawal_locked_ghc)
+    return Number.isFinite(value) && value >= 0 ? value : null
   }
   const n = Number(raw as unknown)
-  return Number.isFinite(n) ? Math.max(0, n) : 0
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
 
 export async function createWithdrawalRequest(input: {
@@ -181,9 +193,9 @@ export async function createWithdrawalRequest(input: {
   }
 }
 
-export async function listWithdrawalsForUser(userId: string): Promise<WithdrawalRequest[]> {
+export async function listWithdrawalsForUser(userId: string): Promise<WithdrawalRequest[] | null> {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return []
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
     const url =
       `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_withdrawal_requests` +
@@ -194,12 +206,13 @@ export async function listWithdrawalsForUser(userId: string): Promise<Withdrawal
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
-    if (!res.ok) return []
-    const rows = (await res.json()) as Record<string, unknown>[]
-    return Array.isArray(rows) ? rows.map(mapRow) : []
+    if (!res.ok) return null
+    const rows = (await res.json()) as unknown
+    return Array.isArray(rows) ? rows.map((row) => mapRow(row as Record<string, unknown>)) : null
   } catch {
-    return []
+    return null
   }
 }
 

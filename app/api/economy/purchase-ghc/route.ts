@@ -9,7 +9,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { getPaymentIntent, loadPaymentIntent } from "@/lib/server/payments/intent-store"
+import { loadPaymentIntent } from "@/lib/server/payments/intent-store"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
 export const runtime = "nodejs"
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   }
 
   const intent =
-    (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+    (await loadPaymentIntent(intentId))
   if (!intent || intent.userId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "INTENT_NOT_FOUND" }, { status: 404 })
   }

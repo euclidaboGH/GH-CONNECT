@@ -100,6 +100,12 @@ const TX_LABELS: Record<string, string> = {
 
 type Tab = "activity" | "rewards" | "about"
 type TxFilter = "all" | "earned" | "spent" | "pending" | "sent" | "received"
+type PublicEconomyPolicy = {
+  version: string
+  asset: { referenceRateDisclaimer: string; piToGhcPurchaseNote: string; ghcToPiWithdrawalFeatureFlagEnabled: boolean }
+  issuance: { dailyClaimBaseGrossGhc: number[]; userSharePercent: number; note: string }
+  fixedSpendCatalog: Array<{ purpose: string; amountGhc: number; baseGhc?: number; feeGhc?: number; description: string }>
+}
 
 function statusLabel(status?: string): { text: string; className: string } {
   switch ((status || "").toLowerCase()) {
@@ -183,6 +189,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   const [tab, setTab] = useState<Tab>("activity")
   const [tick, setTick] = useState(0)
+  const [economyPolicy, setEconomyPolicy] = useState<PublicEconomyPolicy | null>(null)
+  const [economyPolicyLoading, setEconomyPolicyLoading] = useState(true)
+  const [economyPolicyRetry, setEconomyPolicyRetry] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [p2pMode, setP2pMode] = useState<"send" | "request" | "receive" | null>(null)
   const [balanceVisible, setBalanceVisible] = useState(true)
@@ -231,6 +240,22 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     }
   })
   const [sendEducate, setSendEducate] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setEconomyPolicyLoading(true)
+    void fetch("/api/economy/policy", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("ECONOMY_POLICY_UNAVAILABLE")
+        return response.json()
+      })
+      .then((payload) => {
+        if (!cancelled && payload?.ok && payload?.policy) setEconomyPolicy(payload.policy as PublicEconomyPolicy)
+      })
+      .catch(() => { if (!cancelled) setEconomyPolicy(null) })
+      .finally(() => { if (!cancelled) setEconomyPolicyLoading(false) })
+    return () => { cancelled = true }
+  }, [economyPolicyRetry])
 
   useEffect(() => {
     const onRefresh = () => setTick((x) => x + 1)
@@ -448,6 +473,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   const pendingSum = pendingHolds.reduce((s, h) => s + h.amount, 0)
 
+
+
   const claimPendingHold = async (holdId: string) => {
     if (claimingHoldId) return
     if (!walletOnline) {
@@ -528,6 +555,36 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       setClaimingHoldId(null)
     }
   }
+
+  // auto-mature-pending: once per session, claim server-ready pending holds into available
+  useEffect(() => {
+    if (!walletOnline || pendingHolds.length === 0) return
+    let cancelled = false
+    const run = async () => {
+      try {
+        if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ghc.wallet.autoMatured") === "1") return
+        const ready = pendingHolds.filter((h) => h.claimState === "ready")
+        if (!ready.length) return
+        try {
+          sessionStorage.setItem("ghc.wallet.autoMatured", "1")
+        } catch {
+          /* */
+        }
+        for (const h of ready.slice(0, 5)) {
+          if (cancelled) break
+          await claimPendingHold(h.id)
+        }
+      } catch {
+        /* */
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletOnline, pendingHolds.length])
+
 
   const displayPending = pending > 0 ? pending : pendingSum
 
@@ -1654,6 +1711,50 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                     <li>This screen is private — not shown on your public profile.</li>
                   </ul>
                 </div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <div className="flex items-center gap-2">
+                  <Info size={15} className="shrink-0 text-emerald-700 dark:text-emerald-300" />
+                  <p className="text-xs font-bold text-foreground">Utility policy & current pricing</p>
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  GHC is an in-app utility balance, not an investment or a promise of cash value. It has no guaranteed external exchange or redemption value. Pi payments remain a separate payment rail.
+                </p>
+                {economyPolicyLoading ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">Loading current server policy…</p>
+                ) : economyPolicy ? (
+                  <div className="mt-3 space-y-3">
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">Economy policy v{economyPolicy.version}. {economyPolicy.asset.referenceRateDisclaimer}</p>
+                    <div>
+                      <p className="text-[11px] font-semibold text-foreground">Base daily-claim schedule</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{economyPolicy.issuance.dailyClaimBaseGrossGhc.map((amount, index) => `Day ${index + 1}: ${formatGhc(amount)} GHC`).join(" · ")}</p>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{economyPolicy.issuance.note}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-foreground">Fixed-price uses</p>
+                      <div className="mt-1.5 space-y-1.5">
+                        {economyPolicy.fixedSpendCatalog.map((item) => (
+                          <div key={item.purpose} className="flex items-start justify-between gap-3 text-[11px]">
+                            <span className="min-w-0 text-muted-foreground">{item.description}</span>
+                            <span className="shrink-0 font-semibold text-foreground">{formatGhc(item.amountGhc)} GHC</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">{economyPolicy.asset.piToGhcPurchaseNote} {economyPolicy.asset.ghcToPiWithdrawalFeatureFlagEnabled ? "The GHC-to-Pi request feature flag is enabled; this is not a guarantee of approval or settlement." : "GHC-to-Pi withdrawals are disabled by default."}</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-muted-foreground">Current server pricing could not be loaded. Do not rely on cached or user-supplied prices.</p>
+                    <button
+                      type="button"
+                      onClick={() => setEconomyPolicyRetry((attempt) => attempt + 1)}
+                      className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Retry policy
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-[11px] text-muted-foreground">
                 <Clock size={12} />

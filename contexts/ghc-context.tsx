@@ -9,7 +9,7 @@ import {
 } from "@/lib/profile/server-profile-sync"
 import { sanitizeProfileMediaPartial } from "@/lib/profile/sanitize-profile-media"
 
-import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, startTransition } from "react"
+import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef, startTransition } from "react"
 import type { Profile, Settings, Post, StoryItem, Tab, Toast, Candidate, MatchEntry, Conversation, Like, FriendRequest, Message } from "@/lib/ghc-types"
 import { socialGraphStore } from "@/lib/social-graph-store"
 import { resolveBlockedIds, applyGlobalBlockFilters } from "@/lib/block-enforcement"
@@ -365,7 +365,7 @@ interface GHCContextType {
   ) => Promise<boolean>
   addGroupMember: (conversationId: string, userId: string) => Promise<void>
   removeGroupMember: (conversationId: string, userId: string) => Promise<void>
-  setGroupRole: (conversationId: string, userId: string, role: "admin" | "member") => Promise<void>
+  setGroupRole: (conversationId: string, userId: string, role: "owner" | "admin" | "moderator" | "member") => Promise<void>
   updateGroupName: (conversationId: string, newName: string) => Promise<void>
   updateGroupPhoto: (conversationId: string, photoUrl: string) => Promise<void>
 
@@ -670,6 +670,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [identityUserId])
 
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
+  const postsSnapshotRef = useRef(state.posts)
+  // Keep a current snapshot without making refreshFeed's callback identity change
+  // on every feed update (which can retrigger consumer effects).
+  useEffect(() => {
+    postsSnapshotRef.current = state.posts
+  }, [state.posts])
 
   // Hydrate persisted communities into conversation list (survives reload)
   useEffect(() => {
@@ -6105,13 +6111,34 @@ const dismissMatchCelebration = useCallback(() => {
             return ""
           }
         }
+        const me = IdentityService.getCurrentUserId() || "current-user"
+        const stamped = {
+          ...newGroup,
+          conversationType: "group" as const,
+          kind: "community",
+          isCommunity: true,
+          communityId: newGroup.id,
+          members: Array.from(new Set([me, ...((newGroup.members as string[]) || [])])),
+          groupRoles: {
+            ...(newGroup.groupRoles || {}),
+            [me]: "owner" as const,
+          },
+          createdBy: newGroup.createdBy || me,
+        }
         setState((s) => ({
           ...s,
-          conversations: [newGroup, ...s.conversations],
+          conversations: [stamped, ...s.conversations.filter((c) => c.id !== stamped.id)],
         }))
         try {
-          persistCommunityConversation(newGroup)
-          markJoined(newGroup.id)
+          persistCommunityConversation(stamped)
+          markJoined(stamped.id)
+        } catch {
+          /* */
+        }
+        // Server membership (idempotent) so first message is not FORBIDDEN
+        try {
+          const { apiEnsureConversationMember } = await import("@/lib/messaging/server-messaging-sync")
+          await apiEnsureConversationMember(stamped.id, stamped.groupName || stamped.participantName)
         } catch {
           /* */
         }
@@ -6244,10 +6271,17 @@ const dismissMatchCelebration = useCallback(() => {
               ...(c.groupRoles || {}),
               [memberId]: "member",
             }
+            const memberList = Array.from(
+              new Set([...(result.data.members || []), memberId, ...(c.members || [])])
+            )
             return {
               ...c,
-              members: result.data.members,
+              members: memberList,
               groupRoles,
+              kind: (c as { kind?: string }).kind || "community",
+              isCommunity: true,
+              communityId: (c as { communityId?: string }).communityId || communityId,
+              conversationType: "group" as const,
             }
           })
           const row = next.find((c) => c.id === communityId)
@@ -6261,6 +6295,12 @@ const dismissMatchCelebration = useCallback(() => {
           return { ...s, conversations: next }
         })
         markJoined(communityId)
+        try {
+          const { apiEnsureConversationMember } = await import("@/lib/messaging/server-messaging-sync")
+          await apiEnsureConversationMember(communityId)
+        } catch {
+          /* */
+        }
         if (durableOk !== false) {
           addToast("Joined community", "success")
           try {
@@ -7216,12 +7256,13 @@ const dismissMatchCelebration = useCallback(() => {
         }
         // Durable role when community membership is server-backed
         try {
+          // Owner transfer is separate; map owner promotion request to admin on API
           const roleApi =
-            normalized === "owner" ? "admin" : normalized === "admin" || normalized === "moderator" || normalized === "member" ? normalized : "member"
+            normalized === "owner" ? "admin" : normalized
           await fetch(`/api/communities/${encodeURIComponent(conversationId)}/roles`, {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ targetUserId: userId, role: roleApi }),
           })
         } catch {
@@ -7489,6 +7530,10 @@ const dismissMatchCelebration = useCallback(() => {
       // Phase 2: merge whenever API returns posts (durable preferred, not required)
       if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
         const remotePosts = mapRemoteFeedPosts(feed.posts)
+        const existingIdsBeforeMerge = new Set(postsSnapshotRef.current.map((post) => post.id))
+        const newlyFetchedCount = opts?.append
+          ? remotePosts.filter((post) => !existingIdsBeforeMerge.has(post.id)).length
+          : remotePosts.length
         setState((s) => {
           if (opts?.append) {
             const existingIds = new Set(s.posts.map((p) => p.id))
@@ -7517,7 +7562,7 @@ const dismissMatchCelebration = useCallback(() => {
             : s.likedPostIds
           return { ...s, posts: nextPosts, likedPostIds: nextLiked }
         })
-        return { ok: true, durable: Boolean(feed.durable), appended: remotePosts.length }
+        return { ok: true, durable: Boolean(feed.durable), appended: newlyFetchedCount }
       }
       // Server reachable but empty / non-durable — preserve existing local feed
       return { ok: true, durable: Boolean(feed.durable), appended: 0 }

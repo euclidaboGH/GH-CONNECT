@@ -44,8 +44,8 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const { intentId } = await ctx.params
-  // Durable-first: cold starts must recover from DB, not process memory alone
-  const intent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+  // Durable-only: cold starts must recover from DB; never use process memory as authority
+  let intent = (await loadPaymentIntent(intentId))
   if (!intent || intent.userId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
@@ -74,7 +74,8 @@ export async function POST(
     )
   }
 
-  await bindProviderPayment(intentId, paymentId, auth.userId)
+  const bound = await bindProviderPayment(intentId, paymentId, auth.userId)
+  if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
 
   const lookup = await piGetPayment(paymentId)
   if (!lookup.ok || !lookup.payment) {
@@ -99,22 +100,28 @@ export async function POST(
 
   const st = payment.status || {}
   if (st.cancelled || st.user_cancelled) {
-    await transitionIntent(intentId, "CANCELLED", {
+    const cancelledIntent = await transitionIntent(intentId, "CANCELLED", {
       actor: "system",
       detail: "Pi reports cancelled",
     })
-    return NextResponse.json({ ok: true, intent: getPaymentIntent(intentId), recovered: true })
+    if (!cancelledIntent || cancelledIntent.status !== "CANCELLED") {
+      return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+    }
+    return NextResponse.json({ ok: true, intent: cancelledIntent, recovered: true })
   }
 
   if (st.developer_completed) {
     const txid = payment.transaction?.txid || intent.txid || undefined
-    await transitionIntent(intentId, "COMPLETED", {
+    const completedIntent = await transitionIntent(intentId, "COMPLETED", {
       actor: "system",
       detail: "Recovered completed from Pi",
       txid: txid || undefined,
       providerPaymentId: paymentId,
     })
-    const recoveredIntent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId) || intent
+    if (!completedIntent || completedIntent.status !== "COMPLETED") {
+      return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+    }
+    const recoveredIntent = completedIntent
     const membership = await ensureRecoveredMembership(auth.userId, recoveredIntent)
     return NextResponse.json({
       ok: true,
@@ -126,11 +133,15 @@ export async function POST(
 
   if (st.developer_approved) {
     if (intent.status === "CREATED" || intent.status === "APPROVAL_PENDING") {
-      await transitionIntent(intentId, "APPROVED", {
+      const approvedIntent = await transitionIntent(intentId, "APPROVED", {
         actor: "system",
         detail: "Recovered approved from Pi",
         providerPaymentId: paymentId,
       })
+      if (!approvedIntent || approvedIntent.status !== "APPROVED") {
+        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+      }
+      intent = approvedIntent
     }
   }
 

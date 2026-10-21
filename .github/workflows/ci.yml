@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: "24.15.0"
           cache: npm
+      - name: Node runtime preflight
+        run: npm run check:runtime
       - name: Repository integrity audit
         run: npm run audit:project-integrity
       - name: Dependency lock preflight
@@ -74,6 +76,7 @@ jobs:
         with:
           node-version: "24.15.0"
           cache: npm
+      - run: npm run check:runtime
       - run: npm ci --legacy-peer-deps
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
@@ -125,6 +128,10 @@ jobs:
         with:
           node-version: "24.15.0"
           cache: npm
+      - name: Node runtime preflight
+        run: npm run check:runtime
+      - name: Dependency lock preflight
+        run: node scripts/check-dependency-lock-integrity.mjs
       - run: npm ci --legacy-peer-deps
       - run: npx playwright install chromium --with-deps
       - name: Production smoke

@@ -11,8 +11,9 @@ const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
 /** Align with server MAX_VIDEO / elevated file limits for direct path. */
 const MAX_DIRECT_IMAGE_BYTES = 25 * 1024 * 1024
-const MAX_DIRECT_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_DIRECT_VIDEO_BYTES = 40 * 1024 * 1024
 const MAX_DIRECT_FILE_BYTES = 25 * 1024 * 1024
+const MAX_DIRECT_AUDIO_BYTES = 25 * 1024 * 1024
 
 /** Compress oversized images in-browser before they reach the constrained API proxy. */
 async function compressOversizedImage(file: File | Blob): Promise<Blob> {
@@ -115,10 +116,12 @@ async function uploadViaProxy(
     height?: number
     durationMs?: number
     onProgress?: (label: string) => void
+    category?: "avatars" | "images" | "videos" | "audio" | "documents"
   }
 ): Promise<DurableMediaResult> {
   const form = new FormData()
   form.append("file", uploadFile, uploadName)
+  if (meta?.category) form.append("category", meta.category)
   if (meta?.width != null) form.append("width", String(meta.width))
   if (meta?.height != null) form.append("height", String(meta.height))
   if (meta?.durationMs != null) form.append("durationMs", String(meta.durationMs))
@@ -168,6 +171,7 @@ async function uploadViaDirect(
     height?: number
     durationMs?: number
     onProgress?: (label: string) => void
+    category?: "avatars" | "images" | "videos" | "audio" | "documents"
   }
 ): Promise<DurableMediaResult> {
   meta?.onProgress?.("Preparing secure upload…")
@@ -184,6 +188,7 @@ async function uploadViaDirect(
         mimeType,
         byteSize: file.size,
         fileName: uploadName,
+        category: meta?.category,
       }),
     })
     const intent = (await intentRes.json().catch(() => ({}))) as Record<string, unknown>
@@ -244,6 +249,7 @@ async function uploadViaDirect(
         width: meta?.width,
         height: meta?.height,
         durationMs: meta?.durationMs,
+        category: meta?.category,
       }),
     })
     const complete = (await completeRes.json().catch(() => ({}))) as Record<string, unknown>
@@ -281,6 +287,22 @@ export function mediaUploadErrorMessage(up: DurableMediaResult, fallback = "Uplo
   return String(up.userMessage || up.error || fallback)
 }
 
+
+/** True when server storage is missing or unreachable — client may use local image fallback. */
+export function isMediaStorageUnavailable(error: string | undefined | null): boolean {
+  const c = String(error || "").toUpperCase()
+  return (
+    c === "MEDIA_STORAGE_UNAVAILABLE" ||
+    c === "MEDIA_STORAGE_CONFIGURATION_INVALID" ||
+    c === "ASSET_RECORD_FAILED" ||
+    c === "STORAGE_ERROR" ||
+    c === "STORAGE_UPLOAD_FAILED" ||
+    c === "HTTP_501" ||
+    c === "HTTP_503" ||
+    c.includes("MEDIA_STORAGE")
+  )
+}
+
 export async function uploadDurableMedia(
   file: File | Blob,
   meta?: {
@@ -289,22 +311,27 @@ export async function uploadDurableMedia(
     durationMs?: number
     fileName?: string
     onProgress?: (label: string) => void
+    category?: "avatars" | "images" | "videos" | "audio" | "documents"
   }
 ): Promise<DurableMediaResult> {
   const mimeType =
     (file.type || "").toLowerCase() ||
-    (meta?.fileName?.match(/\.pdf$/i) ? "application/pdf" : "application/octet-stream")
+    (meta?.fileName?.match(/\.pdf$/i) ? "application/pdf" : meta?.fileName?.match(/\.mp3$/i) ? "audio/mpeg" : "application/octet-stream")
   let uploadFile: Blob = file
   let uploadName =
     meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
+  meta = { ...meta, category: meta?.category || (mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "videos" : mimeType === "application/pdf" ? "documents" : "images") }
 
   const isImage = mimeType.startsWith("image/")
   const isVideo = mimeType.startsWith("video/")
+  const isAudio = mimeType.startsWith("audio/")
   const maxDirect = isImage
     ? MAX_DIRECT_IMAGE_BYTES
     : isVideo
       ? MAX_DIRECT_VIDEO_BYTES
-      : MAX_DIRECT_FILE_BYTES
+      : isAudio
+        ? MAX_DIRECT_AUDIO_BYTES
+        : MAX_DIRECT_FILE_BYTES
 
   if (uploadFile.size > maxDirect) {
     return {
@@ -333,6 +360,13 @@ export async function uploadDurableMedia(
   if (uploadFile.size <= SAFE_PROXY_UPLOAD_BYTES) {
     const proxy = await uploadViaProxy(uploadFile, uploadName, meta)
     if (proxy.ok) return proxy
+    if (isMediaStorageUnavailable(proxy.error)) {
+      return {
+        ...proxy,
+        error: "MEDIA_STORAGE_UNAVAILABLE",
+        userMessage: mediaUserMessage("MEDIA_STORAGE_UNAVAILABLE", proxy.userMessage),
+      }
+    }
     // If proxy fails for size-related reasons, try direct
     if (
       proxy.error === "FILE_TOO_LARGE" ||

@@ -35,6 +35,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       },
       cache: "no-store",
       redirect: "manual",
+      signal: AbortSignal.timeout(8_000),
     })
     const payload = await signedResponse.json().catch(() => null) as { ok?: boolean; url?: string; error?: string } | null
     if (!signedResponse.ok || !payload?.ok || typeof payload.url !== "string") {

@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261017_ghpv_settlement_engine.sql
+-- 202610170001_ghpv_settlement_engine.sql
 -- GHPV-1B: authoritative settlement snapshot + idempotent commit.
 --
 -- Purpose:

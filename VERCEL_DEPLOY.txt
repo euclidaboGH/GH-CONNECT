@@ -1,14 +1,14 @@
 GH-CONNECT / GreenHaven — deployment runbook
-Current source release: 0.62.5
+Current source release: 0.63.25
 Framework: Next.js 15.5.26
 Required Node.js: 24.15.0 or later in the supported 24.x line
 
 RELEASE STATUS
 --------------
 NOT CLEARED FOR VERCEL PRODUCTION DEPLOYMENT.
-The npm lockfile is missing the resolved node_modules/pi-backend package graph.
+The current dependency-lock state must be confirmed by `npm run check:dependency-lock-integrity` and the official Pi SDK lock verifier in the current source tree; do not assume an older report is current.
 Do not bypass the lock check, delete package-lock.json, or deploy with a non-reproducible install.
-See RELEASE_GATE_PHASE25.md for the complete gate and recorded verification status.
+See docs/PROJECT_TRUTH.md, PHASE-1-IMPLEMENTATION-REPORT.md, and docs/TESTNET_VERIFICATION_GATE.md for current gates and recorded verification status.
 
 GITHUB DESKTOP PREPARATION
 --------------------------
@@ -85,4 +85,4 @@ migrations to Mainnet as part of a source deployment.
 
 ## Required Pi SDK lockfile recovery
 
-Before deploying, resolve the missing `pi-backend@0.1.3` lock graph using the official npm registry. See `PHASE_26_PI_BACKEND_LOCKFILE_RECOVERY_2026-10-19.md`. Do not hand-write lock entries or integrity hashes. The release is blocked until `node scripts/verify-pi-backend-lock.mjs`, `npm ci --legacy-peer-deps`, and `npm run ci:verify` pass against the generated lockfile.
+Before deploying, resolve the missing `pi-backend@0.1.3` lock graph using the official npm registry. Use the current source tree and CI output as authority. Do not hand-write lock entries or integrity hashes. The release is blocked until `node scripts/verify-pi-backend-lock.mjs`, `npm ci --legacy-peer-deps`, `npm run ci:verify`, and `npm run build` pass in a supported Node environment.

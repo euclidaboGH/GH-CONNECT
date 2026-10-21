@@ -56,7 +56,13 @@ export async function POST(request: Request) {
     const all = await listSessionsForUser(auth.userId)
     for (const s of all) {
       if (s.id !== auth.sessionId && s.revokedAt == null) {
-        await revokeStepUpsForSession(s.id)
+        const stepUpsRevoked = await revokeStepUpsForSession(s.id)
+        if (!stepUpsRevoked) {
+          return NextResponse.json(
+            { ok: false, error: "STEP_UP_REVOCATION_UNAVAILABLE" },
+            { status: 503, headers: { "Cache-Control": "no-store" } }
+          )
+        }
       }
     }
 
@@ -75,9 +81,10 @@ export async function POST(request: Request) {
       "[auth/sessions/revoke-others] failed",
       err instanceof Error ? err.message : "unknown"
     )
+    const durabilityFailure = err instanceof Error && /SESSION_REVOCATION_UNAVAILABLE/.test(err.message)
     return NextResponse.json(
-      { ok: false, error: "REVOKE_OTHERS_FAILED" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { ok: false, error: durabilityFailure ? "SESSION_REVOCATION_UNAVAILABLE" : "REVOKE_OTHERS_FAILED" },
+      { status: durabilityFailure ? 503 : 500, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

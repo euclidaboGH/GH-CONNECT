@@ -10,7 +10,6 @@ import {
   grantEntitlement,
 } from "@/lib/server/membership/entitlement-store"
 import {
-  getPaymentIntent,
   loadPaymentIntent,
   loadByProviderPaymentId,
 } from "@/lib/server/payments/intent-store"
@@ -153,8 +152,7 @@ export async function POST(request: Request) {
 
     let intent =
       (intentId ? await loadPaymentIntent(intentId) : null) ||
-      (paymentId ? await loadByProviderPaymentId(paymentId) : null) ||
-      (intentId ? getPaymentIntent(intentId) : null)
+      (paymentId ? await loadByProviderPaymentId(paymentId) : null)
 
     if (!intent) {
       return NextResponse.json(

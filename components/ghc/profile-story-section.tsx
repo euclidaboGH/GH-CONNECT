@@ -204,9 +204,9 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
   const readMedia = async (file: File | undefined, type: "image" | "video") => {
     if (!file) return
-    const maxBytes = type === "video" ? 80 * 1024 * 1024 : 30 * 1024 * 1024
+    const maxBytes = type === "video" ? 40 * 1024 * 1024 : 25 * 1024 * 1024
     if (file.size > maxBytes) {
-      addToast?.(type === "video" ? "Choose a video under 80 MB so it can upload reliably." : "Choose a photo smaller than 30 MB so it can be optimized safely.", "error")
+      addToast?.(type === "video" ? "Choose a video under 40 MB so it can upload reliably." : "Choose a photo smaller than 25 MB so it can be optimized safely.", "error")
       return
     }
     setUploading(type)
@@ -217,7 +217,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         preview = await compressImage(file)
         if (preview) uploadBlob = await (await fetch(preview)).blob()
       }
-      const uploaded = await uploadDurableMedia(uploadBlob, { fileName: file.name })
+      const uploaded = await uploadDurableMedia(uploadBlob, { fileName: file.name, category: type === "video" ? "videos" : "images" })
       if (uploaded.ok && uploaded.url && uploaded.kind === type) {
         setMedia({ type, url: uploaded.url })
         setStoryMode("choose")

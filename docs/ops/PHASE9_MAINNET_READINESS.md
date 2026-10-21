@@ -1,8 +1,8 @@
 # GH-CONNECT Phase 9 — Mainnet Readiness Snapshot
 
-**Decision: READY WITH OPERATOR GATES**
+**Decision: BLOCKED — required evidence has not been collected**
 
-Code/static/security gates pass. Live multi-user Testnet proof and Production environment attestation remain operator-owned. This is **not** authorization to deploy Mainnet.
+This snapshot is a checklist, not proof of release readiness. A clean install, TypeScript, lint and production build under the pinned runtime have not been established in this working session. Live multi-user Testnet proof, restore rehearsal, provider reconciliation evidence and Production environment attestation remain outstanding. This is **not** authorization to deploy Mainnet.
 
 ## Must complete before Mainnet
 

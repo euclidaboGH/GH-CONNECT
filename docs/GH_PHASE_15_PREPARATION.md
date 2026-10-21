@@ -23,7 +23,7 @@ Phase 14 (production hardening) does **not** authorize Phase 15 feature work.
 | `npm run lint` | Operator / CI | Pending |
 | `npm run test:safety` | Operator / CI | Pending (passes when env available) |
 | `npm run build` | Operator / CI | Pending |
-| 51 REQUIRED migrations on Testnet | Operator | Pending |
+| Current migration inventory reconciled and eligible migrations individually validated/applied on Testnet | Operator | Pending |
 | 1 REQUIRES_APPROVAL reviewed | Product/Security | Pending |
 | 2 PROPOSAL left unapplied unless approved | Operator | Policy |
 | Two-user IDOR | Operator | Pending |

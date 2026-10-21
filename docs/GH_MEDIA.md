@@ -9,7 +9,7 @@
 Authenticated user
   → client compress (images)
   → POST /api/media (multipart) when storage configured
-  → Supabase Storage path: {userId}/{object}
+  → Supabase Storage path: {category}/{userId}/{object}
   → gh_media_assets record
   → POST /api/social/posts with mediaIds[] and/or https/data URLs
   → gh_posts (unchanged authority)
@@ -22,8 +22,8 @@ Fallback (no storage): client compress → `data:image` on post create (Phase 7 
 `gh_media_assets`
 
 - `owner_id` session-derived  
-- `storage_path` must start with `{owner_id}/`  
-- `media_kind`: image | video | file  
+- `storage_path` must use `{category}/{owner_id}/{object}` with category allowlisted to `audio`, `documents`, `avatars`, `images`, or `videos`  
+- `media_kind`: image | video | file (audio is recorded as file with its MIME type)  
 - RLS deny-all; RPCs `service_role` only  
 
 Migration: `supabase/migrations/20261001_gh_media_assets.sql`
@@ -33,8 +33,8 @@ Migration: `supabase/migrations/20261001_gh_media_assets.sql`
 | Setting | Value |
 |---------|--------|
 | Env | `GH_MEDIA_BUCKET` (default `gh-media`) |
-| Path | `{authenticatedUserId}/{filename}` |
-| Access | Prefer private + signed URLs (signed access **deferred** if bucket public is not desired) |
+| Paths | `avatars/{userId}/`, `images/{userId}/`, `videos/{userId}/`, `audio/{userId}/`, `documents/{userId}/` |
+| Access | Private bucket; server authorization and application media delivery facade |
 
 Operator must create the bucket in Supabase Storage and set policies. Application code does not grant public RLS on the DB table.
 
@@ -42,9 +42,11 @@ Operator must create the bucket in Supabase Storage and set policies. Applicatio
 
 | Kind | MIME | Max size |
 |------|------|----------|
-| Image | jpeg, png, webp, gif | 25 MB |
-| Video | mp4, webm, quicktime | 80 MB |
-| PDF documents | application/pdf | 8 MB |
+| Avatar | image/jpeg, image/png, image/webp, image/gif, image/avif | 25 MB maximum (avatar UI compresses images) |
+| Image | image/jpeg, image/png, image/webp, image/gif, image/avif | 25 MB |
+| Video | video/mp4, video/webm, video/quicktime | 40 MB |
+| Audio | audio/mpeg, audio/mp4, audio/aac, audio/ogg, audio/wav, audio/webm, audio/flac | 25 MB |
+| PDF documents | application/pdf | 25 MB |
 
 Rejected: blob URLs as durable refs, client owner/path, unsupported types.
 
@@ -57,7 +59,7 @@ Rejected: blob URLs as durable refs, client owner/path, unsupported types.
 ## Access
 
 - `GET /api/media?ids=` resolves assets for session actor (owned or public_url present)  
-- Private signed URL generation: **deferred**  
+- Private signed URL generation: `/api/media/[id]/signed-url`; viewer authorization must be verified before release  
 
 ## Cleanup
 
@@ -100,4 +102,4 @@ PDF cards use the post's `pdfName` as title, post author as author attribution, 
 
 ### Storage/privacy release gate
 
-The existing `/api/media` implementation currently emits public-object URLs and the media documentation notes signed/private delivery is deferred. UI/API post-visibility filtering is not sufficient to prevent direct access to an already-public storage URL. Before accepting confidential or rights-restricted documents, configure a private bucket and implement authorized signed delivery (including message/story/profile media); do not treat this UI feature as a substitute for storage-level authorization. Publicly published PDFs should be intentionally public and rights-cleared.
+Keep `gh-media` private. Do not enable public object URLs. Use the server-authorized media delivery facade and viewer-authorized signed-URL route; verify message/story/profile consumers and privacy behavior in Testnet before release. UI/API post-visibility filtering alone is not a substitute for storage-level authorization. Publicly published PDFs should be intentionally public and rights-cleared.

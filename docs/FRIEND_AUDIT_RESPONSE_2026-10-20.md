@@ -8,7 +8,7 @@ Your friend's diagnosis matches the root cause we fixed in `GH-CONNECT-0.62.5-ME
 |-------------|---------------------|
 | Show real upload error (not only "device only") | Toast includes `userMessage` + error code |
 | Direct-to-storage for large files | `/api/media/direct-upload-intent` + `complete` + client `uploadViaDirect` |
-| Higher limits | Images 25MB, video 80MB, files 25MB |
+| Higher limits | Images 25MB, video 40MB, files 25MB |
 | Posts/stories use durable path | Compose rejects non-durable on publish |
 | Pi-style daily claim popup | `DailyClaimPrompt` mounted in `app.tsx` |
 | Daily claimed notification | `notifyRewardClaimed` on successful claim |

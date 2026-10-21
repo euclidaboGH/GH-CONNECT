@@ -57,7 +57,7 @@ npm run test:safety
 npm run build
 ```
 
-Then Testnet: 51 REQUIRED migrations · IDOR · Pi Browser E2E · multi-instance.
+Then Testnet: reconcile the current generated migration inventory and remote history; validate each eligible migration on disposable PostgreSQL before Testnet, then complete IDOR · Pi Browser E2E · multi-instance gates. Do not bulk-apply migrations.
 
 ---
 

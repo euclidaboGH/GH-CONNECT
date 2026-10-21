@@ -45,6 +45,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       },
       body: JSON.stringify({ p_media_id: id, p_viewer_id: auth.userId }),
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     if (!authz.ok) return reply({ ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }, 503)
     const asset = await authz.json() as {
@@ -65,6 +66,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ expiresIn: 300 }),
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     if (!signed.ok) return reply({ ok: false, error: "MEDIA_SIGNING_UNAVAILABLE" }, 503)
     const payload = await signed.json() as { signedURL?: string; signedUrl?: string }

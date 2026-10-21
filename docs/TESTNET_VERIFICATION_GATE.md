@@ -34,18 +34,19 @@ Static/automated green ≠ Testnet verified ≠ production ready.
 
 ## 1. Migrations (Testnet only)
 
-Canonical on-disk count: **70** under `supabase/migrations/` (see `docs/MIGRATION_CHECKLIST.md`).
+Canonical on-disk count: **109** under `supabase/migrations/` (see generated `docs/MIGRATION_CHECKLIST.md` and `VERIFIED_MANIFEST.txt`).
 
 **Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md` and `docs/MIGRATION_GAP_REPORT.md`.
 
-Classification counts: **67 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL**.
+Classification counts: **77 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **29 REVIEW_REQUIRED**.
 Later groups include balance-lock (20261009–12), GHPV (20261013–20), content rewards (20261022).
 
 | Class | Action |
 |-------|--------|
-| **REQUIRED** | Apply oldest → newest |
-| **REQUIRES_APPROVAL** | Apply only after product/security review |
-| **PROPOSAL / DO NOT APPLY** | Leave unapplied until explicitly approved |
+| **REQUIRED** | Candidate for operator review only. Reconcile target migration history and schema, validate on disposable PostgreSQL, then apply individually on Testnet with recorded evidence. |
+| **REQUIRES_APPROVAL** | Do not apply until product/security review and explicit approval are recorded. |
+| **PROPOSAL / DO NOT APPLY** | Leave unapplied until explicit written approval. |
+| **REVIEW_REQUIRED** | Review dependencies, sequence, SQL behavior and target history; validate on disposable PostgreSQL before Testnet consideration. |
 
 ### Proposal / do not apply by default
 
@@ -127,6 +128,6 @@ Confirm messaging tables, two-user IDOR, then optionally `NEXT_PUBLIC_MESSAGING_
 | Payment ownership tests | Pass |
 | Engagement ≠ financial mutation | Pass |
 
-When exit criteria pass → **Phases 1–13 Testnet-verified** (still not automatic Mainnet / not Phase 14).
+When every exit criterion is evidenced → **Phases 1–13 Testnet-verified** (still not automatic Mainnet approval).
 
 **Phase 15** product features: only after explicit design. Phase 14 hardening does not skip Testnet/IDOR/Pi E2E.

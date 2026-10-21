@@ -88,6 +88,24 @@ const FIXED: Record<string, SpendCatalogEntry> = {
 const MARKETPLACE_MAX = 5_000
 const OTHER_MAX = 100
 
+
+/** Safe, read-only catalog projection for transparent wallet pricing. */
+export function listPublicSpendCatalog(): Array<{
+  purpose: SpendPurpose
+  amountGhc: number
+  baseGhc?: number
+  feeGhc?: number
+  description: string
+}> {
+  return Object.values(FIXED).map((entry) => ({
+    purpose: entry.purpose,
+    amountGhc: entry.amountGhc,
+    ...(entry.baseGhc === undefined ? {} : { baseGhc: entry.baseGhc }),
+    ...(entry.feeGhc === undefined ? {} : { feeGhc: entry.feeGhc }),
+    description: entry.description,
+  }))
+}
+
 /**
  * Resolve authoritative spend amount.
  * Returns error if purpose unknown or client amount mismatches fixed catalog.

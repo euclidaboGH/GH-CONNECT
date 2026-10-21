@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,21 +19,29 @@ export async function GET(request: Request) {
 
   let bucketReachable: boolean | null = null
   let bucketError: string | null = null
+  let bucketEnsured: boolean | null = null
   if (hasUrl && hasKey) {
     try {
-      const res = await fetch(
-        `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/bucket/${encodeURIComponent(storageBucket)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-            apikey: env.supabaseServiceRoleKey!,
-          },
-          cache: "no-store",
+      const ensured = await ensureMediaBucket(storageBucket)
+      bucketEnsured = ensured.ok
+      if (!ensured.ok) {
+        bucketReachable = false
+        bucketError = ensured.error || "ENSURE_FAILED"
+      } else {
+        const res = await fetch(
+          `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/bucket/${encodeURIComponent(storageBucket)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+              apikey: env.supabaseServiceRoleKey!,
+            },
+            cache: "no-store",
+          }
+        )
+        bucketReachable = res.ok
+        if (!res.ok) {
+          bucketError = `HTTP_${res.status}`
         }
-      )
-      bucketReachable = res.ok
-      if (!res.ok) {
-        bucketError = `HTTP_${res.status}`
       }
     } catch {
       bucketReachable = false
@@ -49,6 +58,7 @@ export async function GET(request: Request) {
       bucket: storageBucket,
       bucketReachable,
       bucketError,
+      bucketEnsured,
       limits: {
         proxyMaxMb: 4,
         imageMaxMb: 25,

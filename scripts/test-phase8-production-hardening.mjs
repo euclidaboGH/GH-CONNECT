@@ -40,7 +40,21 @@ ok("no NEXT_PUBLIC service-role key in core server files", serverFiles.every(s =
 ok("no NEXT_PUBLIC Pi API key in core server files", serverFiles.every(s => !s.includes("NEXT_PUBLIC_PI_API_KEY")))
 ok("claim path uses server repository", walletRepo.includes("claimPendingReward"))
 
+
+const candidateTypes = src("lib/ghc-types.ts")
+const discoverySearch = src("lib/discovery-search-utils.ts")
+const discoveryRanking = src("lib/discovery-ranking.ts")
+const packageJson = JSON.parse(src("package.json"))
+
+ok("Candidate profile enrichment fields are explicitly typed", ["city?: string", "profession?: string", "joinedAt?: number | string", "relationshipType?: string | string[]"].every((field) => candidateTypes.includes(field)))
+ok("discovery search result collections use explicit contracts", discoverySearch.includes("interface DiscoverySearchCommunity") && discoverySearch.includes("interface DiscoverySearchBusiness") && !/communities:\s*any\[\]/.test(discoverySearch) && !/businesses:\s*any\[\]/.test(discoverySearch))
+ok("discovery ranking no longer uses unchecked any casts for candidate profile fields", !/candidate as any/.test(discoveryRanking))
+ok("search recency safely accepts numeric and ISO timestamps", discoverySearch.includes("Date.parse(value)") && discoverySearch.includes("age >= 0"))
+ok("new-member recommendations reject future or invalid timestamps", discoverySearch.includes("daysSinceJoined >= 0 && daysSinceJoined < 7"))
+ok("Phase 8 architecture test is exposed as an npm script", packageJson.scripts?.["test:phase8-architecture-quality"] === "node scripts/test-phase8-production-hardening.mjs")
+ok("Phase 8 architecture test is wired into ci:verify", packageJson.scripts?.["ci:verify"]?.includes("npm run test:phase8-architecture-quality"))
+
 const failed = checks.filter(c => !c.pass)
 for (const c of checks) console.log(`${c.pass ? "  ✓" : "  ✗"} ${c.name}`)
-console.log(`\nPhase 8 hardening checks: ${checks.length - failed.length} pass, ${failed.length} fail`)
+console.log(`\nPhase 8 architecture-quality checks: ${checks.length - failed.length} pass, ${failed.length} fail`)
 if (failed.length) process.exit(1)

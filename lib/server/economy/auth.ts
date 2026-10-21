@@ -61,11 +61,28 @@ function verifyHs256Jwt(
       userId?: string
       username?: string
       exp?: number
+      nbf?: number
+      iat?: number
+      iss?: string
+      aud?: string | string[]
     }
-    if (payload.exp && payload.exp * 1000 < Date.now()) return null
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    // Authentication JWTs must be time-bounded. Missing/invalid exp used to
+    // bypass expiration checks because zero/undefined were treated as absent.
+    if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp)) return null
+    if (payload.exp <= nowSeconds) return null
+    if (typeof payload.nbf === "number" && (!Number.isFinite(payload.nbf) || payload.nbf > nowSeconds + 30)) return null
+    if (typeof payload.iat === "number" && (!Number.isFinite(payload.iat) || payload.iat > nowSeconds + 30)) return null
+    const expectedIssuer = process.env.GHC_AUTH_JWT_ISSUER?.trim()
+    if (expectedIssuer && payload.iss !== expectedIssuer) return null
+    const expectedAudience = process.env.GHC_AUTH_JWT_AUDIENCE?.trim()
+    if (expectedAudience) {
+      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
+      if (!audiences.includes(expectedAudience)) return null
+    }
     const sub = payload.sub || payload.user_id || payload.userId
-    if (typeof sub !== "string" || !sub) return null
-    return { sub, username: payload.username }
+    if (typeof sub !== "string" || !sub.trim() || sub.length > 256) return null
+    return { sub: sub.trim(), username: payload.username }
   } catch {
     return null
   }

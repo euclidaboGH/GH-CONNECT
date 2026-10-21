@@ -1,0 +1,45 @@
+import { readFileSync, existsSync } from "node:fs"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+const src = (file) => readFileSync(join(root, file), "utf8")
+const checks = []
+const check = (label, condition) => checks.push({ label, pass: Boolean(condition) })
+
+const health = src("app/api/health/route.ts")
+const live = src("app/api/health/live/route.ts")
+const readiness = src("lib/server/readiness.ts")
+const policy = src("lib/server/release/stage7-readiness.ts")
+const rollback = src("docs/ROLLBACK_RUNBOOK.md")
+const mainnet = src("docs/ops/PHASE9_MAINNET_READINESS.md")
+const opsGuide = src("docs/PHASE_9_OPERATIONS_AND_RESILIENCE.md")
+const pkg = JSON.parse(src("package.json"))
+const evidenceValidator = src("scripts/lib/release-evidence.mjs")
+const evidenceTests = src("scripts/test-release-evidence-validator.mjs")
+const evidenceTemplate = JSON.parse(src("docs/evidence/testnet-beta-evidence.template.json"))
+
+check("readiness endpoint is dynamic and Node-runtime bound", health.includes('dynamic = "force-dynamic"') && health.includes('runtime = "nodejs"'))
+check("readiness endpoint does not cache readiness decisions", health.includes('Cache-Control') && health.includes('no-store'))
+check("readiness endpoint returns computed HTTP status", health.includes("readinessHttpStatus(report)") && health.includes("status,"))
+check("liveness endpoint remains independent of provider/database checks", live.includes("live: true") && !live.includes("evaluateReadiness") && live.includes('Cache-Control'))
+check("readiness report only models safe environment labels and check details", readiness.includes('networkLabel: "sandbox-testnet" | "mainnet" | "unknown"') && readiness.includes("checks: ReadinessCheck[]"))
+check("release policy fails closed by default", policy.includes('status: "not_release_approved"') && policy.includes('financialFeaturesEnabled: false'))
+check("release policy explicitly requires restore rehearsal and rollback testing", policy.includes("Database backup and restore rehearsal") && policy.includes("Feature-flag kill switch verification"))
+check("rollback guidance prohibits destructive ledger rollback", /never\*\* truncate/i.test(rollback) && /Do \*\*not\*\* delete Supabase tables/i.test(rollback))
+check("mainnet readiness snapshot explicitly blocks release until evidence", /Decision:\s*BLOCKED/i.test(mainnet) && /not\*\* authorization to deploy Mainnet/i.test(mainnet))
+check("operations guide defines incident severity and first response", /SEV-1/.test(opsGuide) && /first response/i.test(opsGuide.toLowerCase()))
+check("operations guide includes payment reconciliation and data restore safeguards", /reconcil/i.test(opsGuide) && /restore rehearsal/i.test(opsGuide))
+check("operations guide states that source tests are not live evidence", /source-level/i.test(opsGuide) && /live deployment behavior is correct/i.test(opsGuide))
+check("Phase 9 test is wired to package scripts", pkg.scripts?.["test:phase9-operations-resilience"] === "node scripts/test-phase9-operations-resilience.mjs")
+check("Phase 9 test is included in ci:verify", pkg.scripts?.["ci:verify"]?.includes("npm run test:phase9-operations-resilience"))
+check("release evidence artifacts are hash-verified before acceptance", evidenceValidator.includes("checksum does not match artifact") && evidenceValidator.includes("createHash(\"sha256\")"))
+check("release evidence validator blocks path traversal and symlink escapes", evidenceValidator.includes("artifact must remain inside") && evidenceValidator.includes("symlinks may not escape"))
+check("release evidence validator scans manifest and artifact text for credentials", evidenceValidator.includes("SECRET_PATTERNS") && evidenceValidator.includes("artifact appears to contain"))
+check("evidence validator has adversarial regression coverage and CI wiring", evidenceTests.includes("rejects symlinked artifacts") && pkg.scripts?.["ci:verify"]?.includes("npm run test:release-evidence-validator"))
+check("committed Testnet evidence template defaults to blocked and unapproved", evidenceTemplate.releaseTarget === "testnet-preview" && evidenceTemplate.approval.decision === "not_approved" && evidenceTemplate.gates.every((gate) => gate.status === "blocked"))
+
+for (const { label, pass } of checks) console.log(`${pass ? "PASS" : "FAIL"} ${label}`)
+const failures = checks.filter((item) => !item.pass)
+console.log(`\nPhase 9 operations/resilience checks: ${checks.length - failures.length}/${checks.length} passed`)
+if (failures.length) process.exit(1)

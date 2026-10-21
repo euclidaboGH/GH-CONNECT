@@ -152,6 +152,8 @@ export function PremiumCommunityHub({
   onApproveRequest,
   onDeclineRequest,
   onInviteMember,
+  onSetRole,
+  onRemoveMember,
   pendingJoinRequests = [],
   inviteCandidates = [],
   announcements = [],
@@ -187,6 +189,8 @@ export function PremiumCommunityHub({
   onApproveRequest?: (userId: string) => void
   onDeclineRequest?: (userId: string) => void
   onInviteMember?: (userId: string) => void
+  onSetRole?: (userId: string, role: "admin" | "moderator" | "member") => void
+  onRemoveMember?: (userId: string) => void
   pendingJoinRequests?: string[]
   inviteCandidates?: { id: string; name: string; photo?: string }[]
   announcements?: Announcement[]
@@ -1378,26 +1382,81 @@ export function PremiumCommunityHub({
                 No members to show yet.
               </p>
             ) : (
-              membersWithRoles.map((m) => (
+              membersWithRoles.map((m) => {
+                const roleKey = String(m.role || "member").toLowerCase()
+                const isSelf = m.id === meId
+                const isOwnerRow = roleKey === "owner" || m.id === (community as { createdBy?: string }).createdBy
+                const canManage =
+                  Boolean(onSetRole) &&
+                  (community.role === "owner" || community.role === "admin") &&
+                  !isSelf &&
+                  !isOwnerRow
+                return (
                 <div
                   key={m.id}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2"
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
                 >
-                  <div className="h-9 w-9 overflow-hidden rounded-full bg-muted">
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
                     {m.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.photo} alt="" className="h-full w-full object-cover" />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{m.name}</p>
-                    {m.role && (
-                      <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${ROLE_BADGE[m.role] || ROLE_BADGE.member}`}>
-                        {m.role}
-                      </span>
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs font-bold text-muted-foreground">
+                        {(m.name || "?").slice(0, 1).toUpperCase()}
+                      </div>
                     )}
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {m.name}{isSelf ? " · You" : ""}
+                    </p>
+                    <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${ROLE_BADGE[roleKey] || ROLE_BADGE.member}`}>
+                      {isOwnerRow ? "Owner" : roleKey}
+                    </span>
+                  </div>
+                  {canManage ? (
+                    <div className="flex w-full flex-wrap gap-1.5 sm:w-auto sm:justify-end">
+                      {roleKey !== "admin" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100"
+                          onClick={() => onSetRole?.(m.id, "admin")}
+                        >
+                          Make admin
+                        </button>
+                      ) : null}
+                      {roleKey !== "moderator" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-sky-200 bg-sky-50 px-2.5 text-[10px] font-bold text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100"
+                          onClick={() => onSetRole?.(m.id, "moderator")}
+                        >
+                          Make moderator
+                        </button>
+                      ) : null}
+                      {roleKey !== "member" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-border bg-muted/60 px-2.5 text-[10px] font-bold text-foreground"
+                          onClick={() => onSetRole?.(m.id, "member")}
+                        >
+                          Make member
+                        </button>
+                      ) : null}
+                      {onRemoveMember ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-red-200 bg-red-50 px-2.5 text-[10px] font-bold text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"
+                          onClick={() => onRemoveMember(m.id)}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              ))
+                )
+              })
             )}
 
             {community.isJoined ? (

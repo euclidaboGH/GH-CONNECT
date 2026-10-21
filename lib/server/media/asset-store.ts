@@ -2,10 +2,12 @@
  * Durable media asset records via service-role RPC.
  * No economy coupling.
  */
+import { randomUUID } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
 
 function genMediaId(): string {
-  return `media_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  return `media_${Date.now().toString(36)}_${randomUUID().replace(/-/g, "")}`
 }
 
 export async function createMediaAssetRecord(input: {
@@ -27,9 +29,17 @@ export async function createMediaAssetRecord(input: {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "DB_UNAVAILABLE" }
   }
-  // Enforce ownership path before RPC
-  if (!input.storagePath.startsWith(`${input.ownerId}/`)) {
-    return { ok: false, error: "PATH_OWNERSHIP" }
+  // The database constraint and viewer authorization RPC both require owner/category/object.
+  const parsedPath = parseOwnedMediaPath(input.ownerId, input.storagePath)
+  if (!parsedPath) return { ok: false, error: "PATH_OWNERSHIP_OR_SHAPE" }
+  if (!isSafeMediaBucket(input.bucket)) return { ok: false, error: "INVALID_BUCKET" }
+  const metadataError = validateMediaMetadata(input)
+  if (metadataError) return { ok: false, error: metadataError }
+  if (!mediaCategoryMatches(parsedPath.category, input.mediaKind, input.mimeType)) return { ok: false, error: "MEDIA_CATEGORY_KIND_MISMATCH" }
+  if (!mediaExtensionMatchesMime(parsedPath.fileName, input.mimeType)) return { ok: false, error: "FILE_EXTENSION_MIME_MISMATCH" }
+  if (input.publicUrl != null) {
+    try { if (new URL(input.publicUrl).protocol !== "https:") return { ok: false, error: "INVALID_PUBLIC_URL" } }
+    catch { return { ok: false, error: "INVALID_PUBLIC_URL" } }
   }
   const id = genMediaId()
   try {
@@ -59,16 +69,17 @@ export async function createMediaAssetRecord(input: {
           p_metadata: input.metadata || {},
         }),
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       }
     )
     const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
-    if (!res.ok || !data || data.ok === false) {
-      return {
-        ok: false,
-        error: String((data && (data.error || data.message)) || `HTTP_${res.status}`),
-      }
+    if (res.ok && data && data.ok === true && typeof data.id === "string") {
+      return { ok: true, id: data.id }
     }
-    return { ok: true, id: String(data.id || id) }
+    // Do not bypass a rejected/missing RPC with a direct service-role table insert.
+    // That fallback could turn a failed validation or unapplied schema into a ready asset.
+    const error = data && typeof data.error === "string" ? data.error : `HTTP_${res.status}`
+    return { ok: false, error: `ASSET_RECORD_FAILED:${error}` }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "RPC_FAILED" }
   }
@@ -96,6 +107,7 @@ export async function resolveMediaAssets(
         },
         body: JSON.stringify({ p_actor_id: actorId, p_ids: clean }),
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       }
     )
     const data = (await res.json().catch(() => null)) as {

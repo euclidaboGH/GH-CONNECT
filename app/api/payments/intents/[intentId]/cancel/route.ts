@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
-  getPaymentIntent,
   loadPaymentIntent,
   transitionIntent,
 } from "@/lib/server/payments/intent-store"
@@ -18,18 +17,18 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const { intentId } = await ctx.params
-  // Durable-first so cancel works after cold start / multi-instance
-  const intent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+  // Durable-only: never fall back to process memory when storage is unavailable
+  const intent = (await loadPaymentIntent(intentId))
   if (!intent) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }
   if (intent.userId !== auth.userId) {
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
-  if (intent.status === "COMPLETED" || intent.status === "REFUNDED") {
+  if (["COMPLETED", "FULFILLED", "FAILED", "REFUNDED"].includes(intent.status)) {
     return NextResponse.json(
-      { ok: false, error: "Cannot cancel completed payment" },
-      { status: 400 }
+      { ok: false, error: "PAYMENT_INTENT_TERMINAL", status: intent.status },
+      { status: 409 }
     )
   }
   if (intent.status === "CANCELLED") {
@@ -40,7 +39,7 @@ export async function POST(
     detail: "User cancelled",
   })
   if (!updated) {
-    return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
+    return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
   }
   return NextResponse.json({ ok: true, intent: updated })
 }

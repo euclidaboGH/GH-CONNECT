@@ -69,9 +69,17 @@ export async function POST(
       )
     }
 
-    await revokeStepUpsForSession(targetId)
-
     const isCurrent = targetId === auth.sessionId
+    const stepUpsRevoked = await revokeStepUpsForSession(targetId)
+    if (!stepUpsRevoked) {
+      const failure = NextResponse.json(
+        { ok: false, error: "STEP_UP_REVOCATION_UNAVAILABLE", revokedSessionId: targetId },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      )
+      if (isCurrent) failure.headers.append("Set-Cookie", buildClearSessionCookieHeader())
+      return failure
+    }
+
     const res = NextResponse.json(
       {
         ok: true,
@@ -91,9 +99,10 @@ export async function POST(
       "[auth/sessions/revoke] failed",
       err instanceof Error ? err.message : "unknown"
     )
+    const durabilityFailure = err instanceof Error && /SESSION_REVOCATION_UNAVAILABLE/.test(err.message)
     return NextResponse.json(
-      { ok: false, error: "SESSION_REVOKE_FAILED" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { ok: false, error: durabilityFailure ? "SESSION_REVOCATION_UNAVAILABLE" : "SESSION_REVOKE_FAILED" },
+      { status: durabilityFailure ? 503 : 500, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

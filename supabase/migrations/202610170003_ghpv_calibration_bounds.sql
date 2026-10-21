@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261018_ghpv_calibration_bounds.sql
+-- 202610170003_ghpv_calibration_bounds.sql
 -- GHPV-1B: database-enforced calibration bounds on settlement commit.
 --
 -- Purpose:
@@ -8,7 +8,7 @@
 --   Unresolved/protected alignments persist delta 0.
 --
 -- Dependencies:
---   20261017_ghpv_settlement_engine.sql
+--   202610170001_ghpv_settlement_engine.sql
 --
 -- Objects modified:
 --   gh_ghpv_commit_settlement (CREATE OR REPLACE)
