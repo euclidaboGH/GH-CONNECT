@@ -729,7 +729,7 @@ function SellListingForm({
   setTitle: (v: string) => void
   price: string
   setPrice: (v: string) => void
-  currency: sellCurrency | "PI"
+  currency: "GHC" | "PI"
   setCurrency: (v: "GHC" | "PI") => void
   description: string
   setDescription: (v: string) => void

@@ -178,12 +178,12 @@ function EnhancedPostCardInner({
   }, [])
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
+  const propViewerChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
   useEffect(() => {
     if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
     if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
-    const nextChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
-    if (nextChoice === "upvote" || nextChoice === "downvote") setCurationChoice(nextChoice)
-  }, [post.id, propUp, propDown, (post as { viewerCurationChoice?: string }).viewerCurationChoice])
+    if (propViewerChoice === "upvote" || propViewerChoice === "downvote") setCurationChoice(propViewerChoice)
+  }, [post.id, propUp, propDown, propViewerChoice])
   const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
   const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
   const visibleReactionEntries = Object.entries(post.reactionCounts || {})

@@ -281,9 +281,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ Photo ready", "success")
       } else {
-        const validated = validateImageFiles(Array.from(files), 10)
+        const selectedFiles = Array.from(files)
+        const validationError = validateImageFiles(selectedFiles)
+        if (validationError) {
+          addToast(validationError, "error")
+          return
+        }
         const images: string[] = []
-        for (const file of validated) {
+        for (const file of selectedFiles) {
           setUploadProgress(MEDIA_PROGRESS.compressing)
           let dataUrl: string
           try {

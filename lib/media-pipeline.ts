@@ -320,12 +320,16 @@ export async function processImagesForPost(
   errors: string[]
   previews: string[]
 }> {
-  const validated = validateImageFiles(files, MEDIA_LIMITS.maxImages)
+  const validationError = validateImageFiles(files)
   const references: MediaReference[] = []
   const errors: string[] = []
   const previews: string[] = []
 
-  for (const file of validated) {
+  if (validationError) {
+    return { references, errors: [validationError], previews }
+  }
+
+  for (const file of files) {
     const outcome = await processMediaFile(file, {
       kind: "image",
       allowInlineFallback: true,

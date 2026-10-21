@@ -2382,14 +2382,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           return
         }
         // Merge durable server media back without wiping local data previews
-        if (persisted.profile) {
+        const persistedProfile = persisted.profile
+        if (persistedProfile) {
           setState((s) => ({
             ...s,
             profile: {
               ...s.profile,
-              ...persisted.profile,
-              photos: mergePhotos(s.profile.photos, persisted.profile.photos),
-              coverPhoto: mergeCover(s.profile.coverPhoto, persisted.profile.coverPhoto),
+              ...persistedProfile,
+              photos: mergePhotos(s.profile.photos, persistedProfile.photos),
+              coverPhoto: mergeCover(s.profile.coverPhoto, persistedProfile.coverPhoto),
             },
           }))
         }

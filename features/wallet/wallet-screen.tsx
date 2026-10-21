@@ -2087,7 +2087,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         }}
         onBuy={() => {
           setAssetRail("pi")
-          setTab("tools")
+          setTab("activity")
           try {
             document.getElementById("ghc-wallet-gh-pay")?.scrollIntoView({ behavior: "smooth", block: "start" })
           } catch { /* */ }
@@ -2095,7 +2095,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         onSelectPack={(pack) => {
           setSelectedGhcPack(pack)
           setAssetRail("pi")
-          setTab("tools")
+          setTab("activity")
           try {
             window.dispatchEvent(
               new CustomEvent("ghc:toast", {
