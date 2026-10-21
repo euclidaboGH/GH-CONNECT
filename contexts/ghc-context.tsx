@@ -112,6 +112,7 @@ import { domainEvents } from "@/lib/realtime/event-bus"
 import { subscribeDomainCache } from "@/lib/realtime/use-domain-events"
 import { transportBridge } from "@/lib/realtime/transport-bridge"
 import { createDomainServices, bindDomainServices, type DomainServices } from "@/lib/domains"
+import { getBoundDomainServices } from "@/lib/domains/compat"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import {
   loadPersistedCommunities,
@@ -2392,9 +2393,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
   const completeOnboarding = useCallback(async () => {
     try {
-      const result = await domains.identity.completeOnboarding()
+      const bound = getBoundDomainServices()
+      const result = bound?.identity
+        ? await bound.identity.completeOnboarding()
+        : { ok: false as const, error: "Services not ready" }
       if (!result.ok) {
-        addToast(result.error, "error")
+        addToast(("error" in result && result.error) || "Onboarding failed", "error")
         return
       }
       // Persist on server identity bridge (Pi-verified mapping).
@@ -2458,7 +2462,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Onboarding could not be completed. Please try again.", "error")
     }
-  }, [domains, addToast, state.profile])
+  }, [addToast, state.profile])
 
   const switchLocalProfile = useCallback((localId: string) => {
     const profile = findLocalProfile(localId)
