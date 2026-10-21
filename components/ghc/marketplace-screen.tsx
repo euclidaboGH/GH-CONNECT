@@ -255,8 +255,12 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         return
       }
       const created = await domain.createOrder({ listingId: listing.id, quantity: 1 })
-      if (!created.ok || !created.data?.order) {
+      if (!created.ok) {
         setErr(created.error || "Could not create order")
+        return
+      }
+      if (!created.data.order) {
+        setErr("Could not create order")
         return
       }
       const order = created.data.order
