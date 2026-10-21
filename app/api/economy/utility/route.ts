@@ -86,11 +86,14 @@ export async function POST(request: Request) {
       reason,
       sourceEvent,
     })
-    spendOk = spend.ok
-    spendError = spend.error || "SPEND_FAILED"
-    idempotent = Boolean(spend.idempotent)
-    if (spend.ok && spend.tx && typeof spend.tx === "object" && "id" in spend.tx) {
-      txId = String((spend.tx as { id: string }).id)
+    if (spend.ok) {
+      spendOk = true
+      idempotent = Boolean(spend.idempotent)
+      if (spend.tx && typeof spend.tx === "object" && "id" in spend.tx) {
+        txId = String((spend.tx as { id: string }).id)
+      }
+    } else {
+      spendError = spend.error || "SPEND_FAILED"
     }
   } else if (allowMemoryServer()) {
     const spend = await executeAuthoritativeSpend(getProcessGhcStore(), {
