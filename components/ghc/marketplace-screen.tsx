@@ -22,6 +22,7 @@ import {
   MapPin,
   Plus,
   Tag as TagIcon,
+  Loader2,
 } from "lucide-react"
 import { getMarketplaceDomain, getCommunityDomain } from "@/lib/domains/compat"
 import {
@@ -231,6 +232,104 @@ function ListingCard({
         </div>
       </div>
     </button>
+  )
+}
+
+
+function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const currency = (listing.currency || "GHC").toUpperCase()
+  const method = currency === "GHC" ? "ghc" : "pi"
+
+  const runCheckout = async () => {
+    if (busy) return
+    setBusy(true)
+    setErr(null)
+    setMsg(null)
+    try {
+      const domain = getMarketplaceDomain()
+      if (!domain?.createOrder || !domain?.payOrder) {
+        setErr("Marketplace domain unavailable")
+        return
+      }
+      const created = await domain.createOrder({ listingId: listing.id, quantity: 1 })
+      if (!created.ok || !created.data?.order) {
+        setErr(created.error || "Could not create order")
+        return
+      }
+      const order = created.data.order
+      if (method === "pi") {
+        // Pi path: open pay panel; order stays payment_pending until intent completes
+        setMsg("Order created. Complete Pi payment to confirm.")
+        openPayForListing(
+          {
+            listingId: listing.id,
+            sellerId: listing.sellerId,
+            title: listing.title,
+          },
+          "pi",
+        )
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:toast", {
+              detail: { message: "Order ready — complete Pi payment", type: "info" },
+            }),
+          )
+        } catch { /* */ }
+        return
+      }
+      const paid = await domain.payOrder(order.id, "ghc")
+      if (!paid.ok) {
+        setErr(paid.error || "GHC payment failed — check available balance")
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:toast", {
+              detail: { message: paid.error || "Payment failed", type: "error" },
+            }),
+          )
+        } catch { /* */ }
+        return
+      }
+      setMsg("Paid with GHC. Order confirmed.")
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: { message: "Order paid with GHC", type: "success" },
+          }),
+        )
+      } catch { /* */ }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Checkout failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void runCheckout()}
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
+      >
+        {busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : null}
+        {busy
+          ? "Processing…"
+          : method === "ghc"
+            ? `Buy now · ${formatPrice(listing)}`
+            : `Continue · pay with π`}
+      </button>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        {method === "ghc"
+          ? "Debits available GHC balance on the ledger. Seller receives settlement after fulfillment."
+          : "Creates the order then opens Pi payment. Balance is never invented client-side."}
+      </p>
+      {msg ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{msg}</p> : null}
+      {err ? <p className="text-xs font-medium text-red-600 dark:text-red-400">{err}</p> : null}
+    </div>
   )
 }
 
@@ -594,22 +693,7 @@ function ListingDetail({
               Price and availability are provided by the seller. Review payment details before confirming.
             </p>
             {canBuy ? (
-              <button
-                type="button"
-                onClick={() =>
-                  openPayForListing(
-                    {
-                      listingId: listing.id,
-                      sellerId: listing.sellerId,
-                      title: listing.title,
-                    },
-                    listing.currency?.toUpperCase() === "GHC" ? "ghc" : "pi",
-                  )
-                }
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--gh-green)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
-              >
-                Continue to payment
-              </button>
+              <CheckoutPanel listing={listing} />
             ) : null}
           </div>
         </section>
@@ -624,6 +708,8 @@ function SellListingForm({
   setTitle,
   price,
   setPrice,
+  currency,
+  setCurrency,
   description,
   setDescription,
   category,
@@ -639,6 +725,8 @@ function SellListingForm({
   setTitle: (v: string) => void
   price: string
   setPrice: (v: string) => void
+  currency: sellCurrency | "PI"
+  setCurrency: (v: "GHC" | "PI") => void
   description: string
   setDescription: (v: string) => void
   category: string
@@ -655,7 +743,7 @@ function SellListingForm({
       <div>
         <h2 className="text-[17px] font-bold text-foreground">Sell on Marketplace</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Create a real listing. Price uses ₲ (GHC). Photos can be added when media upload is available on this device.
+          Create a real listing priced in ₲ GHC or π Pi. Photos can be added when media upload is available on this device.
         </p>
       </div>
       <label className="block">
@@ -668,7 +756,7 @@ function SellListingForm({
         />
       </label>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Price (₲ GHC)</span>
+        <span className="text-[12px] font-bold text-muted-foreground">Price</span>
         <input
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -676,6 +764,25 @@ function SellListingForm({
           className="mt-1 w-full rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
           placeholder="0.00"
         />
+      </label>
+      <label className="block">
+        <span className="text-[12px] font-bold text-muted-foreground">Currency</span>
+        <div className="mt-1 flex gap-2">
+          {(["GHC", "PI"] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCurrency(c)}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+                currency === c
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                  : "border-border/70 bg-card text-muted-foreground"
+              }`}
+            >
+              {c === "GHC" ? "₲ GHC" : "π Pi"}
+            </button>
+          ))}
+        </div>
       </label>
       <label className="block">
         <span className="text-[12px] font-bold text-muted-foreground">Category</span>
@@ -750,6 +857,7 @@ export function MarketplaceScreen({
   // Sell form (domain.createListing when available — no invented success)
   const [sellTitle, setSellTitle] = useState("")
   const [sellPrice, setSellPrice] = useState("")
+  const [sellCurrency, setSellCurrency] = useState<"GHC" | "PI">("GHC")
   const [sellDesc, setSellDesc] = useState("")
   const [sellCategory, setSellCategory] = useState<string>(MARKETPLACE_CATEGORIES[0] || "Goods")
   const [sellLocation, setSellLocation] = useState("")
@@ -1031,6 +1139,8 @@ export function MarketplaceScreen({
             setTitle={setSellTitle}
             price={sellPrice}
             setPrice={setSellPrice}
+            currency={sellCurrency}
+            setCurrency={setSellCurrency}
             description={sellDesc}
             setDescription={setSellDesc}
             category={sellCategory}
@@ -1063,7 +1173,7 @@ export function MarketplaceScreen({
                   description: sellDesc.trim() || sellTitle.trim(),
                   category: sellCategory,
                   price: priceNum,
-                  currency: "GHC",
+                  currency: sellCurrency,
                   location: sellLocation.trim() || undefined,
                 })
                 if (!res.ok) {
@@ -1083,7 +1193,7 @@ export function MarketplaceScreen({
                         title: sellTitle.trim(),
                         description: sellDesc.trim() || sellTitle.trim(),
                         price: priceNum,
-                        currency: "GHC",
+                        currency: sellCurrency,
                         status: "active",
                         kind: "product",
                         availability: 1,
@@ -1127,7 +1237,7 @@ export function MarketplaceScreen({
                       title: sellTitle.trim(),
                       description: sellDesc.trim() || sellTitle.trim(),
                       price: priceNum,
-                      currency: "GHC",
+                      currency: sellCurrency,
                       status: "active",
                       kind: "product",
                       availability: 1,

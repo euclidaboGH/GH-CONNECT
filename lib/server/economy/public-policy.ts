@@ -20,7 +20,7 @@ export function getPublicGhcEconomyPolicy() {
       classification: "in_app_utility_balance",
       externalRedemptionPromised: false,
       piToGhcPurchaseAvailable: false,
-      piToGhcPurchaseNote: "Pi-funded GHC packs are unavailable until a non-empty approved pack catalog and durable ledger-credit settlement are implemented and tested.",
+      piToGhcPurchaseNote: "Pi→GHC packs are available when GHC_BUY_WITH_PI_ENABLED or GHC_TESTNET_UNLOCK is set. Credits use ghc_credit_pack_purchase.",
       ghcToPiWithdrawalFeatureFlagEnabled: areGhcPiWithdrawalsEnabled(),
       referenceGhcPerPi: REFERENCE_GHC_PER_PI,
       referenceRateDisclaimer: "Internal reference benchmark only. It is not a market price, conversion offer, guaranteed value, or redemption promise.",
@@ -34,7 +34,8 @@ export function getPublicGhcEconomyPolicy() {
     uses: [
       { id: "peer_transfers", label: "In-app peer transfers", status: "implemented" },
       { id: "membership", label: "Eligible memberships", status: "catalog_priced" },
-      { id: "boosts", label: "Eligible profile and post boosts", status: "catalog_priced" },
+      { id: "boosts", label: "Post, profile, listing boosts & feed spotlight", status: "catalog_priced" },
+      { id: "creator_tools", label: "Creator studio day pass & community tools", status: "catalog_priced" },
       { id: "marketplace", label: "Marketplace orders", status: "order_bound" },
     ],
     fixedSpendCatalog: listPublicSpendCatalog(),

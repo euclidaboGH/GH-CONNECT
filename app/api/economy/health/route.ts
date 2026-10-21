@@ -4,6 +4,7 @@
  */
 import { jsonOk } from "@/lib/server/economy/http"
 import { hasPrivilegedDatabase, readGhcServerEnv, requiredEnvChecklist } from "@/lib/server/economy/env"
+import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
 
 export async function GET() {
   const env = readGhcServerEnv()
@@ -34,6 +35,7 @@ export async function GET() {
     membershipEntitlementsAssumedReady: false,
     marketplaceAssumedReady: false,
     schemaProbe: "not_performed",
+    testnetUnlock: testnetUnlockSnapshot(),
     realtimeConfigured: process.env.GHC_REALTIME_CONFIGURED === "1",
     authConfigured,
     piAuthReady,

@@ -223,3 +223,7 @@ Before any Testnet/Mainnet migration action, capture each environment's `supabas
 ## Security hardening review (2026-10-21)
 
 The latest source-level review and changes for JWT claim validation, profile lifecycle authorization, API mutation origin checks, Pi-auth throttling, and regression evidence are documented in [`docs/SECURITY_AUDIT_HARDENING_2026-10-21.md`](docs/SECURITY_AUDIT_HARDENING_2026-10-21.md). These checks do not replace clean CI, disposable PostgreSQL execution, live Testnet multi-account tests, or an external penetration test.
+
+## Operator deploy (Phases 1–4)
+
+See `docs/OPERATOR_DEPLOYMENT_ENV_AND_MIGRATIONS_2026-10-21.md` for Vercel/Supabase env (public vs private), pack caps, and migration list.

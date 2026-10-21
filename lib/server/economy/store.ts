@@ -559,6 +559,54 @@ export async function expirePendingRequests(
 }
 
 
+/** Pi-verified pack purchase credit — not general minting; reference must be unique. */
+export async function executeAuthoritativePackPurchase(
+  store: GhcAuthoritativeStore,
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason: string
+    productId?: string
+    intentId?: string
+  }
+): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
+  const amount = Math.abs(Number(input.amount))
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  return withUserLock(input.userId, () => {
+    const existing = store.listTransactions(input.userId).find(
+      (t) =>
+        t.referenceId === ref &&
+        t.status === "posted" &&
+        t.amount > 0 &&
+        t.sourceEvent === "PI_PACK_PURCHASE"
+    )
+    if (existing) return { ok: true as const, tx: existing, idempotent: true }
+
+    const tx: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: "earned",
+      amount,
+      status: "posted",
+      reason: input.reason || "Pi pack purchase",
+      sourceEvent: "PI_PACK_PURCHASE",
+      referenceId: ref,
+      createdAt: Date.now(),
+      metadata: {
+        productId: input.productId,
+        intentId: input.intentId,
+        settlement: "pi_verified_pack",
+      },
+    }
+    store.appendPosted(tx)
+    return { ok: true as const, tx }
+  })
+}
+
 /** Generic positive credits are disabled by the Daily-Claim-only issuance policy. */
 export async function executeAuthoritativeCredit(
   store: GhcAuthoritativeStore,

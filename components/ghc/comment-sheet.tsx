@@ -611,7 +611,7 @@ useEffect(() => {
                     for (const file of files) {
                       if (next.length >= 4) break
                       const kind = file.type.startsWith("video/") ? "video" : "image"
-                      const up = await uploadDurableMedia(file)
+                      const up = await uploadDurableMedia(file, { category: file.type.startsWith("video/") ? "videos" : file.type.startsWith("image/") ? "images" : "documents", fileName: file.name })
                       if (up.ok && up.url) {
                         next.push({
                           id: `catt_${Date.now().toString(36)}_${next.length}`,

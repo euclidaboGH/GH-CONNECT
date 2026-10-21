@@ -95,6 +95,38 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
     }
   }
 
+  // Curation (upvote/downvote) — independent of emoji reactions.
+  type FeedCurationRow = { post_id?: string; user_id?: string; choice?: string }
+  const curationByPost = new Map<string, { up: number; down: number; mine?: string }>()
+  const needCuration = rows.some((p) => {
+    const id = String(p.id || "")
+    const hasCounts =
+      p.upvoteCount != null || p.upvote_count != null || p.downvoteCount != null || p.downvote_count != null
+    const hasMine = p.viewerCurationChoice != null || p.viewer_curation_choice != null
+    return id && (!hasCounts || !hasMine)
+  })
+  if (needCuration && ids.length) {
+    const cq = new URLSearchParams()
+    cq.set("post_id", postIdsFilter(ids))
+    cq.set("select", "post_id,user_id,choice")
+    cq.set("limit", "2000")
+    const curationResult = await socialRest<FeedCurationRow[]>(`gh_post_curations?${cq.toString()}`)
+    if (curationResult.ok && Array.isArray(curationResult.data)) {
+      for (const row of curationResult.data) {
+        const postId = String(row.post_id || "")
+        const choice = String(row.choice || "").trim().toLowerCase()
+        if (!postId || !ids.includes(postId)) continue
+        const bucket = curationByPost.get(postId) || { up: 0, down: 0 }
+        if (choice === "upvote") bucket.up += 1
+        else if (choice === "downvote") bucket.down += 1
+        if (String(row.user_id || "") === viewerId && (choice === "upvote" || choice === "downvote")) {
+          bucket.mine = choice
+        }
+        curationByPost.set(postId, bucket)
+      }
+    }
+  }
+
   return rows.map((post) => {
     const id = String(post.id || "")
     const comments = (commentsByPost.get(id) || []).slice().reverse().map((comment) => ({
@@ -110,12 +142,28 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
     const likes = Number(post.likes ?? post.likeCount ?? post.like_count ?? 0) || 0
     const commentCount = Number(post.commentCount ?? post.comment_count ?? comments.length) || 0
     const shares = Number(post.shares ?? post.shareCount ?? post.share_count ?? 0) || 0
+    const curation = curationByPost.get(id)
+    const upvoteCount =
+      Number(post.upvoteCount ?? post.upvote_count ?? (curation ? curation.up : 0)) || 0
+    const downvoteCount =
+      Number(post.downvoteCount ?? post.downvote_count ?? (curation ? curation.down : 0)) || 0
+    const viewerCurationChoice =
+      (post.viewerCurationChoice as string | undefined) ||
+      (post.viewer_curation_choice as string | undefined) ||
+      curation?.mine ||
+      undefined
     return {
       ...post,
       comments,
       commentCount,
       reactionCounts,
       viewerReactions: mineByPost.get(id) || [],
+      upvoteCount,
+      downvoteCount,
+      viewerCurationChoice:
+        viewerCurationChoice === "upvote" || viewerCurationChoice === "downvote"
+          ? viewerCurationChoice
+          : undefined,
       engagement: {
         ...((post.engagement && typeof post.engagement === "object") ? post.engagement as Record<string, unknown> : {}),
         likes,

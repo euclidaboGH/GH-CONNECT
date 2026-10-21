@@ -181,6 +181,39 @@ export const GH_PAY_CATALOG: Record<string, GhPayProduct> = {
     fulfillment: { type: "payout", reason: "approved_reward" },
     active: true,
   },
+
+  // —— Phase 3: governed Pi → GHC utility packs (not FX) ——
+  ghc_pack_10: {
+    id: "ghc_pack_10", direction: "u2a", category: "ghc_pack", title: "Starter · 10 GHC",
+    description: "Utility pack · 0.5 π · server credits 10 GHC after verified payment",
+    amountPi: 0.5, memo: "GreenHaven GHC pack 10",
+    fulfillment: { type: "ghc_pack", productId: "ghc_pack_10", ghcAmount: 10 }, active: true,
+  },
+  ghc_pack_50: {
+    id: "ghc_pack_50", direction: "u2a", category: "ghc_pack", title: "Builder · 50 GHC",
+    description: "Utility pack · 2 π · server credits 50 GHC after verified payment",
+    amountPi: 2, memo: "GreenHaven GHC pack 50",
+    fulfillment: { type: "ghc_pack", productId: "ghc_pack_50", ghcAmount: 50 }, active: true,
+  },
+  ghc_pack_100: {
+    id: "ghc_pack_100", direction: "u2a", category: "ghc_pack", title: "Creator · 100 GHC",
+    description: "Utility pack · 3.5 π · server credits 100 GHC after verified payment",
+    amountPi: 3.5, memo: "GreenHaven GHC pack 100",
+    fulfillment: { type: "ghc_pack", productId: "ghc_pack_100", ghcAmount: 100 }, active: true,
+  },
+  ghc_pack_250: {
+    id: "ghc_pack_250", direction: "u2a", category: "ghc_pack", title: "Pro · 250 GHC",
+    description: "Utility pack · 8 π · server credits 250 GHC after verified payment",
+    amountPi: 8, memo: "GreenHaven GHC pack 250",
+    fulfillment: { type: "ghc_pack", productId: "ghc_pack_250", ghcAmount: 250 }, active: true,
+  },
+  ghc_pack_500: {
+    id: "ghc_pack_500", direction: "u2a", category: "ghc_pack", title: "Studio · 500 GHC",
+    description: "Utility pack · 15 π · server credits 500 GHC after verified payment",
+    amountPi: 15, memo: "GreenHaven GHC pack 500",
+    fulfillment: { type: "ghc_pack", productId: "ghc_pack_500", ghcAmount: 500 }, active: true,
+  },
+
 }
 
 export function getProduct(id: string): GhPayProduct | null {

@@ -357,7 +357,7 @@ export function ProfileScreen({
           aria-label="Change cover photo"
         >
           {cover ? (
-            <img src={cover} alt="" className="h-full w-full object-cover" />
+            <img src={cover} alt="" className="h-full w-full object-cover" onError={(e) => { try { (e.target as HTMLImageElement).style.display = "none" } catch { /* */ } }} />
           ) : null}
           <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
             <Camera size={12} aria-hidden />

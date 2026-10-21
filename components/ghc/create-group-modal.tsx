@@ -608,7 +608,10 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               <div className="p-3 bg-blue-50 rounded-lg">
                 <p className="text-xs text-blue-800">
-                  <span className="font-semibold">✓ Ready to create!</span> Review all details and click "Create Group" below.
+                  <span className="font-semibold">✓ Ready to create!</span> Review all details and click "Create community" below.
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  When testnet fees are active, creation debits a small <span className="font-semibold text-foreground">GHC</span> fee from your available wallet balance (or verified π if you choose Pi). Free messaging and browsing never require GHC or Pi.
                 </p>
               </div>
             </div>

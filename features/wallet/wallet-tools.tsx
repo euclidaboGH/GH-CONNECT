@@ -7,9 +7,11 @@ import {
   Gauge,
   Shield,
   FileText,
+  Sparkles,
 } from "lucide-react"
 
 const TOOLS = [
+  { id: "utility", label: "Spend GHC", icon: Sparkles },
   { id: "tx", label: "Transactions", icon: ListOrdered },
   { id: "qr", label: "Receive / QR", icon: QrCode },
   { id: "methods", label: "Payment methods", icon: CreditCard },
@@ -18,10 +20,12 @@ const TOOLS = [
   { id: "statements", label: "Statements", icon: FileText },
 ] as const
 
+export type WalletToolId = (typeof TOOLS)[number]["id"]
+
 export function WalletToolsGrid({
   onSelect,
 }: {
-  onSelect: (id: (typeof TOOLS)[number]["id"]) => void
+  onSelect: (id: WalletToolId) => void
 }) {
   return (
     <section className="mx-3 mt-5" aria-label="Wallet tools">
@@ -29,7 +33,7 @@ export function WalletToolsGrid({
         More tools
       </h2>
       <p className="mb-3 px-0.5 text-[11px] leading-snug text-muted-foreground">
-        GHC history, statements, and payment methods. Pi payments stay separate from GHC.
+        Spend GHC on boosts & tools, history, statements. Pi payments stay separate.
       </p>
       <div className="grid grid-cols-3 gap-2.5">
         {TOOLS.map(({ id, label, icon: Icon }) => (

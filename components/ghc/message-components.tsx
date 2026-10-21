@@ -301,18 +301,33 @@ export function MessageInput({
   disabled: boolean
 }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const sendLockRef = useRef(false)
 
   const handleEmojiSelect = useCallback((emoji: string) => {
     onMessageChange(messageText + emoji)
     setShowEmojiPicker(false)
   }, [messageText, onMessageChange])
 
+  const fireSend = useCallback(() => {
+    if (disabled || sendLockRef.current) return
+    if (!messageText.trim()) return
+    sendLockRef.current = true
+    try {
+      onSendMessage()
+    } finally {
+      // Parent sets `disabled` while sending; release lock shortly so retries work after failure.
+      window.setTimeout(() => {
+        sendLockRef.current = false
+      }, 600)
+    }
+  }, [disabled, messageText, onSendMessage])
+
   const handleKeyPress = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      onSendMessage()
+      fireSend()
     }
-  }, [onSendMessage])
+  }, [fireSend])
 
   const toggleEmojiPicker = useCallback(() => {
     setShowEmojiPicker(prev => !prev)
@@ -365,7 +380,7 @@ export function MessageInput({
         {/* Send button */}
         <button
           type="button"
-          onClick={onSendMessage}
+          onClick={fireSend}
           disabled={!messageText.trim() || disabled}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--gh-green)] text-white transition hover:brightness-110 active:scale-90 disabled:bg-muted disabled:text-muted-foreground"
           title="Send message"

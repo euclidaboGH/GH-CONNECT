@@ -450,7 +450,18 @@ export async function socialCreateCommunity(input: {
   description?: string
   privacy?: string
   category?: string
-}): Promise<{ ok: boolean; durable: boolean; community?: unknown; id?: string; error?: string }> {
+  feeCurrency?: "GHC" | "PI"
+  feePaymentId?: string
+  feeIntentId?: string
+}): Promise<{
+  ok: boolean
+  durable: boolean
+  community?: unknown
+  id?: string
+  error?: string
+  fee?: unknown
+  message?: string
+}> {
   return json("/api/communities", {
     method: "POST",
     body: JSON.stringify(input),

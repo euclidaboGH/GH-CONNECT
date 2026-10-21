@@ -141,7 +141,12 @@ function EnhancedPostCardInner({
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
     pressTimerRef.current = null
   }, [post.id, galleryIdentity])
-  const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
+  const seedChoiceRaw = String(
+    (post as { viewerCurationChoice?: string }).viewerCurationChoice || ""
+  ).toLowerCase()
+  const seedChoice: "upvote" | "downvote" | "neutral" =
+    seedChoiceRaw === "upvote" || seedChoiceRaw === "downvote" ? seedChoiceRaw : "neutral"
+  const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">(seedChoice)
   const [rosterOpen, setRosterOpen] = useState(false)
   const [rosterKind, setRosterKind] = useState<RosterKind>("likes")
   const openRoster = (kind: RosterKind) => {
@@ -176,7 +181,9 @@ function EnhancedPostCardInner({
   useEffect(() => {
     if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
     if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
-  }, [post.id, propUp, propDown])
+    const nextChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
+    if (nextChoice === "upvote" || nextChoice === "downvote") setCurationChoice(nextChoice)
+  }, [post.id, propUp, propDown, (post as { viewerCurationChoice?: string }).viewerCurationChoice])
   const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
   const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
   const visibleReactionEntries = Object.entries(post.reactionCounts || {})
@@ -616,7 +623,7 @@ function EnhancedPostCardInner({
                     try {
                       for (const file of Array.from(files).slice(0, 10 - draftImages.length)) {
                         if (file.type.startsWith("video/")) {
-                          const res = await uploadDurableMedia(file, { fileName: file.name })
+                          const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
                           const url =
                             (res as { url?: string; publicUrl?: string })?.url ||
                             (res as { publicUrl?: string })?.publicUrl
@@ -624,7 +631,7 @@ function EnhancedPostCardInner({
                           continue
                         }
                         if (!file.type.startsWith("image/")) continue
-                        const res = await uploadDurableMedia(file, { fileName: file.name })
+                        const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
                         const url =
                           (res as { url?: string; publicUrl?: string })?.url ||
                           (res as { publicUrl?: string })?.publicUrl

@@ -22,6 +22,7 @@ export type PayCategory =
   | "refund"
   | "reward_payout"
   | "verification"
+  | "ghc_pack"
 
 export type OrderStatus =
   | "created"
@@ -46,6 +47,7 @@ export type FulfillmentSpec =
   | { type: "payout"; reason: string }
   | { type: "refund"; originalOrderId: string }
   | { type: "verification" }
+  | { type: "ghc_pack"; productId: string; ghcAmount: number }
   | { type: "none" }
 
 export interface GhPayProduct {

@@ -7,6 +7,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { isDatabaseConfigured } from "@/lib/server/economy/http"
 import { computeAndCommitActivityEmissionDurable } from "@/lib/server/economy/activity-emission"
+import { activityRewardsEnabled } from "@/lib/server/economy/testnet-unlock"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,8 +42,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INVALID_MISSION" }, { status: 400 })
   }
 
-  const activityOn =
-    String(process.env.GHC_ACTIVITY_REWARDS_ENABLED || "").trim() === "1"
+  const activityOn = activityRewardsEnabled()
 
   if (activityOn && isDatabaseConfigured()) {
     try {
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     grantedGhc: 0,
     message: activityOn
       ? "Mission recorded"
-      : "Mission complete — set GHC_ACTIVITY_REWARDS_ENABLED=1 on Vercel to credit activity GHC",
+      : "Mission complete — activity GHC credits when testnet unlock or GHC_ACTIVITY_REWARDS_ENABLED=1",
     policy: activityOn ? "activity_enabled" : "progress_only",
   })
 }

@@ -1,7 +1,8 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { curationRedistributeEnabled as unlockCuration } from "@/lib/server/economy/testnet-unlock"
 
 export function curationRedistributeEnabled(): boolean {
-  return String(process.env.GHC_CURATION_REDISTRIBUTE_ENABLED || "").trim() === "1"
+  return unlockCuration()
 }
 
 /**

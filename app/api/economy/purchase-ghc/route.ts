@@ -1,79 +1,143 @@
 /**
- * POST /api/economy/purchase-ghc
- *
- * Pi-powered GHC pack purchase — server authoritative only:
- *   verified Pi payment → payment intent COMPLETED → ledger credit
- *
- * Never accept a client assertion of "+N GHC" without completed intent + Pi lookup.
- * Never invent ledger credits when packs / credit path are not configured.
+ * Phase 3 — Pi-funded GHC pack acquisition (governed product).
+ * POST: credit after completed Pi intent matches catalog.
+ * GET: list packs + limits + enabled flag.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { loadPaymentIntent } from "@/lib/server/payments/intent-store"
+import { buyGhcWithPiEnabled } from "@/lib/server/economy/testnet-unlock"
+import {
+  allowMemoryServer,
+  isDatabaseConfigured,
+  jsonErr,
+  jsonOk,
+} from "@/lib/server/economy/http"
+import {
+  executeAuthoritativePackPurchase,
+  getProcessGhcStore,
+} from "@/lib/server/economy/store"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import {
+  getGhcPack,
+  listGhcPacks,
+  packPurchaseLimits,
+  lagosDayKey,
+} from "@/lib/server/economy/ghc-pack-catalog"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** Explicit pack catalog — empty until product packs are defined with Pi amounts. */
-const GHC_PACK_CATALOG: Record<
-  string,
-  { productId: string; ghcAmount: number; piAmount: number }
-> = {
-  // Intentionally empty in this release.
-  // Example future entry:
-  // ghc_pack_100: { productId: "ghc_pack_100", ghcAmount: 100, piAmount: 1 },
+async function rpcCreditPackPurchase(input: {
+  userId: string
+  amount: number
+  referenceId: string
+  reason: string
+  productId: string
+  intentId: string
+}): Promise<{ ok: boolean; transactionId?: string; alreadyCredited?: boolean; error?: string }> {
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
+  try {
+    const res = await fetch(
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_credit_pack_purchase`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        },
+        body: JSON.stringify({
+          p_user_id: input.userId,
+          p_amount: input.amount,
+          p_reference_id: input.referenceId,
+          p_reason: input.reason,
+          p_product_id: input.productId,
+          p_intent_id: input.intentId,
+        }),
+      }
+    )
+    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
+    if (!res.ok) {
+      return {
+        ok: false,
+        error:
+          data && typeof data === "object" && "message" in data
+            ? String(data.message)
+            : "CREDIT_RPC_FAILED",
+      }
+    }
+    if (data && data.ok === false) {
+      return { ok: false, error: String(data.error || data.code || "CREDIT_DENIED") }
+    }
+    return {
+      ok: true,
+      transactionId: data?.transactionId != null ? String(data.transactionId) : undefined,
+      alreadyCredited: Boolean(data?.alreadyCredited || data?.idempotent),
+    }
+  } catch {
+    return { ok: false, error: "CREDIT_RPC_FAILED" }
+  }
 }
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
-  if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
-  }
+  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  const enabled = process.env.GHC_BUY_WITH_PI_ENABLED === "true"
-  if (!enabled) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "BUY_GHC_DISABLED",
-        message:
-          "Buy GHC with π is not enabled. Pack catalog and ledger credit path must be production-ready first.",
-        policy: ASSET_POLICY.payCopy,
-        packsDefined: Object.keys(GHC_PACK_CATALOG).length,
-      },
-      { status: 503 }
+  if (!buyGhcWithPiEnabled()) {
+    return jsonErr(
+      "BUY_GHC_DISABLED",
+      "Pi→GHC packs disabled. Set GHC_BUY_WITH_PI_ENABLED or GHC_TESTNET_UNLOCK.",
+      503
     )
   }
 
-  if (Object.keys(GHC_PACK_CATALOG).length === 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "PACK_CATALOG_EMPTY",
-        message:
-          "No GHC packs are defined. Refusing to credit ledger without an authoritative pack catalog.",
-        granted: false,
-      },
-      { status: 503 }
+  pruneRateLimitBuckets()
+  const rl = checkRateLimit(`purchase_ghc:${auth.userId}`, 20, 60_000)
+  if (!rl.ok) {
+    return jsonErr("RATE_LIMITED", `Too many purchase attempts; retry in ${rl.retryAfterSec}s`, 429)
+  }
+
+  // Soft daily purchase rate limit (count attempts, not only success)
+  const dayKey = lagosDayKey()
+  const dayRl = checkRateLimit(
+    `purchase_ghc_day:${auth.userId}:${dayKey}`,
+    packPurchaseLimits().maxPurchasesPerDay,
+    24 * 60 * 60 * 1000
+  )
+  if (!dayRl.ok) {
+    return jsonErr(
+      "DAILY_PACK_CAP",
+      `Daily pack purchase limit reached (${packPurchaseLimits().maxPurchasesPerDay}). Retry tomorrow.`,
+      429
     )
   }
 
-  const body = await request.json().catch(() => ({}))
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
+  }
+
   const intentId = String(body.intentId || "").trim()
   const paymentId = String(body.paymentId || "").trim()
   const productId = String(body.productId || body.packId || "").trim()
 
   if (!intentId) {
-    return NextResponse.json({ ok: false, error: "intentId required" }, { status: 400 })
+    return jsonErr("INVALID_INPUT", "intentId required", 400)
   }
 
-  const intent =
-    (await loadPaymentIntent(intentId))
+  const intent = await loadPaymentIntent(intentId)
   if (!intent || intent.userId !== auth.userId) {
-    return NextResponse.json({ ok: false, error: "INTENT_NOT_FOUND" }, { status: 404 })
+    return jsonErr("INTENT_NOT_FOUND", "Payment intent not found", 404)
   }
-  if (intent.status !== "COMPLETED") {
+  if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
     return NextResponse.json(
       { ok: false, error: "INTENT_NOT_COMPLETED", status: intent.status },
       { status: 409 }
@@ -81,10 +145,8 @@ export async function POST(request: Request) {
   }
 
   const pack =
-    (productId && GHC_PACK_CATALOG[productId]) ||
-    (intent.metadata?.productId
-      ? GHC_PACK_CATALOG[String(intent.metadata.productId)]
-      : undefined)
+    getGhcPack(productId) ||
+    (intent.metadata?.productId ? getGhcPack(String(intent.metadata.productId)) : null)
 
   if (!pack) {
     return NextResponse.json(
@@ -102,7 +164,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: "AMOUNT_mismatch",
+        error: "AMOUNT_MISMATCH",
         message: "Pi payment amount does not match pack catalog.",
         granted: false,
       },
@@ -111,35 +173,96 @@ export async function POST(request: Request) {
   }
 
   if (paymentId && intent.providerPaymentId && paymentId !== intent.providerPaymentId) {
-    return NextResponse.json({ ok: false, error: "payment_mismatch", granted: false }, { status: 409 })
+    return NextResponse.json({ ok: false, error: "PAYMENT_MISMATCH", granted: false }, { status: 409 })
   }
 
-  // Ledger credit path for Pi→GHC packs is intentionally not auto-enabled.
-  // Enabling requires a dedicated durable credit RPC + pack config review.
-  return NextResponse.json(
-    {
-      ok: false,
-      error: "LEDGER_CREDIT_NOT_WIRED",
-      message:
-        "Pack matched and Pi payment verified, but server ledger credit for GHC packs is not enabled. No balance was changed.",
-      intentId,
+  const referenceId = `pi_pack:${intentId}:${pack.productId}`
+  const reason = `Pi pack ${pack.label}`
+
+  if (isDatabaseConfigured()) {
+    const credit = await rpcCreditPackPurchase({
+      userId: auth.userId,
+      amount: pack.ghcAmount,
+      referenceId,
+      reason,
       productId: pack.productId,
-      amountPi: intent.amount,
+      intentId,
+    })
+    if (credit.ok) {
+      return jsonOk({
+        ok: true,
+        granted: true,
+        alreadyCredited: credit.alreadyCredited,
+        transactionId: credit.transactionId,
+        productId: pack.productId,
+        ghcAmount: pack.ghcAmount,
+        amountPi: pack.piAmount,
+        intentId,
+        policy: ASSET_POLICY.packPurchaseCopy,
+      })
+    }
+    if (!(allowMemoryServer() && /CREDIT_RPC|function|does not exist/i.test(credit.error || ""))) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: credit.error || "CREDIT_FAILED",
+          message: "Could not credit GHC for verified Pi payment.",
+          granted: false,
+        },
+        { status: 503 }
+      )
+    }
+  }
+
+  if (allowMemoryServer()) {
+    const store = getProcessGhcStore()
+    const result = await executeAuthoritativePackPurchase(store, {
+      userId: auth.userId,
+      amount: pack.ghcAmount,
+      referenceId,
+      reason,
+      productId: pack.productId,
+      intentId,
+    })
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error || "CREDIT_FAILED", granted: false },
+        { status: 400 }
+      )
+    }
+    return jsonOk({
+      ok: true,
+      granted: true,
+      alreadyCredited: Boolean(result.idempotent),
+      transactionId: result.tx.id,
+      productId: pack.productId,
       ghcAmount: pack.ghcAmount,
-      granted: false,
-    },
-    { status: 503 }
+      amountPi: pack.piAmount,
+      intentId,
+      mode: "memory",
+      policy: ASSET_POLICY.packPurchaseCopy,
+    })
+  }
+
+  return jsonErr(
+    "SERVER_UNAVAILABLE",
+    "Apply migration ghc_credit_pack_purchase or enable studio memory economy",
+    503
   )
 }
 
 export async function GET() {
+  const enabled = buyGhcWithPiEnabled()
   return NextResponse.json({
     ok: true,
-    enabled: process.env.GHC_BUY_WITH_PI_ENABLED === "true",
-    packs: Object.values(GHC_PACK_CATALOG),
-    message:
-      Object.keys(GHC_PACK_CATALOG).length === 0
-        ? "No GHC packs defined. Purchase remains unavailable."
-        : "Pack catalog present; enable only after ledger credit is wired.",
+    enabled,
+    product: "governed_utility_pack",
+    conversionEnabled: ASSET_POLICY.conversionEnabled,
+    policy: ASSET_POLICY.packPurchaseCopy,
+    limits: packPurchaseLimits(),
+    packs: listGhcPacks(),
+    message: enabled
+      ? "Complete a Pi payment intent for a catalog pack, then POST intentId + productId to credit GHC."
+      : "Set GHC_BUY_WITH_PI_ENABLED=true or GHC_TESTNET_UNLOCK=1 to enable packs.",
   })
 }

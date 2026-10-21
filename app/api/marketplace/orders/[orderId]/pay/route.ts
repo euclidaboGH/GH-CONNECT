@@ -22,9 +22,47 @@ import {
 } from "@/lib/server/economy/store"
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
+import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+async function recordPlatformCommission(order: {
+  id: string
+  totalAmount: number
+  currency: string
+  paymentMethod: string
+}) {
+  try {
+    const split = splitMarketplaceCommission({
+      grossAmount: order.totalAmount,
+      currency: order.currency,
+    })
+    if ("error" in split) return null
+    const fee = split.platformFeeMinor
+    if (!(fee > 0)) return split
+    // Revenue journal only when fee is in PI (company revenue). GHC fees stay utility.
+    if (String(order.currency).toUpperCase() === "PI" || order.paymentMethod === "pi") {
+      await appendVerifiedCompanyRevenueEvent({
+        idempotencyKey: `mkt_fee:${order.id}`,
+        sourceProvider: "pi",
+        sourceEventId: order.id,
+        eventType: "marketplace_fee",
+        currency: "PI",
+        grossAmountMinor: Math.round(split.grossMinor * 1e7),
+        companyRevenueMinor: Math.round(fee * 1e7),
+        sourceReference: `order:${order.id}`,
+        verifiedAt: new Date().toISOString(),
+        metadata: { order_id: order.id },
+      })
+    }
+    return split
+  } catch {
+    return null
+  }
+}
 
 async function rpcGhcSpend(input: {
   userId: string
@@ -227,11 +265,18 @@ export async function POST(
     }
     await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
 
+    const commission = await recordPlatformCommission({
+      id: order.id,
+      totalAmount: order.totalAmount,
+      currency: String(order.currency || "GHC"),
+      paymentMethod: "ghc",
+    })
     return NextResponse.json({
       ok: true,
       order: await loadOrder(order.id),
       spend: spendTx,
       idempotent,
+      commission,
       durableOrders: marketplaceOrdersDurable(),
     })
   }
@@ -312,9 +357,16 @@ export async function POST(
     await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
     await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
 
+    const commission = await recordPlatformCommission({
+      id: order.id,
+      totalAmount: order.totalAmount,
+      currency: String(order.currency || "PI"),
+      paymentMethod: "pi",
+    })
     return NextResponse.json({
       ok: true,
       order: await loadOrder(order.id),
+      commission,
       durableOrders: marketplaceOrdersDurable(),
     })
   }

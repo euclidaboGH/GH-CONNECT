@@ -1,3 +1,5 @@
+import { isTestnetProductUnlocked } from "@/lib/server/economy/testnet-unlock"
+
 /**
  * Marketplace listing fee (platform service charge) — SEPARATE from seller product price.
  *
@@ -102,7 +104,16 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
     }
   }
 
-  // No approved schedule in repo/env — fee 0, not activated as a paid gate.
+  if (isTestnetProductUnlocked()) {
+    return {
+      feeAmount: 1,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
   return {
     feeAmount: 0,
     feeCurrency: "PI",

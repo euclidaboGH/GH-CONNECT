@@ -1,6 +1,6 @@
 /**
  * GET /api/media/health — operator/diagnostic check for media pipeline.
- * Does not expose secrets. Reports whether storage + auth path are available.
+ * Does not expose secrets. Reports storage + private-bucket readiness.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
@@ -20,6 +20,9 @@ export async function GET(request: Request) {
   let bucketReachable: boolean | null = null
   let bucketError: string | null = null
   let bucketEnsured: boolean | null = null
+  let bucketPublic: boolean | null = null
+  let fileSizeLimit: number | null = null
+
   if (hasUrl && hasKey) {
     try {
       const ensured = await ensureMediaBucket(storageBucket)
@@ -41,6 +44,15 @@ export async function GET(request: Request) {
         bucketReachable = res.ok
         if (!res.ok) {
           bucketError = `HTTP_${res.status}`
+        } else {
+          const info = (await res.json().catch(() => null)) as {
+            public?: boolean
+            file_size_limit?: number
+          } | null
+          if (info) {
+            bucketPublic = Boolean(info.public)
+            fileSizeLimit = typeof info.file_size_limit === "number" ? info.file_size_limit : null
+          }
         }
       }
     } catch {
@@ -49,9 +61,13 @@ export async function GET(request: Request) {
     }
   }
 
+  const ready =
+    Boolean(auth) && hasUrl && hasKey && bucketReachable === true && bucketEnsured !== false
+
   return NextResponse.json(
     {
       ok: true,
+      ready,
       authenticated: Boolean(auth),
       userIdPresent: Boolean(auth?.userId),
       storageConfigured: hasUrl && hasKey,
@@ -59,25 +75,43 @@ export async function GET(request: Request) {
       bucketReachable,
       bucketError,
       bucketEnsured,
+      /** Operator expects private=true for GreenHaven. Public buckets still work via signed facade. */
+      bucketPublic,
+      fileSizeLimitBytes: fileSizeLimit,
+      privacy: "private-bucket-via-authorized-facade",
+      folders: ["avatars", "images", "videos", "audio", "documents"],
+      pathPattern: "{ownerUserId}/{folder}/{uuid}.{ext}",
       limits: {
         proxyMaxMb: 4,
-        imageMaxMb: 25,
-        videoMaxMb: 80,
-        fileMaxMb: 25,
+        imageMaxMb: 50,
+        videoMaxMb: 50,
+        audioMaxMb: 50,
+        fileMaxMb: 50,
+        bucketMaxMb: 50,
         directUpload: true,
       },
       routes: {
         proxy: "/api/media",
         directIntent: "/api/media/direct-upload-intent",
         directComplete: "/api/media/direct-upload-complete",
+        content: "/api/media/{id}/content",
+        signedUrl: "/api/media/{id}/signed-url",
+        health: "/api/media/health",
       },
+      migrationsRequired: [
+        "20261001_gh_media_assets.sql",
+        "202610190002_gh_private_media_references_and_viewer_authz.sql",
+        "202610200002_gh_comment_media_attachments.sql",
+      ],
       hint: !auth
-        ? "Open this URL while signed in. If authenticated is false, session/cookies are the first problem."
+        ? "Open while signed in. If authenticated is false, session/cookies are the first problem."
         : !hasUrl || !hasKey
-          ? "Supabase URL or service role key missing in Vercel env."
-          : bucketReachable === false
-            ? "Storage bucket not reachable — check GH_MEDIA_BUCKET and Supabase storage policies."
-            : "Media pipeline configuration looks reachable. Retry an upload and check Vercel logs if it still fails.",
+          ? "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Vercel (server secrets), plus GH_MEDIA_BUCKET."
+          : bucketReachable !== true
+            ? "Bucket not reachable — create private bucket matching GH_MEDIA_BUCKET and apply media migrations."
+            : ready
+              ? "Media pipeline looks ready. Uploads use owner folders; display uses /api/media/{id}/content (auth required)."
+              : "Check migrations and bucket privacy settings.",
     },
     { headers: { "Cache-Control": "no-store" } }
   )

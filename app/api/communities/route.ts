@@ -8,6 +8,7 @@ import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { feesRequireSettlement, quoteCommunityCreateFee } from "@/lib/server/fees/pilot-fee-policy"
+import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
 import { ensureCommunityConversation } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
@@ -73,29 +74,16 @@ export async function POST(request: Request) {
   const feeQuote = quoteCommunityCreateFee(
     String(body.feeCurrency || "").toUpperCase() === "PI" ? "PI" : "GHC"
   )
-  if (feesRequireSettlement(feeQuote)) {
-    const feePaymentId = String(body.feePaymentId || body.feeIntentId || "").trim()
-    if (!feePaymentId) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "COMMUNITY_CREATE_FEE_REQUIRED",
-          fee: feeQuote,
-          message: "Community creation requires a verified fee payment when fees are activated.",
-        },
-        { status: 402 }
-      )
-    }
-    // Payment verification for community fees is product-approved separately;
-    // until a dedicated verifier exists, refuse activation rather than trust the client id.
+  const feePaymentIdEarly = String(body.feePaymentId || body.feeIntentId || "").trim()
+  if (feesRequireSettlement(feeQuote) && feeQuote.feeCurrency === "PI" && !feePaymentIdEarly) {
     return NextResponse.json(
       {
         ok: false,
-        error: "COMMUNITY_CREATE_FEE_VERIFIER_PENDING",
+        error: "COMMUNITY_CREATE_FEE_REQUIRED",
         fee: feeQuote,
-        message: "Fee schedule is configured but payment verification is not enabled yet. Creation remains free until the verifier ships.",
+        message: "Community creation requires a completed Pi payment intent when Pi fees are activated.",
       },
-      { status: 503 }
+      { status: 402 }
     )
   }
 
@@ -125,6 +113,43 @@ export async function POST(request: Request) {
     tags: Array.isArray(body.tags) ? body.tags.slice(0, 20) : [],
     welcomeMessage: String(body.welcomeMessage || "").slice(0, 500),
     conversationId: stableId,
+  }
+
+  if (feesRequireSettlement(feeQuote)) {
+    const referenceId = `community_create_fee_${row.id}`
+    const settled = await settlePilotFee({
+      userId: auth.userId,
+      fee: feeQuote,
+      referenceId,
+      reason: `Community create fee · ${name}`,
+      sourceEvent: "COMMUNITY_CREATE_FEE",
+      paymentRef: feePaymentIdEarly || null,
+      bindKey: "communityId",
+      bindValue: row.id,
+    })
+    if (!settled.ok) {
+      const err = settled.error || "FEE_SETTLEMENT_FAILED"
+      const status =
+        err === "INSUFFICIENT_BALANCE"
+          ? 400
+          : err === "FEE_PAYMENT_REQUIRED" || err === "FEE_PAYMENT_NOT_COMPLETED"
+            ? 402
+            : err === "SERVER_UNAVAILABLE"
+              ? 503
+              : 400
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err,
+          fee: feeQuote,
+          message:
+            err === "INSUFFICIENT_BALANCE"
+              ? "Insufficient available GHC to create this community."
+              : "Community create fee could not be settled. Pay the fee then retry.",
+        },
+        { status }
+      )
+    }
   }
 
   if (!socialDbConfigured()) {

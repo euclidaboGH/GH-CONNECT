@@ -1,8 +1,11 @@
 /**
  * Pilot fee schedule for marketplace listing and community creation.
- * Amounts are proposals until GHC_*_FEE_* env activates ratesApproved.
+ * Env activates ratesApproved. Under testnet unlock, documented pilot amounts
+ * are treated as approved so the full product can be exercised before mainnet.
  * Never trust client-supplied fee amounts.
  */
+
+import { isTestnetProductUnlocked } from "@/lib/server/economy/testnet-unlock"
 
 export type FeeCurrency = "GHC" | "PI"
 
@@ -22,11 +25,13 @@ function readNum(name: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
-/** Proposed pilot: 5 GHC or 0.05 Pi per new listing (env activates). */
+export function feesRequireSettlement(fee: PilotFeeQuote): boolean {
+  return fee.ratesApproved && fee.feeAmount > 0
+}
+
 export function quoteMarketplaceListingFee(preferred?: FeeCurrency): PilotFeeQuote {
   const ghc = readNum("GHC_MARKETPLACE_LISTING_FEE_GHC")
   const pi = readNum("GHC_MARKETPLACE_LISTING_FEE_PI")
-  // Prefer explicit preferred currency when both set
   if (preferred === "GHC" && ghc != null) {
     return { feature: "marketplace_listing", feeAmount: ghc, feeCurrency: "GHC", ratesApproved: ghc > 0, code: "FEE_FIXED_GHC", basis: "env_ghc" }
   }
@@ -39,18 +44,17 @@ export function quoteMarketplaceListingFee(preferred?: FeeCurrency): PilotFeeQuo
   if (pi != null) {
     return { feature: "marketplace_listing", feeAmount: pi, feeCurrency: "PI", ratesApproved: pi > 0, code: "FEE_FIXED_PI", basis: "env_pi" }
   }
-  // Documented pilot defaults for display only — not approved until env set
+  const unlock = isTestnetProductUnlocked()
   return {
     feature: "marketplace_listing",
-    feeAmount: 5,
+    feeAmount: unlock ? 1 : 5,
     feeCurrency: "GHC",
-    ratesApproved: false,
-    code: "FEE_PILOT_DISPLAY_ONLY",
-    basis: "pilot_proposal_5_ghc_or_0_05_pi",
+    ratesApproved: unlock,
+    code: unlock ? "FEE_TESTNET_UNLOCK" : "FEE_PILOT_DISPLAY_ONLY",
+    basis: unlock ? "testnet_unlock_1_ghc" : "pilot_proposal_5_ghc_or_0_05_pi",
   }
 }
 
-/** Proposed pilot: 50 GHC or 0.5 Pi per community creation (env activates). */
 export function quoteCommunityCreateFee(preferred?: FeeCurrency): PilotFeeQuote {
   const ghc = readNum("GHC_COMMUNITY_CREATE_FEE_GHC")
   const pi = readNum("GHC_COMMUNITY_CREATE_FEE_PI")
@@ -66,6 +70,13 @@ export function quoteCommunityCreateFee(preferred?: FeeCurrency): PilotFeeQuote 
   if (pi != null) {
     return { feature: "community_create", feeAmount: pi, feeCurrency: "PI", ratesApproved: pi > 0, code: "FEE_FIXED_PI", basis: "env_pi" }
   }
+  const unlock = isTestnetProductUnlocked()
+  if (unlock) {
+    if (preferred === "PI") {
+      return { feature: "community_create", feeAmount: 0.1, feeCurrency: "PI", ratesApproved: true, code: "FEE_TESTNET_UNLOCK", basis: "testnet_unlock_0_1_pi" }
+    }
+    return { feature: "community_create", feeAmount: 5, feeCurrency: "GHC", ratesApproved: true, code: "FEE_TESTNET_UNLOCK", basis: "testnet_unlock_5_ghc" }
+  }
   return {
     feature: "community_create",
     feeAmount: 50,
@@ -74,8 +85,4 @@ export function quoteCommunityCreateFee(preferred?: FeeCurrency): PilotFeeQuote 
     code: "FEE_PILOT_DISPLAY_ONLY",
     basis: "pilot_proposal_50_ghc_or_0_5_pi",
   }
-}
-
-export function feesRequireSettlement(q: PilotFeeQuote): boolean {
-  return q.ratesApproved && q.feeAmount > 0
 }

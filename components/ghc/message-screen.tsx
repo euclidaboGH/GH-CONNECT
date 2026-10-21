@@ -703,6 +703,13 @@ export function MessageScreen() {
                           ? "video"
                           : "file"
                       const up = await uploadDurableMedia(file, {
+                        category: file.type.startsWith("image/")
+                          ? "images"
+                          : file.type.startsWith("video/")
+                            ? "videos"
+                            : file.type.startsWith("audio/")
+                              ? "audio"
+                              : "documents",
                         onProgress: (label) => {
                           try {
                             window.dispatchEvent(

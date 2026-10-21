@@ -48,7 +48,7 @@ export function getEconomyProgramStatus(): EconomyProgramRow[] {
     {
       id: "referral_settlement",
       title: "Referral rewards",
-      summary: "5% of charged membership amount — only when settlement flag is ON.",
+      summary: "5% of charged membership — on when referral flag or testnet unlock.",
       surfaceLive: true,
       issuanceEnabled: referral,
       mode: "issue",
@@ -56,7 +56,7 @@ export function getEconomyProgramStatus(): EconomyProgramRow[] {
     {
       id: "curation_redistribute",
       title: "Curation rewards",
-      summary: "Redistributes existing GHC — never mints when flag is OFF.",
+      summary: "Redistributes existing GHC. On when GHC_CURATION_REDISTRIBUTE_ENABLED or testnet unlock.",
       surfaceLive: true,
       issuanceEnabled: curation,
       mode: "redistribute",

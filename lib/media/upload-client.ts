@@ -10,10 +10,10 @@ import { IdentityService } from "@/lib/identity/identity-service"
 const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
 /** Align with server MAX_VIDEO / elevated file limits for direct path. */
-const MAX_DIRECT_IMAGE_BYTES = 25 * 1024 * 1024
-const MAX_DIRECT_VIDEO_BYTES = 40 * 1024 * 1024
-const MAX_DIRECT_FILE_BYTES = 25 * 1024 * 1024
-const MAX_DIRECT_AUDIO_BYTES = 25 * 1024 * 1024
+const MAX_DIRECT_IMAGE_BYTES = 50 * 1024 * 1024
+const MAX_DIRECT_VIDEO_BYTES = 50 * 1024 * 1024
+const MAX_DIRECT_FILE_BYTES = 50 * 1024 * 1024
+const MAX_DIRECT_AUDIO_BYTES = 50 * 1024 * 1024
 
 /** Compress oversized images in-browser before they reach the constrained API proxy. */
 async function compressOversizedImage(file: File | Blob): Promise<Blob> {

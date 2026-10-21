@@ -54,6 +54,7 @@ import { WithdrawGhcPanel } from "./withdraw-ghc-panel"
 import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
 import { AddGhcSheet } from "./add-ghc-sheet"
+import { GhcUtilityPanel } from "@/components/ghc/ghc-utility-panel"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdServer } from "@/lib/domains/greenhaven-id"
 
@@ -211,6 +212,41 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [showUtilityPanel, setShowUtilityPanel] = useState(false)
+
+  useEffect(() => {
+    const onPackIntent = (ev: Event) => {
+      try {
+        const d = (ev as CustomEvent).detail as {
+          productId?: string
+          ghcAmount?: number
+          amountPi?: number
+          label?: string
+          intentId?: string
+        }
+        if (!d?.productId) return
+        setSelectedGhcPack({
+          productId: String(d.productId),
+          ghcAmount: Number(d.ghcAmount || 0),
+          piAmount: Number(d.amountPi || 0),
+          label: d.label,
+        })
+        setAssetRail("pi")
+        window.setTimeout(() => {
+          try {
+            document.getElementById("ghc-wallet-gh-pay")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          } catch { /* */ }
+        }, 100)
+        if (d.intentId) {
+          addToast(`Pack intent ${String(d.intentId).slice(0, 8)}… · complete π payment below`, "info")
+        }
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:ghc-pack-intent", onPackIntent as EventListener)
+    return () => window.removeEventListener("ghc:ghc-pack-intent", onPackIntent as EventListener)
+  }, [addToast])
+
+  const [selectedGhcPack, setSelectedGhcPack] = useState<{ productId: string; ghcAmount: number; piAmount: number; label?: string } | null>(null)
   type TxDateRange = "today" | "7d" | "30d" | "all"
   const [txDateRange, setTxDateRange] = useState<TxDateRange>("all")
   type PiIntentRow = {
@@ -415,18 +451,40 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const holds: PendingHold[] = []
     for (const tx of txs) {
       if (tx.status === "pending" && tx.amount > 0) {
-        const review =
-          Boolean((tx.metadata as { reviewRequired?: boolean } | undefined)?.reviewRequired)
+        const meta = (tx.metadata || {}) as {
+          reviewRequired?: boolean
+          redeemableAt?: number | string
+          rewardLifecycle?: string
+        }
+        const review = Boolean(meta.reviewRequired)
+        let redeemableAtMs =
+          typeof meta.redeemableAt === "number"
+            ? meta.redeemableAt
+            : meta.redeemableAt
+              ? Date.parse(String(meta.redeemableAt))
+              : NaN
+        if (
+          !Number.isFinite(redeemableAtMs) &&
+          (String(tx.sourceEvent || "").includes("DAILY_CLAIM") ||
+            meta.rewardLifecycle === "daily_claim_48h")
+        ) {
+          redeemableAtMs = Number(tx.createdAt) + 48 * 60 * 60 * 1000
+        }
+        const locked = Number.isFinite(redeemableAtMs) && Date.now() < redeemableAtMs
+        const claimState: "ready" | "review" = review || locked ? "review" : "ready"
+        const expectedClearLabel = review
+          ? "Under review — not claimable yet"
+          : locked
+            ? `Available after ${new Date(redeemableAtMs).toLocaleString()} (48h lock)`
+            : "Ready to claim to available balance"
         holds.push({
           id: tx.id,
           amount: tx.amount,
           reason: tx.reason || TX_LABELS[tx.kind] || "Pending credit",
           source: classifyPendingSource(tx.reason || "", tx.sourceEvent || ""),
-          expectedClearLabel: review
-            ? "Under review — not claimable yet"
-            : "Ready to claim to available balance",
+          expectedClearLabel,
           createdAt: tx.createdAt,
-          claimState: review ? "review" : "ready",
+          claimState,
         })
       }
     }
@@ -1615,7 +1673,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
           <WalletToolsGrid
             onSelect={(id) => {
-              if (id === "tx") {
+              if (id === "utility") {
+                setShowUtilityPanel(true)
+                setAssetRail("ghc")
+              } else if (id === "tx") {
                 setTab("activity")
                 setTxFilter("all")
                 setAssetRail("ghc")
@@ -1637,6 +1698,25 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             }}
           />
 
+          {showUtilityPanel ? (
+            <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[12px] font-bold text-foreground">Utility catalog</p>
+                <button
+                  type="button"
+                  className="text-[11px] font-semibold text-muted-foreground"
+                  onClick={() => setShowUtilityPanel(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <GhcUtilityPanel
+                compact
+                onToast={(msg, type) => addToast(msg, type || "info")}
+              />
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
             <p className="font-semibold text-foreground">Pay with π (Pi Browser)</p>
             <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
@@ -1645,6 +1725,17 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               GreenHaven device PIN only unlocks this app — Pi Wallet authorizes π charges.
             </p>
           </div>
+          <div id="ghc-wallet-gh-pay" className="scroll-mt-4">
+          {selectedGhcPack ? (
+            <div className="mx-3 mb-2 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2 text-[12px] dark:border-violet-900 dark:bg-violet-950/40">
+              <p className="font-bold text-violet-900 dark:text-violet-100">
+                Pack selected: {selectedGhcPack.label || `${selectedGhcPack.ghcAmount} GHC`}
+              </p>
+              <p className="text-muted-foreground">
+                Pay {selectedGhcPack.piAmount} π via GH Pay, then server credits GHC (product {selectedGhcPack.productId}).
+              </p>
+            </div>
+          ) : null}
           <GhPayPanel
             compact
             onToast={(msg, type) => {
@@ -1653,6 +1744,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               addToast(msg, level)
             }}
           />
+        </div>
         </div>
 
           {tab === "rewards" && (
@@ -1992,6 +2084,31 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           setP2pMode("receive")
           setP2pError(null)
           setP2pSuccess(null)
+        }}
+        onBuy={() => {
+          setAssetRail("pi")
+          setTab("tools")
+          try {
+            document.getElementById("ghc-wallet-gh-pay")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          } catch { /* */ }
+        }}
+        onSelectPack={(pack) => {
+          setSelectedGhcPack(pack)
+          setAssetRail("pi")
+          setTab("tools")
+          try {
+            window.dispatchEvent(
+              new CustomEvent("ghc:toast", {
+                detail: {
+                  message: `Selected ${pack.label || pack.ghcAmount + " GHC"} · pay ${pack.piAmount} π then complete purchase`,
+                  type: "info",
+                },
+              }),
+            )
+          } catch { /* */ }
+          try {
+            document.getElementById("ghc-wallet-gh-pay")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          } catch { /* */ }
         }}
       />
       <SendGhcFlow

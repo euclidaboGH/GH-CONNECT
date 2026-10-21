@@ -225,6 +225,11 @@ export interface Post {
   reactionCounts?: Record<string, number>
   /** Reaction types the authenticated viewer has applied to this post. */
   viewerReactions?: string[]
+  /** Curation quality votes (independent of emoji reactions). */
+  upvoteCount?: number
+  downvoteCount?: number
+  /** Viewer's active curation choice when known from server. */
+  viewerCurationChoice?: "upvote" | "downvote"
   // Marketplace share — canonical listing remains in marketplace domain
   listingId?: string
   listingKind?: "product" | "service" | "opportunity"

@@ -7,7 +7,8 @@ import {
   fetchServerProfile,
   persistServerProfile,
 } from "@/lib/profile/server-profile-sync"
-import { sanitizeProfileMediaPartial } from "@/lib/profile/sanitize-profile-media"
+import { sanitizeProfileMediaPartial, durableOnlyProfileMedia } from "@/lib/profile/sanitize-profile-media"
+import { mergePhotos, mergeCover } from "@/lib/profile/merge-profile-media"
 
 import { useMemo, createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef, startTransition } from "react"
 import type { Profile, Settings, Post, StoryItem, Tab, Toast, Candidate, MatchEntry, Conversation, Like, FriendRequest, Message } from "@/lib/ghc-types"
@@ -591,6 +592,9 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
     const viewCount = Number(p.viewCount ?? p.view_count ?? 0) || 0
     const upvoteCount = Number(p.upvoteCount ?? p.upvote_count ?? 0) || 0
     const downvoteCount = Number(p.downvoteCount ?? p.downvote_count ?? 0) || 0
+    const viewerCurationRaw = String(p.viewerCurationChoice ?? p.viewer_curation_choice ?? p.curationChoice ?? "").toLowerCase()
+    const viewerCurationChoice =
+      viewerCurationRaw === "upvote" || viewerCurationRaw === "downvote" ? viewerCurationRaw : undefined
     const createdAt = Number(p.createdAt ?? p.created_at ?? Date.now()) || Date.now()
     const deletedAtRaw = p.deletedAt ?? p.deleted_at
     const deletedAt =
@@ -631,6 +635,7 @@ function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>
       viewCount: viewCount || undefined,
       upvoteCount,
       downvoteCount,
+      viewerCurationChoice,
       quoteOf: p.quoteOf || p.quote_of_post_id ? String(p.quoteOf || p.quote_of_post_id) : undefined,
     } as Post
   }).filter((p) => Boolean(p.id))
@@ -2179,13 +2184,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           if (!(result.durable && result.exists)) return
           setState((s) => {
             const server = result.profile as Partial<Profile>
-            const photos = Array.isArray(server.photos) ? server.photos : s.profile.photos
-            const coverPhoto =
-              server.coverPhoto === null || server.coverPhoto === ""
-                ? ""
-                : typeof server.coverPhoto === "string" && server.coverPhoto
-                  ? server.coverPhoto
-                  : s.profile.coverPhoto
+            const photos = mergePhotos(s.profile.photos, server.photos)
+            const coverPhoto = mergeCover(s.profile.coverPhoto, server.coverPhoto)
             return {
               ...s,
               profile: {
@@ -2194,7 +2194,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 id: (server.id as string) || s.profile.id,
                 photos,
                 coverPhoto,
-                onboarded: Boolean(server.onboarded),
+                onboarded: Boolean(server.onboarded ?? s.profile.onboarded),
               },
             }
           })
@@ -2234,21 +2234,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (cancelled || !result.ok || !result.profile) return
         setState((s) => {
           const server = result.profile as Partial<Profile>
-          // Durable server row is authority: honor explicit empty arrays / false onboarded.
-          // Non-durable or offline: keep local cache to avoid flash-wipe.
+          // Durable https media from server wins; empty server must not wipe local data: previews.
           const durable = result.durable && result.exists
-          const photos =
-            durable && Array.isArray(server.photos)
-              ? server.photos
-              : Array.isArray(server.photos) && server.photos.length > 0
-                ? server.photos
-                : s.profile.photos
-          const coverPhoto =
-            durable && (server.coverPhoto === null || server.coverPhoto === "")
-              ? ""
-              : typeof server.coverPhoto === "string" && server.coverPhoto.length > 0
-                ? server.coverPhoto
-                : s.profile.coverPhoto
+          const photos = mergePhotos(s.profile.photos, server.photos)
+          const coverPhoto = mergeCover(s.profile.coverPhoto, server.coverPhoto)
           const onboarded = durable
             ? Boolean(server.onboarded)
             : Boolean(server.onboarded) || Boolean(s.profile.onboarded)
@@ -2314,53 +2303,100 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         bio: updates.bio ? sanitizeText(updates.bio, 500) : undefined,
       } as Record<string, unknown>) as Partial<Profile>
 
-      // Drop blob/data media that cannot cross devices (Phase 7)
-      if (Array.isArray(updates.photos) && Array.isArray(sanitized.photos)) {
-        if (sanitized.photos.length < updates.photos.length && updates.photos.some((u) => String(u).startsWith("blob:") || String(u).startsWith("data:"))) {
-          addToast("Local-only image skipped — upload needs network for other devices", "info")
-        }
-      }
+      // Client keeps displayable media (incl. compact data:image). Server only gets durable URLs.
+      const forServer = {
+        ...sanitized,
+        ...durableOnlyProfileMedia({
+          photos: Array.isArray(sanitized.photos) ? (sanitized.photos as string[]) : undefined,
+          coverPhoto:
+            "coverPhoto" in sanitized
+              ? ((sanitized.coverPhoto as string | null | undefined) ?? null)
+              : undefined,
+        }),
+      } as Partial<Profile>
 
-      // Canonical Identity domain mutation
+      const hasLocalOnlyMedia =
+        (Array.isArray(sanitized.photos) &&
+          (sanitized.photos as string[]).some((u) => String(u).startsWith("data:"))) ||
+        (typeof sanitized.coverPhoto === "string" && String(sanitized.coverPhoto).startsWith("data:"))
+
+      // Canonical Identity domain mutation — keep full client media in domain state
       const result = await domains.identity.updateProfile(sanitized)
       if (!result.ok) {
         addToast(result.error, "error")
         return
       }
 
-      setState((s) => ({ ...s, profile: { ...s.profile, ...result.data } }))
+      setState((s) => {
+        const nextProfile = {
+          ...s.profile,
+          ...result.data,
+          photos: mergePhotos(
+            Array.isArray(sanitized.photos) ? sanitized.photos : result.data.photos,
+            result.data.photos
+          ),
+          coverPhoto: mergeCover(
+            "coverPhoto" in sanitized ? sanitized.coverPhoto : result.data.coverPhoto,
+            result.data.coverPhoto
+          ),
+        }
+        return { ...s, profile: nextProfile }
+      })
 
-      // Durable social profile (server). Await so reload can hydrate photos/fields.
-      // Failures do not roll back local UX; queue offline sync when needed.
+      // Durable social profile (server). Never POST large data: URLs (API body limit ~65KB).
       if (!state.isOnline) {
         offlineQueue.addAction({
           type: "profile_update",
-          payload: result.data,
+          payload: forServer,
           maxRetries: 3,
         })
-        addToast("Profile queued for sync", "info")
+        addToast(
+          hasLocalOnlyMedia
+            ? "Photo saved on this device — will sync when durable storage is ready"
+            : "Profile queued for sync",
+          "info"
+        )
         return
       }
 
       try {
-        const persisted = await persistServerProfile({ ...result.data })
+        const persisted = await persistServerProfile({ ...forServer })
         if (!persisted.ok) {
           offlineQueue.addAction({
             type: "profile_update",
-            payload: result.data,
+            payload: forServer,
             maxRetries: 3,
           })
           addToast(
-            persisted.error ||
-              "Profile saved on this device — server not confirmed. Will retry.",
+            hasLocalOnlyMedia
+              ? "Photo shows on this device. Configure media storage so other devices can see it."
+              : persisted.error ||
+                  "Profile saved on this device — server not confirmed. Will retry.",
             "info"
           )
+          // still persist local full profile
+          try {
+            const full = { ...result.data, ...sanitized }
+            window.localStorage.setItem("ghc.profile", JSON.stringify(full))
+          } catch { /* */ }
           return
+        }
+        // Merge durable server media back without wiping local data previews
+        if (persisted.profile) {
+          setState((s) => ({
+            ...s,
+            profile: {
+              ...s.profile,
+              ...persisted.profile,
+              photos: mergePhotos(s.profile.photos, persisted.profile.photos),
+              coverPhoto: mergeCover(s.profile.coverPhoto, persisted.profile.coverPhoto),
+            },
+          }))
         }
       } catch {
         offlineQueue.addAction({
           type: "profile_update",
-          payload: result.data,
+          payload: forServer,
           maxRetries: 3,
         })
         addToast("Profile saved on this device — server not confirmed. Will retry.", "info")
@@ -2368,7 +2404,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        window.localStorage.setItem("ghc.profile", JSON.stringify(result.data))
+        const fullLocal = {
+          ...result.data,
+          photos: mergePhotos(sanitized.photos ?? result.data.photos, result.data.photos),
+          coverPhoto: mergeCover(
+            "coverPhoto" in sanitized ? sanitized.coverPhoto : result.data.coverPhoto,
+            result.data.coverPhoto
+          ),
+        }
+        window.localStorage.setItem("ghc.profile", JSON.stringify(fullLocal))
         const { stampLocalOnboardingComplete, isStrongCompletedProfileShape } = await import("@/lib/onboarding-local")
         if (isStrongCompletedProfileShape(result.data as never) || (result.data as { onboarded?: boolean }).onboarded) {
           stampLocalOnboardingComplete({
@@ -3613,7 +3657,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast, state.posts])
 
-  const editComment = async (postId: string, commentId: string, newText: string) => {
+  const editComment = useCallback(async (postId: string, commentId: string, newText: string) => {
     const normalized = (newText || "").trim()
     if (!normalized) {
       addToast("Comment cannot be empty", "error")
@@ -3645,9 +3689,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not edit comment", "error")
     }
-  }
+  }, [addToast, state.posts, state.profile])
 
-  const deleteComment = async (postId: string, commentId: string) => {
+  const deleteComment = useCallback(async (postId: string, commentId: string) => {
     try {
       const result = await domains.posts.deleteComment(postId, commentId)
       if (!result.ok) {
@@ -3672,9 +3716,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete comment", "error")
     }
-  }
+  }, [addToast, state.posts, state.profile])
 
-  const addCommentReaction = async (postId: string, commentId: string, emoji: string) => {
+  const addCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
     const em = String(emoji || "").trim().slice(0, 16)
     if (!em) return
     try {
@@ -3782,10 +3826,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not react to comment", "error")
     }
-  }
+  }, [addToast, state.posts, state.profile])
 
 
-  const removeCommentReaction = async (postId: string, commentId: string, emoji: string) => {
+  const removeCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -3807,9 +3851,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-  }
+  }, [addToast, state.posts, state.profile])
 
-  const pinComment = async (postId: string, commentId: string) => {
+  const pinComment = useCallback(async (postId: string, commentId: string) => {
     // Local preference only — no durable comment-pin API/RPC in this build.
     setState((s) => ({
       ...s,
@@ -3823,9 +3867,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       ),
     }))
     addToast("Pinned on this device only — not synced to other accounts yet", "info")
-  }
+  }, [addToast, state.posts, state.profile])
 
-  const unpinComment = async (postId: string, commentId: string) => {
+  const unpinComment = useCallback(async (postId: string, commentId: string) => {
     // Local preference only — no durable comment-pin API/RPC in this build.
     setState((s) => ({
       ...s,
@@ -3839,7 +3883,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       ),
     }))
     addToast("Unpinned on this device only", "info")
-  }
+  }, [addToast, state.posts, state.profile])
 
   const createQuoteRepost = async (originalPostId: string, quoteText: string) => {
     const originalPost = state.posts.find((p) => p.id === originalPostId)
@@ -4969,52 +5013,64 @@ const dismissMatchCelebration = useCallback(() => {
         return true
       }
 
-      let serverId: string | null = null
-      let durable = false
-      try {
-        const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
-        const remote = await apiSendMessageWithRetry(
-          conversationId,
-          sanitizedText,
-          String(uiMessage.id),
-          replyToMessageId,
-          sharedPostId
-        )
-        if (remote?.ok && remote.durable !== false) {
-          durable = true
-          serverId = remote.message?.id ? String(remote.message.id) : null
-        } else {
-          const remoteError = String(remote?.error || "STORE_UNAVAILABLE")
-          permanentFailure = /AUTH_REQUIRED|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|INVALID|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET_NOT_FOUND/i.test(remoteError)
-          if (permanentFailure) permanentError = remoteError
-          if (!permanentFailure) {
-            offlineQueue.addAction({
-              type: "send_message",
-              payload: {
-                conversationId,
-                text: sanitizedText,
-                csrfToken,
-                messageId: uiMessage.id,
-                replyToMessageId,
-                sharedPostId,
-              },
-              maxRetries: 3,
-            })
-          }
-        }
-      } catch {
-        offlineQueue.addAction({
-          type: "send_message",
-          payload: {
+      // Domain messaging already performed the durable POST when online
+      // (apiSendMessageWithRetry inside sendMessage). Do NOT call the API again —
+      // a second POST was creating duplicate messages for a single Send press.
+      const domainStatus = String((result.data as { status?: string }).status || uiMessage.status || "")
+      const alreadyDurable =
+        domainStatus === "sent" || domainStatus === "delivered" || domainStatus === "read"
+      let serverId: string | null = alreadyDurable
+        ? String(uiMessage.id || result.data.id || "")
+        : null
+      let durable = alreadyDurable
+
+      if (!alreadyDurable) {
+        // Offline-prepared / failed domain path only — one network attempt here.
+        try {
+          const { apiSendMessageWithRetry } = await import("@/lib/messaging/server-messaging-sync")
+          const remote = await apiSendMessageWithRetry(
             conversationId,
-            text: sanitizedText,
-            csrfToken,
-            messageId: uiMessage.id,
+            sanitizedText,
+            String(uiMessage.id),
             replyToMessageId,
-            sharedPostId,
-          },
-          maxRetries: 3,
-        })
+            sharedPostId
+          )
+          if (remote?.ok && remote.durable !== false) {
+            durable = true
+            serverId = remote.message?.id ? String(remote.message.id) : String(uiMessage.id)
+          } else {
+            const remoteError = String(remote?.error || "STORE_UNAVAILABLE")
+            permanentFailure = /AUTH_REQUIRED|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|INVALID|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET_NOT_FOUND/i.test(remoteError)
+            if (permanentFailure) permanentError = remoteError
+            if (!permanentFailure) {
+              offlineQueue.addAction({
+                type: "send_message",
+                payload: {
+                  conversationId,
+                  text: sanitizedText,
+                  csrfToken,
+                  messageId: uiMessage.id,
+                  replyToMessageId,
+                  sharedPostId,
+                },
+                maxRetries: 3,
+              })
+            }
+          }
+        } catch {
+          offlineQueue.addAction({
+            type: "send_message",
+            payload: {
+              conversationId,
+              text: sanitizedText,
+              csrfToken,
+              messageId: uiMessage.id,
+              replyToMessageId,
+              sharedPostId,
+            },
+            maxRetries: 3,
+          })
+        }
       }
 
       await domains.messaging
@@ -6090,6 +6146,7 @@ const dismissMatchCelebration = useCallback(() => {
               description: formData.description || "",
               privacy: formData.privacy,
               category: formData.category,
+              feeCurrency: "GHC",
             })
             const ok =
               durable &&

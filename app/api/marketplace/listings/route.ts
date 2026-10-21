@@ -21,6 +21,7 @@ import {
   listingFeeRequiresSettlement,
 } from "@/lib/server/marketplace/listing-fee"
 import { verifyListingFeePayment } from "@/lib/server/marketplace/verify-listing-fee-payment"
+import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -118,29 +119,79 @@ export async function POST(request: Request) {
   void body.listingFee
   if (listingFeeRequiresSettlement(listingFee) && status === "active") {
     const feePaymentRef = String(body.listingFeePaymentId || body.feePaymentId || "").trim()
-    const verified = await verifyListingFeePayment({
-      sellerId: auth.userId,
-      listingId: id,
-      fee: listingFee,
-      paymentRef: feePaymentRef || null,
-    })
-    if (!verified.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: verified.error,
-          message:
-            "Listing fee payment must be a completed intent owned by you, matching the server fee amount/currency, and bound to this listing (referenceId marketplace_listing_fee_{listingId} or metadata.listingId).",
-          listingFee: {
-            amount: listingFee.feeAmount,
-            currency: listingFee.feeCurrency,
-            ratesApproved: listingFee.ratesApproved,
-            code: listingFee.code,
-          },
-          expectedReferenceId: `marketplace_listing_fee_${id}`,
+    const referenceId = `marketplace_listing_fee_${id}`
+
+    if (listingFee.feeCurrency === "GHC") {
+      const settled = await settlePilotFee({
+        userId: auth.userId,
+        fee: {
+          feature: "marketplace_listing",
+          feeAmount: listingFee.feeAmount,
+          feeCurrency: "GHC",
+          ratesApproved: listingFee.ratesApproved,
+          code: String(listingFee.code),
+          basis: String(listingFee.basis),
         },
-        { status: verified.error === "LISTING_FEE_PAYMENT_REQUIRED" ? 402 : 403 }
-      )
+        referenceId,
+        reason: `Marketplace listing fee · ${title}`,
+        sourceEvent: "MARKETPLACE_LISTING_FEE",
+        paymentRef: feePaymentRef || null,
+        bindKey: "listingId",
+        bindValue: id,
+      })
+      if (!settled.ok) {
+        const err = settled.error || "LISTING_FEE_SETTLEMENT_FAILED"
+        return NextResponse.json(
+          {
+            ok: false,
+            error: err,
+            message:
+              err === "INSUFFICIENT_BALANCE"
+                ? "Insufficient available GHC to activate this listing."
+                : "Listing fee could not be settled from available GHC.",
+            listingFee: {
+              amount: listingFee.feeAmount,
+              currency: listingFee.feeCurrency,
+              ratesApproved: listingFee.ratesApproved,
+              code: listingFee.code,
+            },
+            expectedReferenceId: referenceId,
+          },
+          {
+            status:
+              err === "INSUFFICIENT_BALANCE"
+                ? 400
+                : err === "SERVER_UNAVAILABLE"
+                  ? 503
+                  : 402,
+          }
+        )
+      }
+    } else {
+      const verified = await verifyListingFeePayment({
+        sellerId: auth.userId,
+        listingId: id,
+        fee: listingFee,
+        paymentRef: feePaymentRef || null,
+      })
+      if (!verified.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: verified.error,
+            message:
+              "Listing fee payment must be a completed intent owned by you, matching the server fee amount/currency, and bound to this listing.",
+            listingFee: {
+              amount: listingFee.feeAmount,
+              currency: listingFee.feeCurrency,
+              ratesApproved: listingFee.ratesApproved,
+              code: listingFee.code,
+            },
+            expectedReferenceId: referenceId,
+          },
+          { status: verified.error === "LISTING_FEE_PAYMENT_REQUIRED" ? 402 : 403 }
+        )
+      }
     }
   }
 

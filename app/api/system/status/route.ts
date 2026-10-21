@@ -1,3 +1,4 @@
+import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
 /**
  * GET /api/system/status — non-secret operator diagnostic.
  * Helps explain why media/rewards/messaging still fail after env is set.
@@ -15,9 +16,9 @@ export async function GET() {
     const env = readGhcServerEnv()
     const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
     const flags = {
-      activityRewards: String(process.env.GHC_ACTIVITY_REWARDS_ENABLED || "").trim() === "1",
-      referralSettlement: String(process.env.GHC_REFERRAL_SETTLEMENT_ENABLED || "").trim() === "1",
-      curationRedistribute: String(process.env.GHC_CURATION_REDISTRIBUTE_ENABLED || "").trim() === "1",
+      activityRewards: testnetUnlockSnapshot().activityRewards,
+      referralSettlement: testnetUnlockSnapshot().referralSettlement,
+      curationRedistribute: testnetUnlockSnapshot().curationRedistribute,
     }
     const supabase = {
       urlPresent: Boolean(env.supabaseUrl),

@@ -13,6 +13,17 @@ import {
 } from "@/lib/server/payments/intent-store"
 import { piGetPayment, getPiApiKey } from "@/lib/server/payments/pi-api"
 import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
+import { getGhcPack, isGhcPackProductId } from "@/lib/server/economy/ghc-pack-catalog"
+import { buyGhcWithPiEnabled } from "@/lib/server/economy/testnet-unlock"
+import {
+  allowMemoryServer,
+  isDatabaseConfigured,
+} from "@/lib/server/economy/http"
+import {
+  executeAuthoritativePackPurchase,
+  getProcessGhcStore,
+} from "@/lib/server/economy/store"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -178,6 +189,90 @@ export async function POST(request: Request) {
       }
     }
 
+
+    // Phase 3: governed GHC pack credit when product is a pack
+    let ghcPackGrant: {
+      granted: boolean
+      alreadyCredited?: boolean
+      ghcAmount?: number
+      productId?: string
+      error?: string
+    } | null = null
+    try {
+      const metaProduct = String(finalIntent.metadata?.productId || "").trim()
+      const ref = String(finalIntent.referenceId || "")
+      const packId =
+        (isGhcPackProductId(metaProduct) && metaProduct) ||
+        (ref.startsWith("ghc_pack_") ? ref.split(":")[0] : "") ||
+        (isGhcPackProductId(ref) ? ref : "")
+      if (packId && buyGhcWithPiEnabled()) {
+        const pack = getGhcPack(packId)
+        if (pack && Number(finalIntent.amount) === pack.piAmount) {
+          const referenceId = `pi_pack:${finalIntent.id}:${pack.productId}`
+          const reason = `Pi pack ${pack.label}`
+          if (isDatabaseConfigured()) {
+            const env = readGhcServerEnv()
+            const res = await fetch(
+              `${env.supabaseUrl!.replace(/\/$/, "")}/rest/v1/rpc/ghc_credit_pack_purchase`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: env.supabaseServiceRoleKey!,
+                  Authorization: `Bearer ${env.supabaseServiceRoleKey!}`,
+                },
+                body: JSON.stringify({
+                  p_user_id: auth.userId,
+                  p_amount: pack.ghcAmount,
+                  p_reference_id: referenceId,
+                  p_reason: reason,
+                  p_product_id: pack.productId,
+                  p_intent_id: finalIntent.id,
+                }),
+              }
+            )
+            const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
+            if (res.ok && data && data.ok !== false) {
+              ghcPackGrant = {
+                granted: true,
+                alreadyCredited: Boolean(data.alreadyCredited || data.idempotent),
+                ghcAmount: pack.ghcAmount,
+                productId: pack.productId,
+              }
+            } else {
+              ghcPackGrant = {
+                granted: false,
+                error: String((data && data.error) || "CREDIT_FAILED"),
+                productId: pack.productId,
+              }
+            }
+          } else if (allowMemoryServer()) {
+            const result = await executeAuthoritativePackPurchase(getProcessGhcStore(), {
+              userId: auth.userId,
+              amount: pack.ghcAmount,
+              referenceId,
+              reason,
+              productId: pack.productId,
+              intentId: finalIntent.id,
+            })
+            ghcPackGrant = result.ok
+              ? {
+                  granted: true,
+                  alreadyCredited: Boolean(result.idempotent),
+                  ghcAmount: pack.ghcAmount,
+                  productId: pack.productId,
+                }
+              : { granted: false, error: result.error, productId: pack.productId }
+          }
+        }
+      }
+    } catch (e) {
+      ghcPackGrant = {
+        granted: false,
+        error: e instanceof Error ? e.message : "PACK_GRANT_FAILED",
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       paymentId: intent.providerPaymentId,
@@ -186,6 +281,7 @@ export async function POST(request: Request) {
       productId: intent.metadata?.productId || null,
       referenceId: intent.referenceId,
       membership: membershipGrant,
+      ghcPack: ghcPackGrant,
     })
   } catch (e) {
     return NextResponse.json(
