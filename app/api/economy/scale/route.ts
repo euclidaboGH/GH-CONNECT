@@ -54,9 +54,13 @@ export async function GET(request: Request) {
       activityWeeklyCapGhc: ACTIVITY_WEEKLY_CAP_GHC,
       population: population
         ? {
-            eligibleUsers: population.eligibleUsers,
-            activeClaimers: population.activeClaimers,
+            eligibleUsers: population.eligibleEconomicUsers,
+            eligibleEconomicUsers: population.eligibleEconomicUsers,
+            activeClaimers: population.activeEconomicUsers,
+            activeEconomicUsers: population.activeEconomicUsers,
             suspendedUsers: population.suspendedUsers,
+            registeredUsers: population.registeredUsers,
+            source: population.source,
           }
         : null,
       processTelemetry: telemetry

@@ -35,8 +35,8 @@ export async function GET() {
     durable: Boolean(population),
     population: population
       ? {
-          eligibleUsers: population.eligibleUsers,
-          activeClaimers: population.activeClaimers,
+          eligibleUsers: population.eligibleEconomicUsers,
+          activeClaimers: population.activeEconomicUsers,
           suspendedUsers: population.suspendedUsers,
         }
       : null,
