@@ -1689,7 +1689,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [state.ready, state.profile?.id])
+  }, [state.ready, state.profile?.id, state.profile?.displayName, state.profile?.photos])
 
 
 
@@ -2096,22 +2096,35 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [state.ready, identityUserId])
 
+  // Snapshot the exact persistence slices during render so the effect can depend on
+  // the values it writes, without capturing the entire state object.
+  const persistenceReady = state.ready
+  const persistenceProfile = state.profile
+  const persistenceSettings = state.settings
+  const persistencePosts = state.posts
+  const persistenceMatches = state.matches
+  const persistenceLikes = state.likes
+  const persistenceConversations = state.conversations
+  const persistenceFriendRequests = state.friendRequests
+  const persistenceFollowing = state.following
+  const persistenceFriends = state.friends
+  const persistenceBlockedUsers = state.blockedUsers
+  const persistenceMutedUsers = state.mutedUsers
+
   // Save existing user-state slices together after startup restoration.
   useEffect(() => {
-    if (!sdk || !state.ready) return
-    const {
-      profile,
-      settings,
-      posts,
-      matches,
-      likes,
-      conversations,
-      friendRequests,
-      following,
-      friends,
-      blockedUsers,
-      mutedUsers,
-    } = state
+    if (!sdk || !persistenceReady) return
+    const profile = persistenceProfile
+    const settings = persistenceSettings
+    const posts = persistencePosts
+    const matches = persistenceMatches
+    const likes = persistenceLikes
+    const conversations = persistenceConversations
+    const friendRequests = persistenceFriendRequests
+    const following = persistenceFollowing
+    const friends = persistenceFriends
+    const blockedUsers = persistenceBlockedUsers
+    const mutedUsers = persistenceMutedUsers
     if (!profile.onboarded) return
 
     const timer = setTimeout(async () => {
@@ -2141,18 +2154,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }, 1500)
     return () => clearTimeout(timer)
   }, [
-    state.ready,
-    state.profile,
-    state.settings,
-    state.posts,
-    state.matches,
-    state.likes,
-    state.conversations,
-    state.friendRequests,
-    state.following,
-    state.friends,
-    state.blockedUsers,
-    state.mutedUsers,
+    persistenceReady,
+    persistenceProfile,
+    persistenceSettings,
+    persistencePosts,
+    persistenceMatches,
+    persistenceLikes,
+    persistenceConversations,
+    persistenceFriendRequests,
+    persistenceFollowing,
+    persistenceFriends,
+    persistenceBlockedUsers,
+    persistenceMutedUsers,
     sdk,
   ])
 
@@ -2434,7 +2447,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Failed to update profile", "error")
     }
-  }, [addToast, state.profile])
+  }, [addToast, domains.identity, state.isOnline, state.profile])
 
   const completeOnboarding = useCallback(async () => {
     try {
@@ -2526,7 +2539,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...otherLocals,
       ],
     }))
-  }, [addToast])
+  }, [])
 
   const createLocalProfile = (profile: Partial<Profile>) => {
     // Identity domain builds the record; local-profiles API persists it
@@ -2701,7 +2714,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       addToast("Failed to create post", "error")
       return false
     }
-  }, [addToast, state.profile, state.posts])
+  }, [addToast, domains.posts, state.isOnline, state.profile, state.posts])
 
   /** Durable multi-reaction (like, love, support, …). Server is authority when configured. */
   const reactToPost = useCallback(async (postId: string, reaction: string = "like") => {
@@ -3153,7 +3166,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete post", "error")
     }
-  }, [addToast, state.posts])
+  }, [addToast, domains.posts, state.posts])
 
   const addComment = useCallback(async (
     postId: string,
@@ -3559,7 +3572,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not update post", "error")
     }
-  }, [addToast, state.posts, state.profile, domains])
+  }, [addToast, domains])
 
   const archivePost = useCallback(async (postId: string) => {
     const post = state.posts.find((p) => p.id === postId)
@@ -3690,7 +3703,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not edit comment", "error")
     }
-  }, [addToast, state.posts, state.profile])
+  }, [addToast, domains.posts])
 
   const deleteComment = useCallback(async (postId: string, commentId: string) => {
     try {
@@ -3717,7 +3730,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete comment", "error")
     }
-  }, [addToast, state.posts, state.profile])
+  }, [addToast, domains.posts])
 
   const addCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
     const em = String(emoji || "").trim().slice(0, 16)
@@ -3827,7 +3840,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not react to comment", "error")
     }
-  }, [addToast, state.posts, state.profile])
+  }, [addToast, domains.posts])
 
 
   const removeCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
