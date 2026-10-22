@@ -24,8 +24,14 @@ assert.match(signedUrl, /storagePath\.split\("\/"\)\.map\(\(part\) => encodeURIC
 
 assert.match(ghcContext, /const canMessageUser = useCallback\([\s\S]*?\}, \[state\.settings\?\.blockedUsers, state\.blockedUsers\]\)/,
   'canMessageUser must be memoized with the block-state dependencies it reads')
-assert.match(ghcContext, /const unfollowFromPost = useCallback\([\s\S]*?\}, \[followUser\]\)/,
-  'unfollowFromPost must be memoized so feed context values remain stable')
+assert.match(ghcContext, /const unfollowFromPost = useCallback\(async \(userId: string\) => \{\s*await setFollowUser\(userId, false\)\s*\}, \[setFollowUser\]\)/,
+  'unfollowFromPost must use an explicit durable unfollow target and stable dependency')
+assert.ok(ghcContext.indexOf('const followUser = useCallback') >= 0 && ghcContext.indexOf('const followUser = useCallback') < ghcContext.indexOf('const followFromPost = useCallback'),
+  'followUser must be declared before any callback that references it')
+assert.match(ghcContext, /const followFromPost = useCallback\(async \(userId: string\) => \{\s*await setFollowUser\(userId, true\)\s*\}, \[setFollowUser\]\)/,
+  'followFromPost must use the explicit durable follow operation, not a later-declared toggle callback')
+assert.doesNotMatch(ghcContext, /const followFromPost = useCallback\([\s\S]{0,180}?await followUser\(userId\)[\s\S]{0,100}?\}, \[followUser\]\)/,
+  'followFromPost must not capture followUser before its declaration')
 assert.match(ghcContext, /const applyShareResult = useCallback\([\s\S]*?\}, \[sendMessage, addToast\]\)/,
   'applyShareResult must be memoized with its sendMessage and toast dependencies')
 assert.match(ghcContext, /const mutedIdsForUi = useMemo\([\s\S]*?\}, \[state\]\)/,
@@ -39,4 +45,4 @@ assert.doesNotMatch(ghcContext, /\[state\.profile\.displayName, state\.conversat
 assert.doesNotMatch(ghcContext, /\[state\.friends, state\.friendRequests, state\.profile, domains, addToast\]/,
   'addFriend must not depend on friendRequests when updates use functional state setters')
 
-console.log('Latest CI regression checks: 16/16 passed')
+console.log('Latest CI regression checks: 19/19 passed')

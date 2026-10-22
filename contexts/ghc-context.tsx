@@ -4251,16 +4251,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const followFromPost = async (userId: string) => {
-    // Canonical: same path as followUser (graph domain)
-    await followUser(userId)
-  }
-
-  const unfollowFromPost = useCallback(async (userId: string) => {
-    // Canonical: toggleFollow via graph — never dual-write following alone
-    await followUser(userId)
-  }, [followUser])
-
   const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     const messagingPrivacyUpdates: Record<string, string> = {}
     if (updates.whoCanMessage && updates.whoCanMessage !== state.settings.whoCanMessage) messagingPrivacyUpdates.whoCanMessage = updates.whoCanMessage
@@ -4501,15 +4491,14 @@ const dismissMatchCelebration = useCallback(() => {
     setState((s) => (s.matchCelebration ? { ...s, matchCelebration: null } : s))
   }, [])
 
-  const followUser = useCallback(async (userId: string) => {
+  const setFollowUser = useCallback(async (userId: string, shouldFollow: boolean) => {
     try {
       if (!isLikelyServerUserId(userId)) {
         addToast("Cannot follow — pick a real registered member", "error")
         return
       }
       const already = (state.following || []).includes(userId)
-      const wantFollow = !already
-      if (wantFollow) {
+      if (shouldFollow && !already) {
         const matchIds = (state.matches || []).map((m) => m.userId)
         const friendIds = state.friends || []
         if (!privacyCanFollow(state.settings, "current-user", userId, matchIds, friendIds)) {
@@ -4517,46 +4506,68 @@ const dismissMatchCelebration = useCallback(() => {
           return
         }
       }
-      // Server-first so follower lists match across accounts
+      // The authenticated Supabase-backed endpoint is the durable source of truth.
       const { socialFollow } = await import("@/lib/social/client")
-      const remote = await socialFollow(userId, wantFollow)
+      const remote = await socialFollow(userId, shouldFollow)
       if (!remote.ok || remote.durable === false) {
-        addToast(
-          remote.error ||
-            (wantFollow
-              ? "Could not follow — server not confirmed"
-              : "Could not unfollow — server not confirmed"),
-          "error",
-        )
+        addToast(remote.error || (shouldFollow
+          ? "Could not follow — server not confirmed"
+          : "Could not unfollow — server not confirmed"), "error")
         return
       }
-      const result = await domains.graph.toggleFollow(userId)
-      if (result.ok) {
-        setState((s) => applyGraphPatch(s, patchFromFollow(result.data)))
-      } else {
-        // Align local list even if domain toggle lagged
-        setState((s) => ({
-          ...s,
-          following: wantFollow
-            ? Array.from(new Set([...(s.following || []), userId]))
-            : (s.following || []).filter((id) => id !== userId),
-        }))
+      // Update the in-memory graph only when its current state differs from the confirmed
+      // server target. The domain adapter is local/session state, not a second DB write.
+      if (already !== shouldFollow) {
+        const result = await domains.graph.toggleFollow(userId)
+        if (result.ok) {
+          setState((s) => applyGraphPatch(s, patchFromFollow(result.data)))
+        } else {
+          setState((s) => ({
+            ...s,
+            following: shouldFollow
+              ? Array.from(new Set([...(s.following || []), userId]))
+              : (s.following || []).filter((id) => id !== userId),
+          }))
+        }
       }
       try {
-        window.dispatchEvent(
-          new CustomEvent("ghc:social-mutation", {
-            detail: { type: wantFollow ? "follow" : "unfollow", targetUserId: userId },
-          })
-        )
-      } catch {
-        /* */
-      }
-      addToast(wantFollow ? "Following" : "Unfollowed", wantFollow ? "success" : "info")
+        window.dispatchEvent(new CustomEvent("ghc:social-mutation", {
+          detail: { type: shouldFollow ? "follow" : "unfollow", targetUserId: userId },
+        }))
+      } catch { /* non-browser/test runtime */ }
+      addToast(shouldFollow ? "Following" : "Unfollowed", shouldFollow ? "success" : "info")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
-      addToast("Error following user", "error")
+      addToast("Error updating follow status", "error")
     }
   }, [domains, addToast, state.following, state.matches, state.friends, state.settings])
+
+  const followUser = useCallback(async (userId: string) => {
+    try {
+      // Read authoritative status before toggling so stale profile/feed state cannot invert
+      // an intended action or issue duplicate follow writes.
+      const { socialFetchFollowStatus } = await import("@/lib/social/client")
+      const status = await socialFetchFollowStatus(userId)
+      if (!status.ok || !status.durable) {
+        addToast(status.error || "Could not verify follow status. Try again.", "error")
+        return
+      }
+      await setFollowUser(userId, !status.isFollowing)
+    } catch (err) {
+      errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
+      addToast("Could not verify follow status", "error")
+    }
+  }, [setFollowUser, addToast])
+
+  // Keep Feed and Profile adapters below the canonical callback declaration to avoid
+  // block-scoped use-before-declaration errors in the CI TypeScript check.
+  const followFromPost = useCallback(async (userId: string) => {
+    await setFollowUser(userId, true)
+  }, [setFollowUser])
+
+  const unfollowFromPost = useCallback(async (userId: string) => {
+    await setFollowUser(userId, false)
+  }, [setFollowUser])
 
   const addFriend = useCallback(async (userId: string) => {
     try {

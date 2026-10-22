@@ -21,7 +21,7 @@ const accBody = uni.slice(acceptIdx, uni.indexOf("export async function declineU
 ok(accBody.indexOf("postJson(\"/api/connections/accept\"") < accBody.indexOf("acceptFriendRequest"), "API before session graph on accept")
 
 const ctx = readFileSync("contexts/ghc-context.tsx", "utf8")
-const fStart = ctx.indexOf("const followUser = useCallback")
+const fStart = ctx.indexOf("const setFollowUser = useCallback")
 const fEnd = ctx.indexOf("const addFriend = useCallback")
 const fBody = ctx.slice(fStart, fEnd)
 ok(fBody.indexOf("socialFollow") < fBody.indexOf("toggleFollow"), "follow: API before domain toggle")
