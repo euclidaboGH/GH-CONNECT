@@ -20,6 +20,13 @@ export type NotificationType =
   | "post_comment"
   | "connection_request"
   | "curation"
+  | "upvote"
+  | "downvote"
+  | "comment_reply"
+  | "marketplace_listing"
+  | "marketplace_order"
+  | "marketplace_comment"
+  | "marketplace_reaction"
 
 export interface Notification {
   id: string
@@ -35,7 +42,7 @@ export interface Notification {
 export const NOTIFICATIONS_CHANGED_EVENT = "ghc:notifications-changed" as const
 
 const NOTIFICATIONS_KEY = "ghc_notifications"
-const MAX_NOTIFICATIONS = 100
+const MAX_NOTIFICATIONS = 300
 
 export const notificationSystem = {
   // Add notification
@@ -195,14 +202,33 @@ export const notificationSystem = {
   deleteNotification: (notifId: string): void => {
     try {
       const stored = localStorage.getItem(NOTIFICATIONS_KEY)
-      if (!stored) return
-
-      const notifs: Notification[] = JSON.parse(stored)
+      const notifs: Notification[] = stored ? JSON.parse(stored) : []
       const updated = notifs.filter((n) => n.id !== notifId)
-
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        const delKey = "ghc_notifications_deleted"
+        const deleted: string[] = JSON.parse(localStorage.getItem(delKey) || "[]")
+        if (notifId && !deleted.includes(notifId)) {
+          deleted.push(notifId)
+          localStorage.setItem(delKey, JSON.stringify(deleted.slice(-500)))
+        }
+      } catch { /* */ }
+      try {
+        window.dispatchEvent(
+          new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "delete", id: notifId } }),
+        )
+      } catch { /* */ }
     } catch (e) {
-      console.warn("[v0] Failed to delete notification:", e)
+      console.warn("[ghc] Failed to delete notification:", e)
+    }
+  },
+
+  isDeleted: (notifId: string): boolean => {
+    try {
+      const deleted: string[] = JSON.parse(localStorage.getItem("ghc_notifications_deleted") || "[]")
+      return deleted.includes(notifId)
+    } catch {
+      return false
     }
   },
 
@@ -237,18 +263,52 @@ export function notifyRewardClaimed(input: {
 
 /** Local mirror when you receive engagement on your content (author-only). */
 export function notifyContentEngagement(input: {
-  kind: "comment" | "like" | "curation"
+  kind: "comment" | "like" | "curation" | "upvote" | "downvote" | "comment_reply"
   title: string
   message: string
   postId?: string
   fromUserId?: string
+  actorId?: string
 }): void {
-  const type =
-    input.kind === "comment" ? "comment" : input.kind === "like" ? "like" : "system"
-  notificationSystem.addNotification(type, input.title, input.message, "🔔", {
+  const typeMap: Record<string, NotificationType> = {
+    comment: "post_comment",
+    like: "post_like",
+    curation: "curation",
+    upvote: "upvote",
+    downvote: "downvote",
+    comment_reply: "comment_reply",
+  }
+  const type = typeMap[input.kind] || "system"
+  const icon =
+    input.kind === "upvote" ? "⬆️" :
+    input.kind === "downvote" ? "⬇️" :
+    input.kind === "like" ? "❤️" :
+    input.kind === "comment" || input.kind === "comment_reply" ? "💬" : "🔔"
+  notificationSystem.addNotification(type, input.title, input.message, icon, {
     postId: input.postId,
     fromUserId: input.fromUserId,
+    actorId: input.actorId || input.fromUserId,
     kind: input.kind,
+    category: "social",
+    open: "feed",
+  })
+}
+
+export function notifyMarketplaceEvent(input: {
+  kind: "listing" | "order" | "comment" | "reaction"
+  title: string
+  message: string
+  listingId?: string
+}): void {
+  const type =
+    input.kind === "listing" ? "marketplace_listing" :
+    input.kind === "order" ? "marketplace_order" :
+    input.kind === "comment" ? "marketplace_comment" : "marketplace_reaction"
+  notificationSystem.addNotification(type, input.title, input.message, "🛒", {
+    listingId: input.listingId,
+    kind: `marketplace_${input.kind}`,
+    category: "marketplace",
+    open: "marketplace",
   })
 }
 

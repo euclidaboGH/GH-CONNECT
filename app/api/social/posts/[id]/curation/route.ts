@@ -115,15 +115,45 @@ export async function POST(
   }
 
   if (!result.ok || data?.ok === false) {
-    const err = data?.error || result.error || "CURATION_FAILED"
+    const err = String(data?.error || result.error || "CURATION_FAILED")
     if (err === "NOT_FOUND") {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
     }
     if (err === "FORBIDDEN" || err === "SELF_CURATION_FORBIDDEN") {
-      return NextResponse.json({ ok: false, error: err }, { status: 403 })
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err,
+          message:
+            err === "SELF_CURATION_FORBIDDEN"
+              ? "You cannot upvote or downvote your own post."
+              : "You cannot curate this post.",
+        },
+        { status: 403 }
+      )
     }
     if (err === "INVALID_CHOICE") {
       return NextResponse.json({ ok: false, error: "INVALID_CHOICE" }, { status: 400 })
+    }
+    // Signature miss / schema cache / true missing function
+    if (
+      /_HTTP_404$/.test(err) ||
+      result.status === 404 ||
+      result.diagnosticCode === "PGRST202" ||
+      result.diagnosticCode === "PGRST203"
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SOCIAL_RPC_UNAVAILABLE",
+          diagnosticCode: result.diagnosticCode || null,
+          diagnosticMessage: result.diagnosticMessage || null,
+          message:
+            "Curation RPC could not be resolved (missing signature or schema cache). Confirm gh_post_curation_set_with_reward(text,text,text,numeric,numeric,text) is exposed to PostgREST and run NOTIFY pgrst, 'reload schema'.",
+          durable: false,
+        },
+        { status: 503 }
+      )
     }
     return NextResponse.json(
       { ok: false, error: err, durable: false },
@@ -146,32 +176,54 @@ export async function POST(
     ghcMutated: false,
   }
 
-  // Reward decision is returned by the same transaction as the vote write.
+  // Reward decision only when the atomic reward-aware RPC ran.
+  // Fallback to gh_post_curation_set must never claim a reward credit.
+  const rewardAware =
+    result.fn === "gh_post_curation_set_with_reward" && !result.usedFallback
+      ? true
+      : result.fn === "gh_post_curation_set_with_reward"
   const rewardData = data.reward
-  const reward: Record<string, unknown> = rewardData
-    ? {
-        credited: Boolean(rewardData.credited),
-        amount: Number(rewardData.amount || 0),
-        reason: rewardData.reason,
-        status: rewardData.status,
-      }
-    : { credited: false, amount: 0, reason: "NO_REWARD_FOR_NON_UPVOTE" }
+  let reward: Record<string, unknown>
+  if (result.usedFallback && result.fn === "gh_post_curation_set") {
+    reward = {
+      credited: false,
+      amount: 0,
+      reason: "REWARD_RPC_UNAVAILABLE",
+      status: "skipped",
+      path: "vote_only_fallback",
+    }
+  } else if (rewardData) {
+    reward = {
+      credited: Boolean(rewardData.credited),
+      amount: Number(rewardData.amount || 0),
+      reason: rewardData.reason,
+      status: rewardData.status,
+    }
+  } else {
+    reward = { credited: false, amount: 0, reason: "NO_REWARD_FOR_NON_UPVOTE" }
+  }
+  void rewardAware
 
   // Safe public curation notice — no JCS/weights/private calibration
   if (finalChoice === "upvote" || finalChoice === "downvote") {
     void (async () => {
       const authorId = await lookupPostAuthor(postId)
       if (!authorId || authorId === auth.userId) return
+      const isUp = choice === "upvote"
+      const isDown = choice === "downvote"
+      if (choice === "neutral") return
       await emitSocialNotification({
         recipientUserId: authorId,
         actorUserId: auth.userId,
         type: "curation",
         entityType: "post",
         entityId: postId,
-        title: "Community review",
-        body: "Your post received a new community review.",
-        dedupeKey: `curation:${auth.userId}:${postId}`,
-        metadata: { postId, publicOnly: true },
+        title: isUp ? "New upvote on your post" : "New downvote on your post",
+        body: isUp
+          ? "Someone upvoted your post"
+          : "Someone downvoted your post",
+        dedupeKey: `curation:${auth.userId}:${postId}:${choice}`,
+        metadata: { postId, choice, publicOnly: true, category: "social" },
       })
     })()
   }

@@ -22,6 +22,11 @@ import {
   Gift,
   Share2,
   CheckCheck,
+  Trash2,
+  ChevronLeft,
+  ArrowUp,
+  ArrowDown,
+  Store,
 } from "lucide-react"
 import {
   notificationSystem,
@@ -37,6 +42,11 @@ import {
   navigateNotificationDeepLink,
   type NotificationCenterBucket,
 } from "@/lib/notification-center"
+import {
+  groupNotificationsIntoThreads,
+  notificationChannelKey,
+  type NotificationThread,
+} from "@/lib/notification-channels"
 
 const ICON: Partial<Record<NotificationType, React.ReactNode>> = {
   like: <Heart size={15} className="text-rose-500" />,
@@ -53,6 +63,16 @@ const ICON: Partial<Record<NotificationType, React.ReactNode>> = {
   ghc_sent: <Coins size={15} className="text-emerald-700" />,
   reward: <Gift size={15} className="text-amber-600" />,
   payment: <Coins size={15} className="text-teal-600" />,
+  post_like: <Heart size={15} className="text-rose-500" />,
+  post_comment: <MessageCircle size={15} className="text-sky-600" />,
+  comment_reply: <MessageCircle size={15} className="text-sky-700" />,
+  upvote: <ArrowUp size={15} className="text-emerald-600" />,
+  downvote: <ArrowDown size={15} className="text-orange-600" />,
+  curation: <ArrowUp size={15} className="text-emerald-700" />,
+  marketplace_listing: <Store size={15} className="text-amber-700" />,
+  marketplace_order: <Store size={15} className="text-amber-600" />,
+  marketplace_comment: <MessageCircle size={15} className="text-amber-600" />,
+  marketplace_reaction: <Heart size={15} className="text-amber-600" />,
   mention: <MessageCircle size={15} className="text-sky-600" />,
 }
 
@@ -98,6 +118,10 @@ const EMPTY_COPY: Record<NotificationCenterBucket, { title: string; body: string
     title: "No community alerts",
     body: "Invites, join requests, and community announcements appear here.",
   },
+  marketplace: {
+    title: "No marketplace alerts",
+    body: "Listing updates, orders, and product reactions will show here.",
+  },
   system: {
     title: "No system notices",
     body: "Security and account notices appear here when needed.",
@@ -117,6 +141,8 @@ export function NotificationBell({
   const [listLoading, setListLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [durableOk, setDurableOk] = useState<boolean | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [threadKey, setThreadKey] = useState<string | null>(null)
   const ghc = useGHC() as { blockedUsers?: string[]; mutedUsers?: string[] }
   const blockedKey = Array.isArray(ghc.blockedUsers) ? ghc.blockedUsers.join("|") : ""
   const mutedKey = Array.isArray(ghc.mutedUsers) ? ghc.mutedUsers.join("|") : ""
@@ -303,7 +329,15 @@ export function NotificationBell({
           for (const x of [...durableSocialVisible, ...durableEconomyVisible, ...mappedAnnouncements, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
-          return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+          return Array.from(byId.values())
+            .filter((x) => {
+              try {
+                return !notificationSystem.isDeleted?.(x.id)
+              } catch {
+                return true
+              }
+            })
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         })
 
         const localUnread = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers).filter((n) => !n.read).length
@@ -402,6 +436,15 @@ export function NotificationBell({
   }, [open])
 
   const filtered = useMemo(() => filterByBucket(items, bucket), [items, bucket])
+  const threads = useMemo(() => groupNotificationsIntoThreads(filtered), [filtered])
+  const expanded = useMemo(
+    () => (expandedId ? filtered.find((x) => x.id === expandedId) || null : null),
+    [expandedId, filtered],
+  )
+  const activeThread = useMemo(() => {
+    if (!threadKey) return null
+    return threads.find((th) => th.channelKey === threadKey) || null
+  }, [threadKey, threads])
 
   const openPanel = () => {
     setOpen(true)
@@ -415,44 +458,93 @@ export function NotificationBell({
 
   const closePanel = () => {
     setOpen(false)
+    setExpandedId(null)
+    setThreadKey(null)
     dispatchCloseTransientUI({ reason: "notification-close" })
   }
 
-  const onTap = (n: Notification) => {
+  const markOneRead = (n: Notification) => {
     try {
       notificationSystem.markAsRead?.(n.id)
     } catch {
       /* */
     }
-    // Optimistic UI — durable rows only update after server merge otherwise
     setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
     setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
-    const notificationData = (n.data || {}) as { durable?: boolean; durableEconomy?: boolean; durableAnnouncement?: boolean; announcementId?: string; actionPath?: string }
+    const notificationData = (n.data || {}) as {
+      durable?: boolean
+      durableEconomy?: boolean
+      durableAnnouncement?: boolean
+      announcementId?: string
+    }
     if (notificationData.durable && n.id) {
       void fetch("/api/social/notifications", {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
-      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
+      })
+        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
+        .catch(() => null)
     } else if (notificationData.durableAnnouncement && notificationData.announcementId) {
       void fetch("/api/system/announcements", {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: notificationData.announcementId }),
-      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
+      })
+        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
+        .catch(() => null)
     } else if (notificationData.durableEconomy && n.id) {
       void fetch(`/api/economy/notifications/${encodeURIComponent(n.id)}/read`, {
-        method: "POST", credentials: "include", headers: { Accept: "application/json" },
-      }).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read"))).catch(() => null)
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      })
+        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
+        .catch(() => null)
     }
+  }
+
+  /** Tap opens detail + channel history (like DM thread). Navigate via Open action. */
+  const onTap = (n: Notification) => {
+    markOneRead(n)
+    setExpandedId(n.id)
+    setThreadKey(notificationChannelKey(n))
+  }
+
+  const openTarget = (n: Notification) => {
+    markOneRead(n)
+    const notificationData = (n.data || {}) as { actionPath?: string }
     const link = resolveNotificationDeepLink(n)
-    if (notificationData.actionPath && notificationData.actionPath.startsWith("/") && !notificationData.actionPath.startsWith("//")) {
+    if (
+      notificationData.actionPath &&
+      notificationData.actionPath.startsWith("/") &&
+      !notificationData.actionPath.startsWith("//")
+    ) {
       window.location.assign(notificationData.actionPath)
     } else {
       navigateNotificationDeepLink(link)
     }
     onOpenTarget?.(n)
     closePanel()
-    // Background reconcile — do not block navigation
     window.setTimeout(() => refresh(), 400)
+  }
+
+  const onDelete = (n: Notification) => {
+    try {
+      notificationSystem.deleteNotification?.(n.id)
+    } catch {
+      /* */
+    }
+    setItems((prev) => prev.filter((x) => x.id !== n.id))
+    if (expandedId === n.id) {
+      setExpandedId(null)
+      setThreadKey(null)
+    }
+    setStatusMsg("Notification deleted")
+    window.setTimeout(() => setStatusMsg(null), 2000)
+    window.setTimeout(() => refresh(), 300)
   }
 
   const markAll = () => {
@@ -608,14 +700,95 @@ export function NotificationBell({
                   </p>
                 </div>
               ) : (
+                {expanded && activeThread ? (
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
+                        onClick={() => {
+                          setExpandedId(null)
+                          setThreadKey(null)
+                        }}
+                      >
+                        <ChevronLeft size={16} /> Back
+                      </button>
+                      <p className="text-[12px] font-bold text-foreground">Conversation history</p>
+                    </div>
+                    <div className="border-b border-border/40 bg-muted/20 px-4 py-4">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted">
+                          {ICON[expanded.type] || <Bell size={16} className="text-muted-foreground" />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-bold text-foreground">{expanded.title}</p>
+                          <p className="mt-1 text-[13px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
+                            {expanded.message}
+                          </p>
+                          <p className="mt-2 text-[11px] text-muted-foreground">{timeLabel(expanded.timestamp)}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openTarget(expanded)}
+                              className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white"
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDelete(expanded)}
+                              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted"
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      Earlier in this channel ({activeThread.history.length})
+                    </p>
+                    <ul className="divide-y divide-border" role="list">
+                      {activeThread.history.map((n) => (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              markOneRead(n)
+                              setExpandedId(n.id)
+                            }}
+                            className={`flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/40 ${
+                              n.id === expanded.id ? "bg-emerald-50/50 dark:bg-emerald-950/30" : ""
+                            } ${!n.read ? "font-semibold" : ""}`}
+                          >
+                            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                              {ICON[n.type] || <Bell size={13} />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex justify-between gap-2">
+                                <span className="text-[12px] font-bold text-foreground">{n.title}</span>
+                                <span className="text-[10px] text-muted-foreground">{timeLabel(n.timestamp)}</span>
+                              </span>
+                              <span className="mt-0.5 block text-[11px] text-muted-foreground line-clamp-2">
+                                {n.message}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
                 <ul className="divide-y divide-border" role="list" aria-label="Notification list">
-                  {filtered.map((n) => (
-                    <li key={n.id}>
+                  {threads.map((th) => {
+                    const n = th.latest
+                    return (
+                    <li key={th.channelKey}>
                       <button
                         type="button"
                         onClick={() => onTap(n)}
                         className={`flex w-full items-start gap-3 px-4 py-3.5 text-left transition hover:bg-muted/50 ${
-                          !n.read ? "bg-emerald-50/40 dark:bg-emerald-950/20" : ""
+                          th.unreadCount > 0 ? "bg-emerald-50/40 dark:bg-emerald-950/20" : ""
                         }`}
                       >
                         <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -628,6 +801,11 @@ export function NotificationBell({
                               {timeLabel(n.timestamp)}
                             </span>
                           </span>
+                          {th.history.length > 1 ? (
+                            <span className="mt-0.5 block text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                              {th.history.length} updates in this channel
+                            </span>
+                          ) : null}
                           {isCommunityNotification(n) ? (
                             <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                               {communityNotificationLabel(n)}
@@ -637,13 +815,17 @@ export function NotificationBell({
                             {n.message}
                           </span>
                         </span>
-                        {!n.read ? (
-                          <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--gh-green)]" aria-label="Unread" />
+                        {th.unreadCount > 0 ? (
+                          <span className="mt-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] px-1 text-[10px] font-bold text-white">
+                            {th.unreadCount > 9 ? "9+" : th.unreadCount}
+                          </span>
                         ) : null}
                       </button>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
+                )}
               )}
             </div>
           </div>

@@ -38,8 +38,21 @@ export async function POST(request: Request) {
   })
   const data = result.data as { ok?: boolean; saved?: boolean; error?: string }
   if (!result.ok || data?.ok === false) {
+    const err = String(data?.error || result.error || "SAVE_FAILED")
+    if (/_HTTP_404$/.test(err) || result.status === 404) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SOCIAL_RPC_UNAVAILABLE",
+          diagnosticCode: result.diagnosticCode || null,
+          diagnosticMessage: result.diagnosticMessage || null,
+          message: "Save RPC is not installed. Apply supabase migration 202610220010_ENSURE_social_engagement_rpcs.sql",
+        },
+        { status: 503 },
+      )
+    }
     return NextResponse.json(
-      { ok: false, error: data?.error || result.error || "SAVE_FAILED" },
+      { ok: false, error: err },
       { status: data?.error === "NOT_FOUND" ? 404 : data?.error === "FORBIDDEN" ? 403 : 503 }
     )
   }

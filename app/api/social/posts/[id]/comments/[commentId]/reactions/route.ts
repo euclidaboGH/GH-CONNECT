@@ -61,8 +61,10 @@ export async function POST(
   }
   if (!result.ok || data.ok === false) {
     const code = String(data.error || result.error || "REACTION_FAILED")
-    const status = code === "COMMENT_NOT_FOUND" || code === "POST_NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 503
-    return NextResponse.json({ ok: false, error: code, durable: false }, { status })
+    const codeNorm = /_HTTP_404$/.test(code) || result.status === 404 ? "SOCIAL_RPC_MISSING" : code
+    const status = codeNorm === "COMMENT_NOT_FOUND" || code === "POST_NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 503
+    return NextResponse.json(
+      { ok: false, error: codeNorm, durable: false }, { status })
   }
   return NextResponse.json({
     ok: true,

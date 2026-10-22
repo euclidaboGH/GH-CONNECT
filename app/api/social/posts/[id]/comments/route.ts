@@ -198,11 +198,24 @@ export async function POST(
   const result = await socialRpc("gh_comment_create", { p_row: comment })
   const data = result.data as { ok?: boolean; error?: string; id?: string; idempotent?: boolean; commentCount?: number }
   if (!result.ok || data?.ok === false) {
+    const err = String(data?.error || result.error || "COMMENT_FAILED")
+    if (/_HTTP_404$/.test(err) || result.status === 404) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SOCIAL_RPC_UNAVAILABLE",
+          diagnosticCode: result.diagnosticCode || null,
+          diagnosticMessage: result.diagnosticMessage || null,
+          message: "Comment RPC is not installed. Apply supabase migration 202610220010_ENSURE_social_engagement_rpcs.sql",
+        },
+        { status: 503 },
+      )
+    }
     const status = data?.error === "POST_NOT_FOUND" || data?.error === "PARENT_NOT_FOUND" ? 404
       : data?.error === "COMMENT_ID_CONFLICT" ? 409
         : data?.error === "INVALID" ? 400 : 503
     return NextResponse.json(
-      { ok: false, error: data?.error || result.error || "COMMENT_FAILED" },
+      { ok: false, error: err },
       { status }
     )
   }

@@ -90,10 +90,10 @@ export async function POST(
         type: "post_like",
         entityType: "post",
         entityId: postId,
-        title: "New like",
-        body: "Someone liked your post",
-        dedupeKey: `like:${auth.userId}:${postId}`,
-        metadata: { postId, reaction },
+        title: reaction === "like" ? "New like on your post" : `New ${reaction} on your post`,
+        body: reaction === "like" ? "Someone liked your post" : `Someone reacted (${reaction}) to your post`,
+        dedupeKey: `like:${auth.userId}:${postId}:${reaction}`,
+        metadata: { postId, reaction, category: "social" },
       })
     })()
   }

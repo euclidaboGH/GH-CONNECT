@@ -1,8 +1,8 @@
 {
   "name": "gh-connect",
-  "version": "0.69.3",
+  "version": "0.70.2",
   "private": true,
-  "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
+  "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
     "dev": "next dev",
     "build": "ESLINT_USE_FLAT_CONFIG=false next build",
@@ -153,7 +153,8 @@
     "test:latest-ci-regressions": "node scripts/test-latest-ci-regressions.mjs",
     "test:post-engagement-refresh-persistence": "node scripts/test-post-engagement-refresh-persistence.mjs",
     "test:social-write-persistence": "node scripts/test-social-write-persistence.mjs",
-    "test:connection-social-write-pipeline": "node scripts/test-connection-social-write-pipeline.mjs"
+    "test:connection-social-write-pipeline": "node scripts/test-connection-social-write-pipeline.mjs",
+    "test:social-write-rpc-contracts": "node scripts/test-social-write-rpc-contracts.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

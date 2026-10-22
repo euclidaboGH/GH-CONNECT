@@ -24,6 +24,7 @@ export type NotificationCenterBucket =
   | "rewards"
   | "requests"
   | "community"
+  | "marketplace"
   | "system"
 
 export const NOTIFICATION_CENTER_BUCKETS: {
@@ -37,6 +38,7 @@ export const NOTIFICATION_CENTER_BUCKETS: {
   { id: "rewards", label: "Rewards" },
   { id: "requests", label: "Requests" },
   { id: "community", label: "Community" },
+  { id: "marketplace", label: "Market" },
   { id: "system", label: "System" },
 ]
 
@@ -91,6 +93,9 @@ export type NotificationDeepLink = {
 }
 
 const SOCIAL_TYPES = new Set<NotificationType>([
+  "upvote",
+  "downvote",
+  "comment_reply",
   "like",
   "comment",
   "follow",
@@ -151,6 +156,19 @@ export function bucketForNotification(n: Notification): Exclude<NotificationCent
     (n.type === "system" && (open === "settings" || open === "security" || open === "verification"))
   ) {
     return "system"
+  }
+
+  if (
+    cat === "marketplace" ||
+    open === "marketplace" ||
+    data.listingId ||
+    n.type === "marketplace_listing" ||
+    n.type === "marketplace_order" ||
+    n.type === "marketplace_comment" ||
+    n.type === "marketplace_reaction" ||
+    /listing|marketplace|order sold|product/i.test(blobOf(n))
+  ) {
+    return "marketplace"
   }
 
   if (
@@ -358,21 +376,34 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     n.type === "post_like" ||
     n.type === "comment" ||
     n.type === "post_comment" ||
+    n.type === "comment_reply" ||
     n.type === "share" ||
     n.type === "mention" ||
     n.type === "story_reply" ||
-    n.type === "curation"
+    n.type === "curation" ||
+    n.type === "upvote" ||
+    n.type === "downvote"
   ) {
     link.open = "feed"
     link.tab = "home"
     const isComment =
-      n.type === "comment" || n.type === "post_comment" || n.type === "mention" || n.type === "story_reply"
+      n.type === "comment" || n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention" || n.type === "story_reply"
     link.section = isComment ? "comments" : "post"
     if (!link.postId) {
       const d = (n.data || {}) as Record<string, unknown>
       const pid = d.postId || d.entityId || d.post_id
       if (pid) link.postId = String(pid)
     }
+    } else if (
+    n.type === "marketplace_listing" ||
+    n.type === "marketplace_order" ||
+    n.type === "marketplace_comment" ||
+    n.type === "marketplace_reaction"
+  ) {
+    link.open = "feed"
+    link.tab = "home"
+    const lid = (n.data as { listingId?: string } | undefined)?.listingId
+    if (lid) link.listingId = String(lid)
   } else if (n.type === "ghc_received" || n.type === "ghc_sent" || n.type === "payment") {
     link.open = "wallet"
     link.tab = "wallet"
