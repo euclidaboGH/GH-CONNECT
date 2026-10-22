@@ -45,4 +45,19 @@ assert.doesNotMatch(ghcContext, /\[state\.profile\.displayName, state\.conversat
 assert.doesNotMatch(ghcContext, /\[state\.friends, state\.friendRequests, state\.profile, domains, addToast\]/,
   'addFriend must not depend on friendRequests when updates use functional state setters')
 
-console.log('Latest CI regression checks: 19/19 passed')
+const walletScreen = readFileSync('features/wallet/wallet-screen.tsx', 'utf8')
+const piAuth = readFileSync('contexts/pi-auth-context.tsx', 'utf8')
+assert.match(walletScreen, /const txs = useMemo<GhcTransaction\[]>\(\(\) => data\?\.txs \?\? \[\], \[data\?\.txs\]\)/,
+  'wallet transaction fallback array must be memoized to preserve referential stability')
+assert.match(walletScreen, /const rewards = useMemo<RewardRecord\[]>\(\(\) => data\?\.rewards \?\? \[\], \[data\?\.rewards\]\)/,
+  'wallet rewards fallback array must be memoized to preserve referential stability')
+assert.match(piAuth, /const fetchProducts = useCallback\(async \(sdkInstance: SDKLiteInstance\): Promise<void> => \{[\s\S]*?\}, \[\]\)/,
+  'Pi product loader must be stable before initialize uses it')
+assert.match(piAuth, /const initialize = useCallback\(async \(\) => \{[\s\S]*?\}, \[fetchProducts\]\)/,
+  'Pi initialization must be stable and declare its fetchProducts dependency')
+assert.match(piAuth, /initialize\(\)\.finally\(\(\) => \{[\s\S]*?\}, \[initialize\]\)/,
+  'Pi auth initialization effect must declare initialize without suppressing exhaustive-deps')
+assert.match(ghcContext, /const contextValue = useMemo\([\s\S]*?\n      acceptCommunityInvitation,\n[\s\S]*?\n      updateSettings,\n    \],/,
+  'GHC context value must include callback references in its dependency list')
+
+console.log('Latest CI regression checks: 25/25 passed')

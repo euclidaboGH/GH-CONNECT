@@ -2602,7 +2602,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
-  const createLocalProfile = (profile: Partial<Profile>) => {
+  const createLocalProfile = useCallback((profile: Partial<Profile>) => {
     // Identity domain builds the record; local-profiles API persists it
     const next = domains.identity.buildLocalProfile(profile)
     setActiveLocalProfileId(next.localId)
@@ -2617,7 +2617,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           .map(profileToLocalCandidate),
       ],
     }))
-  }
+  }, [domains.identity])
 
   const createPost = useCallback(async (
     content: string,
@@ -4107,7 +4107,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast, state.posts])
 
-  const hidePost = async (postId: string) => {
+  const hidePost = useCallback(async (postId: string) => {
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -4115,15 +4115,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       ),
     }))
     addToast("Post hidden", "success")
-  }
+  }, [addToast])
 
-  const markNotInterested = async (postId: string) => {
+  const markNotInterested = useCallback(async (postId: string) => {
     setState((s) => ({
       ...s,
       posts: s.posts.filter((p) => p.id !== postId),
     }))
     addToast("Marked as not interested", "success")
-  }
+  }, [addToast])
 
   const recordModerationReport = useCallback((type: "user" | "post" | "comment" | "message" | "story" | "group", targetId: string, reason: string) => {
     const normalizedReason = reason.trim().slice(0, 160) || "Other"
@@ -4206,7 +4206,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast, domains.graph])
 
-  const unmuteUser = async (userId: string) => {
+  const unmuteUser = useCallback(async (userId: string) => {
     try {
       const result = await domains.graph.unmuteUser(userId)
       if (!result.ok) {
@@ -4219,9 +4219,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error unmuting user", "error")
     }
-  }
+  }, [addToast, domains.graph])
 
-  const restrictUser = async (userId: string) => {
+  const restrictUser = useCallback(async (userId: string) => {
     try {
       const result = await domains.graph.restrictUser(userId)
       if (!result.ok) {
@@ -4234,9 +4234,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error restricting user", "error")
     }
-  }
+  }, [addToast, domains.graph])
 
-  const unrestrictUser = async (userId: string) => {
+  const unrestrictUser = useCallback(async (userId: string) => {
     try {
       const result = await domains.graph.unrestrictUser(userId)
       if (!result.ok) {
@@ -4249,7 +4249,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error updating restriction", "error")
     }
-  }
+  }, [addToast, domains.graph])
 
   const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     const messagingPrivacyUpdates: Record<string, string> = {}
@@ -4277,8 +4277,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, settings: { ...s.settings, ...updates } }))
   }, [addToast, state.settings])
 
-  const isMatchOrFriend = (userId: string) => state.matches.some((match) => match.userId === userId) || state.friends.includes(userId)
-  const canViewProfile = (userId: string) => userId === "current-user" || state.settings.profileVisibility === "everyone" || (state.settings.profileVisibility === "matches-only" && isMatchOrFriend(userId))
+  const isMatchOrFriend = useCallback(
+    (userId: string) => state.matches.some((match) => match.userId === userId) || state.friends.includes(userId),
+    [state.matches, state.friends]
+  )
+  const canViewProfile = useCallback(
+    (userId: string) => userId === "current-user" || state.settings.profileVisibility === "everyone" || (state.settings.profileVisibility === "matches-only" && isMatchOrFriend(userId)),
+    [state.settings.profileVisibility, isMatchOrFriend]
+  )
   const canMessageUser = useCallback((userId: string) => {
     if (userId === "current-user") return false
     const blocked = new Set([...(state.settings?.blockedUsers || []), ...(state.blockedUsers || [])])
@@ -4286,8 +4292,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     // whoCanMessage is an inbound privacy setting; the server checks the recipient's saved preference.
     return true
   }, [state.settings?.blockedUsers, state.blockedUsers])
-  const canViewStory = (ownerId: string) => ownerId === "current-user" || state.settings.storyVisibility === "everyone" || (state.settings.storyVisibility === "matches-only" && isMatchOrFriend(ownerId))
-  const canSeeOnlineStatus = (userId: string) => userId === "current-user" || state.settings.onlineStatus === "everyone" || (state.settings.onlineStatus === "matches-only" && isMatchOrFriend(userId))
+  const canViewStory = useCallback(
+    (ownerId: string) => ownerId === "current-user" || state.settings.storyVisibility === "everyone" || (state.settings.storyVisibility === "matches-only" && isMatchOrFriend(ownerId)),
+    [state.settings.storyVisibility, isMatchOrFriend]
+  )
+  const canSeeOnlineStatus = useCallback(
+    (userId: string) => userId === "current-user" || state.settings.onlineStatus === "everyone" || (state.settings.onlineStatus === "matches-only" && isMatchOrFriend(userId)),
+    [state.settings.onlineStatus, isMatchOrFriend]
+  )
 
   const swipe = useCallback(async (candidateId: string, action: "like" | "pass" | "superlike") => {
     try {
@@ -7877,8 +7889,8 @@ const dismissMatchCelebration = useCallback(() => {
       addToast,
       logout,
     }),
-    // Intentionally depend on session slices + state fields that surface in UI.
-    // Callbacks are useCallback-stable in this provider.
+    // The context value exposes these stable callbacks. Include every callback
+    // so memoization remains correct when a callback implementation changes.
     [
       state.ready,
       state.profile,
@@ -7898,6 +7910,114 @@ const dismissMatchCelebration = useCallback(() => {
       visibleSession,
       blockedIdsForUi,
       mutedIdsForUi,
+      acceptCommunityInvitation,
+      acceptMatch,
+      addComment,
+      addCommentReaction,
+      addFriend,
+      addGroupMember,
+      addMessageReaction,
+      addToast,
+      applyShareResult,
+      approveCommunityJoinRequest,
+      archiveConversation,
+      archivePost,
+      blockUser,
+      canMessageUser,
+      canSeeOnlineStatus,
+      canViewProfile,
+      canViewStory,
+      completeOnboarding,
+      createBackup,
+      createBoardPost,
+      createCommunityAnnouncement,
+      createCommunityEvent,
+      createGroup,
+      createLocalProfile,
+      createPost,
+      createQuoteRepost,
+      declineCommunityInvitation,
+      declineCommunityJoinRequest,
+      deleteComment,
+      deleteMessage,
+      deletePost,
+      dismissMatchCelebration,
+      editComment,
+      editMessage,
+      editPost,
+      followFromPost,
+      followUser,
+      forwardMessage,
+      hideBoardPost,
+      hidePost,
+      inviteCommunityMember,
+      joinCommunity,
+      leaveCommunity,
+      likePost,
+      loadConversationMessages,
+      loadDraft,
+      loadPostComments,
+      logout,
+      markConversationRead,
+      markNotInterested,
+      muteConversation,
+      muteUser,
+      pinBoardPost,
+      pinComment,
+      pinConversation,
+      pinMessage,
+      publishStory,
+      reactToBoardPost,
+      reactToPost,
+      refreshFeed,
+      rejectMatch,
+      removeCommentReaction,
+      removeGroupMember,
+      removeMessageReaction,
+      replyToBoardPost,
+      replyToMessage,
+      replyToStory,
+      reportCommunityContent,
+      reportContent,
+      reportPost,
+      reportUser,
+      restrictUser,
+      requestJoinCommunity,
+      restoreFromBackup,
+      rsvpCommunityEvent,
+      saveDraft,
+      savePost,
+      scheduleMessage,
+      searchMessages,
+      sendDisappearingMessage,
+      sendMediaMessage,
+      sendMessage,
+      sendVoiceNote,
+      setGroupRole,
+      setTab,
+      setTypingIndicator,
+      sharePost,
+      startConversation,
+      swipe,
+      switchLocalProfile,
+      transitionCommunityLifecycle,
+      unarchiveConversation,
+      unarchivePost,
+      unblockUser,
+      unfollowFromPost,
+      unhideBoardPost,
+      unmuteConversation,
+      unmuteUser,
+      unpinBoardPost,
+      unpinComment,
+      unpinConversation,
+      unpinMessage,
+      unrestrictUser,
+      unsavePost,
+      updateGroupName,
+      updateGroupPhoto,
+      updateProfile,
+      updateSettings,
     ],
   )
 

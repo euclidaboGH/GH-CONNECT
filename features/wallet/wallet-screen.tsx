@@ -444,8 +444,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const locked = wallet?.locked ?? 0
   const earned = wallet?.lifetimeEarned ?? (wallet as { earned?: number })?.earned ?? 0
   const spent = wallet?.lifetimeSpent ?? (wallet as { spent?: number })?.spent ?? 0
-  const txs = data?.txs ?? []
-  const rewards = data?.rewards ?? []
+  // Keep empty fallbacks referentially stable. Fresh [] values here invalidate
+  // every downstream memo/callback whenever the wallet service is unavailable.
+  const txs = useMemo<GhcTransaction[]>(() => data?.txs ?? [], [data?.txs])
+  const rewards = useMemo<RewardRecord[]>(() => data?.rewards ?? [], [data?.rewards])
 
   const pendingHolds: PendingHold[] = useMemo(() => {
     const holds: PendingHold[] = []

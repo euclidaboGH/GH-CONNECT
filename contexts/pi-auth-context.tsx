@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
 import { PI_NETWORK_CONFIG, allowLocalAuthFallback } from "@/lib/system-config"
@@ -353,7 +354,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   >(null);
   const [authLifecycle, setAuthLifecycle] = useState<AuthLifecycleState>(INITIAL_AUTH_LIFECYCLE);
 
-  const fetchProducts = async (sdkInstance: SDKLiteInstance): Promise<void> => {
+  const fetchProducts = useCallback(async (sdkInstance: SDKLiteInstance): Promise<void> => {
     try {
       const { products } = await sdkInstance.state.products();
       setProducts(products);
@@ -361,9 +362,9 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       console.error("Failed to load products:", e);
       setProducts([]);
     }
-  };
+  }, []);
 
-  const initialize = async () => {
+  const initialize = useCallback(async () => {
     setHasError(false);
     setRestoredPurchases(null);
     setAuthLifecycle(INITIAL_AUTH_LIFECYCLE);
@@ -854,7 +855,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         })
       );
     }
-  };
+  }, [fetchProducts]);
 
   const continueLocalPreview = () => {
     if (!allowLocalAuthFallback()) {
@@ -925,7 +926,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(hardTimeout);
     };
-  }, []);
+  }, [initialize]);
 
   const signOut = () => {
     writeSignedOutFlag(true);
