@@ -3,13 +3,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
-const migration = fs.readFileSync(path.join(root, 'supabase/migrations/202610180003_reputation_event_integrity.sql'), 'utf8')
+const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261022010073_reputation_event_integrity.sql'), 'utf8')
 const policy = fs.readFileSync(path.join(root, 'docs/GREENHAVEN_REPUTATION_CURATION_POLICY.md'), 'utf8')
 const route = fs.readFileSync(path.join(root, 'app/api/social/posts/[id]/curation/route.ts'), 'utf8')
-const pipeline = fs.readFileSync(path.join(root, 'supabase/migrations/202610180002_gh_curation_pipeline_atomic.sql'), 'utf8')
-const selfVote = fs.readFileSync(path.join(root, 'supabase/migrations/202610180005_allow_self_curation.sql'), 'utf8')
+const pipeline = fs.readFileSync(path.join(root, 'supabase/migrations/20261022010072_gh_curation_pipeline_atomic.sql'), 'utf8')
+const selfVote = fs.readFileSync(path.join(root, 'supabase/migrations/20261022010075_allow_self_curation.sql'), 'utf8')
 const levels = fs.readFileSync(path.join(root, 'lib/social-economy/reputation-levels.ts'), 'utf8')
-const repSql = fs.readFileSync(path.join(root, 'supabase/migrations/20260929_gh_reputation.sql'), 'utf8')
+const repSql = fs.readFileSync(path.join(root, 'supabase/migrations/20261022010046_gh_reputation.sql'), 'utf8')
 const checks = [
   ['SQL trigger guards reputation event inserts/updates', /BEFORE INSERT OR UPDATE OF event_type, points/.test(migration)],
   ['Canonical profile completion points', /WHEN 'profile_complete' THEN 25/.test(migration)],

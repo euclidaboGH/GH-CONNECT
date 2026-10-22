@@ -59,4 +59,4 @@ INTENT (this phase) → PAYMENT (existing Pi/GHC — not wired) → SETTLEMENT (
 
 ## Migration
 
-`supabase/migrations/202609300001_gh_creator_studio.sql`
+`supabase/migrations/20261022010047_gh_creator_studio.sql`

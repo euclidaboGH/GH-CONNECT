@@ -42,7 +42,7 @@ const store = read("lib/server/economy/store.ts")
 const walletRoute = read("app/api/economy/wallet/[userId]/route.ts")
 const sync = read("lib/domains/adapters/wallet-sync-after-claim.ts")
 const dailyUi = read("components/ghc/daily-reward-experience.tsx")
-const rpcSql = read("supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql")
+const rpcSql = read("supabase/migrations/20261022010009_economy_v12_atomic_daily_claim.sql")
 
 assert(dailyRoute.includes("rpcExecuteDailyClaimV12"), "daily route calls atomic RPC")
 assert(db.includes("ghc_execute_daily_claim_v12"), "db.ts invokes ghc_execute_daily_claim_v12")

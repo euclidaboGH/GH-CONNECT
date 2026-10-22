@@ -56,7 +56,7 @@ function assertAgg(s, label) {
 
 // --- Source checks ---
 const mig = fs.readFileSync(
-  path.join(root, "supabase/migrations/20261016_ghpv_active_weight_set_semantics.sql"),
+  path.join(root, "supabase/migrations/20261022010067_ghpv_active_weight_set_semantics.sql"),
   "utf8"
 )
 ok(mig.includes("gh_ghpv_active_weights"), "migration: active weights table")

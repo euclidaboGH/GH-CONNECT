@@ -89,7 +89,7 @@ export async function GET() {
       blockers.push(`Storage bucket "${storageBucket}" not ready: ${bucket.error || "unknown"}. Create it in Supabase Storage or allow service-role create.`)
     }
     if (rpcProbe["gh_media_asset_create"] === "MISSING" && rpcProbe["table:gh_media_assets"] === "MISSING") {
-      blockers.push("Apply media migration 20261001_gh_media_assets.sql (RPC + table).")
+      blockers.push("Apply media migration 20261022010049_gh_media_assets.sql (RPC + table).")
     }
     if (rpcProbe["ghc_execute_daily_claim_v12"] === "MISSING") {
       blockers.push("Apply economy daily-claim migration (ghc_execute_daily_claim_v12). Flags alone do not credit GHC.")

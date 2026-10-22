@@ -8,7 +8,7 @@
 
 ## Migration
 
-`supabase/migrations/202610180012_gh_engagement_rosters.sql`
+`supabase/migrations/20261022010080_gh_engagement_rosters.sql`
 
 Apply on Preview Supabase after social core. Then deploy app.
 

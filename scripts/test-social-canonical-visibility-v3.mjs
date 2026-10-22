@@ -1,10 +1,10 @@
 import fs from "node:fs"
 import assert from "node:assert/strict"
 
-const migration = fs.readFileSync("supabase/migrations/202610220001_gh_social_canonical_visibility.sql", "utf8")
+const migration = fs.readFileSync("supabase/migrations/20261022010097_gh_social_canonical_visibility.sql", "utf8")
 const feedRoute = fs.readFileSync("app/api/social/feed/route.ts", "utf8")
 const commentsRoute = fs.readFileSync("app/api/social/posts/[id]/comments/route.ts", "utf8")
-const profileMigration = fs.readFileSync("supabase/migrations/20261023_gh_profile_content_library.sql", "utf8")
+const profileMigration = fs.readFileSync("supabase/migrations/20261022010102_gh_profile_content_library.sql", "utf8")
 const postCard = fs.readFileSync("components/ghc/enhanced-post-card.tsx", "utf8")
 const profileScreen = fs.readFileSync("components/ghc/profile-screen.tsx", "utf8")
 

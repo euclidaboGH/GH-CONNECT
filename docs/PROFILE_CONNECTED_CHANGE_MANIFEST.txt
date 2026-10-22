@@ -11,7 +11,7 @@ Modified:
 - scripts/audit-profile-production.mjs
 - scripts/audit-profile-connected-production.mjs (new)
 - package.json
-- supabase/migrations/20261023_gh_profile_content_library.sql
+- supabase/migrations/20261022010102_gh_profile_content_library.sql
 - docs/GH_PROFILE_CONTENT_LIBRARY.md
 - docs/PROFILE_CONNECTED_PRODUCTION_AUDIT_2026-10-14.md (new)
 - SAFE_TO_PUSH.md

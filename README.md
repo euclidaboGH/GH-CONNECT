@@ -1,6 +1,6 @@
 # GH-CONNECT / GreenHaven
 
-**Current source version:** `0.69.3` (see `package.json` and `lib/app-release.ts`).
+**Current source version:** `0.70.3` (see `package.json` and `lib/app-release.ts`).
 
 GH-CONNECT is a Pi-integrated social, identity, marketplace and GHC utility platform. This repository contains application source, Supabase migrations, automated checks, and operator documentation. A feature present in source is not proof that its database migration is applied or that the feature is enabled in a live environment.
 

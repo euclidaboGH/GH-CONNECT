@@ -2,7 +2,7 @@
 
 ## Audit findings addressed
 
-1. **Migration checklist** now includes `202609260002_gh_reaction_multi_type.sql` (`gh_reaction_toggle`) plus comment cursor, feed order, follow status, search.
+1. **Migration checklist** now includes `20261022010041_gh_reaction_multi_type.sql` (`gh_reaction_toggle`) plus comment cursor, feed order, follow status, search.
 2. **`operator:live-e2e-social`** now performs:
    - distinct identities
    - A→B connection + B inbox read-back

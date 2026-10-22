@@ -17,9 +17,9 @@ const walletRepo = src("lib/domains/http-repositories.ts")
 const walletDb = src("lib/server/economy/db.ts")
 const nextConfig = src("next.config.mjs")
 const phaseMigrations = [
-  "supabase/migrations/202610150001_gh_post_list_feed_stable_cursor.sql",
-  "supabase/migrations/202610150002_gh_comment_stable_cursor.sql",
-  "supabase/migrations/202610150003_ghc_wallet_snapshot_spendable.sql",
+  "supabase/migrations/20261022010063_gh_post_list_feed_stable_cursor.sql",
+  "supabase/migrations/20261022010064_gh_comment_stable_cursor.sql",
+  "supabase/migrations/20261022010065_ghc_wallet_snapshot_spendable.sql",
 ]
 
 ok("reward route requires authentication", rewardRoute.includes("resolveAuthenticatedUser"))

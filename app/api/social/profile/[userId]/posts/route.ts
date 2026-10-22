@@ -188,7 +188,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ userId: str
       ok: false,
       error: migrationMissing ? "PROFILE_CONTENT_MIGRATION_REQUIRED" : result.error || "PROFILE_CONTENT_UNAVAILABLE",
       message: migrationMissing
-        ? "Apply supabase/migrations/20261023_gh_profile_content_library.sql on Testnet before using profile content search."
+        ? "Apply supabase/migrations/20261022010102_gh_profile_content_library.sql on Testnet before using profile content search."
         : "Profile content is temporarily unavailable. Please try again shortly.",
     }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }

@@ -85,8 +85,8 @@ const required = [
   "lib/server/economy/telemetry.ts",
   "lib/server/economy/population.ts",
   "app/api/economy/rewards/daily/route.ts",
-  "supabase/migrations/202609030001_economy_v12_claim_streak_and_population.sql",
-  "supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql",
+  "supabase/migrations/20261022010008_economy_v12_claim_streak_and_population.sql",
+  "supabase/migrations/20261022010009_economy_v12_atomic_daily_claim.sql",
 ]
 for (const f of required) {
   assert(existsSync(join(root, f)), `exists ${f}`)
@@ -256,7 +256,7 @@ assert(pop.includes("rpcEconomicPopulationStats"), "population uses DB RPC")
 assert(pop.includes("GHC_ALLOW_ELIGIBLE_OVERRIDE"), "production blocks silent env override")
 assert(existsSync(join(root, "lib/server/economy/population.ts")), "population.ts exists")
 const mig = readFileSync(
-  join(root, "supabase/migrations/202609030001_economy_v12_claim_streak_and_population.sql"),
+  join(root, "supabase/migrations/20261022010008_economy_v12_claim_streak_and_population.sql"),
   "utf8"
 )
 assert(mig.includes("ghc_claim_streak_state"), "migration creates claim streak table")
@@ -274,7 +274,7 @@ assert(daily2.includes("await computeDailyClaim"), "daily route awaits async com
 
 console.log("\n16. Atomic claim migration + API wiring")
 const atomicMig = readFileSync(
-  join(root, "supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql"),
+  join(root, "supabase/migrations/20261022010009_economy_v12_atomic_daily_claim.sql"),
   "utf8"
 )
 assert(atomicMig.includes("ghc_execute_daily_claim_v12"), "atomic RPC function")
@@ -377,7 +377,7 @@ const act = readFileSync(join(root, "lib/server/economy/activity-emission.ts"), 
 assert(act.includes("computeAndCommitActivityEmissionDurable"), "durable activity API")
 const disc = readFileSync(join(root, "lib/discovery-mode.ts"), "utf8")
 assert(disc.includes("isDiscoveryDemoAllowed"), "discovery demo gate")
-const migP0 = readFileSync(join(root, "supabase/migrations/202609050001_p0_activity_governor_durable.sql"), "utf8")
+const migP0 = readFileSync(join(root, "supabase/migrations/20261022010014_p0_activity_governor_durable.sql"), "utf8")
 assert(migP0.includes("ghc_activity_try_grant"), "migration activity grant")
 assert(migP0.includes("ghc_membership_upsert"), "migration membership")
 

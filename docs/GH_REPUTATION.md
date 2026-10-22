@@ -87,4 +87,4 @@ Client-supplied idempotency keys cannot farm multiple awards for these actions.
 
 ## Migration
 
-`supabase/migrations/20260929_gh_reputation.sql`
+`supabase/migrations/20261022010046_gh_reputation.sql`

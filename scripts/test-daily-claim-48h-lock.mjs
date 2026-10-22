@@ -6,8 +6,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (p) => existsSync(join(root, p)) ? readFileSync(join(root, p), "utf8") : ""
 let passed = 0, failed = 0
 function check(ok, name) { if (ok) { passed++; console.log(`✓ ${name}`) } else { failed++; console.error(`✗ ${name}`) } }
-const migration = read("supabase/migrations/202610180008_daily_claim_48h_lock.sql")
-const issuancePolicy = read("supabase/migrations/202610180009_ghc_daily_claim_only_issuance.sql")
+const migration = read("supabase/migrations/20261022010076_daily_claim_48h_lock.sql")
+const issuancePolicy = read("supabase/migrations/20261022010077_ghc_daily_claim_only_issuance.sql")
 const daily = read("app/api/economy/rewards/daily/route.ts")
 const claimRoute = read("app/api/economy/rewards/claim/route.ts")
 const store = read("lib/server/economy/store.ts")

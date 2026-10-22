@@ -30,9 +30,9 @@ Do **not** rely on a public bucket. The app never stores public object URLs for 
 
 ## Migrations required
 
-- `20261001_gh_media_assets.sql`
-- `202610190002_gh_private_media_references_and_viewer_authz.sql`
-- `202610200002_gh_comment_media_attachments.sql` (comment media)
+- `20261022010049_gh_media_assets.sql`
+- `20261022010087_gh_private_media_references_and_viewer_authz.sql`
+- `20261022010089_gh_comment_media_attachments.sql` (comment media)
 - Messaging attachments meta migration when using DM media
 
 ## Verify

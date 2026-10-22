@@ -1,4 +1,4 @@
-# GH-CONNECT 0.69.3 — Repository Cleanup Report
+# GH-CONNECT 0.70.3 — Repository Cleanup Report
 
 ## Cleanup scope
 
@@ -7,7 +7,7 @@ This pass focused on misleading documentation, obsolete status snapshots, and le
 ### Completed
 
 - Replaced the root README with a concise current-version overview, entry points, safety boundaries, and the known Vercel build blocker.
-- Updated `docs/PROJECT_TRUTH.md`, `docs/PHASE_IMPLEMENTATION_STATUS.md`, `docs/README.md`, and `VERCEL_DEPLOY.txt` to use current source version `0.69.3` and distinguish source checks from live release approval.
+- Updated `docs/PROJECT_TRUTH.md`, `docs/PHASE_IMPLEMENTATION_STATUS.md`, `docs/README.md`, and `VERCEL_DEPLOY.txt` to use current source version `0.70.3` and distinguish source checks from live release approval.
 - Moved root-level dated implementation/stabilization reports to `docs/archive/historical-reports-2026-10-22/` and labeled them historical/non-authoritative.
 - Removed the one-off CI repair report from the shipped root, the old duplicate migration manifest, and superseded deployment/push troubleshooting notes.
 - Updated the Testnet migration gate to show the current 111-file inventory and current classification totals.

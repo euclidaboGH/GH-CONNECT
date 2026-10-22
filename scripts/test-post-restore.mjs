@@ -6,7 +6,7 @@ function ok(condition, label) {
   else { console.error(`FAIL ${label}`); failed++ }
 }
 const routePath = "app/api/social/posts/[id]/restore/route.ts"
-const migrationPath = "supabase/migrations/202610250002_gh_post_restore_owner_window.sql"
+const migrationPath = "supabase/migrations/20261022010109_gh_post_restore_owner_window.sql"
 ok(existsSync(routePath), "restore route exists")
 ok(existsSync(migrationPath), "owner restore migration exists")
 const route = readFileSync(routePath, "utf8")

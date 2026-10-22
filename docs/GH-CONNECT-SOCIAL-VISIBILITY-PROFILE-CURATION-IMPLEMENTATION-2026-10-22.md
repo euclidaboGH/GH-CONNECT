@@ -1,13 +1,13 @@
 # GH-CONNECT — Social Visibility, Profile Timeline and Curation Clarity Implementation
 
-**Source baseline:** GH-CONNECT 0.69.3 archive supplied in this conversation  
+**Source baseline:** GH-CONNECT 0.70.3 archive supplied in this conversation  
 **Status:** Source changes implemented; database rollout and full production build remain blocked/unverified.
 
 ## Implemented in source
 
 ### 1. Canonical server-side visibility RPCs
 
-Added `supabase/migrations/202610220001_gh_social_canonical_visibility.sql` with:
+Added `supabase/migrations/20261022010097_gh_social_canonical_visibility.sql` with:
 
 - `gh_post_viewer_can_read(viewer, post)` as the canonical SQL policy for active posts.
 - `gh_post_list_feed_v3` using stable `(createdAt, id)` keyset pagination and applying authorization before returning post bodies.

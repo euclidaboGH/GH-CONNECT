@@ -8,10 +8,10 @@
 
 | Numeric version | Migration | Dependency / role |
 |---|---|---|
-| `202610170001` | `202610170001_ghpv_settlement_engine.sql` | GHPV settlement engine; depends on the earlier GHPV infrastructure chain. |
-| `202610170002` | `202610170002_match_signals_durable.sql` | Durable matching signals; independent matching feature. |
-| `202610170003` | `202610170003_ghpv_calibration_bounds.sql` | Hardens the settlement function after the settlement engine. |
-| `202610180012` | `202610180012_gh_engagement_rosters.sql` | Social reaction, vote, viewer and comment-emoji roster RPCs. |
+| `202610170001` | `20261022010068_ghpv_settlement_engine.sql` | GHPV settlement engine; depends on the earlier GHPV infrastructure chain. |
+| `202610170002` | `20261022010069_match_signals_durable.sql` | Durable matching signals; independent matching feature. |
+| `202610170003` | `20261022010070_ghpv_calibration_bounds.sql` | Hardens the settlement function after the settlement engine. |
+| `202610180012` | `20261022010080_gh_engagement_rosters.sql` | Social reaction, vote, viewer and comment-emoji roster RPCs. |
 
 These migrations are distinct and retained. The inventory generator now rejects duplicate numeric prefixes so a future collision fails the source check.
 

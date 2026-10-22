@@ -22,7 +22,7 @@ Friend specification aligns with existing GreenHaven doctrine (`GH_SOCIAL_ECONOM
 | Gap | Resolution |
 |-----|------------|
 | No frozen product law | `docs/GHPV_PROOF_OF_VALUE_FRAMEWORK.md` |
-| No judgment tables | Migration `20261013_ghpv_judgment_infrastructure.sql` |
+| No judgment tables | Migration `20261022010061_ghpv_judgment_infrastructure.sql` |
 | No CP formula module | `lib/server/ghpv/curation-power.ts` |
 
 ## Explicitly deferred (do not fake)

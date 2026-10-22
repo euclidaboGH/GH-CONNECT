@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs"
 const read = (p) => fs.readFileSync(p, "utf8")
-const migration = read("supabase/migrations/202610220002_gh_social_engagement_write_integrity.sql")
+const migration = read("supabase/migrations/20261022010098_gh_social_engagement_write_integrity.sql")
 const curation = read("app/api/social/posts/[id]/curation/route.ts")
 const reactions = read("app/api/social/posts/[id]/reactions/route.ts")
 const comments = read("app/api/social/posts/[id]/comments/route.ts")

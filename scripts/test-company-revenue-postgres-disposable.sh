@@ -20,7 +20,7 @@ fi
 echo "[1/4] Prepare test roles"
 psql "$GH_REVENUE_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$root/scripts/postgres-tests/company-revenue-setup.sql"
 echo "[2/4] Apply revenue journal migration to disposable DB"
-psql "$GH_REVENUE_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/202610210001_company_revenue_event_journal.sql"
+psql "$GH_REVENUE_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261022010091_company_revenue_event_journal.sql"
 echo "[3/4] Validate permissions, append-only trigger, idempotency, conflicts, amount math and verification gates"
 psql "$GH_REVENUE_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$root/scripts/postgres-tests/company-revenue-assertions.sql"
 

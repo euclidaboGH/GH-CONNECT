@@ -59,7 +59,7 @@ App did **not** call RPCs from the browser. ACLs for `authenticated` are irrelev
 - `lib/server/social/rpc.ts` — `Content-Profile`/`Accept-Profile: public`, parse PGRST codes, structured fallbacks, safe warn logs.
 - Curation route — honest reward on fallback; richer `SOCIAL_RPC_UNAVAILABLE` diagnostics.
 - Comments/saves — surface diagnostic fields.
-- `supabase/migrations/202610220011_pgrst_reload_social_rpcs.sql` — schema reload notify only.
+- `supabase/migrations/20261022010100_pgrst_reload_social_rpcs.sql` — schema reload notify only.
 - `scripts/test-social-write-rpc-contracts.mjs` — 22 static contract checks (`npm run test:social-write-rpc-contracts`).
 
 ## Operator verification (live DB — not automated here)

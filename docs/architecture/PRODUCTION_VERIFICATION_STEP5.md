@@ -38,15 +38,15 @@ Includes:
 
 Already expected in repo (existence ≠ applied):
 
-- `20260821_ghc_economy_ledger.sql`
+- `20261022010001_ghc_economy_ledger.sql`
 - `20260822_*` ledger / identity / RLS / transfers
 - `20260903_economy_v12_*` claim streak + atomic claim
-- `202609040003_pi_payment_intents_durable.sql`
-- `202609040002_membership_entitlements_and_activity_caps.sql`
-- `20260905_connection_request_intents.sql` (**proposal / not auto-applied**)
-- `202609050001_p0_activity_governor_durable.sql`
-- `20260906_community_join_reasons_proposal.sql` (**PROPOSAL ONLY**)
-- `20260907_community_governance_log_proposal.sql` (**PROPOSAL ONLY**)
+- `20261022010013_pi_payment_intents_durable.sql`
+- `20261022010012_membership_entitlements_and_activity_caps.sql`
+- `20261022010015_connection_request_intents.sql` (**proposal / not auto-applied**)
+- `20261022010014_p0_activity_governor_durable.sql`
+- `20261022010016_community_join_reasons_proposal.sql` (**PROPOSAL ONLY**)
+- `20261022010017_community_governance_log_proposal.sql` (**PROPOSAL ONLY**)
 
 Rules:
 

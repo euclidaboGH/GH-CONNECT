@@ -36,11 +36,11 @@ Static/automated green ≠ Testnet verified ≠ production ready.
 
 ## 1. Migrations (Testnet only)
 
-Canonical on-disk count: **113** SQL files under `supabase/migrations/`. The current diagnostic manifest is marked **BLOCKED** because version prefixes `202610210001` and `202610210002` are duplicated. Do not apply migrations until these identifiers and target history are reviewed. See `docs/PROJECT_TRUTH.md`.
+Canonical on-disk count: **115** SQL files under `supabase/migrations/`. The canonical source uses unique 14-digit migration versions and has no duplicate-version blocker. Runtime installation is still required before Testnet consideration.
 
 **Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md` and `docs/MIGRATION_GAP_REPORT.md`.
 
-Current file classifications: **79 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **31 REVIEW_REQUIRED**. These counts do not override the duplicate-version blocker or authorize bulk application.
+Current file classifications: **81 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **31 REVIEW_REQUIRED**. These counts are review metadata only and do not authorize bulk application.
 Later groups include balance-lock (20261009–12), GHPV (20261013–20), canonical visibility (202610220001), and social engagement write-integrity hardening (202610220002). The new social write migration is review-required; it must be tested on disposable PostgreSQL and Testnet only after duplicate migration-version history is reconciled.
 
 | Class | Action |
@@ -52,12 +52,12 @@ Later groups include balance-lock (20261009–12), GHPV (20261013–20), canonic
 
 ### Proposal / do not apply by default
 
-- `20260906_community_join_reasons_proposal.sql`
-- `20260907_community_governance_log_proposal.sql`
+- `20261022010016_community_join_reasons_proposal.sql`
+- `20261022010017_community_governance_log_proposal.sql`
 
 ### Requires approval
 
-- `20260905_connection_request_intents.sql`
+- `20261022010015_connection_request_intents.sql`
 
 ### Phase 1–13 social object smoke (after REQUIRED apply)
 

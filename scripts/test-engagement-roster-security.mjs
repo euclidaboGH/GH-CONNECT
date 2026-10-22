@@ -16,7 +16,7 @@ const assert = (condition, message) => {
 }
 
 console.log("\n=== ENGAGEMENT ROSTER SECURITY REGRESSION CHECK ===\n")
-const migrationPath = "supabase/migrations/202610240003_gh_post_reaction_roster_visibility_guard.sql"
+const migrationPath = "supabase/migrations/20261022010103_gh_post_reaction_roster_visibility_guard.sql"
 assert(existsSync(join(root, migrationPath)), "forward migration exists for already-migrated databases")
 const migration = readFileSync(join(root, migrationPath), "utf8")
 assert(migration.includes("p_actor_id text") && migration.includes("v_actor = ''"), "rejects missing actor identity")

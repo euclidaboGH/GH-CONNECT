@@ -8,7 +8,7 @@ function ok(c, m) { if (c) { pass++; console.log('  ✓', m) } else { fail++; co
 const rew = fs.readFileSync(path.join(root, 'lib/server/economy/reward-engine.ts'), 'utf8')
 const db = fs.readFileSync(path.join(root, 'lib/server/economy/db.ts'), 'utf8')
 const mig = fs.readFileSync(
-  path.join(root, 'supabase/migrations/20261012_ghc_activity_stage_lock_align.sql'),
+  path.join(root, 'supabase/migrations/20261022010060_ghc_activity_stage_lock_align.sql'),
   'utf8'
 )
 

@@ -16,7 +16,7 @@ function ok(cond, msg) {
   }
 }
 
-const mig = join(root, "supabase/migrations/202610181200_marketplace_stale_payment_claim_recovery.sql")
+const mig = join(root, "supabase/migrations/20261022010081_marketplace_stale_payment_claim_recovery.sql")
 ok(existsSync(mig), "stale claim recovery migration present")
 const sql = existsSync(mig) ? readFileSync(mig, "utf8") : ""
 ok(sql.includes("gh_marketplace_list_stale_payment_claims"), "list stale claims RPC")
@@ -33,7 +33,7 @@ ok(ts.includes("forceReleaseStalePaymentClaim"), "forceReleaseStalePaymentClaim 
 ok(ts.includes("gh_marketplace_force_release_stale_payment_claim"), "RPC name wired")
 
 // release_expired still skips active claims
-const base = join(root, "supabase/migrations/202610180011_atomic_marketplace_inventory_reservation.sql")
+const base = join(root, "supabase/migrations/20261022010079_atomic_marketplace_inventory_reservation.sql")
 const baseSql = existsSync(base) ? readFileSync(base, "utf8") : ""
 ok(baseSql.includes("payment_claimed_at IS NULL"), "expiry worker skips active claims")
 

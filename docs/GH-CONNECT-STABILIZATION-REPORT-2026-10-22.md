@@ -1,6 +1,6 @@
 # GH-CONNECT — Authentication, Payments, Economy, Messaging & Media Stabilization
 
-**Source baseline:** GH-CONNECT 0.69.3 social visibility/profile/curation repair candidate supplied in this conversation.  
+**Source baseline:** GH-CONNECT 0.70.3 social visibility/profile/curation repair candidate supplied in this conversation.  
 **Scope:** source-level stabilization only. No Supabase migration was applied, no production/Testnet record was deleted or modified, and no live Pi payment or payout was executed.
 
 ## Changes implemented
@@ -46,7 +46,7 @@
 ### 7. Source and CI regression quality
 
 - Added `scripts/test-payment-economy-stabilization.mjs` (24 static contract assertions) and wired it into `ci:verify`.
-- Corrected stale tests that pinned the package to `0.63.25` despite the checked-in project being `0.69.3`; tests now validate semver and compare release metadata dynamically.
+- Corrected stale tests that pinned the package to `0.63.25` despite the checked-in project being `0.70.3`; tests now validate semver and compare release metadata dynamically.
 - Updated stale profile-edit and media-attachment tests to validate the current callback and owned-media-reference implementations.
 - Documented `GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR` in `.env.example` so environment-reference coverage passes.
 
@@ -86,8 +86,8 @@ These are source/static tests unless explicitly described otherwise; they are no
 ## Release blockers that remain
 
 1. **Duplicate Supabase migration prefixes remain unresolved:**
-   - `202610210001_company_revenue_event_journal.sql` and `202610210001_gh_post_list_feed_curation_fields.sql`
-   - `202610210002_ghc_credit_pack_purchase.sql` and `202610210002_pi_payment_intent_idempotency_lookup.sql`
+   - `20261022010091_company_revenue_event_journal.sql` and `20261022010092_gh_post_list_feed_curation_fields.sql`
+   - `20261022010093_ghc_credit_pack_purchase.sql` and `20261022010094_pi_payment_intent_idempotency_lookup.sql`
 
    The migration-history reconciler therefore fails with two local-collision blocks. Do not rename, reorder or apply these files until Testnet and Mainnet migration histories have been captured and compared.
 

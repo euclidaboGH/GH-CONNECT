@@ -26,7 +26,7 @@ Fallback (no storage): client compress → `data:image` on post create (Phase 7 
 - `media_kind`: image | video | file (audio is recorded as file with its MIME type)  
 - RLS deny-all; RPCs `service_role` only  
 
-Migration: `supabase/migrations/20261001_gh_media_assets.sql`
+Migration: `supabase/migrations/20261022010049_gh_media_assets.sql`
 
 ## Bucket
 
@@ -90,7 +90,7 @@ No secrets in client bundles.
 The profile library surfaces the signed-in owner's posts and media, and gives viewers a paginated search of content that the server authorizes for their relationship to that profile. It groups Posts, Photos, Videos, Documents and Profile history. It does not make a private post public.
 
 - API: `GET /api/social/profile/:userId/posts`
-- RPC migration: `supabase/migrations/20261023_gh_profile_content_library.sql`
+- RPC migration: `supabase/migrations/20261022010102_gh_profile_content_library.sql`
 - The API derives the viewer from the authenticated session, rate-limits requests, and calls a service-role-only RPC.
 - The RPC excludes deleted/archived posts, suppresses blocked profiles, and applies public/follower/mutual/owner visibility before returning media references. Search includes post text and PDF titles; pagination uses a timestamp + post ID cursor.
 - Profile and cover photo history is bounded to 24 prior durable HTTPS references and stored in the non-financial profile payload. Legacy inline data URLs are not copied into history to avoid bloating profile records.

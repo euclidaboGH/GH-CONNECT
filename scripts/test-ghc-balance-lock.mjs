@@ -5,7 +5,7 @@ const root = process.cwd()
 let pass = 0, fail = 0
 function ok(c, m) { if (c) { pass++; console.log('  ✓', m) } else { fail++; console.log('  ✗', m) } }
 
-const mig = fs.readFileSync(path.join(root, 'supabase/migrations/20261009_ghc_balance_lock_and_spendable.sql'), 'utf8')
+const mig = fs.readFileSync(path.join(root, 'supabase/migrations/20261022010057_ghc_balance_lock_and_spendable.sql'), 'utf8')
 const wd = fs.readFileSync(path.join(root, 'lib/server/economy/withdrawal.ts'), 'utf8')
 
 ok(mig.includes("ghc_balance:'"), 'migration uses ghc_balance lock namespace')

@@ -147,9 +147,9 @@ assert(existsSync(join(root, "docs/architecture/CONTEXT_STRANGLER_STEP4.md")), "
 assert(existsSync(join(root, "docs/architecture/PRODUCTION_VERIFICATION_STEP5.md")), "Step5 docs")
 
 const migrations = [
-  "supabase/migrations/20260821_ghc_economy_ledger.sql",
-  "supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql",
-  "supabase/migrations/202609040003_pi_payment_intents_durable.sql",
+  "supabase/migrations/20261022010001_ghc_economy_ledger.sql",
+  "supabase/migrations/20261022010009_economy_v12_atomic_daily_claim.sql",
+  "supabase/migrations/20261022010013_pi_payment_intents_durable.sql",
 ]
 for (const m of migrations) {
   assert(existsSync(join(root, m)), `migration present: ${m.split("/").pop()}`)

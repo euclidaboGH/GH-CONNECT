@@ -4,8 +4,8 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const a2u = read('app/api/payments/a2u/create/route.ts')
 const ghcRoute = read('app/api/marketplace/payouts/[requestId]/reconcile-ghc/route.ts')
 const transitionRoute = read('app/api/marketplace/payouts/[requestId]/transition/route.ts')
-const piMigration = read('supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql')
-const ghcMigration = read('supabase/migrations/202610250007_ghc_atomic_seller_payout_settlement.sql')
+const piMigration = read('supabase/migrations/20261022010113_pi_a2u_sdk_execution_orchestration.sql')
+const ghcMigration = read('supabase/migrations/20261022010114_ghc_atomic_seller_payout_settlement.sql')
 const pkg = JSON.parse(read('package.json'))
 const checks = [
   ['official Pi backend SDK pinned', pkg.dependencies['pi-backend'] === '0.1.3'],

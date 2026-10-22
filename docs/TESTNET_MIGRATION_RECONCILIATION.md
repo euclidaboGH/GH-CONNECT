@@ -13,9 +13,9 @@ Repository migration **filenames** were renamed to match Testnet history. **SQL 
 Notable renames:
 - `20260822_*` day-collision files → `202608220001` … `202608220005`
 - `20260903`–`20260927` multi-file days → sequential `…0001` / `…0002` / …
-- `20261006_gh_notif_share_type.sql` → `20261006_gh_notif_share_type.sql`
-- Creator studio → `202609300001_gh_creator_studio.sql`
-- Withdrawal → `202609260001_ghc_withdrawal_requests.sql`
+- `20261022010054_gh_notif_share_type.sql` → `20261022010054_gh_notif_share_type.sql`
+- Creator studio → `20261022010047_gh_creator_studio.sql`
+- Withdrawal → `20261022010040_ghc_withdrawal_requests.sql`
 
 ## Policy
 
@@ -27,7 +27,7 @@ Notable renames:
 ## Classification (unchanged)
 
 - REQUIRED: 51  
-- REQUIRES_APPROVAL: 1 (`20260905_connection_request_intents.sql`)  
+- REQUIRES_APPROVAL: 1 (`20261022010015_connection_request_intents.sql`)  
 - PROPOSAL: 2  
 
 ## Schema / remote verification

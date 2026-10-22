@@ -19,7 +19,7 @@ const walletApi = read("app/api/economy/wallet/[userId]/route.ts")
 const profileApi = read("app/api/profile/me/route.ts")
 const library = read("components/ghc/profile-content-library.tsx")
 const profilePostsApi = read("app/api/social/profile/[userId]/posts/route.ts")
-const libraryMigration = read("supabase/migrations/20261023_gh_profile_content_library.sql")
+const libraryMigration = read("supabase/migrations/20261022010102_gh_profile_content_library.sql")
 const checks = [
   ["Profile consumes canonical feed context", profile.includes("useGHCFeed")],
   ["Profile filters to posts owned by current profile", profile.includes("isOwnProfilePost(post.authorId, post.authorName, meId, p)")],

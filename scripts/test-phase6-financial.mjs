@@ -153,4 +153,4 @@ const clientPrice = 1
 assert(catalogPrice !== clientPrice, "client price must not authorize")
 
 console.log("\nPhase 6 financial smoke tests finished.")
-console.log("Note: DB concurrency relies on ghc_execute_* RPCs + advisory locks — apply migration 202609080001_ghc_spend_sign_and_idempotency.sql")
+console.log("Note: DB concurrency relies on ghc_execute_* RPCs + advisory locks — apply migration 20261022010018_ghc_spend_sign_and_idempotency.sql")

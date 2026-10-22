@@ -125,4 +125,4 @@ findOrCreate("uid-b", "b")
 assert(byPi.has("uid-a") && byPi.has("uid-b"), "two distinct pi uids")
 
 console.log("\nPhase 2A identity smoke tests finished.")
-console.log("Note: durable returning-user after real server restart requires applying migration 202609080002_gh_pi_identities.sql")
+console.log("Note: durable returning-user after real server restart requires applying migration 20261022010019_gh_pi_identities.sql")

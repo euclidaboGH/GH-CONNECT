@@ -2,7 +2,7 @@
 
 ## Scope and source baseline
 
-This candidate is based on the GH-CONNECT 0.69.3 social-write-persistence archive available in the current conversation. It is **not** a fresh checkout of remote commit `bfd4f88fc987fbfeb04c23a48f0f08b939e4030d`. Compare changes against the latest `testnet` branch before applying them.
+This candidate is based on the GH-CONNECT 0.70.3 social-write-persistence archive available in the current conversation. It is **not** a fresh checkout of remote commit `bfd4f88fc987fbfeb04c23a48f0f08b939e4030d`. Compare changes against the latest `testnet` branch before applying them.
 
 ## Confirmed CI blocker fixed
 

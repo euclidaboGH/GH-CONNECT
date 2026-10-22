@@ -5,7 +5,7 @@ import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-const file = join(root, "supabase/migrations/202609260002_gh_reaction_multi_type.sql")
+const file = join(root, "supabase/migrations/20261022010041_gh_reaction_multi_type.sql")
 if (!existsSync(file)) {
   console.error("FAIL: reaction migration missing on disk")
   process.exit(1)

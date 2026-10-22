@@ -25,7 +25,7 @@
 |--------|-----------------|----------------|-------------|--------------|-------|
 | **Identity / Pi auth** | Pi SDK + IdentityService | Same + server-verified token | B/D hybrid | B | Pi UID → GH user; no hardcoded `"current-user"` in production paths |
 | **Profile** | GHCContext + profile store | Profile domain + server | D/B | A/B | Public profile must not expose GHC balance |
-| **Social graph / Connections** | Unified connection adapter + optional RPC | Server-backed requests | B/D | A/B | Migration `20260905_connection_request_intents.sql` NOT auto-applied |
+| **Social graph / Connections** | Unified connection adapter + optional RPC | Server-backed requests | B/D | A/B | Migration `20261022010015_connection_request_intents.sql` NOT auto-applied |
 | **Discovery** | Adapters + empty production lists | Server ranking later | D/B | B | No seed in production (`isDemoDataAllowed`) |
 | **Feed / Posts** | GHCContext feed | Feed domain + server | D | A/B | Create hub is UI only |
 | **Messaging** | Conversations in context | Messaging domain | D | A/B | DMs ≠ community board |

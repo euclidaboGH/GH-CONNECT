@@ -12,7 +12,7 @@ function ok(c, m) {
   }
 }
 
-const mig = join(root, "supabase/migrations/202610181400_transfer_pair_orphan_recovery.sql")
+const mig = join(root, "supabase/migrations/20261022010083_transfer_pair_orphan_recovery.sql")
 ok(existsSync(mig), "transfer pair recovery migration present")
 const sql = existsSync(mig) ? readFileSync(mig, "utf8") : ""
 ok(sql.includes("ghc_list_orphan_transfer_outs"), "list orphan outs RPC")
@@ -24,7 +24,7 @@ ok(sql.includes("service_role"), "service_role grants")
 ok(!/kind\s*,\s*'transfer_out'|kind\s*=\s*'transfer_out'.*INSERT/i.test(sql.replace(/\n/g, " ")) || true, "ops path focused on transfer_in")
 ok(!/INSERT INTO public\.ghc_transactions[\s\S]*'transfer_out'/i.test(sql), "complete path does not insert transfer_out")
 
-const base = join(root, "supabase/migrations/20260821_ghc_economy_ledger.sql")
+const base = join(root, "supabase/migrations/20261022010001_ghc_economy_ledger.sql")
 const baseSql = existsSync(base) ? readFileSync(base, "utf8") : ""
 ok(baseSql.includes("uq_ghc_transfer_out_ref"), "unique transfer_out ref index")
 ok(baseSql.includes("uq_ghc_transfer_in_ref"), "unique transfer_in ref index")

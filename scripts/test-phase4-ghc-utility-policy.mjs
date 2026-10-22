@@ -6,7 +6,7 @@ const routePath = 'app/api/economy/policy/route.ts'
 const policyPath = 'lib/server/economy/public-policy.ts'
 const catalogPath = 'lib/server/economy/spend-catalog.ts'
 const walletPath = 'features/wallet/wallet-screen.tsx'
-const migrationPath = 'supabase/migrations/202610210001_company_revenue_event_journal.sql'
+const migrationPath = 'supabase/migrations/20261022010091_company_revenue_event_journal.sql'
 
 assert.ok(existsSync(routePath), 'public economy policy route exists')
 const route = read(routePath)

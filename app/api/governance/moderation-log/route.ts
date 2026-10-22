@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_entry" }, { status: 400 })
     }
 
-    // Durable table write requires applied migration 20260907_community_governance_log_proposal.sql
+    // Durable table write requires applied migration 20261022010017_community_governance_log_proposal.sql
     // Until operator applies migration + wires Supabase insert, we do not claim durable:true.
     const dbConfigured = Boolean(
       process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY

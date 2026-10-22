@@ -18,7 +18,7 @@ ok(existsSync("docs/PROJECT_TRUTH.md"), "current project truth exists")
 const man = readFileSync("VERIFIED_MANIFEST.txt", "utf8")
 const project = readFileSync("docs/PROJECT_TRUTH.md", "utf8")
 ok(man.includes("inventory_status=BLOCKED_DUPLICATE_VERSION_PREFIXES") || man.includes("inventory_status=OK"), "manifest explicitly reports inventory status")
-ok(project.includes("duplicate migration version prefixes"), "project truth documents migration inventory blocker")
+ok(project.includes("unique 14-digit") && project.includes("CLEAN"), "project truth documents clean migration inventory gate")
 
 const op = readFileSync("scripts/operator-multiuser-migrations.mjs", "utf8")
 ok(op.includes("ECONOMY_OPERATOR_REVIEW"), "economy review list")

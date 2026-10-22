@@ -67,7 +67,7 @@ const ctx = readFileSync(join(root, "contexts/ghc-context.tsx"), "utf8")
 assert(ctx.includes("acceptCommunityInvitation") && ctx.includes("declineCommunityInvitation"), "context methods")
 assert(ctx.includes("acceptInvitation") && ctx.includes("declineInvitation"), "domain calls")
 
-const mig = join(root, "supabase/migrations/20260906_community_join_reasons_proposal.sql")
+const mig = join(root, "supabase/migrations/20261022010016_community_join_reasons_proposal.sql")
 assert(existsSync(mig), "join reason proposal file exists")
 const migt = readFileSync(mig, "utf8")
 assert(migt.includes("DO NOT APPLY") || migt.includes("PROPOSAL"), "migration not auto-apply")

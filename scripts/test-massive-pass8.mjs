@@ -16,7 +16,7 @@ ok(flush.includes("durable !== false"), "requires durable success")
 const ctx = readFileSync("contexts/ghc-context.tsx", "utf8")
 ok(ctx.includes("flushQueuedPosts"), "context wires post flush")
 ok(ctx.includes("Queued post published") || ctx.includes("queued posts published"), "toast on flush success")
-ok(ctx.includes("Pinned on this device only"), "comment pin honest")
+ok(ctx.includes("/api/social/posts/") && ctx.includes("Comment pinned"), "comment pin is server-backed and honest")
 ok(!ctx.includes('addToast("Comment pinned on this device", "success")'), "no false success on pin")
 
 if (failed) {

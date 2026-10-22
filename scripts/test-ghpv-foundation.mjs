@@ -22,7 +22,7 @@ ok(doc.includes("A vote is **not** a GHC minting event"), "doctrine: no vote min
 ok(doc.includes("GHPV-1"), "phased plan present")
 
 const mig = fs.readFileSync(
-  path.join(root, "supabase/migrations/20261013_ghpv_judgment_infrastructure.sql"),
+  path.join(root, "supabase/migrations/20261022010061_ghpv_judgment_infrastructure.sql"),
   "utf8"
 )
 ok(mig.includes("gh_content_quality_state"), "quality state table")

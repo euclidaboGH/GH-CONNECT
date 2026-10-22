@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
-const migration = readFileSync('supabase/migrations/202610210001_company_revenue_event_journal.sql', 'utf8')
+const migration = readFileSync('supabase/migrations/20261022010091_company_revenue_event_journal.sql', 'utf8')
 const adapter = readFileSync('lib/server/revenue/revenue-event.ts', 'utf8')
 const report = readFileSync('docs/PHASE_3_COMPANY_REVENUE_FOUNDATION.md', 'utf8')
 const cloudflare = readFileSync('docs/CLOUDFLARE_R2_GLOBAL_MEDIA_ARCHITECTURE.md', 'utf8')

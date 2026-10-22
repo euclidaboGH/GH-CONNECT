@@ -16,8 +16,8 @@ const future = files.filter((f) => {
   const stamp = (f.match(/^(\d{8})/) || [,''])[1]
   return stamp && stamp > auditDate
 })
-const guard = '202610180004_curation_self_vote_guard.sql'
-const allow = '202610180005_allow_self_curation.sql'
+const guard = '20261022010074_curation_self_vote_guard.sql'
+const allow = '20261022010075_allow_self_curation.sql'
 const indexGuard = files.indexOf(guard)
 const indexAllow = files.indexOf(allow)
 const failures = []

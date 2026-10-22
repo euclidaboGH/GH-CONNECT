@@ -2,7 +2,7 @@
 
 ## Required deployment order
 
-1. Apply `migrations/202610240005_gh_messaging_presence_delivery_receipts.sql` to **Testnet Supabase**.
+1. Apply `migrations/20261022010105_gh_messaging_presence_delivery_receipts.sql` to **Testnet Supabase**.
 2. Deploy the same branch to the Vercel **Preview** environment.
 3. Test using two authenticated accounts on the same Preview deployment:
    - A sends B a message. A should see `Sent · not delivered` until B fetches the conversation.

@@ -28,7 +28,7 @@ The optional connection-request table is checked dynamically because its migrati
 
 ## Database rollout
 
-Apply `supabase/migrations/20261023_gh_profile_content_library.sql` on Testnet before enabling the UI in a deployed environment. The migration is additive and does not change economy, rewards, membership, payment, or post-write paths. Verify that the RPC is callable by `service_role` and not by `anon` or `authenticated` directly.
+Apply `supabase/migrations/20261022010102_gh_profile_content_library.sql` on Testnet before enabling the UI in a deployed environment. The migration is additive and does not change economy, rewards, membership, payment, or post-write paths. Verify that the RPC is callable by `service_role` and not by `anon` or `authenticated` directly.
 
 Suggested post-apply checks:
 

@@ -7,7 +7,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 const policy = read('docs/GREENHAVEN_REPUTATION_CURATION_POLICY.md')
 const status = read('docs/archive/historical-reports-2026-10-22/PHASE_2_CURATION_IMPLEMENTATION_STATUS.md')
 const runbook = read('docs/TESTNET_LIVE_RELEASE_GATES.md')
-const settlement = read('supabase/migrations/202610170003_ghpv_calibration_bounds.sql')
+const settlement = read('supabase/migrations/20261022010070_ghpv_calibration_bounds.sql')
 const checks = [
   ['settlement RPC explicitly reports no GHC mutation', /'ghcMutated', false/.test(settlement)],
   ['settlement RPC is service-role only', /REVOKE ALL ON FUNCTION public\.gh_ghpv_commit_settlement/.test(settlement) && /TO service_role/.test(settlement)],

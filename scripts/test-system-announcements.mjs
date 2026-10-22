@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
 
-const migration = fs.readFileSync('supabase/migrations/202610250001_gh_system_announcements.sql', 'utf8')
+const migration = fs.readFileSync('supabase/migrations/20261022010108_gh_system_announcements.sql', 'utf8')
 const route = fs.readFileSync('app/api/system/announcements/route.ts', 'utf8')
 const bell = fs.readFileSync('components/ghc/notification-bell.tsx', 'utf8')
 

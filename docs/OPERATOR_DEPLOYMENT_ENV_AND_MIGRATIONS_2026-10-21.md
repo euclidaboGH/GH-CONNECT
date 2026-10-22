@@ -146,21 +146,21 @@ Apply in **filename order** from `supabase/migrations/`. Critical recent ones fo
 
 | Migration | Purpose |
 |-----------|---------|
-| `202610180008_daily_claim_48h_lock.sql` | Daily claim maturity |
-| `202610180009_ghc_daily_claim_only_issuance.sql` | Issuance policy |
-| `202610180010_atomic_membership_purchase.sql` | Membership |
-| `202610180011_atomic_marketplace_inventory_reservation.sql` | Marketplace stock |
-| `202610181500_referral_programme.sql` | Referrals |
+| `20261022010076_daily_claim_48h_lock.sql` | Daily claim maturity |
+| `20261022010077_ghc_daily_claim_only_issuance.sql` | Issuance policy |
+| `20261022010078_atomic_membership_purchase.sql` | Membership |
+| `20261022010079_atomic_marketplace_inventory_reservation.sql` | Marketplace stock |
+| `20261022010084_referral_programme.sql` | Referrals |
 | `202610181501` / `502` | Issuance guards / curation redistribute |
-| `202610190002_gh_private_media_references_and_viewer_authz.sql` | Private media |
-| `202610210001_company_revenue_event_journal.sql` | Company revenue |
-| `202610210001_gh_post_list_feed_curation_fields.sql` | Feed vote persistence |
-| `202610210002_ghc_credit_pack_purchase.sql` | **Pi→GHC pack credit** |
-| `202610210002_pi_payment_intent_idempotency_lookup.sql` | Payment intents |
-| `202610210003_pi_payment_intent_atomic_transitions.sql` | Intent transitions |
-| `202610250006_pi_a2u_sdk_execution_orchestration.sql` | A2U |
-| `202610250007_ghc_atomic_seller_payout_settlement.sql` | Seller payout |
-| `202610250008_paystack_ngn_beneficiaries_and_payouts.sql` | Paystack |
+| `20261022010087_gh_private_media_references_and_viewer_authz.sql` | Private media |
+| `20261022010091_company_revenue_event_journal.sql` | Company revenue |
+| `20261022010092_gh_post_list_feed_curation_fields.sql` | Feed vote persistence |
+| `20261022010093_ghc_credit_pack_purchase.sql` | **Pi→GHC pack credit** |
+| `20261022010094_pi_payment_intent_idempotency_lookup.sql` | Payment intents |
+| `20261022010095_pi_payment_intent_atomic_transitions.sql` | Intent transitions |
+| `20261022010113_pi_a2u_sdk_execution_orchestration.sql` | A2U |
+| `20261022010114_ghc_atomic_seller_payout_settlement.sql` | Seller payout |
+| `20261022010115_paystack_ngn_beneficiaries_and_payouts.sql` | Paystack |
 
 Full list: `ls supabase/migrations | sort` (~112 files). Prefer Supabase CLI:
 

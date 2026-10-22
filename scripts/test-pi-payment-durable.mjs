@@ -23,7 +23,7 @@ function assert(cond, msg) {
 }
 
 console.log("\n1. Migration + source artifacts")
-const mig = join(root, "supabase/migrations/202609040003_pi_payment_intents_durable.sql")
+const mig = join(root, "supabase/migrations/20261022010013_pi_payment_intents_durable.sql")
 assert(existsSync(mig), "durable migration exists")
 const sql = readFileSync(mig, "utf8")
 assert(sql.includes("ghc_payment_intents"), "table ghc_payment_intents")
@@ -38,8 +38,8 @@ assert(store.includes("loadPaymentIntent"), "async durable load")
 assert(store.includes("loadByProviderPaymentId"), "load by Pi payment id")
 assert(store.includes("markIntentFulfilled"), "fulfillment marker")
 assert(store.includes("isAllowedPaymentTransition") && store.includes("ghc_payment_intent_transition"), "transition guards use explicit matrix and atomic DB RPC")
-assert(readFileSync(join(root, "supabase/migrations/202610210003_pi_payment_intent_atomic_transitions.sql"), "utf8").includes("COMPLETED_STATUS_CANNOT_REGRESS"), "atomic DB transition prevents completed-payment regression")
-assert(readFileSync(join(root, "supabase/migrations/202610210003_pi_payment_intent_atomic_transitions.sql"), "utf8").includes("FOR UPDATE"), "payment transition serializes row updates")
+assert(readFileSync(join(root, "supabase/migrations/20261022010095_pi_payment_intent_atomic_transitions.sql"), "utf8").includes("COMPLETED_STATUS_CANNOT_REGRESS"), "atomic DB transition prevents completed-payment regression")
+assert(readFileSync(join(root, "supabase/migrations/20261022010095_pi_payment_intent_atomic_transitions.sql"), "utf8").includes("FOR UPDATE"), "payment transition serializes row updates")
 
 const types = readFileSync(join(root, "lib/server/payments/intent-types.ts"), "utf8")
 assert(types.includes("FULFILLED"), "FULFILLED status")
@@ -91,7 +91,7 @@ assert(store2.includes("assertDurableWrite") || store2.includes("DURABLE_REQUIRE
 console.log("\n6. Phase 23 — A2U Testnet recovery and serialization (static)")
 const a2uCreate = readFileSync(join(root, "app/api/payments/a2u/create/route.ts"), "utf8")
 const a2uComplete = readFileSync(join(root, "app/api/payments/a2u/complete/route.ts"), "utf8")
-const a2uMigration = readFileSync(join(root, "supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql"), "utf8")
+const a2uMigration = readFileSync(join(root, "supabase/migrations/20261022010113_pi_a2u_sdk_execution_orchestration.sql"), "utf8")
 assert(a2uCreate.includes('getIncompleteServerPayments'), "A2U create recovers existing incomplete server payments")
 assert(a2uCreate.includes('UNRELATED_INCOMPLETE_A2U_PAYMENT_REQUIRES_REVIEW'), "A2U blocks a second payment when an unrelated incomplete payment exists")
 assert(a2uCreate.includes('gh_pi_a2u_begin_execution') && a2uCreate.includes('gh_pi_a2u_release_sequence_lease'), "A2U execution uses durable sequence lease")

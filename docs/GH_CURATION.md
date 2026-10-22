@@ -37,7 +37,7 @@ Body: `{ "choice": "upvote" | "downvote" | "neutral" }`
 
 ## Migration
 
-`supabase/migrations/20260928_gh_post_curation.sql`
+`supabase/migrations/20261022010045_gh_post_curation.sql`
 
 ## Content vs profile engagement
 

@@ -12,7 +12,7 @@ const files = [
   "lib/domains/adapters/community-governance.ts",
   "app/api/governance/moderation-log/route.ts",
   "app/api/governance/reports/route.ts",
-  "supabase/migrations/20260907_community_governance_log_proposal.sql",
+  "supabase/migrations/20261022010017_community_governance_log_proposal.sql",
   "docs/architecture/GOVERNANCE_DURABILITY_STEP3.md",
 ]
 for (const f of files) assert(existsSync(join(root, f)), f)
@@ -29,7 +29,7 @@ assert(gov.includes("tryServerMirror"), "server mirror attempted")
 const logRoute = readFileSync(join(root, "app/api/governance/moderation-log/route.ts"), "utf8")
 assert(logRoute.includes("durable: false") && logRoute.includes("GHC_GOVERNANCE_SERVER"), "API honest")
 
-const mig = readFileSync(join(root, "supabase/migrations/20260907_community_governance_log_proposal.sql"), "utf8")
+const mig = readFileSync(join(root, "supabase/migrations/20261022010017_community_governance_log_proposal.sql"), "utf8")
 assert(mig.includes("PROPOSAL ONLY") && mig.includes("NOT APPLIED"), "migration proposal marked")
 assert(mig.includes("ghc_community_moderation_log") && mig.includes("ghc_community_reports"), "tables")
 assert(mig.includes("ENABLE ROW LEVEL SECURITY"), "RLS")

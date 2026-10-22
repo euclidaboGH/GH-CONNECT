@@ -48,7 +48,7 @@ All of the following source/static suites passed in this environment:
 
 - A full `npm ci`, TypeScript check, ESLint run and Next.js production build were **not completed** here. Dependency installation timed out in the available environment; no green Vercel deployment is claimed.
 - No PostgreSQL engine was available, so the new SQL migration was not executed or concurrency-tested against a database.
-- Normal migration inventory validation remains **blocked** by existing duplicate migration prefixes `202610210001` and `202610210002`. The new migration is `REVIEW_REQUIRED`; do not apply it until Testnet/Mainnet migration histories and dependencies are reconciled. It calls `gh_post_viewer_can_read` introduced by `202610220001_gh_social_canonical_visibility.sql`.
+- Normal migration inventory validation remains **blocked** by existing duplicate migration prefixes `202610210001` and `202610210002`. The new migration is `REVIEW_REQUIRED`; do not apply it until Testnet/Mainnet migration histories and dependencies are reconciled. It calls `gh_post_viewer_can_read` introduced by `20261022010097_gh_social_canonical_visibility.sql`.
 - Source-level tests do not prove live Supabase persistence. After migration review and application on a disposable database/Testnet, run two-account create/vote/react/comment/reply/edit/delete/pin/save/share and refresh tests before production promotion.
 - This repair does not reconstruct votes/comments that were never inserted into Supabase. The migration only reconciles cached aggregate counters from rows that actually exist; it does not fabricate missing engagement.
 
@@ -56,7 +56,7 @@ All of the following source/static suites passed in this environment:
 
 1. Pull the latest `testnet` branch and compare this candidate/patch; do not replace a newer remote checkout wholesale.
 2. Resolve duplicate migration versions through a history-aware review. Do not rename already-applied migrations blindly.
-3. Test `202610220002_gh_social_engagement_write_integrity.sql` on disposable PostgreSQL and confirm prerequisite `202610220001` is applied.
+3. Test `20261022010098_gh_social_engagement_write_integrity.sql` on disposable PostgreSQL and confirm prerequisite `202610220001` is applied.
 4. Apply the migration to Testnet only after review; capture migration output and verify table/function privileges.
 5. On supported Node.js 24.15.0 or newer in the project's Node 24 line, run `npm ci --legacy-peer-deps`, `npm run typecheck`, `npm run lint`, the focused social tests, and `npm run build`.
 6. Run two-account tests: vote and reaction from account B on account A's post; comment/reply/react/edit/delete; pin as post owner; refresh Feed and Profile; confirm counts and viewer state. Also verify private/blocked posts are denied and failed writes never display success.

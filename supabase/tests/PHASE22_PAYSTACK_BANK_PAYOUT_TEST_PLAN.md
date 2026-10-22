@@ -3,7 +3,7 @@
 Do not enable `PAYSTACK_TRANSFERS_ENABLED` until these checks pass in a disposable Supabase project and Paystack Test Mode.
 
 1. Run `supabase/phase22_readonly_preflight.sql`; confirm the target migration history and inspect existing marketplace currency/payment rails.
-2. Apply only `202610250008_paystack_ngn_beneficiaries_and_payouts.sql` to a disposable database, then run `PHASE22_POST_MIGRATION_ASSERTIONS.sql`. `anon` and `authenticated` must not execute any of the payout RPCs; `service_role` must.
+2. Apply only `20261022010115_paystack_ngn_beneficiaries_and_payouts.sql` to a disposable database, then run `PHASE22_POST_MIGRATION_ASSERTIONS.sql`. `anon` and `authenticated` must not execute any of the payout RPCs; `service_role` must.
 3. Create an NGN obligation only from a real, independently verified NGN revenue event through `gh_bank_payout_record_obligation`. A GHC/PI order must not be passed as an NGN funding source. Duplicate source reference with identical evidence is idempotent; conflicting amount, seller, type, or evidence must fail.
 4. Test bank list, account resolution, and user-scoped beneficiary/payout history. Verify history returns only the authenticated seller's own records. Wrong account number, bank code, account-name mismatch, no recent step-up, duplicate beneficiary, missing fingerprint key, and provider timeout must fail closed. Raw account numbers must never be stored in GreenHaven tables or application logs.
 5. Create a beneficiary in Paystack Test Mode and persist only provider recipient code, account holder name, bank details, HMAC fingerprint, and last four digits. Confirm RLS blocks all client reads/writes.

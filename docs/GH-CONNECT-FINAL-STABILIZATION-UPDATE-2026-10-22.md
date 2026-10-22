@@ -2,7 +2,7 @@
 
 ## Source baseline and scope
 
-This candidate is assembled from the previously available GH-CONNECT 0.69.3 Vercel build-repair archive, with the React Hooks/static-CI patch for the reported `540b980` failures applied. It is **not** a fresh checkout of GitHub commit `540b9804c8868f5c36b6cb6628ff7c77d4ff1c06`; compare/apply the focused changes against the current `testnet` branch before replacing any branch contents.
+This candidate is assembled from the previously available GH-CONNECT 0.70.3 Vercel build-repair archive, with the React Hooks/static-CI patch for the reported `540b980` failures applied. It is **not** a fresh checkout of GitHub commit `540b9804c8868f5c36b6cb6628ff7c77d4ff1c06`; compare/apply the focused changes against the current `testnet` branch before replacing any branch contents.
 
 ## Changes included
 

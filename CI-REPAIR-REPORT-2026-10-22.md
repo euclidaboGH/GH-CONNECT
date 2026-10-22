@@ -1,4 +1,4 @@
-# GH-CONNECT 0.69.3 — React Hook CI Repair
+# GH-CONNECT 0.70.3 — React Hook CI Repair
 
 ## Scope
 

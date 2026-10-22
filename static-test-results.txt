@@ -1,0 +1,450 @@
+===== check:clean-migrations =====
+PASS clean canonical migrations: 115 unique 14-digit SQL migrations
+EXIT:0
+===== check:migration-inventory =====
+PASS docs/MIGRATION_CHECKLIST.md is synchronized
+PASS VERIFIED_MANIFEST.txt is synchronized
+
+Migration inventory: 115 files — {"REQUIRED":81,"REQUIRES_APPROVAL":1,"PROPOSAL":2,"REVIEW_REQUIRED":31}
+EXIT:0
+===== test:critical-security-hardening =====
+Critical security hardening: 20 assertions passed
+EXIT:0
+===== test:latest-ci-regressions =====
+Latest CI regression checks: 25/25 passed
+EXIT:0
+===== test:essential-20 =====
+PASS essentials lib
+PASS skip to content
+PASS session resume
+PASS global hotkeys
+PASS safe links
+PASS media retry
+PASS pending queue chip
+PASS copy id button
+PASS app skip
+PASS app resume
+PASS app hotkeys
+PASS banner queue chip
+PASS post safe links
+PASS message failure reason
+PASS discover online filter
+PASS online chip UI
+PASS GH ID copy fallback
+PASS docs
+
+ESSENTIAL 20: all checks passed
+EXIT:0
+===== test:media-signed-url =====
+Private media viewer-authorized signed-URL checks: 10/10 passed
+Upload orphan-cleanup and facade URL checks: 5/5 passed
+EXIT:0
+===== test:media-direct =====
+PASS intent route
+PASS complete route
+PASS direct client path
+PASS 40MB video limit
+PASS proxy threshold
+PASS category sent to direct upload intent
+PASS server proxy video limit is 40MB
+PASS server direct video limit is 40MB
+PASS completion validates category path
+PASS new buckets default to 50MB cap
+PASS server accepts configured audio MIME types
+PASS direct upload supports audio category
+PASS direct upload supports documents category
+PASS direct upload supports avatars category
+PASS direct upload supports images category
+PASS direct upload supports videos category
+PASS direct upload uses owner-first canonical storage paths
+PASS PDF MIME allowlist matches Supabase
+PASS proxy upload uses owner-first canonical storage paths
+PASS compose video limit is 40MB
+PASS old 4MB copy removed
+PASS daily claim prompt
+PASS prompt wired
+
+MEDIA + CLAIM upgrades: all checks passed
+EXIT:0
+===== test:ghc-pi-withdrawal-default-off =====
+GHC→Pi withdrawal default-off checks: 7 pass, 0 fail
+EXIT:0
+===== test:phase3-company-revenue-foundation =====
+Phase 3 company revenue foundation: all source invariants passed
+EXIT:0
+===== test:phase4-ghc-utility-policy =====
+Phase 4 GHC utility policy: 27 assertions passed
+EXIT:0
+===== test:phase5-financial-integrity =====
+PASS durable payment intent migration uses unique provider payment identity
+PASS production payment intent store refuses memory as durable authority
+PASS GHC→Pi withdrawal is explicitly default-off
+PASS asset conversion is not implicitly enabled
+PASS Pi A2U requires explicit flags and Testnet mode
+PASS Pi A2U execution is durably serialized
+PASS seller payout checks funded treasury and verified eligible backing
+PASS seller payout route remains explicitly feature-gated
+PASS Paystack payout state is represented in server/database layer
+PASS membership entitlement logic is server-owned
+PASS financial safety report records external verification as outstanding
+
+Phase 5 financial-integrity contract: 11/11 passed
+EXIT:0
+===== test:phase6-media-messaging-realtime =====
+PASS message reads require authenticated session
+PASS message read and send routes disable caching
+PASS conversation membership gates durable message access
+PASS message sends enforce bounded attachment count before persistence
+PASS message attachment references reject blob/data and arbitrary URLs
+PASS message attachments are same-origin first-party media content references
+PASS private media authorization uses actual session viewer
+PASS signed media links have short five-minute lifetime
+PASS media content delivery restricts redirect to trusted HTTPS storage origin
+PASS media records are referenced by stable IDs and protected by RLS
+PASS media visibility is reevaluated against current post/story/message access
+PASS presence and receipts are server-owned under RLS
+PASS realtime transport blocks client-asserted financial outcomes
+PASS offline message queue retains permanent-failure handling
+PASS phase 6 test is registered
+PASS phase 6 test is included in full CI verification
+Phase 6 media/messaging/realtime checks: 16/16 passed
+EXIT:0
+===== test:phase7-product-experience =====
+PASS post cards remain single, labelled article surfaces
+PASS post card can be opened by keyboard when a detail action is supplied
+PASS keyboard activation ignores nested controls
+PASS duplicate author reputation badge has been removed
+PASS gallery only renders media accepted by the durable-media policy
+PASS gallery navigation bounds use the filtered gallery length
+PASS gallery controls are named and remain available on touch screens
+PASS gallery touch long-press timer is cancelled on touch cancellation and mouse leave
+PASS expanded post text has an explicit accessible state
+PASS comment bodies stay collapsed on the feed card
+PASS comment action opens the dedicated comments surface
+PASS only one post-options trigger is rendered in the card
+PASS reaction totals are not duplicated in a second summary row
+PASS upvote and downvote rosters remain discoverable with long-press/context menu
+PASS post engagement requests remain server-authoritative
+PASS feed has a named accessible feed landmark
+PASS feed loading state is exposed to assistive technology
+PASS feed includes stories and moments before timeline items
+PASS story rail is named for assistive technology
+PASS story publishing requires durable server confirmation before reporting live
+PASS story reaction state updates from the server response
+PASS composer offers a shared post/story experience
+PASS feed experience styles define accessible touch targets
+PASS reduced-motion preferences remain respected globally
+PASS small-device feed layout has explicit narrow viewport rules
+PASS phase 7 test is wired into package scripts and CI verification
+
+Phase 7 product-experience checks: 26/26 passed
+EXIT:0
+===== test:phase8-architecture-quality =====
+  ✓ reward route requires authentication
+  ✓ reward route is locked to Daily-Claim-only issuance
+  ✓ reward route does not pass client input to an issuer
+  ✓ reward engine denies generic issuance at domain boundary
+  ✓ reward engine has no generic staging or emission bypass
+  ✓ Daily Claim remains the dedicated issuance path
+  ✓ server wallet repository retains authoritative snapshot
+  ✓ wallet snapshot has spendable/locked authority
+  ✓ production build does not ignore TypeScript errors
+  ✓ production build does not ignore ESLint
+  ✓ phase migration present: supabase/migrations/20261022010063_gh_post_list_feed_stable_cursor.sql
+  ✓ phase migration present: supabase/migrations/20261022010064_gh_comment_stable_cursor.sql
+  ✓ phase migration present: supabase/migrations/20261022010065_ghc_wallet_snapshot_spendable.sql
+  ✓ no NEXT_PUBLIC service-role key in core server files
+  ✓ no NEXT_PUBLIC Pi API key in core server files
+  ✓ claim path uses server repository
+  ✓ Candidate profile enrichment fields are explicitly typed
+  ✓ discovery search result collections use explicit contracts
+  ✓ discovery ranking no longer uses unchecked any casts for candidate profile fields
+  ✓ search recency safely accepts numeric and ISO timestamps
+  ✓ new-member recommendations reject future or invalid timestamps
+  ✓ Phase 8 architecture test is exposed as an npm script
+  ✓ Phase 8 architecture test is wired into ci:verify
+
+Phase 8 architecture-quality checks: 23 pass, 0 fail
+EXIT:0
+===== test:phase9-operations-resilience =====
+PASS readiness endpoint is dynamic and Node-runtime bound
+PASS readiness endpoint does not cache readiness decisions
+PASS readiness endpoint returns computed HTTP status
+PASS liveness endpoint remains independent of provider/database checks
+PASS readiness report only models safe environment labels and check details
+PASS release policy fails closed by default
+PASS release policy explicitly requires restore rehearsal and rollback testing
+PASS rollback guidance prohibits destructive ledger rollback
+PASS mainnet readiness snapshot explicitly blocks release until evidence
+PASS operations guide defines incident severity and first response
+PASS operations guide includes payment reconciliation and data restore safeguards
+PASS operations guide states that source tests are not live evidence
+PASS Phase 9 test is wired to package scripts
+PASS Phase 9 test is included in ci:verify
+PASS release evidence artifacts are hash-verified before acceptance
+PASS release evidence validator blocks path traversal and symlink escapes
+PASS release evidence validator scans manifest and artifact text for credentials
+PASS evidence validator has adversarial regression coverage and CI wiring
+PASS committed Testnet evidence template defaults to blocked and unapproved
+
+Phase 9 operations/resilience checks: 19/19 passed
+EXIT:0
+===== test:social-authz =====
+Social authz static scan: 39 pass, 0 fail, 39 routes
+ALL SOCIAL AUTHZ STATIC CHECKS PASSED
+EXIT:0
+===== test:idor-static =====
+IDOR static: 176 pass, 0 fail (164 routes scanned)
+ALL IDOR STATIC CHECKS PASSED
+EXIT:0
+===== test:social-visibility =====
+
+=== SOCIAL ENGAGEMENT VISIBILITY ===
+
+  ✓ feed engagement is hydrated with batched comments and reactions
+  ✓ feed engagement hydration fails soft and does not fail feed
+  ✓ remote feed maps comment counts, reaction counts and viewer reactions
+  ✓ post cards show comments, shares and non-Like reaction counts without a Like action
+  ✓ post media and card body open full post detail
+  ✓ full post view includes complete content, media, comments and engagement totals
+  ✓ feed mounts full post detail and hydrates comments on open
+  ✓ story rail shows media/text previews before opening a story
+  ✓ story reactions are saved durably and show aggregate counts
+  ✓ story reaction API authenticates and rate limits writes
+  ✓ story reactions migration has RLS, safe RPC and service-role-only execute
+  ✓ story reaction RPC enforces story audience independently of known story IDs
+  ✓ story reaction RPC keeps matches-only and private stories owner-only until canonical match authorization exists
+  ✓ package and lock versions match
+
+=== RESULTS: 14 passed, 0 failed ===
+EXIT:0
+===== test:notification-attention =====
+PASS Daily reward is compact in the header, not a persistent feed card
+PASS Claim-ready attention notice is deduplicated per user and reward day
+PASS Reward remains visible while server status hydrates
+PASS Daily claim remains server-authoritative
+PASS Notification center loads durable social activity
+PASS Notification center loads durable GHC/economy alerts
+PASS Notification center combines local, social, economy, and system-announcement unread counts
+PASS Durable social alerts can be marked read
+PASS Durable economy alerts can be marked read
+PASS Navigation refreshes attention counts from server endpoints
+PASS Home, messages, discovery and profile have attention dots
+PASS Navigation responds to read and new-activity events
+PASS New app releases create a reviewable system notification
+PASS Release notice version matches package version
+PASS Published posts notify eligible followers through a server RPC
+PASS Post notification migration allows post_created and protects RPC access
+PASS Durable messages notify conversation members after server acceptance
+notification-attention: 17/17 passed
+EXIT:0
+===== test:post-engagement-refresh-persistence =====
+PASS feed curation is reconciled from durable vote rows on every refresh
+PASS feed uses durable curation totals when the table read succeeds
+PASS feed does not discard comment previews when stored count is stale zero
+PASS profile endpoint hydrates durable comments and curation
+PASS profile vote state is resolved by authenticated viewer ID
+PASS profile endpoint exposes vote counts and viewer choice
+PASS comment list has a canonical REST recovery path for stale RPCs
+PASS profile timeline maps server-hydrated comments instead of replacing them with empty arrays
+PASS opening a comment thread cannot lower the known durable comment total
+PASS comment-list fallback marks successfully read durable rows as durable
+
+10/10 post engagement refresh checks passed
+EXIT:0
+===== test:social-write-persistence =====
+PASS curation write remains session-authenticated and uses the atomic RPC
+PASS curation RPC serializes writes per post and reconciles counters from canonical vote rows
+PASS reaction API checks canonical post visibility before write
+PASS reaction RPC locks post and derives like count from durable rows
+PASS comment creation maps ID collisions to conflict instead of false success
+PASS comment reads do not report transport-only RPC success as durable data
+PASS comment create RPC only treats same-author/post/content duplicates as idempotent
+PASS comment delete uses atomic RPC instead of direct REST patch
+PASS comment edit and pin use authenticated durable RPCs
+PASS comment edit and pin state are included in canonical list and profile/feed hydration
+PASS comment delete transaction adjusts post comment count and allows comment/post owners
+PASS deleting a parent does not silently discard other users' durable replies
+PASS comment reactions use durable RPC and return viewer state after refresh
+PASS comment reaction RPC serializes writes on the comment row
+PASS feed hydrates comment reactions and preserves media attachments
+PASS profile hydrates curation, post reactions and comment reactions
+PASS comment read helper exposes counts and only the current viewer's own emojis
+PASS client applies server reaction result without a second local toggle
+PASS comment reaction removal uses the durable server toggle
+PASS comment edit/delete client actions call durable HTTP endpoints
+PASS comment UI uses hydrated counts and active viewer state
+PASS profile UI preserves server-hydrated post and comment reaction state
+PASS save route verifies post visibility and writes through durable RPC
+PASS share route verifies post visibility and writes through durable RPC
+PASS post edit reports success only after returned database row confirms persistence
+PASS migration locks down service-role-only write RPCs
+PASS existing counters reconcile from canonical durable rows
+
+27/27 social write-persistence checks passed
+EXIT:0
+===== test:connection-server-first =====
+PASS postJson sends credentials
+PASS postJson sends auth headers
+PASS send marked server-first
+PASS fails if not durable
+PASS API before session graph on send
+PASS API before session graph on accept
+PASS follow: API before domain toggle
+PASS follow rejects non-durable
+PASS connect: API before domain
+PASS connect requires durable
+
+CONNECTION SERVER-FIRST: all checks passed
+EXIT:0
+===== test:reaction-server-first =====
+PASS uses socialToggleReaction
+PASS server-first comment
+PASS API before setState
+PASS rejects non-durable
+PASS no keep-optimistic on network fail
+PASS no optimistic-rollback path (server-first)
+PASS curation requires durable
+PASS story reaction requires durable
+
+REACTION SERVER-FIRST: all checks passed
+EXIT:0
+===== test:messaging-reliability =====
+
+=== MESSAGING DELIVERY / PRESENCE / PRIVACY CHECKS ===
+
+  ✓ durable message reads fail closed on non-membership and production store failures
+  ✓ server checks direct-message block state and fails closed if the block lookup is unavailable
+  ✓ delivery and atomic read receipts persist per recipient
+  ✓ shared-post cards persist as messages only after server-side audience and block checks
+  ✓ sharing a post into chat uses the canonical durable send pipeline
+  ✓ offline retries preserve shared-post references
+  ✓ sender sees read only when recipients read and delivered only when recipient receipts exist
+  ✓ receipt schema is idempotent and supports one receipt per recipient
+  ✓ inbox unread counts use one bounded server RPC rather than an N+1 message query
+  ✓ read receipts and the unread cursor update atomically in one server-side transaction
+  ✓ presence schema stores expiring online and typing leases
+  ✓ recipient messaging and online-status privacy are stored server-side with constrained values
+  ✓ server refuses DM creation to unknown/unverified recipient identities
+  ✓ presence and last-seen visibility follow the recipient's saved privacy setting
+  ✓ DM creation and each send enforce the recipient's privacy and fail closed until legacy settings are synced
+  ✓ messaging and presence privacy preference API is authenticated, validated and rate-limited
+  ✓ legacy privacy settings migrate without overwriting server-configured settings
+  ✓ presence and receipt tables deny direct client access under RLS
+  ✓ presence route delegates membership enforcement to the server store and rate limits writes
+  ✓ global presence heartbeat requires an authenticated server session
+  ✓ open chat refreshes presence and typing leases
+  ✓ chat header distinguishes active state from a server-backed last-seen label
+  ✓ typing indicator expires when the composer becomes idle
+  ✓ open conversations refresh durable messages so receipts update without reopening
+  ✓ message bubble clearly distinguishes sent, delivered and read
+  ✓ client preserves server receipt status and distinguishes durable acceptance from queued/failed sends
+  ✓ permanent queue failures are removed and surfaced instead of retrying forever
+  ✓ deployment guide documents durable mode, privacy enforcement and encryption limitation
+  ✓ app heartbeat and inbox refresh support timely online status and incoming-message visibility
+  ✓ client sync helpers use authenticated no-store requests
+  ✓ messaging reliability checks are wired into package scripts
+  ✓ release verification includes messaging reliability checks
+
+Passed: 32; Failed: 0
+MESSAGING RELIABILITY CHECKS PASSED
+
+EXIT:0
+===== test:rewards-reliability =====
+
+=== REWARDS RELIABILITY REGRESSION ===
+
+1. Server-authoritative availability
+  ✓ daily route exposes authenticated GET status
+  ✓ daily status requires authenticated identity
+  ✓ daily status reads durable per-user streak state
+  ✓ claimability derives from server reward-day key
+  ✓ duplicate claim responds idempotently without crediting twice
+  ✓ backend outage is not misreported as a client input error
+  ✓ status response is not cached
+  ✓ client reconciles against daily status endpoint
+
+2. Reward-day rollover and recovery
+  ✓ reward day uses Africa/Lagos day key
+  ✓ long-open tabs detect reward-day rollover
+  ✓ focus restores status after suspended tab
+  ✓ network return refreshes status
+  ✓ visibility return refreshes status
+  ✓ home reward sheet re-evaluates at day rollover
+  ✓ Rewards Centre hero uses server status
+
+3. Claim failure and economy safety
+  ✓ daily claim cannot fall back to generic reward evaluation/claim
+  ✓ only confirmed idempotent claims synchronize local claimed state
+  ✓ failed daily request leaves the claim available
+  ✓ hero recognizes confirmed already-claimed response
+  ✓ failed claim tells user reward can be retried
+  ✓ wallet refresh remains server-ledger based
+  ✓ successful claim keeps shared refresh event
+
+4. Test integration
+  ✓ dedicated reward reliability test command exists
+  ✓ static verification runner includes reward reliability
+
+=== RESULTS: 24 passed, 0 failed ===
+
+REWARDS RELIABILITY REGRESSION PASSED
+
+EXIT:0
+===== test:massive-production-pass =====
+PASS focus/mutation pulls conversations
+PASS messaging reconcile event
+PASS conv merge in ≥2 hydrate paths
+PASS current migration manifest exists
+PASS current project truth exists
+PASS manifest explicitly reports inventory status
+FAIL project truth documents migration inventory blocker
+PASS economy review list
+PASS reaction in critical set
+PASS e2e messaging stages
+PASS messaging server-first retained
+
+MASSIVE PRODUCTION PASS: 1 failure(s)
+EXIT:1
+===== test:project-truth =====
+PASS package.json and lockfile root versions match
+PASS README current baseline matches package version
+PASS deployment runbook version matches package version
+PASS generated checklist migration count matches canonical directory
+PASS generated checklist class counts match its migration rows
+PASS verified manifest version matches package version
+PASS verified manifest migration count matches canonical directory
+PASS Testnet gate uses current canonical migration count
+PASS Testnet gate uses all current migration classifications
+PASS Testnet gate contains no stale inventory or blanket-apply instruction
+PASS Phase 14/15 operator guidance has no stale 51-migration count
+PASS authoritative status documents match current source version
+PASS project truth explicitly separates source inventory from release approval
+PASS project-truth check is registered in npm scripts
+
+Project truth check: 14 checks passed, 0 failures.
+PASS project truth regression contract
+EXIT:0
+===== test:phase1-2-foundation =====
+PASS package, lockfile and app release versions match
+PASS supported Node engine and pin align
+PASS typecheck fails fast on unsupported Node
+PASS lint fails fast on unsupported Node
+PASS build runtime preflight precedes JSX safety
+PASS aggregate CI includes Phase 1–2 foundation contract
+PASS CI uses supported Node and runtime preflight
+PASS Testnet E2E skips are explicitly labeled not release evidence
+PASS production smoke includes runtime and lock preflights
+PASS canonical migrations match generated checklist
+PASS migration classifications are internally consistent
+PASS Testnet gate reflects current migration count and classes
+PASS project truth reflects current migration inventory
+PASS phase status reflects current version and blocked release state
+PASS manifest version and migration inventory match source
+PASS Pi SDK package and lock entries have a verifier
+PASS README does not claim the Pi SDK lock graph is currently missing
+PASS release authority separates source inventory from launch approval
+
+PHASE 1–2 FOUNDATION: 18/18 passed
+EXIT:0
+STATIC_TEST_FAILURES=1

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 const lifecycle = fs.readFileSync('app/api/account/lifecycle/route.ts','utf8')
 const exportRoute = fs.readFileSync('app/api/account/export/route.ts','utf8')
 const payoutRoute = fs.readFileSync('app/api/marketplace/payouts/route.ts','utf8')
-const migration = fs.readFileSync('supabase/migrations/202610250003_gh_lifecycle_payout_quality_foundation.sql','utf8')
+const migration = fs.readFileSync('supabase/migrations/20261022010110_gh_lifecycle_payout_quality_foundation.sql','utf8')
 const mediaContent = fs.readFileSync('app/api/media/[id]/content/route.ts','utf8')
 const checks = [
   ['lifecycle requires session-derived identity', lifecycle.includes('resolveAuthenticatedUser(request.headers)')],

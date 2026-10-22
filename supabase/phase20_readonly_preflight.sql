@@ -2,8 +2,8 @@
 -- This script does not create, alter, update, or delete anything.
 WITH expected(version, migration_name) AS (
   VALUES
-    ('202610250006','202610250006_pi_a2u_sdk_execution_orchestration.sql'),
-    ('202610250007','202610250007_ghc_atomic_seller_payout_settlement.sql')
+    ('202610250006','20261022010113_pi_a2u_sdk_execution_orchestration.sql'),
+    ('202610250007','20261022010114_ghc_atomic_seller_payout_settlement.sql')
 ), history AS (
   SELECT version::text AS version FROM supabase_migrations.schema_migrations
 )

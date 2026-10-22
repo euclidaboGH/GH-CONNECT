@@ -17,7 +17,7 @@ The app code is correct; the **database migrations were not applied** (or only p
 1. Open **Supabase → SQL Editor** for the project used by Vercel `SUPABASE_URL`.
 2. Run the full script:
 
-   `supabase/migrations/202610220010_ENSURE_social_engagement_rpcs.sql`
+   `supabase/migrations/20261022010099_ENSURE_social_engagement_rpcs.sql`
 
    (also at `docs/SUPABASE_ENSURE_SOCIAL_RPCS_2026-10-22.sql`)
 

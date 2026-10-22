@@ -1,6 +1,6 @@
 import fs from "node:fs"
 import assert from "node:assert/strict"
-const migration = fs.readFileSync(new URL("../supabase/migrations/202610180001_ghc_curation_rewards.sql", import.meta.url), "utf8")
+const migration = fs.readFileSync(new URL("../supabase/migrations/20261022010071_ghc_curation_rewards.sql", import.meta.url), "utf8")
 const route = fs.readFileSync(new URL("../app/api/social/posts/[id]/curation/route.ts", import.meta.url), "utf8")
 const card = fs.readFileSync(new URL("../components/ghc/enhanced-post-card.tsx", import.meta.url), "utf8")
 const client = fs.readFileSync(new URL("../lib/social/client.ts", import.meta.url), "utf8")
@@ -20,7 +20,7 @@ assert.match(migration, /greatest\(0, coalesce\(max_daily_earn, 500\)\)/, "curat
 assert.doesNotMatch(migration, /least\(5, greatest\(0, coalesce\(max_daily_earn/, "no undocumented hard-coded 5 GHC cap")
 assert.match(migration, /Africa\/Lagos/, "daily cap uses Africa/Lagos day boundary")
 assert.match(migration, /source_event, reference_id/, "credit writes to authoritative ledger")
-assert.match(fs.readFileSync(new URL("../supabase/migrations/202609030002_economy_v12_atomic_daily_claim.sql", import.meta.url), "utf8"), /uq_ghc_earned_posted_ref/, "existing unique earned-ledger reference protects exactly-once credit")
+assert.match(fs.readFileSync(new URL("../supabase/migrations/20261022010009_economy_v12_atomic_daily_claim.sql", import.meta.url), "utf8"), /uq_ghc_earned_posted_ref/, "existing unique earned-ledger reference protects exactly-once credit")
 assert.match(migration, /REVOKE ALL ON FUNCTION public\.ghc_curation_reward_credit/, "RPC is not publicly executable")
 assert.match(route, /INVALID_REWARD_PERCENTAGE/, "API validates percentage")
 assert.match(migration, /IF v_choice = 'upvote' THEN[\s\S]*?ghc_curation_reward_credit/, "only authoritative upvotes invoke the reward engine")
@@ -33,7 +33,7 @@ assert.match(migration, /REVOKE ALL ON TABLE public\.ghc_curation_reward_claims 
 assert.match(migration, /SET search_path = pg_catalog, public/, "security definer function pins a safe search path")
 console.log("GHC curation reward engine static checks: 24/24 passed")
 
-const pipelineMigration = fs.readFileSync(new URL("../supabase/migrations/202610180002_gh_curation_pipeline_atomic.sql", import.meta.url), "utf8")
+const pipelineMigration = fs.readFileSync(new URL("../supabase/migrations/20261022010072_gh_curation_pipeline_atomic.sql", import.meta.url), "utf8")
 assert.match(pipelineMigration, /gh_ghpv_record_curation_weight/, "atomic wrapper records GHPV weight")
 assert.match(pipelineMigration, /v_weight \* \(v_percentage \/ 100\)/, "selected percentage scales active curation weight")
 assert.match(pipelineMigration, /ADD COLUMN IF NOT EXISTS reward_percentage numeric\(5,2\)/, "selected percentage persists with active vote")

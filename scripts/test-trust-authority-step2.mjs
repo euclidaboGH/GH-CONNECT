@@ -49,7 +49,7 @@ assert(storeSrc.includes("pending"), "store pending status")
 assert(storeSrc.includes("DURABLE_REQUIRED"), "prod durable required")
 assert(storeSrc.includes("NEVER grants") || storeSrc.includes("Submitting a request NEVER"), "store no auto-grant policy")
 
-const mig = join(root, "supabase/migrations/20260914_verification_requests_durable.sql")
+const mig = join(root, "supabase/migrations/20261022010026_verification_requests_durable.sql")
 assert(existsSync(mig), "verification requests migration")
 const migSrc = readFileSync(mig, "utf8")
 assert(migSrc.includes("gh_verification_requests"), "migration table")

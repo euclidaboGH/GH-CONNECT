@@ -99,9 +99,9 @@ export async function GET(request: Request) {
         health: "/api/media/health",
       },
       migrationsRequired: [
-        "20261001_gh_media_assets.sql",
-        "202610190002_gh_private_media_references_and_viewer_authz.sql",
-        "202610200002_gh_comment_media_attachments.sql",
+        "20261022010049_gh_media_assets.sql",
+        "20261022010087_gh_private_media_references_and_viewer_authz.sql",
+        "20261022010089_gh_comment_media_attachments.sql",
       ],
       hint: !auth
         ? "Open while signed in. If authenticated is false, session/cookies are the first problem."

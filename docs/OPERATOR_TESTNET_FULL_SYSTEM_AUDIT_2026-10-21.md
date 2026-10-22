@@ -8,8 +8,8 @@ Test coins are only for in-app development. Paths below must work the same way o
 
 ## Apply migrations
 
-1. `202610210001_gh_post_list_feed_curation_fields.sql` — feed upvote/downvote + viewer choice  
-2. `202610210002_ghc_credit_pack_purchase.sql` — Pi pack → GHC credit  
+1. `20261022010092_gh_post_list_feed_curation_fields.sql` — feed upvote/downvote + viewer choice  
+2. `20261022010093_ghc_credit_pack_purchase.sql` — Pi pack → GHC credit  
 
 ## Vercel env (testnet)
 

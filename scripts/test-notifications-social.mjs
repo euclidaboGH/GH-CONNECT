@@ -24,8 +24,8 @@ function read(rel) {
 
 console.log("Social notifications\n")
 
-const mig = read("supabase/migrations/20261003_gh_social_notifications.sql")
-const mig2 = read("supabase/migrations/20261021_gh_social_notifications_types_extend.sql")
+const mig = read("supabase/migrations/20261022010051_gh_social_notifications.sql")
+const mig2 = read("supabase/migrations/20261022010096_gh_social_notifications_types_extend.sql")
 const api = read("app/api/social/notifications/route.ts")
 const server = read("lib/server/social/notifications.ts")
 const reactions = read("app/api/social/posts/[id]/reactions/route.ts")

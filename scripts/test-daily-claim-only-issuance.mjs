@@ -2,8 +2,8 @@ import fs from "node:fs"
 import assert from "node:assert/strict"
 
 const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), "utf8")
-const migration = read("supabase/migrations/202610180009_ghc_daily_claim_only_issuance.sql")
-const dailyClaimMigration = read("supabase/migrations/202610180008_daily_claim_48h_lock.sql")
+const migration = read("supabase/migrations/20261022010077_ghc_daily_claim_only_issuance.sql")
+const dailyClaimMigration = read("supabase/migrations/20261022010076_daily_claim_48h_lock.sql")
 const evaluateRoute = read("app/api/economy/rewards/evaluate/route.ts")
 const creditRoute = read("app/api/economy/ledger/credit/route.ts")
 const rewardEngine = read("lib/server/economy/reward-engine.ts")

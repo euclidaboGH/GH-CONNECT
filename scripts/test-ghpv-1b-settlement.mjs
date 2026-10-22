@@ -7,7 +7,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 let pass = 0, fail = 0
 function ok(c, m) { if (c) { pass++; console.log("  ✓", m) } else { fail++; console.log("  ✗", m) } }
 
-const mig = fs.readFileSync(path.join(root, "supabase/migrations/202610170001_ghpv_settlement_engine.sql"), "utf8")
+const mig = fs.readFileSync(path.join(root, "supabase/migrations/20261022010068_ghpv_settlement_engine.sql"), "utf8")
 ok(mig.includes("gh_ghpv_settlement_snapshot"), "snapshot RPC")
 ok(mig.includes("gh_post_curations"), "snapshot joins current curations")
 ok(mig.includes("gh_ghpv_commit_settlement"), "commit RPC")
@@ -62,7 +62,7 @@ ok(parse({ votes: [{ reviewerId: "a", choice: "mint", weight: 9 }, { reviewerId:
 console.log(`\nGHPV-1B settlement: ${pass} pass, ${fail} fail`)
 process.exit(fail ? 1 : 0)
 
-const bounds = fs.readFileSync(path.join(root, "supabase/migrations/202610170003_ghpv_calibration_bounds.sql"), "utf8")
+const bounds = fs.readFileSync(path.join(root, "supabase/migrations/20261022010070_ghpv_calibration_bounds.sql"), "utf8")
 ok(bounds.includes("greatest(-2.5, least(2.5"), "SQL delta cap")
 ok(bounds.includes("least(100"), "SQL JCS bound")
 ok(bounds.includes("quarantined"), "quarantine preserved")

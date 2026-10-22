@@ -61,12 +61,12 @@ export async function GET() {
       "ghc_resolve_public_id",
     ],
     migrations: [
-      "supabase/migrations/20260821_ghc_economy_ledger.sql",
+      "supabase/migrations/20261022010001_ghc_economy_ledger.sql",
       "supabase/migrations/20260822_ghc_public_identities.sql",
       "supabase/migrations/20260822_ghc_notification_events.sql",
       "supabase/migrations/20260822_ghc_economy_events_rls.sql",
       "supabase/migrations/20260822_ghc_transfer_request_rpcs.sql",
-      "supabase/migrations/20260822_ghc_account_and_claim.sql",
+      "supabase/migrations/20261022010007_ghc_account_and_claim.sql",
       "supabase/migrations/20260822_ghc_rls_tighten_events.sql",
     ],
     note: databaseConfigured

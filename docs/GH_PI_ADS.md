@@ -62,4 +62,4 @@ Idempotency key: `ad_verify:{userId}:{adId}` (server-forced).
 
 ## Migration
 
-`supabase/migrations/20260930_gh_ad_verification.sql`
+`supabase/migrations/20261022010048_gh_ad_verification.sql`

@@ -31,7 +31,7 @@ node scripts/check-migration-release-readiness.mjs
 node scripts/print-migration-checklist.mjs
 ```
 
-If the project is linked locally, confirm the linked ref before any `db push`. Do not use `db push` until the reviewed diff is understood. The self-curation sequence is intentionally superseding: `202610180004_curation_self_vote_guard.sql` precedes `202610180005_allow_self_curation.sql`; the later function permits self-curation for display but excludes self-votes from independent reviewer evidence, account reputation, and GHC rewards. Future-dated migrations need explicit dependency review and a recorded release decision; filename chronology is not proof of application.
+If the project is linked locally, confirm the linked ref before any `db push`. Do not use `db push` until the reviewed diff is understood. The self-curation sequence is intentionally superseding: `20261022010074_curation_self_vote_guard.sql` precedes `20261022010075_allow_self_curation.sql`; the later function permits self-curation for display but excludes self-votes from independent reviewer evidence, account reputation, and GHC rewards. Future-dated migrations need explicit dependency review and a recorded release decision; filename chronology is not proof of application.
 
 Use a disposable database to replay the selected migrations from a clean state first. Capture the migration list before and after Testnet application. Do not change Mainnet during Testnet validation.
 

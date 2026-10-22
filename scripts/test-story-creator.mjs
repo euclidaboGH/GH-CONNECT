@@ -14,7 +14,7 @@ const read = (path) => readFileSync(join(root, path), "utf8")
 console.log("\n=== STORY CREATOR / STORY VISIBILITY REGRESSION CHECKS ===\n")
 const ui = read("components/ghc/profile-story-section.tsx")
 const route = read("app/api/social/stories/route.ts")
-const migration = read("supabase/migrations/202610240004_gh_story_creator_upgrade.sql")
+const migration = read("supabase/migrations/20261022010104_gh_story_creator_upgrade.sql")
 const data = read("lib/ghc-data.ts")
 const app = read("components/ghc/app.tsx")
 

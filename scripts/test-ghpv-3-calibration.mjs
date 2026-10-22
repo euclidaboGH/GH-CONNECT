@@ -17,7 +17,7 @@ ok(src.includes("SELF_OR_ALT"), "self/alt protection")
 ok(src.includes("PROTECTED_MODE"), "subjective protection")
 ok(!/ghc_execute|mint|transfer|wallet/i.test(src), "no GHC in calibration module")
 
-const mig = fs.readFileSync(path.join(root, "supabase/migrations/20261015_ghpv_curator_calibration_apply.sql"), "utf8")
+const mig = fs.readFileSync(path.join(root, "supabase/migrations/20261022010066_ghpv_curator_calibration_apply.sql"), "utf8")
 ok(mig.includes("gh_ghpv_apply_calibration"), "apply RPC")
 ok(mig.includes("ghcMutated"), "explicit no GHC")
 ok(mig.includes("service_role") && mig.includes("REVOKE ALL"), "service_role only")

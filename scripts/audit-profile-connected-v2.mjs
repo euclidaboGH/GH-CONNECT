@@ -31,7 +31,7 @@ const reputation = read("app/api/social/reputation/route.ts")
 const curation = read("app/api/social/posts/[id]/curation/route.ts")
 const profileApi = read("app/api/profile/me/route.ts")
 const contentApi = read("app/api/social/profile/[userId]/posts/route.ts")
-const contentSql = read("supabase/migrations/20261023_gh_profile_content_library.sql")
+const contentSql = read("supabase/migrations/20261022010102_gh_profile_content_library.sql")
 const pkg = JSON.parse(read("package.json"))
 
 const checks = [
@@ -118,7 +118,7 @@ const checks = [
   ["Existing JSX gate remains prebuild", pkg.scripts.prebuild === "node scripts/check-jsx-safety.mjs"],
   ["Messaging API route exists", exists("app/api/messaging/conversations/[conversationId]/messages/route.ts")],
   ["Wallet API route exists", exists("app/api/economy/wallet/[userId]/route.ts")],
-  ["Content library migration exists", exists("supabase/migrations/20261023_gh_profile_content_library.sql")],
+  ["Content library migration exists", exists("supabase/migrations/20261022010102_gh_profile_content_library.sql")],
 ]
 
 let failed = 0

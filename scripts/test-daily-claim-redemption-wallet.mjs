@@ -11,9 +11,9 @@ function check(ok, name) {
   else { failed++; console.error(`✗ ${name}`) }
 }
 
-const migration = read("supabase/migrations/202610180008_daily_claim_48h_lock.sql")
-const walletMigration = read("supabase/migrations/202610150003_ghc_wallet_snapshot_spendable.sql")
-const balanceMigration = read("supabase/migrations/20261009_ghc_balance_lock_and_spendable.sql")
+const migration = read("supabase/migrations/20261022010076_daily_claim_48h_lock.sql")
+const walletMigration = read("supabase/migrations/20261022010065_ghc_wallet_snapshot_spendable.sql")
+const balanceMigration = read("supabase/migrations/20261022010057_ghc_balance_lock_and_spendable.sql")
 const claimRoute = read("app/api/economy/rewards/claim/route.ts")
 const walletRoute = read("app/api/economy/wallet/[userId]/route.ts")
 const db = read("lib/server/economy/db.ts")

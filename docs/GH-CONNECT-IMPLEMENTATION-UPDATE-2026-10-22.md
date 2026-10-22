@@ -1,6 +1,6 @@
 # GH-CONNECT implementation update — 2026-10-22
 
-Source baseline: GH-CONNECT 0.69.3 audit candidate. This update contains additional source-level repairs on top of the existing full product audit candidate. It does not claim that Testnet/Mainnet migrations have been applied or that a live end-to-end build has passed.
+Source baseline: GH-CONNECT 0.70.3 audit candidate. This update contains additional source-level repairs on top of the existing full product audit candidate. It does not claim that Testnet/Mainnet migrations have been applied or that a live end-to-end build has passed.
 
 ## Implemented in this candidate
 

@@ -107,6 +107,6 @@ Domain `lib/domains/reputation-domain.ts` localStorage is **non-authoritative** 
 ## 8. Related migrations
 
 - Social reactions / curation: `20260926*`, `20260928*`
-- Reputation: `20260929_gh_reputation.sql`
+- Reputation: `20261022010046_gh_reputation.sql`
 - GHPV: `20261013`–`20261020`
 - Economy reward atomic stage: `20261011*` (separate from GHPV)

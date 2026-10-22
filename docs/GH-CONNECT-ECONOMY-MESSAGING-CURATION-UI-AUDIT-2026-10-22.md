@@ -1,7 +1,7 @@
 # GH-CONNECT — Economy, Messaging, Curation, Media & UI Audit Addendum
 
 **Audit date:** 2026-10-22  
-**Source:** GH-CONNECT 0.69.3 audit candidate available in this conversation. This is a source-code audit, not a live Testnet/Mainnet database inspection. Do not treat this addendum as approval to deploy migrations or to delete production records.
+**Source:** GH-CONNECT 0.70.3 audit candidate available in this conversation. This is a source-code audit, not a live Testnet/Mainnet database inspection. Do not treat this addendum as approval to deploy migrations or to delete production records.
 
 ## Executive conclusion
 

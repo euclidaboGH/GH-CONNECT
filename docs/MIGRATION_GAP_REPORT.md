@@ -46,11 +46,11 @@ Approximate **new / later** groups not reflected in the old manifest:
 
 | File | Dependency / caution |
 |------|----------------------|
-| `20261009_ghc_balance_lock_and_spendable.sql` | Replaces fragmented locks; needs existing transfer/spend/withdraw RPCs |
-| `20261010_ghc_withdrawal_settle_atomic.sql` | Needs withdrawal requests + balance lock |
+| `20261022010057_ghc_balance_lock_and_spendable.sql` | Replaces fragmented locks; needs existing transfer/spend/withdraw RPCs |
+| `20261022010058_ghc_withdrawal_settle_atomic.sql` | Needs withdrawal requests + balance lock |
 | `20261013`–`20261020` GHPV | Builds judgment/weight/settlement **infra**; no client mint |
-| `20261022_gh_content_rewards.sql` | Explicit: votes do not insert reward mint; distribution separate |
-| `20260905_connection_request_intents.sql` | REQUIRES_APPROVAL — operator review |
+| `20261022010101_gh_content_rewards.sql` | Explicit: votes do not insert reward mint; distribution separate |
+| `20261022010015_connection_request_intents.sql` | REQUIRES_APPROVAL — operator review |
 | `20260906` / `20260907` | PROPOSAL — do not apply by default |
 
 ---

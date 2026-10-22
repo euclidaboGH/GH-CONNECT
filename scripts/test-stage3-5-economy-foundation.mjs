@@ -16,9 +16,9 @@ function ok(c, m) {
   }
 }
 
-const m1 = "supabase/migrations/202610181500_referral_programme.sql"
-const m2 = "supabase/migrations/202610181501_issuance_guard_referral_and_curation_redistribute.sql"
-const m3 = "supabase/migrations/202610181502_curation_redistribute_balance_funded.sql"
+const m1 = "supabase/migrations/20261022010084_referral_programme.sql"
+const m2 = "supabase/migrations/20261022010085_issuance_guard_referral_and_curation_redistribute.sql"
+const m3 = "supabase/migrations/20261022010086_curation_redistribute_balance_funded.sql"
 ok(existsSync(join(root, m1)), "referral programme migration")
 ok(existsSync(join(root, m2)), "issuance guard amendment")
 ok(existsSync(join(root, m3)), "curation redistribute migration")

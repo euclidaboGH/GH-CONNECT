@@ -21,7 +21,7 @@ function assert(c, m) {
 console.log("\n=== UNIVERSAL SEARCH + CONNECTION INTENT (#39) ===\n")
 
 const files = [
-  "supabase/migrations/20260905_connection_request_intents.sql",
+  "supabase/migrations/20261022010015_connection_request_intents.sql",
   "lib/domains/adapters/unified-connection-request.ts",
   "lib/domains/adapters/universal-search.ts",
   "lib/domains/adapters/connection-request-intent.ts",
@@ -32,7 +32,7 @@ const files = [
 ]
 for (const f of files) assert(existsSync(join(root, f)), `exists ${f}`)
 
-const mig = readFileSync(join(root, "supabase/migrations/20260905_connection_request_intents.sql"), "utf8")
+const mig = readFileSync(join(root, "supabase/migrations/20261022010015_connection_request_intents.sql"), "utf8")
 assert(mig.includes("ghc_connection_requests"), "requests table")
 assert(mig.includes("ghc_connection_contexts"), "contexts table")
 assert(mig.includes("CREATE TABLE IF NOT EXISTS"), "additive IF NOT EXISTS")

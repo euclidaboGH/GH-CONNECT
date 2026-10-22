@@ -206,7 +206,7 @@ export async function POST(
           error: "SOCIAL_RPC_UNAVAILABLE",
           diagnosticCode: result.diagnosticCode || null,
           diagnosticMessage: result.diagnosticMessage || null,
-          message: "Comment RPC is not installed. Apply supabase migration 202610220010_ENSURE_social_engagement_rpcs.sql",
+          message: "Comment RPC is not installed. Apply supabase migration 20261022010099_ENSURE_social_engagement_rpcs.sql",
         },
         { status: 503 },
       )

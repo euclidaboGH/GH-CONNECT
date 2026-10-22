@@ -8,10 +8,10 @@ This update prepares the reviewed source archive for a genuinely new Supabase pr
 
 All 109 SQL migration files now have unique numeric prefixes. Four distinct migrations were retained and assigned unique identities:
 
-- `202610170001_ghpv_settlement_engine.sql`
-- `202610170002_match_signals_durable.sql`
-- `202610170003_ghpv_calibration_bounds.sql`
-- `202610180012_gh_engagement_rosters.sql`
+- `20261022010068_ghpv_settlement_engine.sql`
+- `20261022010069_match_signals_durable.sql`
+- `20261022010070_ghpv_calibration_bounds.sql`
+- `20261022010080_gh_engagement_rosters.sql`
 
 The settlement engine precedes its calibration hardening. Matching signals and engagement rosters remain separate migrations. The inventory generator now fails if a future change introduces a duplicate numeric prefix or a migration filename without a numeric prefix.
 

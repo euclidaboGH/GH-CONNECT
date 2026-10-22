@@ -17,47 +17,47 @@ const json = process.argv.includes("--json")
 /** Critical files for Stage 2 financial integrity review (ordered for disposable PG). */
 const CRITICAL = [
   {
-    file: "20260821_ghc_economy_ledger.sql",
+    file: "20261022010001_ghc_economy_ledger.sql",
     symbols: ["ghc_transactions", "ghc_available_balance", "ghc_execute_transfer"],
     why: "Core ledger foundation (transactions + balance + transfer)",
   },
   {
-    file: "202609030002_economy_v12_atomic_daily_claim.sql",
+    file: "20261022010009_economy_v12_atomic_daily_claim.sql",
     symbols: ["ghc_execute_daily_claim_v12"],
     why: "Atomic Daily Claim path",
   },
   {
-    file: "202609040001_ghc_ledger_spend_rpc.sql",
+    file: "20261022010011_ghc_ledger_spend_rpc.sql",
     symbols: ["ghc_execute_spend"],
     why: "Authoritative spend RPC",
   },
   {
-    file: "202609040002_membership_entitlements_and_activity_caps.sql",
+    file: "20261022010012_membership_entitlements_and_activity_caps.sql",
     symbols: ["ghc_membership"],
     why: "Membership entitlements table/RPCs",
   },
   {
-    file: "20261009_ghc_balance_lock_and_spendable.sql",
+    file: "20261022010057_ghc_balance_lock_and_spendable.sql",
     symbols: ["spendable", "ghc_balance"],
     why: "Spendable balance / locks",
   },
   {
-    file: "202610180008_daily_claim_48h_lock.sql",
+    file: "20261022010076_daily_claim_48h_lock.sql",
     symbols: ["48", "pending", "claim"],
     why: "48h pending lock on Daily Claim",
   },
   {
-    file: "202610180009_ghc_daily_claim_only_issuance.sql",
+    file: "20261022010077_ghc_daily_claim_only_issuance.sql",
     symbols: ["issuance", "daily"],
     why: "Issuance guard (Daily Claim only until referral path)",
   },
   {
-    file: "202610180010_atomic_membership_purchase.sql",
+    file: "20261022010078_atomic_membership_purchase.sql",
     symbols: ["ghc_purchase_membership", "ghc_execute_spend"],
     why: "Atomic GHC membership purchase",
   },
   {
-    file: "202610180011_atomic_marketplace_inventory_reservation.sql",
+    file: "20261022010079_atomic_marketplace_inventory_reservation.sql",
     symbols: [
       "gh_marketplace_release_expired_reservations",
       "payment_claimed_at",
@@ -66,12 +66,12 @@ const CRITICAL = [
     why: "Marketplace reservation + payment claim",
   },
   {
-    file: "202609120002_marketplace_orders_durable.sql",
+    file: "20261022010024_marketplace_orders_durable.sql",
     symbols: ["gh_marketplace_orders", "order"],
     why: "Durable marketplace orders",
   },
   {
-    file: "202610181200_marketplace_stale_payment_claim_recovery.sql",
+    file: "20261022010081_marketplace_stale_payment_claim_recovery.sql",
     symbols: [
       "gh_marketplace_list_stale_payment_claims",
       "gh_marketplace_force_release_stale_payment_claim",
@@ -80,7 +80,7 @@ const CRITICAL = [
     why: "Ops recovery for stuck payment claims (no auto-pay)",
   },
   {
-    file: "202610181300_membership_orphaned_purchase_recovery.sql",
+    file: "20261022010082_membership_orphaned_purchase_recovery.sql",
     symbols: [
       "ghc_membership_complete_orphaned_purchase",
       "ghc_membership_list_orphan_purchase_candidates",
@@ -89,7 +89,7 @@ const CRITICAL = [
     why: "Ops complete entitlement after orphaned membership debit",
   },
   {
-    file: "202610181400_transfer_pair_orphan_recovery.sql",
+    file: "20261022010083_transfer_pair_orphan_recovery.sql",
     symbols: [
       "ghc_list_orphan_transfer_outs",
       "ghc_complete_orphan_transfer_in",
@@ -98,17 +98,17 @@ const CRITICAL = [
     why: "Ops complete missing transfer_in for existing transfer_out",
   },
   {
-    file: "202610181500_referral_programme.sql",
+    file: "20261022010084_referral_programme.sql",
     symbols: ["ghc_referral_ensure_code", "ghc_settle_referral_reward", "REFERRAL_REWARD_V1"],
     why: "Referral programme schema + settlement RPC",
   },
   {
-    file: "202610181501_issuance_guard_referral_and_curation_redistribute.sql",
+    file: "20261022010085_issuance_guard_referral_and_curation_redistribute.sql",
     symbols: ["REFERRAL_REWARD_V1", "CURATION_REDISTRIBUTE_V1", "GHC_ISSUANCE_BLOCKED"],
     why: "Issuance guard allows referral + curation redistribute only",
   },
   {
-    file: "202610181502_curation_redistribute_balance_funded.sql",
+    file: "20261022010086_curation_redistribute_balance_funded.sql",
     symbols: ["ghc_curation_redistribute", "INSUFFICIENT_SPENDABLE"],
     why: "Balance-funded curation redistribution",
   },

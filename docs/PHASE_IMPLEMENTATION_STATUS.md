@@ -15,6 +15,6 @@ These statuses are not interchangeable. A source implementation, migration file,
 
 ## Current status
 
-The current package version is `0.69.3`. The latest supplied Vercel build log for `testnet` commit `a04ebff` failed TypeScript checking at `contexts/ghc-context.tsx:2450` because `domains` is referenced before its declaration. Production release is not approved. See [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) for the current gate table and next actions.
+The current package version is `0.70.3`. The supplied source has passed the repository static hardening gates used in this release reconstruction. Production/Testnet release is not approved and remains blocked until a disposable PostgreSQL clean-install and the required live evidence gates are completed. See [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) for the current gate table and next actions.
 
 Older phase reports are retained under [`archive/`](archive/) for historical context only. Do not use their version numbers, migration counts, or test totals as current evidence.

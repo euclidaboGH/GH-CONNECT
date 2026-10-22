@@ -1,7 +1,7 @@
 # GH-CONNECT — Post vote/comment persistence and refresh repair
 
 Date: 2026-10-22
-Baseline: available GH-CONNECT 0.69.3 consolidated stabilization candidate. This is not a fresh checkout of the latest remote `testnet` branch.
+Baseline: available GH-CONNECT 0.70.3 consolidated stabilization candidate. This is not a fresh checkout of the latest remote `testnet` branch.
 
 ## Reported symptom
 Post upvotes/downvotes and comments appeared to disappear after a page refresh, in both feed cards and the profile timeline.

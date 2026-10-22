@@ -14,7 +14,7 @@
 
 - Added `background` to `StoryItem`, local sanitization, hydration, and the story create request.
 - API accepts only the six known story background presets; arbitrary client CSS is discarded.
-- Added `202610240004_gh_story_creator_upgrade.sql` to persist themes and filter story visibility on the server.
+- Added `20261022010104_gh_story_creator_upgrade.sql` to persist themes and filter story visibility on the server.
 - `everyone`: visible to all authenticated viewers except blocked relationships.
 - `followers`: requires the viewer to follow the story owner.
 - `friends`: requires reciprocal follow edges in the current durable social graph.
@@ -31,7 +31,7 @@
 
 ## Required rollout
 
-1. Review and apply `202610240004_gh_story_creator_upgrade.sql` to Testnet Supabase.
+1. Review and apply `20261022010104_gh_story_creator_upgrade.sql` to Testnet Supabase.
 2. Deploy the updated project to the Testnet Preview.
 3. Verify create/read behavior with two test accounts: everyone, followers, reciprocal-follow friends, private stories, block behavior, camera denial fallback, image/video upload, text-theme persistence, replies/reactions, and owner-only viewer roster.
 4. Only after successful Testnet verification, apply the same reviewed migration to Mainnet Supabase and promote the tested commit.

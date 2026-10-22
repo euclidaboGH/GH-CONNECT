@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
-const migration = fs.readFileSync('supabase/migrations/202610190002_gh_private_media_references_and_viewer_authz.sql', 'utf8')
-const financial = fs.readFileSync('supabase/migrations/202610250004_gh_verified_tip_settlement_payout_reconciliation.sql', 'utf8')
+const migration = fs.readFileSync('supabase/migrations/20261022010087_gh_private_media_references_and_viewer_authz.sql', 'utf8')
+const financial = fs.readFileSync('supabase/migrations/20261022010111_gh_verified_tip_settlement_payout_reconciliation.sql', 'utf8')
 const upload = fs.readFileSync('app/api/media/route.ts', 'utf8')
 const signer = fs.readFileSync('app/api/media/[id]/signed-url/route.ts', 'utf8')
 const posts = fs.readFileSync('app/api/social/posts/route.ts', 'utf8')

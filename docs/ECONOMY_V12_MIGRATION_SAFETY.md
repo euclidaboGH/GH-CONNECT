@@ -9,15 +9,15 @@
 
 | Order | File | Purpose |
 |------:|------|---------|
-| 1 | `202609030003_economy_v12_telemetry_note.sql` | Documentation / non-authoritative telemetry notes only |
-| 2 | `202609030001_economy_v12_claim_streak_and_population.sql` | `ghc_claim_streak_state`, `ghc_user_economic_status`, population + streak RPCs |
-| 3 | `202609030002_economy_v12_atomic_daily_claim.sql` | Unique earned-ref index + `ghc_execute_daily_claim_v12` |
+| 1 | `20261022010010_economy_v12_telemetry_note.sql` | Documentation / non-authoritative telemetry notes only |
+| 2 | `20261022010008_economy_v12_claim_streak_and_population.sql` | `ghc_claim_streak_state`, `ghc_user_economic_status`, population + streak RPCs |
+| 3 | `20261022010009_economy_v12_atomic_daily_claim.sql` | Unique earned-ref index + `ghc_execute_daily_claim_v12` |
 
 **Prerequisite (already in repo, earlier):**
 
 | File | Why needed first |
 |------|------------------|
-| `20260821_ghc_economy_ledger.sql` | Creates `ghc_transactions` and core ledger RPCs |
+| `20261022010001_ghc_economy_ledger.sql` | Creates `ghc_transactions` and core ledger RPCs |
 | Other `20260822_*` ledger/identity migrations | Public identities, RLS, transfer RPCs used by population stats |
 
 Do **not** re-run destructive edits on `ghc_transactions` itself.
@@ -45,9 +45,9 @@ ghc_public_identities / ghc_user_economic_status
 ## 3. Order of execution
 
 1. Confirm core ledger migrations already applied (`ghc_transactions` exists).  
-2. Apply `202609030003_economy_v12_telemetry_note.sql` (optional, comments only).  
-3. Apply `202609030001_economy_v12_claim_streak_and_population.sql`.  
-4. Apply `202609030002_economy_v12_atomic_daily_claim.sql`.  
+2. Apply `20261022010010_economy_v12_telemetry_note.sql` (optional, comments only).  
+3. Apply `20261022010008_economy_v12_claim_streak_and_population.sql`.  
+4. Apply `20261022010009_economy_v12_atomic_daily_claim.sql`.  
 5. Run post-migration verification (section 5).
 
 ---

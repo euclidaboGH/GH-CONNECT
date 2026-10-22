@@ -35,4 +35,4 @@ The complete `npm run typecheck`, lint, and production build have **not** been e
 
 ## Release safety
 
-This candidate is based on the previously available GH-CONNECT 0.69.3 archive, not a fresh checkout of the live `testnet` branch at `aeb1c8a`. Apply the focused patch to the actual current branch and inspect the diff before committing. Do not replace the branch wholesale with this archive. No Supabase migrations or live payment/ledger data were changed.
+This candidate is based on the previously available GH-CONNECT 0.70.3 archive, not a fresh checkout of the live `testnet` branch at `aeb1c8a`. Apply the focused patch to the actual current branch and inspect the diff before committing. Do not replace the branch wholesale with this archive. No Supabase migrations or live payment/ledger data were changed.

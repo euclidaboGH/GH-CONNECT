@@ -1,7 +1,7 @@
 # GH-CONNECT Pi Browser Media + Daily GHC Claim Repair
 
 **Date:** 2026-10-22  
-**Baseline:** available GH-CONNECT 0.69.3 React Hooks CI repair archive. This is a repair candidate, not a verified checkout of the live GitHub `testnet` branch.
+**Baseline:** available GH-CONNECT 0.70.3 React Hooks CI repair archive. This is a repair candidate, not a verified checkout of the live GitHub `testnet` branch.
 
 ## Findings and changes
 

@@ -16,7 +16,7 @@ The reaction-roster RPC previously accepted an authenticated actor ID but did no
 - denies all other visibility levels, matching the current feed visibility policy;
 - remains executable only by `service_role`.
 
-The existing migration was corrected for fresh database setup, and the additive forward migration `202610240003_gh_post_reaction_roster_visibility_guard.sql` carries the fix to databases where the original roster migration has already been applied. Apply it to Testnet first after reviewing the SQL; verify the RPC and route behavior before applying it to Mainnet.
+The existing migration was corrected for fresh database setup, and the additive forward migration `20261022010103_gh_post_reaction_roster_visibility_guard.sql` carries the fix to databases where the original roster migration has already been applied. Apply it to Testnet first after reviewing the SQL; verify the RPC and route behavior before applying it to Mainnet.
 
 ## Regression and inventory improvements
 
@@ -49,7 +49,7 @@ The build log's `npm audit` count (14 vulnerabilities) also needs a fresh `npm a
 - Added a dedicated global creator entry point so the feed and create hub no longer open the legacy story form.
 - Upgraded story viewing with immersive media/text layouts, progress, swipe/keyboard navigation, private replies/reactions, and the existing owner-only viewer roster.
 - Corrected own-story detection for both the local `current-user` placeholder and the authenticated profile ID.
-- Added `background` to the story model and sanitizer, allowlisted presets at the API boundary, and added `202610240004_gh_story_creator_upgrade.sql` for durable theme storage and server-side story audience filtering.
+- Added `background` to the story model and sanitizer, allowlisted presets at the API boundary, and added `20261022010104_gh_story_creator_upgrade.sql` for durable theme storage and server-side story audience filtering.
 - Audience rules in the migration: `everyone` is public; `followers` requires a follow edge from viewer to owner; `friends` requires reciprocal follow edges; `private` is owner-only. `matches-only` is intentionally owner-only until a canonical server-side match relation is available.
 - Story reactions are sent as private messages rather than displayed as a local-only fake reaction. Viewer names load from the owner-gated server endpoint.
 - Upload ceiling remains bounded by the existing `/api/media` proxy (4 MB per uploaded blob). Images are optimized before upload; videos above 4 MB are rejected with a clear message. A resumable/direct-to-storage video pipeline is a separate infrastructure upgrade.

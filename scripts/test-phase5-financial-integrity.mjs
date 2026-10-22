@@ -2,16 +2,16 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
-const piIntent = read('supabase/migrations/202609040003_pi_payment_intents_durable.sql')
+const piIntent = read('supabase/migrations/20261022010013_pi_payment_intents_durable.sql')
 const piStore = read('lib/server/payments/intent-store.ts')
 const withdrawal = read('lib/server/economy/withdrawal.ts')
 const asset = read('lib/asset-separation.ts')
 const a2u = read('app/api/payments/a2u/create/route.ts')
-const a2uSql = read('supabase/migrations/202610250006_pi_a2u_sdk_execution_orchestration.sql')
-const sellerPayoutSql = read('supabase/migrations/202610250007_ghc_atomic_seller_payout_settlement.sql')
+const a2uSql = read('supabase/migrations/20261022010113_pi_a2u_sdk_execution_orchestration.sql')
+const sellerPayoutSql = read('supabase/migrations/20261022010114_ghc_atomic_seller_payout_settlement.sql')
 const sellerPayoutRoute = read('app/api/marketplace/payouts/[requestId]/reconcile-ghc/route.ts')
 const paystackWebhook = read('app/api/webhooks/paystack/route.ts')
-const paystackSql = read('supabase/migrations/202610250008_paystack_ngn_beneficiaries_and_payouts.sql')
+const paystackSql = read('supabase/migrations/20261022010115_paystack_ngn_beneficiaries_and_payouts.sql')
 const membership = read('lib/server/membership/entitlement-store.ts')
 const report = read('docs/PHASE_5_GHC_PI_FINANCIAL_INTEGRITY.md')
 

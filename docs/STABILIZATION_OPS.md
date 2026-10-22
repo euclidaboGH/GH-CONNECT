@@ -20,9 +20,9 @@
    - `ghc_payment_intents` + payment RPCs
    - `ghc_membership_entitlements` + `ghc_membership_upsert`
    - `gh_posts`, `gh_communities`, …
-   - `202609250002_gh_post_list_feed_order_fix.sql`
-   - `202609250001_gh_poll_vote_authoritative.sql`
-   - `202609250003_rpc_acl_lockdown.sql`
+   - `20261022010038_gh_post_list_feed_order_fix.sql`
+   - `20261022010037_gh_poll_vote_authoritative.sql`
+   - `20261022010039_rpc_acl_lockdown.sql`
 4. Verify:
    ```sql
    SELECT to_regclass('public.gh_pi_identities');

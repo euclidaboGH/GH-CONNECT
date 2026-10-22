@@ -7,7 +7,7 @@
 | Governance logic (roles, health, lifecycle) | Production-ready logic |
 | Session log/report Maps | Class C — process memory |
 | Server API mirror | `/api/governance/*` — honest `durable: false` until migration + insert |
-| DB migration | `20260907_community_governance_log_proposal.sql` — **NOT APPLIED** |
+| DB migration | `20261022010017_community_governance_log_proposal.sql` — **NOT APPLIED** |
 
 ## Rules
 

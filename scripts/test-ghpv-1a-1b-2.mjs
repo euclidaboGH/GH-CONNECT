@@ -53,7 +53,7 @@ ok(cqiSrc.includes("Never uses GHC balance"), "2 no balance")
 ok(cqiSrc.includes("distributionFactorFromCqi"), "2 distribution factor")
 
 const mig = fs.readFileSync(
-  path.join(root, "supabase/migrations/20261014_ghpv_curation_weight_and_settle.sql"),
+  path.join(root, "supabase/migrations/20261022010062_ghpv_curation_weight_and_settle.sql"),
   "utf8"
 )
 ok(mig.includes("gh_ghpv_record_curation_weight"), "migration record RPC")

@@ -28,7 +28,7 @@ const route = read("app/api/social/posts/[id]/reward/route.ts")
 const store = read("lib/server/content-reward/store.ts")
 const panel = read("components/ghc/post-reward/post-reward-panel.tsx")
 const card = read("components/ghc/enhanced-post-card.tsx")
-const mig = read("supabase/migrations/20261022_gh_content_rewards.sql")
+const mig = read("supabase/migrations/20261022010101_gh_content_rewards.sql")
 const curation = read("app/api/social/posts/[id]/curation/route.ts")
 
 ok(route.includes("getPublicContentReward"), "reward GET uses server store")

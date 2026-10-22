@@ -21,9 +21,9 @@ All progress can be wiped at launch. Enable full flow on **Vercel** (Production 
 
 Apply migrations through at least:
 
-- `20260928_gh_post_curation.sql` (upvote/downvote columns + table)
-- `202609030002_economy_v12_atomic_daily_claim.sql` (48h claim)
-- **`202610210001_gh_post_list_feed_curation_fields.sql`** (feed returns upvote/downvote + viewerCurationChoice)
+- `20261022010045_gh_post_curation.sql` (upvote/downvote columns + table)
+- `20261022010009_economy_v12_atomic_daily_claim.sql` (48h claim)
+- **`20261022010092_gh_post_list_feed_curation_fields.sql`** (feed returns upvote/downvote + viewerCurationChoice)
 
 Without the last migration, votes still write to DB but **disappear from the feed UI on reload**.
 

@@ -12,7 +12,7 @@ const server = readFileSync(join(root, 'lib/server/membership/entitlement-store.
 const spend = readFileSync(join(root, 'lib/server/economy/spend-catalog.ts'), 'utf8')
 const ui = readFileSync(join(root, 'components/ghc/premium-membership-screen.tsx'), 'utf8')
 const activateRoute = readFileSync(join(root, 'app/api/membership/activate/route.ts'), 'utf8')
-const atomicMigration = readFileSync(join(root, 'supabase/migrations/202610180010_atomic_membership_purchase.sql'), 'utf8')
+const atomicMigration = readFileSync(join(root, 'supabase/migrations/20261022010078_atomic_membership_purchase.sql'), 'utf8')
 const roadmap = readFileSync(join(root, 'GREENHAVEN_GHC_ECONOMY_AND_FEES_ROADMAP_2026-10-18.md'), 'utf8')
 const options = [
   { months: 1, discount: 0, vip: 150, vvip: 300, access: 2 },

@@ -47,7 +47,7 @@ Referral rewards · funded curation · marketplace/community fees · Mainnet app
 
 ## Stage 2.1 — Stale payment-claim recovery
 
-Migration: `202610181200_marketplace_stale_payment_claim_recovery.sql`
+Migration: `20261022010081_marketplace_stale_payment_claim_recovery.sql`
 
 | RPC | Purpose |
 |-----|---------|
@@ -61,7 +61,7 @@ Server helpers: `listStalePaymentClaims`, `forceReleaseStalePaymentClaim` in `li
 
 ## Stage 2.2 — Orphaned membership purchase recovery
 
-Migration: `202610181300_membership_orphaned_purchase_recovery.sql`
+Migration: `20261022010082_membership_orphaned_purchase_recovery.sql`
 
 When `ghc_purchase_membership` finds an **idempotent spend** without matching `purchase_ref` entitlement, it returns `MEMBERSHIP_PURCHASE_RECONCILIATION_REQUIRED` instead of granting again.
 
@@ -75,7 +75,7 @@ Server: `listOrphanMembershipPurchaseCandidates`, `completeOrphanedMembershipPur
 
 ## Stage 2.3 — Transfer pair orphan recovery
 
-Migration: `202610181400_transfer_pair_orphan_recovery.sql`
+Migration: `20261022010083_transfer_pair_orphan_recovery.sql`
 
 Normal transfers write `transfer_out` + `transfer_in` in one transaction via `ghc_execute_transfer`.
 

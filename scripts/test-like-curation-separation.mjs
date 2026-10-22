@@ -2,9 +2,9 @@ import fs from "node:fs"
 import assert from "node:assert/strict"
 const card = fs.readFileSync(new URL("../components/ghc/enhanced-post-card.tsx", import.meta.url), "utf8")
 const route = fs.readFileSync(new URL("../app/api/social/posts/[id]/curation/route.ts", import.meta.url), "utf8")
-const migration = fs.readFileSync(new URL("../supabase/migrations/202610180001_ghc_curation_rewards.sql", import.meta.url), "utf8")
+const migration = fs.readFileSync(new URL("../supabase/migrations/20261022010071_ghc_curation_rewards.sql", import.meta.url), "utf8")
 const client = fs.readFileSync(new URL("../lib/social/client.ts", import.meta.url), "utf8")
-const phase6 = fs.readFileSync(new URL("../supabase/migrations/202610180009_ghc_daily_claim_only_issuance.sql", import.meta.url), "utf8")
+const phase6 = fs.readFileSync(new URL("../supabase/migrations/20261022010077_ghc_daily_claim_only_issuance.sql", import.meta.url), "utf8")
 assert.match(card, /handleCuration\("upvote"\)/, "Upvote remains a primary curation action")
 assert.match(card, /handleCuration\("downvote"\)/, "Downvote remains a primary curation action")
 assert.match(card, /Curation vote weight percentage; does not issue GHC/, "Curation selector is accurately labeled as weight, not GHC reward")

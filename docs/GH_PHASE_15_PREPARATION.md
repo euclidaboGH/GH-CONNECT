@@ -43,7 +43,7 @@ Phase 14 (production hardening) does **not** authorize Phase 15 feature work.
 
 ### Track B — Connection-request durability
 
-- Activate `20260905_connection_request_intents.sql` only after approval  
+- Activate `20261022010015_connection_request_intents.sql` only after approval  
 - Wire accept/decline APIs to session actor  
 - IDOR matrix mandatory  
 

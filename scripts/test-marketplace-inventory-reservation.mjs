@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 const root=process.cwd(); let pass=0,fail=0
 function ok(c,m){if(c){pass++;console.log('  ✓',m)}else{fail++;console.log('  ✗',m)}}
-const migration=fs.readFileSync(path.join(root,'supabase/migrations/202610180011_atomic_marketplace_inventory_reservation.sql'),'utf8')
+const migration=fs.readFileSync(path.join(root,'supabase/migrations/20261022010079_atomic_marketplace_inventory_reservation.sql'),'utf8')
 const route=fs.readFileSync(path.join(root,'app/api/marketplace/orders/route.ts'),'utf8')
 const store=fs.readFileSync(path.join(root,'lib/server/marketplace/order-store.ts'),'utf8')
 const listingStore=fs.readFileSync(path.join(root,'lib/server/marketplace/listing-store.ts'),'utf8')

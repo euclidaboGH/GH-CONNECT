@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
 const route = fs.readFileSync('app/api/social/posts/[id]/comments/[commentId]/reactions/route.ts', 'utf8')
-const migration = fs.readFileSync('supabase/migrations/202610180012_gh_engagement_rosters.sql', 'utf8')
+const migration = fs.readFileSync('supabase/migrations/20261022010080_gh_engagement_rosters.sql', 'utf8')
 assert.match(migration, /jsonb_agg\(row_to_json\(q\)::jsonb\)/, 'reaction list RPC returns roster rows')
 assert.match(route, /reactions\?: Array<\{ emoji\?: unknown \}>/, 'route models roster result from RPC')
 assert.match(route, /data\.reactions\.reduce<Record<string, number>>/, 'route aggregates counts when RPC does not provide counts')

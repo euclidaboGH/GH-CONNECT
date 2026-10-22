@@ -42,7 +42,7 @@ Existing `GlobalSearchModal` prefers durable server people results when availabl
 
 ## Migration
 
-`supabase/migrations/20261004_gh_search.sql`
+`supabase/migrations/20261022010052_gh_search.sql`
 
 ## Deferred
 

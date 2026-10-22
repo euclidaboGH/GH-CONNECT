@@ -10,7 +10,7 @@ const release = read('lib/app-release.ts')
 const packageJson = JSON.parse(read('package.json'))
 const postApi = read('app/api/social/posts/route.ts')
 const messageApi = read('app/api/messaging/conversations/[conversationId]/messages/route.ts')
-const postMigration = read('supabase/migrations/202610240007_gh_post_created_notifications.sql')
+const postMigration = read('supabase/migrations/20261022010107_gh_post_created_notifications.sql')
 
 const checks = [
   ['Daily reward is compact in the header, not a persistent feed card', /useDailyClaimStatus/.test(feed) && /Daily reward status is kept compact in the app header/.test(feed) && !/data-ghc-feed-daily-reward/.test(feed)],
