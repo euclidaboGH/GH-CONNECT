@@ -699,8 +699,7 @@ export function NotificationBell({
                     {EMPTY_COPY[bucket]?.body}
                   </p>
                 </div>
-              ) : (
-                {expanded && activeThread ? (
+              ) : expanded && activeThread ? (
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
                       <button
@@ -825,7 +824,6 @@ export function NotificationBell({
                     )
                   })}
                 </ul>
-                )}
               )}
             </div>
           </div>
