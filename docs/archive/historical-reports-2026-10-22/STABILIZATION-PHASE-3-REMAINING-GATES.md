@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Phase 3 — Remaining security and migration gates
 
 Run from the updated project root.

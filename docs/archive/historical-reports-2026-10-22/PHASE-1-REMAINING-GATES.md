@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Phase 1 — Remaining Build and Dependency Gates
 
 Run from a clean checkout of the authoritative v0.63.25 baseline on Node.js 24.15.0.

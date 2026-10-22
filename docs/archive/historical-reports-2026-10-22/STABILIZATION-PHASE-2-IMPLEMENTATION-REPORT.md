@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # GreenHaven 10-Phase Stabilization — Phase 2 Report
 
 **Baseline:** GH-CONNECT `0.63.25`  

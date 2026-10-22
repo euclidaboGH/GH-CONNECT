@@ -2775,7 +2775,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       addToast("Failed to create post", "error")
       return false
     }
-  }, [addToast, domains.posts, state.isOnline, state.profile, state.posts])
+  }, [addToast, domains.posts, state.isOnline, state.profile])
 
   /** Durable multi-reaction (like, love, support, …). Server is authority when configured. */
   const reactToPost = useCallback(async (postId: string, reaction: string = "like") => {
@@ -3281,6 +3281,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           if (post.id !== postId) return post
           const existing = Array.isArray(post.comments) ? post.comments : []
           if (existing.some((c) => c.id === newComment.id)) return post
+          const currentCommentCount = Math.max(
+            Number(post.engagement?.comments ?? existing.length) || 0,
+            existing.length,
+          )
           const nextComments = [
             ...existing,
             {
@@ -3292,18 +3296,24 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           return {
             ...post,
             comments: nextComments,
+            // Feed hydration only loads a preview. Preserve the known durable
+            // total instead of replacing it with the number loaded on device.
             engagement: normalizeEngagementMetrics(post.engagement, {
-              comments: nextComments.length,
+              comments: currentCommentCount + 1,
             }),
           }
         }),
       }))
+      const postBeforeComment = state.posts.find((p) => p.id === postId)
+      const countBeforeComment = Math.max(
+        Number(postBeforeComment?.engagement?.comments ?? 0) || 0,
+        postBeforeComment?.comments?.length ?? 0,
+      )
       broadcastPostEngagement({
         postId,
         kind: "comment",
         commentDelta: 1,
-        commentCount:
-          (state.posts.find((p) => p.id === postId)?.comments?.length ?? 0) + 1,
+        commentCount: countBeforeComment + 1,
       })
       try {
         window.dispatchEvent(
@@ -3342,7 +3352,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 ...post,
                 comments: mapped as typeof post.comments,
                 engagement: normalizeEngagementMetrics(post.engagement, {
-                  comments: mapped.length,
+                  // Reconciliation is capped at 80 comments; keep the larger
+                  // known total rather than treating the loaded page as total.
+                  comments: Math.max(
+                    Number(post.engagement?.comments ?? 0) || 0,
+                    post.comments?.length ?? 0,
+                    mapped.length,
+                  ),
                 }),
               }
             }),
@@ -3350,7 +3366,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           broadcastPostEngagement({
             postId,
             kind: "comment",
-            commentCount: mapped.length,
+            commentCount: Math.max(countBeforeComment + 1, mapped.length),
           })
         }
       } catch { /* non-fatal */ }
@@ -3867,7 +3883,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           : post
       ),
     }))
-  }, [addToast, state.posts, state.profile])
+  }, [])
 
   const pinComment = useCallback(async (postId: string, commentId: string) => {
     // Local preference only — no durable comment-pin API/RPC in this build.
@@ -3883,7 +3899,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       ),
     }))
     addToast("Pinned on this device only — not synced to other accounts yet", "info")
-  }, [addToast, state.posts, state.profile])
+  }, [addToast])
 
   const unpinComment = useCallback(async (postId: string, commentId: string) => {
     // Local preference only — no durable comment-pin API/RPC in this build.
@@ -3899,9 +3915,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       ),
     }))
     addToast("Unpinned on this device only", "info")
-  }, [addToast, state.posts, state.profile])
+  }, [addToast])
 
-  const createQuoteRepost = async (originalPostId: string, quoteText: string) => {
+  const createQuoteRepost = useCallback(async (originalPostId: string, quoteText: string) => {
     const originalPost = state.posts.find((p) => p.id === originalPostId)
     if (!originalPost) {
       addToast("Original post not found", "error")
@@ -3949,9 +3965,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       addToast("Could not reach the server to publish this quote", "error")
       return
     }
-  }
+  }, [addToast, state.posts, state.profile])
 
-  const sharePost = async (
+  const sharePost = useCallback(async (
     postId: string,
     platform: "twitter" | "facebook" | "linkedin" | "copy" | "timeline" | "story" | "private" | "group" = "copy"
   ) => {
@@ -3981,10 +3997,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       return result.link || ""
     }
     return ""
-  }
+  }, [addToast, state.settings, state.blockedUsers, state.posts, state.conversations])
 
 
-  const savePost = async (postId: string, collection?: string) => {
+  const savePost = useCallback(async (postId: string, collection?: string) => {
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -4047,9 +4063,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       addToast("Could not reach the server to save this post", "error")
     }
-  }
+  }, [addToast])
 
-  const unsavePost = async (postId: string) => {
+  const unsavePost = useCallback(async (postId: string) => {
     const prevBookmarks = state.posts.find((p) => p.id === postId)?.bookmarkedBy
     setState((s) => ({
       ...s,
@@ -4101,7 +4117,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }))
       addToast("Could not reach the server to update saved posts", "error")
     }
-  }
+  }, [addToast, state.posts])
 
   const hidePost = async (postId: string) => {
     setState((s) => ({
@@ -4137,7 +4153,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const reportPost = async (postId: string, reason: string) => {
+  const reportPost = useCallback(async (postId: string, reason: string) => {
     try {
       const result = await domains.reports.report("post", postId, reason)
       if (!result.ok) {
@@ -4156,7 +4172,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not submit report", "error")
     }
-  }
+  }, [addToast, domains.reports, recordModerationReport])
 
   const reportContent = useCallback(async (
     targetType: "user" | "post" | "comment" | "message" | "story" | "group",
@@ -4187,7 +4203,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [addToast, recordModerationReport, domains])
 
 
-  const muteUser = async (userId: string) => {
+  const muteUser = useCallback(async (userId: string) => {
     try {
       const result = await domains.graph.muteUser(userId)
       if (!result.ok) {
@@ -4200,7 +4216,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error muting user", "error")
     }
-  }
+  }, [addToast, domains.graph])
 
   const unmuteUser = async (userId: string) => {
     try {

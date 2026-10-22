@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # GH-CONNECT Phase 2 — Production Readiness and Reliability Report
 
 **Source baseline:** `GH-CONNECT-0.63.18-PHASE1-ASSET-SAFETY.zip`  

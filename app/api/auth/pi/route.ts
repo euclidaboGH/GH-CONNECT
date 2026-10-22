@@ -46,14 +46,32 @@ export async function POST(request: Request) {
     if (Number.isFinite(contentLength) && contentLength > 16_384) {
       return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }
-    const body = await request.json().catch(() => ({}))
+    // Enforce the cap on the actual body too; content-length can be absent on
+    // streamed/chunked requests. Do not parse an unbounded JSON body first.
+    const rawBody = await request.text()
+    if (Buffer.byteLength(rawBody, "utf8") > 16_384) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
+    let body: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = JSON.parse(rawBody)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ ok: false, error: "INVALID_JSON" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const accessToken =
       typeof body.accessToken === "string" ? body.accessToken.trim() : ""
 
     if (!accessToken) {
       return NextResponse.json(
         { ok: false, error: "accessToken required" },
-        { status: 400 }
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+    if (accessToken.length > 8_192 || /[\u0000-\u001f\u007f]/.test(accessToken)) {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_ACCESS_TOKEN_FORMAT" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
       )
     }
 

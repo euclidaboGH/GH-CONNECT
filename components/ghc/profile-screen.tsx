@@ -23,7 +23,7 @@ import {
   BadgeCheck,
 } from "lucide-react"
 import { LazyImage } from "./lazy-image"
-import type { Profile } from "@/lib/ghc-types"
+import type { Post, Profile } from "@/lib/ghc-types"
 import { isOwnProfilePost } from "@/lib/ownership"
 import { IdentityService } from "@/lib/identity/identity-service"
 import {
@@ -66,11 +66,171 @@ export function ProfileScreen({
   const interests = Array.isArray(p.interests) ? p.interests.filter(Boolean) : []
   const intents = Array.isArray(p.connectionIntents) ? p.connectionIntents.filter(Boolean) : []
   const meId = IdentityService.getCurrentUserId()
-  const posts = useMemo(
+  // The profile timeline is loaded from its own durable, viewer-authorized API;
+  // the feed is only a temporary visual fallback while that request is in flight.
+  const [timelinePosts, setTimelinePosts] = useState<Post[] | null>(null)
+  const [timelineCursor, setTimelineCursor] = useState<{ before: number; beforeId: string } | null>(null)
+  const [timelineHasMore, setTimelineHasMore] = useState(false)
+  const [timelineLoading, setTimelineLoading] = useState(false)
+  const [timelineLoadingMore, setTimelineLoadingMore] = useState(false)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineRetry, setTimelineRetry] = useState(0)
+  const fallbackPosts = useMemo(
     () => (Array.isArray(feed.posts) ? feed.posts.filter((post) => isOwnProfilePost(post.authorId, post.authorName, meId, p)) : []),
     [feed.posts, meId, p],
   )
+  const posts = timelinePosts ?? fallbackPosts
   const [libraryOpen, setLibraryOpen] = useState(false)
+
+  useEffect(() => {
+    if (!meId) return
+    const controller = new AbortController()
+    setTimelineLoading(true)
+    setTimelineError(null)
+    setTimelinePosts(null)
+    setTimelineCursor(null)
+    setTimelineHasMore(false)
+    void (async () => {
+      try {
+        const response = await fetch(`/api/social/profile/${encodeURIComponent(meId)}/posts?limit=30&kind=all`, {
+          credentials: "include", cache: "no-store", signal: controller.signal,
+        })
+        const data = await response.json().catch(() => ({})) as {
+          ok?: boolean; posts?: Array<Record<string, unknown>>; hasMore?: boolean;
+          nextBefore?: number | null; nextBeforeId?: string | null; error?: string; message?: string
+        }
+        if (!response.ok || !data.ok) throw new Error(data.message || data.error || `Timeline unavailable (${response.status})`)
+        const mapped = (Array.isArray(data.posts) ? data.posts : []).map((row): Post => {
+          const likes = Math.max(0, Number(row.likes) || 0)
+          const commentCount = Math.max(0, Number(row.commentCount) || 0)
+          const shares = Math.max(0, Number(row.shares) || 0)
+          return {
+            id: String(row.id || ""), authorId: String(row.authorId || ""),
+            authorName: String(row.authorName || "Member"), authorPhoto: String(row.authorPhoto || ""),
+            content: String(row.content || ""), images: Array.isArray(row.images) ? row.images.map(String) : [],
+            video: row.video == null ? null : String(row.video), pdf: row.pdf == null ? null : String(row.pdf),
+            pdfName: row.pdfName == null ? null : String(row.pdfName), likes, comments: [],
+            createdAt: Number(row.createdAt) || 0, isEdited: Boolean(row.isEdited),
+            shares, visibility: (String(row.visibility || "public") as Post["visibility"]),
+            communityId: row.communityId == null ? undefined : String(row.communityId),
+            communityName: row.communityName == null ? undefined : String(row.communityName),
+            contentType: (String(row.contentType || "standard") as Post["contentType"]),
+            upvoteCount: Math.max(0, Number(row.upvoteCount) || 0),
+            downvoteCount: Math.max(0, Number(row.downvoteCount) || 0),
+            viewerCurationChoice: row.viewerCurationChoice === "upvote" || row.viewerCurationChoice === "downvote" ? row.viewerCurationChoice : undefined,
+            engagement: { likes, comments: commentCount, shares, views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
+          }
+        }).filter((post) => post.id && post.authorId === meId)
+        setTimelinePosts(mapped)
+        setTimelineHasMore(Boolean(data.hasMore))
+        setTimelineCursor(typeof data.nextBefore === "number" && typeof data.nextBeforeId === "string"
+          ? { before: data.nextBefore, beforeId: data.nextBeforeId } : null)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setTimelineError(error instanceof Error ? error.message : "Your complete timeline could not be loaded")
+      } finally {
+        if (!controller.signal.aborted) setTimelineLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [meId, timelineRetry])
+
+  const loadMoreTimeline = useCallback(async () => {
+    if (!meId || !timelineCursor || !timelineHasMore || timelineLoadingMore) return
+    setTimelineLoadingMore(true)
+    setTimelineError(null)
+    try {
+      const params = new URLSearchParams({ limit: "30", kind: "all", before: String(timelineCursor.before), beforeId: timelineCursor.beforeId })
+      const response = await fetch(`/api/social/profile/${encodeURIComponent(meId)}/posts?${params.toString()}`, {
+        credentials: "include", cache: "no-store",
+      })
+      const data = await response.json().catch(() => ({})) as {
+        ok?: boolean; posts?: Array<Record<string, unknown>>; hasMore?: boolean;
+        nextBefore?: number | null; nextBeforeId?: string | null; error?: string; message?: string
+      }
+      if (!response.ok || !data.ok) throw new Error(data.message || data.error || `More posts unavailable (${response.status})`)
+      const mapped = (Array.isArray(data.posts) ? data.posts : []).map((row): Post => {
+        const likes = Math.max(0, Number(row.likes) || 0)
+        const commentCount = Math.max(0, Number(row.commentCount) || 0)
+        const shares = Math.max(0, Number(row.shares) || 0)
+        return {
+          id: String(row.id || ""), authorId: String(row.authorId || ""), authorName: String(row.authorName || "Member"),
+          authorPhoto: String(row.authorPhoto || ""), content: String(row.content || ""),
+          images: Array.isArray(row.images) ? row.images.map(String) : [], video: row.video == null ? null : String(row.video),
+          pdf: row.pdf == null ? null : String(row.pdf), pdfName: row.pdfName == null ? null : String(row.pdfName),
+          likes, comments: [], createdAt: Number(row.createdAt) || 0, isEdited: Boolean(row.isEdited), shares,
+          visibility: String(row.visibility || "public") as Post["visibility"],
+          communityId: row.communityId == null ? undefined : String(row.communityId),
+          communityName: row.communityName == null ? undefined : String(row.communityName),
+          contentType: String(row.contentType || "standard") as Post["contentType"],
+          upvoteCount: Math.max(0, Number(row.upvoteCount) || 0), downvoteCount: Math.max(0, Number(row.downvoteCount) || 0),
+          viewerCurationChoice: row.viewerCurationChoice === "upvote" || row.viewerCurationChoice === "downvote" ? row.viewerCurationChoice : undefined,
+          engagement: { likes, comments: commentCount, shares, views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
+        }
+      }).filter((post) => post.id && post.authorId === meId)
+      setTimelinePosts((current) => {
+        const existing = current || []
+        const seen = new Set(existing.map((post) => post.id))
+        return [...existing, ...mapped.filter((post) => !seen.has(post.id))]
+      })
+      setTimelineHasMore(Boolean(data.hasMore))
+      setTimelineCursor(typeof data.nextBefore === "number" && typeof data.nextBeforeId === "string"
+        ? { before: data.nextBefore, beforeId: data.nextBeforeId } : null)
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : "More posts could not be loaded")
+    } finally {
+      setTimelineLoadingMore(false)
+    }
+  }, [meId, timelineCursor, timelineHasMore, timelineLoadingMore])
+
+  // Profile timeline cards can contain older posts that are not in the home-feed
+  // store, so their writes go directly through the durable social API contracts.
+  const handleTimelineDelete = useCallback(async (postId: string) => {
+    try {
+      const { socialDeletePost } = await import("@/lib/social/client")
+      const result = await socialDeletePost(postId)
+      if (!result.ok || !result.durable) throw new Error(result.error || "Server did not confirm deletion")
+      setTimelinePosts((current) => current?.filter((post) => post.id !== postId) ?? null)
+      ghc.addToast?.("Post deleted", "success")
+    } catch (error) {
+      ghc.addToast?.(error instanceof Error ? error.message : "Could not delete post", "error")
+    }
+  }, [ghc])
+
+  const handleTimelineEdit = useCallback(async (postId: string, content: string, media?: { images?: string[]; video?: string | null }) => {
+    try {
+      const { socialEditPost } = await import("@/lib/social/client")
+      const result = await socialEditPost(postId, content, media)
+      if (!result.ok || !result.durable) throw new Error(result.error || "Server did not confirm the edit")
+      setTimelinePosts((current) => current?.map((post) => post.id === postId ? {
+        ...post, content,
+        ...(media ? {
+          images: media.images !== undefined ? media.images : post.images,
+          video: media.video !== undefined ? media.video : post.video,
+        } : {}),
+        isEdited: true,
+      } : post) ?? null)
+      ghc.addToast?.("Post updated", "success")
+    } catch (error) {
+      ghc.addToast?.(error instanceof Error ? error.message : "Could not update post", "error")
+    }
+  }, [ghc])
+
+  const handleTimelineArchive = useCallback(async (postId: string) => {
+    try {
+      const response = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/archive`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }), cache: "no-store",
+      })
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; durable?: boolean; error?: string }
+      if (!response.ok || !result.ok || !result.durable) throw new Error(result.error || "Server did not confirm archive")
+      setTimelinePosts((current) => current?.filter((post) => post.id !== postId) ?? null)
+      ghc.addToast?.("Post archived", "success")
+    } catch (error) {
+      ghc.addToast?.(error instanceof Error ? error.message : "Could not archive post", "error")
+    }
+  }, [ghc])
+
   const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
 
@@ -561,7 +721,12 @@ export function ProfileScreen({
               <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
               <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
             </div>
-            {posts.length === 0 ? (
+            {timelineLoading && timelinePosts === null ? (
+              <div className="m-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-7 text-center" role="status">
+                <p className="text-[13px] font-semibold text-foreground">Loading your full timeline…</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Your profile timeline loads independently from the home feed.</p>
+              </div>
+            ) : posts.length === 0 ? (
               <div className="m-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-7 text-center">
                 <p className="text-[13px] font-semibold text-foreground">Your timeline starts here</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">Use the composer above to share a thought, photo, video or update.</p>
@@ -573,7 +738,7 @@ export function ProfileScreen({
                     <OwnPostCard
                       post={post}
                       isLiked={feed.likedPostIds.includes(post.id)}
-                      onDelete={(postId) => { void feed.deletePost(postId) }}
+                      onDelete={(postId) => { void handleTimelineDelete(postId) }}
                       onLike={(postId) => { void feed.likePost(postId) }}
                       onComment={(postId) => {
                         try {
@@ -588,8 +753,8 @@ export function ProfileScreen({
                         } catch { /* */ }
                       }}
                       onSave={(postId) => { void feed.savePost(postId).catch(() => ghc.addToast?.("Could not save post", "error")) }}
-                      onEdit={(postId, content, media?) => { void feed.editPost(postId, content, media) }}
-                      onArchive={(postId) => { void feed.archivePost(postId) }}
+                      onEdit={(postId, content, media?) => { void handleTimelineEdit(postId, content, media) }}
+                      onArchive={(postId) => { void handleTimelineArchive(postId) }}
                       onInsights={(postId) => {
                         try {
                           window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
@@ -601,6 +766,20 @@ export function ProfileScreen({
                 ))}
               </ul>
             )}
+            {timelineError ? (
+              <div className="mx-3 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3" role="status">
+                <p className="text-[12px] font-semibold text-foreground">Complete timeline could not be verified</p>
+                <p className="mt-1 break-words text-[11px] text-muted-foreground">{timelineError}. The posts shown may only be the currently loaded home-feed subset.</p>
+                <button type="button" onClick={() => setTimelineRetry((value) => value + 1)} className="mt-2 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold hover:bg-muted">Retry timeline</button>
+              </div>
+            ) : null}
+            {timelineHasMore && timelinePosts !== null ? (
+              <div className="px-3 pb-3">
+                <button type="button" disabled={timelineLoadingMore} onClick={() => void loadMoreTimeline()} className="min-h-10 w-full rounded-full border border-border px-4 py-2 text-[12px] font-bold hover:bg-muted disabled:opacity-50">
+                  {timelineLoadingMore ? "Loading more posts…" : "Load older posts"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

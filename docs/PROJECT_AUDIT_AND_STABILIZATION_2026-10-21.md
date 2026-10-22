@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # GreenHaven Project Audit and Stabilization — 2026-10-21
 
 **Audited baseline:** GH-CONNECT v0.63.23 Stage 7 archive  

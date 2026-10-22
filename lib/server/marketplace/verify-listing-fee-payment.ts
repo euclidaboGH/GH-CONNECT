@@ -16,7 +16,7 @@ import {
   listingFeeRequiresSettlement,
 } from "@/lib/server/marketplace/listing-fee"
 
-const FEE_PURPOSES = new Set(["marketplace", "sponsored_listing", "other"])
+const FEE_PURPOSES = new Set(["marketplace", "sponsored_listing"])
 
 function amountsEqual(a: number, b: number): boolean {
   const ra = Math.round(Number(a) * 1e8) / 1e8
@@ -35,14 +35,23 @@ function listingBound(intent: PaymentIntent, listingId: string): boolean {
   const metaListing = String(
     meta.listingId || meta.listing_id || meta.marketplaceListingId || ""
   ).trim()
-  if (metaListing && metaListing === lid) return true
-  const purposeKind = String(meta.kind || meta.feeKind || meta.purposeKind || "").toLowerCase()
   const ref = String(intent.referenceId || "").trim()
-  if (ref === expectedReferenceId(lid)) return true
-  if (ref === `listing_fee_${lid}`) return true
-  // Require explicit listing binding — amount-only match is insufficient
-  if (purposeKind === "listing_fee" && metaListing === lid) return true
-  return false
+  // If both binding channels are present, they must agree. Previously an intent
+  // with metadata for listing A and a reference for listing B could satisfy both
+  // verifiers independently and be reused to activate two listings.
+  const referenceListing = ref.startsWith("marketplace_listing_fee_")
+    ? ref.slice("marketplace_listing_fee_".length).trim()
+    : ref.startsWith("listing_fee_")
+      ? ref.slice("listing_fee_".length).trim()
+      : ""
+  if (metaListing && metaListing !== lid) return false
+  if (referenceListing && referenceListing !== lid) return false
+  if (metaListing && referenceListing && metaListing !== referenceListing) return false
+  if (metaListing === lid || referenceListing === lid) return true
+  const purposeKind = String(meta.kind || meta.feeKind || meta.purposeKind || "").toLowerCase()
+  // Require explicit listing binding — amount-only and generic purposeKind are
+  // insufficient. purposeKind is accepted only alongside the exact metadata ID.
+  return purposeKind === "listing_fee" && metaListing === lid
 }
 
 async function resolveIntent(paymentRef: string): Promise<PaymentIntent | null> {
@@ -86,6 +95,9 @@ export async function verifyListingFeePayment(input: {
 
   if (intent.userId !== input.sellerId) {
     return { ok: false, error: "LISTING_FEE_PAYMENT_OWNERSHIP" }
+  }
+  if (intent.provider !== "pi") {
+    return { ok: false, error: "LISTING_FEE_PAYMENT_PROVIDER" }
   }
 
   if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {

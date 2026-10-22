@@ -13,10 +13,12 @@ ok(ctx.includes("apiListConversations(40)"), "focus/mutation pulls conversations
 ok(ctx.includes("ghc:messaging-reconcile"), "messaging reconcile event")
 ok((ctx.match(/convs && convs\.ok && convs\.durable/g) || []).length >= 2, "conv merge in ≥2 hydrate paths")
 
-ok(existsSync("docs/VERIFIED_MIGRATION_MANIFEST_2026-10-18.txt"), "migration manifest")
-ok(existsSync("docs/PRODUCTION_READINESS_GATE_2026-10-18.md"), "readiness gate doc")
-const man = readFileSync("docs/VERIFIED_MIGRATION_MANIFEST_2026-10-18.txt", "utf8")
-ok(/TOTAL=9\d/.test(man), "manifest total ~90+")
+ok(existsSync("VERIFIED_MANIFEST.txt"), "current migration manifest exists")
+ok(existsSync("docs/PROJECT_TRUTH.md"), "current project truth exists")
+const man = readFileSync("VERIFIED_MANIFEST.txt", "utf8")
+const project = readFileSync("docs/PROJECT_TRUTH.md", "utf8")
+ok(man.includes("inventory_status=BLOCKED_DUPLICATE_VERSION_PREFIXES") || man.includes("inventory_status=OK"), "manifest explicitly reports inventory status")
+ok(project.includes("duplicate migration version prefixes"), "project truth documents migration inventory blocker")
 
 const op = readFileSync("scripts/operator-multiuser-migrations.mjs", "utf8")
 ok(op.includes("ECONOMY_OPERATOR_REVIEW"), "economy review list")

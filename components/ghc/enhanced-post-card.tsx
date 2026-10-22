@@ -263,7 +263,15 @@ function EnhancedPostCardInner({
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
         if (res.reward?.credited && Number(res.reward.amount) > 0) {
-          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `You earned ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC`, type: "success" } })) } catch { /* */ }
+          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC credited`, type: "success" } })) } catch { /* */ }
+        } else {
+          // A curation vote is a quality signal, not proof of a financial credit.
+          // Be explicit so users do not mistake a successful vote for GHC earnings.
+          const rewardReason = String(res.reward?.reason || "").toUpperCase()
+          const message = rewardReason.includes("DISABLED") || rewardReason.includes("DAILY_CLAIM_ONLY")
+            ? "Vote saved. Curation rewards are currently disabled; no GHC was credited."
+            : "Vote saved. No GHC was credited for this vote."
+          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message, type: "success" } })) } catch { /* */ }
         }
         broadcastPostEngagement({
           postId: post.id,

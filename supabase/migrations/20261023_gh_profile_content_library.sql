@@ -27,7 +27,6 @@ DECLARE
   v_count integer := 0;
   v_oldest timestamptz;
   v_oldest_id text;
-  v_connected boolean := false;
 BEGIN
   IF p_viewer_id IS NULL OR length(trim(p_viewer_id)) = 0
      OR p_profile_id IS NULL OR length(trim(p_profile_id)) = 0 THEN
@@ -38,16 +37,7 @@ BEGIN
     v_kind := 'all';
   END IF;
 
-  -- The connection-intents migration is approval-gated in some environments.
-  -- Probe dynamically so this migration remains valid if that table is absent.
-  IF to_regclass('public.ghc_connection_requests') IS NOT NULL THEN
-    EXECUTE 'SELECT EXISTS (
-      SELECT 1 FROM public.ghc_connection_requests cr
-      WHERE cr.status = ''accepted''
-        AND ((cr.from_user_id = $1 AND cr.to_user_id = $2)
-          OR (cr.from_user_id = $2 AND cr.to_user_id = $1))
-    )' INTO v_connected USING trim(p_viewer_id), trim(p_profile_id);
-  END IF;
+  -- Mutuals means mutual follows consistently across feed, comments, and profile.
 
   -- A block in either direction suppresses the entire profile from the viewer.
   IF EXISTS (
@@ -66,6 +56,18 @@ BEGIN
     WHERE p.author_id = trim(p_profile_id)
       AND p.deleted_at IS NULL
       AND p.archived_at IS NULL
+      -- Community-bound profile posts require active membership. The author can
+      -- always review their own content; other viewers cannot infer private posts.
+      AND (
+        p.community_id IS NULL
+        OR p.author_id = trim(p_viewer_id)
+        OR EXISTS (
+          SELECT 1 FROM public.gh_community_members cm
+          WHERE cm.community_id = p.community_id
+            AND cm.gh_user_id = trim(p_viewer_id)
+            AND lower(coalesce(cm.status, '')) = 'active'
+        )
+      )
       AND (
         p_before_ms IS NULL
         OR (extract(epoch from p.created_at) * 1000)::bigint < p_before_ms
@@ -101,7 +103,6 @@ BEGIN
                   AND f2.following_id = trim(p_viewer_id)
               )
             )
-            OR v_connected
           )
         )
       )
@@ -145,6 +146,18 @@ BEGIN
     WHERE p.author_id = trim(p_profile_id)
       AND p.deleted_at IS NULL
       AND p.archived_at IS NULL
+      -- Community-bound profile posts require active membership. The author can
+      -- always review their own content; other viewers cannot infer private posts.
+      AND (
+        p.community_id IS NULL
+        OR p.author_id = trim(p_viewer_id)
+        OR EXISTS (
+          SELECT 1 FROM public.gh_community_members cm
+          WHERE cm.community_id = p.community_id
+            AND cm.gh_user_id = trim(p_viewer_id)
+            AND lower(coalesce(cm.status, '')) = 'active'
+        )
+      )
       AND (
         p_before_ms IS NULL
         OR (extract(epoch from p.created_at) * 1000)::bigint < p_before_ms
@@ -168,7 +181,6 @@ BEGIN
               EXISTS (SELECT 1 FROM public.gh_follows f1 WHERE f1.follower_id = trim(p_viewer_id) AND f1.following_id = trim(p_profile_id))
               AND EXISTS (SELECT 1 FROM public.gh_follows f2 WHERE f2.follower_id = trim(p_profile_id) AND f2.following_id = trim(p_viewer_id))
             )
-            OR v_connected
           )
         )
       )

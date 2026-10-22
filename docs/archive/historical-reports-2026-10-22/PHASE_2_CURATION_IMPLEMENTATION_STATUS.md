@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Phase 2 Curation Implementation Status
 
 **Status:** source implementation and static tests exist; live database and Testnet behavior remain unverified in this working copy.

@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Stage 7 Implementation Report — v0.63.25
 
 Implemented a read-only server-owned release readiness policy at `GET /api/release/readiness`, covering CI/build, payment reconciliation, security/authorization, observability, recovery/rollback, and staged rollout. Added a Stage 7 regression suite to `ci:verify`, updated package/lock/release metadata, and synchronized Phase 4–6 regression expectations to the current release version.

@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # GH-CONNECT 10-Phase Remediation — Phase 1 Report
 
 **Baseline:** GH-CONNECT v0.63.25 (`GH-CONNECT-0.63.25-10-PHASE-REMEDIATION-START.zip`)

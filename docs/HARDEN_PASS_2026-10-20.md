@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # Harden pass — 2026-10-20 (0.63.6)
 
 ## Error / type hardening

@@ -3,6 +3,7 @@
  * Body: { purpose, targetId?, clientRequestId? }
  * Amount always from server catalog. Idempotent on referenceId.
  */
+import { createHash } from "node:crypto"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   allowMemoryServer,
@@ -64,10 +65,39 @@ export async function POST(request: Request) {
   }
 
   const targetId = String(body.targetId || body.postId || body.listingId || body.profileId || "").trim()
-  const clientReq = String(body.clientRequestId || body.idempotencyKey || "").trim()
-  const referenceId =
-    clientReq ||
-    `utility:${purpose}:${auth.userId}:${targetId || "none"}:${Math.floor(Date.now() / 60000)}`
+  if (targetId.length > 180 || /[\u0000-\u001f\u007f]/.test(targetId)) {
+    return jsonErr("INVALID_TARGET", "Invalid target identifier", 400)
+  }
+  if (["boost_post", "boost_profile", "boost_listing", "feed_spotlight"].includes(purpose) && !targetId) {
+    return jsonErr("TARGET_REQUIRED", "A post, profile, or listing target is required for this boost", 400)
+  }
+  // This endpoint can debit GHC, but the current release has no durable active-
+  // boost record consumed by feed/profile/listing ranking. Never charge users for
+  // an effect that cannot be confirmed. Re-enable only with the atomic activation
+  // RPC and ranking integration deployed together.
+  const effectNotConfigured = new Set([
+    "boost", "boost_post", "boost_profile", "boost_listing", "feed_spotlight",
+    "community_tools_month", "creator_studio_day",
+  ])
+  if (effectNotConfigured.has(purpose)) {
+    return jsonErr(
+      purpose.startsWith("boost") || purpose === "feed_spotlight"
+        ? "BOOST_EFFECT_NOT_CONFIGURED"
+        : "UTILITY_EFFECT_NOT_CONFIGURED",
+      "This purchase is temporarily unavailable; no GHC has been charged. Durable entitlement/boost activation is not enabled for this feature.",
+      503,
+    )
+  }
+  const rawClientReq = String(body.clientRequestId || body.idempotencyKey || "").trim()
+  if (rawClientReq.length > 160 || /[\u0000-\u001f\u007f]/.test(rawClientReq)) {
+    return jsonErr("INVALID_IDEMPOTENCY_KEY", "Invalid request idempotency key", 400)
+  }
+  // Client keys are namespaced server-side; a client must not be able to collide
+  // with another purpose/user or with a different economy operation.
+  const scopedUser = createHash("sha256").update(auth.userId).digest("hex").slice(0, 24)
+  const referenceId = rawClientReq
+    ? `utility:${purpose}:${scopedUser}:${createHash("sha256").update(rawClientReq).digest("hex")}`
+    : `utility:${purpose}:${scopedUser}:${createHash("sha256").update(targetId || "none").digest("hex").slice(0, 24)}:${Math.floor(Date.now() / 60000)}`
 
   const entry = getCatalogEntry(purpose)!
   const reason = entry.description

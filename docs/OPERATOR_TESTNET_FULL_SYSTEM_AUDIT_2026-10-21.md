@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # Full system audit — testnet GHC / Pi (0.64.1)
 
 Test coins are only for in-app development. Paths below must work the same way on mainnet with real balances.

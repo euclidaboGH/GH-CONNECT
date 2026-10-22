@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # GreenHaven Stabilization Phase 3 — Identity, Security, Privacy & Migration Reconciliation
 
 **Source baseline:** `0.63.25`  

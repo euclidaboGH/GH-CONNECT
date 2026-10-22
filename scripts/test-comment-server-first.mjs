@@ -9,18 +9,22 @@ function ok(c, m) {
     failed++
   }
 }
-const addStart = t.indexOf("const addComment = async")
-const addEnd = t.indexOf("useEffect(() => {\n    const onEngagement", addStart)
-const chunk = t.slice(addStart, addEnd)
+// Match the current React useCallback declaration; the old `= async` matcher
+// silently returned an empty slice after addComment was memoized.
+const addStart = t.indexOf("const addComment = useCallback(async")
+const addEnd = t.indexOf("\n  const deleteComment", addStart)
+const chunk = addStart >= 0 && addEnd > addStart ? t.slice(addStart, addEnd) : ""
 ok(chunk.includes("socialAddComment"), "addComment uses socialAddComment")
 ok(chunk.includes("Server-first") || chunk.includes("server-first") || chunk.includes("Server-first"), "server-first comment")
 ok(chunk.indexOf("socialAddComment") < chunk.indexOf("setState"), "remote before local setState")
 ok(chunk.includes("durable === false"), "rejects non-durable")
+ok(chunk.includes("currentCommentCount + 1"), "preserves durable total when only a comment preview is loaded")
+ok(chunk.includes("Math.max(countBeforeComment + 1, mapped.length)"), "reconciliation does not replace total with the 80-comment page size")
 ok(!chunk.includes("domains.posts.addComment"), "no local-only domain comment first")
 
-const reactStart = t.indexOf("const addCommentReaction = async")
+const reactStart = t.indexOf("const addCommentReaction = useCallback(async")
 const reactEnd = t.indexOf("const removeCommentReaction", reactStart)
-const rchunk = t.slice(reactStart, reactEnd)
+const rchunk = reactStart >= 0 && reactEnd > reactStart ? t.slice(reactStart, reactEnd) : ""
 ok(rchunk.includes("/comments/") && rchunk.includes("/reactions"), "reaction hits API")
 ok(rchunk.includes("durable === false"), "reaction rejects non-durable")
 

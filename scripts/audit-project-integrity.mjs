@@ -137,6 +137,10 @@ const routeMatches = (candidate) => {
   return false;
 };
 for (const file of sourceFiles) {
+  // Test scripts intentionally contain literal route examples (including routes
+  // asserted to be absent from production code). They are not navigation UI and
+  // must not be interpreted as user-facing links by this heuristic.
+  if (file.startsWith("scripts/")) continue;
   const source = read(file);
   linkPattern.lastIndex = 0;
   let match;

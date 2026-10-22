@@ -16,6 +16,8 @@ type CatalogItem = {
   description: string
   category: string
   durationHours?: number
+  available?: boolean
+  unavailableReason?: string
 }
 
 type SupplySnap = {
@@ -190,6 +192,9 @@ export function GhcUtilityPanel({
                     {item.purpose.replace(/_/g, " ")}
                   </p>
                   <p className="text-[11px] leading-snug text-muted-foreground">{item.description}</p>
+                  {item.available === false && item.unavailableReason ? (
+                    <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">{item.unavailableReason}</p>
+                  ) : null}
                   <p className="mt-1 text-[12px] font-semibold tabular-nums text-foreground">
                     ₲ {item.amountGhc}
                     {item.amountPi != null ? (
@@ -206,11 +211,11 @@ export function GhcUtilityPanel({
                 </div>
                 <button
                   type="button"
-                  disabled={!!busy}
+                  disabled={!!busy || item.available === false}
                   onClick={() => void purchase(item.purpose)}
-                  className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-60"
+                  className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                 >
-                  {isBusy ? <Loader2 size={14} className="animate-spin" /> : "Buy"}
+                  {isBusy ? <Loader2 size={14} className="animate-spin" /> : item.available === false ? "Unavailable" : "Buy"}
                 </button>
               </li>
             )

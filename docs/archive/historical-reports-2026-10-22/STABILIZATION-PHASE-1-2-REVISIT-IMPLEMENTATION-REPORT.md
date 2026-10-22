@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Stabilization Phases 1–2 — Revisit and Implementation
 
 **Source baseline:** GH-CONNECT `0.63.25`  

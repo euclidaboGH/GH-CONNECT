@@ -1,12 +1,10 @@
 /**
  * POST /api/economy/missions/progress
- * Records mission completion. Optional small GHC via activity emission when
- * GHC_ACTIVITY_REWARDS_ENABLED=1.
+ * Fail-closed until completion can be verified and claimed atomically in durable storage.
+ * A client-supplied mission code is not evidence of a completed action.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { isDatabaseConfigured } from "@/lib/server/economy/http"
-import { computeAndCommitActivityEmissionDurable } from "@/lib/server/economy/activity-emission"
 import { activityRewardsEnabled } from "@/lib/server/economy/testnet-unlock"
 
 export const runtime = "nodejs"
@@ -21,14 +19,6 @@ const ALLOWED = new Set([
   "accept_connection",
 ])
 
-const BASE_GHC: Record<string, number> = {
-  join_community: 0.15,
-  first_post: 0.25,
-  first_comment: 0.1,
-  complete_profile: 0.2,
-  send_connection: 0.1,
-  accept_connection: 0.1,
-}
 
 export async function POST(req: Request) {
   const auth = await resolveAuthenticatedUser(req.headers)
@@ -44,38 +34,35 @@ export async function POST(req: Request) {
 
   const activityOn = activityRewardsEnabled()
 
-  if (activityOn && isDatabaseConfigured()) {
-    try {
-      const base = BASE_GHC[code] ?? 0.1
-      const result = await computeAndCommitActivityEmissionDurable({
-        userId: auth.userId,
-        baseAmountGhc: base,
-      })
-      if (result.ok) {
-        return NextResponse.json({
-          ok: true,
-          completed: true,
-          alreadyCompleted: Boolean(result.capped && result.grantedGhc === 0),
-          grantedGhc: result.grantedGhc,
-          message:
-            result.grantedGhc > 0
-              ? `Mission complete · ₲ ${result.grantedGhc.toFixed(2)} credited`
-              : "Mission recorded (activity cap or already counted today)",
-        })
-      }
-    } catch {
-      /* progress-only */
-    }
+  // A mission code submitted by a client is not proof that the user performed
+  // the action. This endpoint currently has no durable mission-verification RPC
+  // that checks the corresponding community/post/comment/profile/connection row
+  // and claims the mission once. Do not issue GHC or report a verified completion
+  // until that authority exists. This avoids reward farming by replaying any code.
+  if (activityOn) {
+    return NextResponse.json(
+      {
+        ok: false,
+        completed: false,
+        verified: false,
+        grantedGhc: 0,
+        error: "MISSION_VERIFICATION_UNAVAILABLE",
+        message: "Mission rewards are paused until server-side completion verification and one-time claim storage are configured. No GHC was issued.",
+      },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
   }
 
-  return NextResponse.json({
-    ok: true,
-    completed: true,
-    alreadyCompleted: false,
-    grantedGhc: 0,
-    message: activityOn
-      ? "Mission recorded"
-      : "Mission complete — activity GHC credits when testnet unlock or GHC_ACTIVITY_REWARDS_ENABLED=1",
-    policy: activityOn ? "activity_enabled" : "progress_only",
-  })
+  return NextResponse.json(
+    {
+      ok: false,
+      completed: false,
+      verified: false,
+      grantedGhc: 0,
+      error: "MISSION_PROGRESS_NOT_PERSISTED",
+      message: "Mission progress cannot yet be confirmed by the server. No completion or reward has been recorded.",
+      policy: "progress_only_unavailable",
+    },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  )
 }

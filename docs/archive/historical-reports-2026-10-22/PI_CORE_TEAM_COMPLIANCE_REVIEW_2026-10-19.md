@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Pi Integration and Compliance Review — Engineering Draft
 
 **Status: engineering checklist only. This is not a Pi Core Team approval, legal opinion, or authorization to launch financial products.** Obtain current platform guidance and qualified legal review before production financial changes.

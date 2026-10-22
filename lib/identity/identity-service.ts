@@ -290,9 +290,10 @@ export const IdentityService = {
     if (token) {
       return { Authorization: `Bearer ${token}` }
     }
-    // Dev / memory-ledger path when server allows GHC_ALLOW_DEV_AUTH
-    // Includes studio placeholder so local spend/claim can authenticate in development
-    if (identity.userId) {
+    // Dev / memory-ledger path only. Never send synthetic user tokens from a
+    // production browser: production requests must use the verified GH session
+    // cookie or a real Pi access token.
+    if (process.env.NODE_ENV !== "production" && identity.userId) {
       return { Authorization: `Bearer user:${identity.userId}` }
     }
     return {}

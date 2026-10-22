@@ -1,23 +1,24 @@
-# GH-CONNECT 0.69.3 — CI Repair Report (2026-10-22)
+# GH-CONNECT 0.69.3 — React Hook CI Repair
 
-## Finding
-The reported TypeScript diagnostics (`Variable 'domains' is used before being assigned` and `Block-scoped variable 'domains' used before its declaration`) are caused by React callbacks referencing `domains.identity` and `domains.posts` in their dependency arrays before the `const domains` declaration later in the component. The callbacks are declared earlier in the component than the memoized domain service.
+## Scope
 
-## Change made
-- Moved the existing `getDomainState` callback and `domains: DomainServices` `useMemo` declaration before `updateProfile` and `createPost`, which consume `domains`.
-- Preserved the domain-service factory, options, dependency list, callbacks, and existing behavior.
-- Left the domain-service binding effects in their existing position.
-- No dependency versions, database schemas, API contracts, wallet logic, payment logic, or UI were changed.
+Applied a focused repair to `contexts/ghc-context.tsx` using the latest cleaned project archive available in this conversation as the source baseline. The GitHub commit `17b03c8` was not checked out directly; reconcile this patch with the current `testnet` branch before committing.
 
-The `recordModerationReport` callback is captured by `onReportPersist` but is only invoked by user-triggered report persistence; it is not invoked during `createDomainServices` construction. The existing guard and existing explanatory lint comment were preserved.
+## Changes
 
-## Verification
-- JSX safety check: PASS — 727 files scanned.
-- Reported build regression suite: PASS — 7/7.
-- Vercel build repair regression suite: PASS — 9/9.
-- Source-order checks: PASS — `getDomainState` and `domains` are each declared once and before callbacks that reference them.
-- Full TypeScript check and production build: NOT VERIFIED. Available local Node.js is v22.16.0, below this project's required runtime, and dependencies were not installed in this verification run.
-- Full npm security audit: NOT RUN as part of this focused declaration-order repair.
+- Wrapped `createQuoteRepost`, `sharePost`, `savePost`, `unsavePost`, `reportPost`, and `muteUser` in `useCallback` so references included in the context `useMemo` remain stable when their real dependencies have not changed.
+- Added dependency arrays based on values actually read directly by each callback.
+- Removed stale/unnecessary dependencies from the `createPost`, `removeCommentReaction`, `pinComment`, and `unpinComment` callbacks while retaining `addToast` where used.
+- Kept existing behavior, durable server calls, error handling, toast messages, and state update logic intact.
 
-## Important source note
-This patch is based on the latest project archive available in this conversation. It addresses the exact declaration-order error shown in the supplied GitHub Actions annotations, but the full current GitHub commit tree was not fetched into this environment. Reconcile this one-file change with the current `testnet` branch before committing, and rerun the full CI suite.
+## Checks run
+
+- `node scripts/check-jsx-safety.mjs`: PASS, 727 files scanned.
+- `node scripts/test-reported-build-regressions.mjs`: PASS, 7/7.
+- `node scripts/test-vercel-build-repair.mjs`: PASS, 9/9.
+- Focused source assertions for the callback/dependency changes: PASS.
+
+## Not verified
+
+- Full ESLint run, TypeScript typecheck, and Next.js production build were not run because dependencies are not installed in this working environment and the project specifies Node.js 24.22.1.
+- This archive is based on the latest cleaned ZIP available here, not a fresh checkout of commit `17b03c8`. Verify the exact branch diff and rerun CI before merging or deploying.

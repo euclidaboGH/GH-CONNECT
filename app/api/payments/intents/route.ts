@@ -46,20 +46,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
   }
 
+  const metadata = typeof body.metadata === "object" && body.metadata && !Array.isArray(body.metadata)
+    ? body.metadata as Record<string, unknown>
+    : {}
+  // GHC pack intents carry reserved server-side catalog bindings and must be
+  // created through /api/economy/packs/intent, which derives price and amount.
+  if (purpose === "digital_product" && String(metadata.kind || "") === "ghc_pack") {
+    return NextResponse.json(
+      { ok: false, error: "USE_GHC_PACK_INTENT_ROUTE", message: "GHC pack intents must use the server-owned pack catalog." },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+
   const referenceId = String(body.referenceId || body.orderId || "").trim()
   if (!referenceId) {
     return NextResponse.json({ ok: false, error: "referenceId required" }, { status: 400 })
   }
 
-  // Pi payment intents are π only — GHC uses ledger spend, never this engine
-  if (body.currency === "GHC") {
+  // This route creates Pi-provider intents only. Reject other rails explicitly
+  // instead of silently coercing a typo (or lowercase GHC) into a Pi payment.
+  const requestedCurrency = String(body.currency || "PI").trim().toUpperCase()
+  if (requestedCurrency === "GHC") {
     return NextResponse.json(
       {
         ok: false,
         error: "GHC_NOT_ON_PI_RAILS",
         message: ASSET_POLICY.payCopy,
       },
-      { status: 400 }
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+  if (requestedCurrency !== "PI") {
+    return NextResponse.json(
+      { ok: false, error: "UNSUPPORTED_PAYMENT_CURRENCY", supported: ["PI"] },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
     )
   }
 
@@ -69,7 +89,7 @@ export async function POST(request: Request) {
     amount,
     currency: "PI",
     referenceId,
-    metadata: typeof body.metadata === "object" && body.metadata ? body.metadata : {},
+    metadata,
     idempotencyKey:
       typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : undefined,
     provider: "pi",

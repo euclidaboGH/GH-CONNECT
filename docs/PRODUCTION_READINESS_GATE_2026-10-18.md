@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # GreenHaven / GH-CONNECT — Production readiness gate (18 Oct 2026)
 
 ## What is verified in source (this series)
@@ -19,7 +23,7 @@
 ## Migration inventory
 
 - **96** SQL files in `supabase/migrations/`
-- Manifest: `docs/VERIFIED_MIGRATION_MANIFEST_2026-10-18.txt`
+- Current source manifest: `VERIFIED_MANIFEST.txt` (see `docs/PROJECT_TRUTH.md`; dated inventory details in this document are historical).
 - Multi-user critical set: `scripts/operator-multiuser-migrations.mjs`
 - Economy/recovery review list printed by the same script (not auto-applied)
 

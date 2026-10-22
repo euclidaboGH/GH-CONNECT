@@ -10,6 +10,8 @@ import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/no
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { canViewSocialPost } from "@/lib/server/social/post-visibility"
+import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,20 +29,36 @@ export async function GET(
   const { id } = await ctx.params
   const postId = String(id || "").trim()
   if (!postId) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
-  if (!socialDbConfigured()) return NextResponse.json({ ok: true, durable: false, comments: [], nextCursor: null })
+  if (!socialDbConfigured()) return NextResponse.json({ ok: false, error: "SOCIAL_STORE_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
 
   const url = new URL(request.url)
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 40), 1), 100)
-  const before = Number(url.searchParams.get("before") || 0)
+  const rawLimit = url.searchParams.get("limit")
+  const parsedLimit = rawLimit === null ? 40 : Number(rawLimit)
+  if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+    return NextResponse.json({ ok: false, error: "INVALID_LIMIT" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const limit = parsedLimit
+  const beforeRaw = url.searchParams.get("before")
   const beforeId = String(url.searchParams.get("beforeId") || "").trim()
-  if ((before && !Number.isFinite(before)) || before < 0 || beforeId.length > 160) {
-    return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400 })
+  const hasCursor = beforeRaw !== null || beforeId !== ""
+  const before = beforeRaw !== null && /^\d{1,16}$/.test(beforeRaw) ? Number(beforeRaw) : null
+  if (hasCursor && (before === null || !Number.isSafeInteger(before) || before <= 0 || !beforeId || beforeId.length > 160 || /[\u0000-\u001f\u007f]/.test(beforeId))) {
+    return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
-  // Prefer stable (createdAt,id) cursor RPC. Keep legacy fallback until migration is applied.
-  const v2 = await socialRpc("gh_comment_list_v2", {
+  // V3 repeats post visibility inside the database RPC, not only in this route.
+  // Stable-cursor fallbacks are retained for staged rollout; canViewSocialPost above
+  // remains a fail-closed gate while older database functions are still installed.
+  const v3 = await socialRpc("gh_comment_list_v3", {
     p_post_id: postId, p_viewer_id: auth.userId, p_limit: limit + 1,
-    p_before_ms: before || null, p_before_id: beforeId || null,
+    p_before_ms: before, p_before_id: hasCursor ? beforeId : null,
+  })
+  const v2 = v3.ok ? v3 : await socialRpc("gh_comment_list_v2", {
+    p_post_id: postId, p_viewer_id: auth.userId, p_limit: limit + 1,
+    p_before_ms: before, p_before_id: hasCursor ? beforeId : null,
   })
   const chosen = v2.ok ? v2 : await socialRpc("gh_comment_list", { p_post_id: postId })
   const data = chosen.data as { comments?: unknown[] }
@@ -49,7 +67,7 @@ export async function GET(
   if (hasMore) comments = comments.slice(0, limit)
   const last = comments[comments.length - 1] as { id?: unknown; createdAt?: unknown } | undefined
   const nextCursor = hasMore && last ? { before: Number(last.createdAt) || 0, beforeId: String(last.id || "") } : null
-  return NextResponse.json({ ok: true, durable: chosen.ok, comments, nextCursor, stableCursor: v2.ok })
+  return NextResponse.json({ ok: true, durable: chosen.ok, comments, nextCursor, stableCursor: v3.ok || v2.ok })
 }
 
 export async function POST(
@@ -69,6 +87,9 @@ export async function POST(
   if (!postId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
 
   const body = await request.json().catch(() => ({}))
   const text = String(body.text || body.content || "").trim()
@@ -76,36 +97,24 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400 })
   }
 
-  // Durable media only — max 4 https URLs (never blob:/data:)
+  // Durable first-party media only. Attachment IDs must resolve to ready assets owned by this actor.
   const rawMedia = Array.isArray(body.mediaAttachments)
     ? body.mediaAttachments
     : Array.isArray(body.media)
       ? body.media
       : []
-  const media = rawMedia.slice(0, 4).map((item: unknown, i: number) => {
-    if (!item || typeof item !== "object") return null
-    const o = item as Record<string, unknown>
-    const url = String(o.url || "").trim()
-    if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.length > 2048) return null
-    try {
-      const u = new URL(url)
-      if (u.protocol !== "https:" && u.protocol !== "http:") return null
-    } catch {
-      return null
-    }
-    const typeRaw = String(o.type || "image").toLowerCase()
-    const type = typeRaw === "image" || typeRaw === "video" || typeRaw === "file" ? typeRaw : "image"
-    return {
-      id: String(o.id || `catt_${i}`).slice(0, 80),
-      type,
-      url,
-      fileName: o.fileName != null ? String(o.fileName).slice(0, 180) : undefined,
-    }
-  }).filter(Boolean)
-
-  if (rawMedia.length > 0 && media.length === 0) {
-    return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENTS" }, { status: 400 })
+  const attachmentValidation = await validateOwnedMediaAttachments({
+    requestUrl: request.url,
+    ownerId: auth.userId,
+    raw: rawMedia,
+    maxItems: 4,
+  })
+  if (!attachmentValidation.ok) {
+    const status = attachmentValidation.error === "MEDIA_AUTHORIZATION_UNAVAILABLE" ? 503 : 400
+    return NextResponse.json({ ok: false, error: attachmentValidation.error }, { status, headers: { "Cache-Control": "no-store" } })
   }
+  const media = attachmentValidation.attachments
+
   if (!text && media.length === 0) {
     return NextResponse.json({ ok: false, error: "EMPTY_COMMENT" }, { status: 400 })
   }

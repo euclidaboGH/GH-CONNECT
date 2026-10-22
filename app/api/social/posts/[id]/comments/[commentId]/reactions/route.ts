@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { canViewSocialPost, commentBelongsToPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,6 +30,12 @@ export async function POST(
   if (!postId || !cId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
+  const belongs = await commentBelongsToPost(postId, cId)
+  if (belongs === null) return NextResponse.json({ ok: false, error: "COMMENT_LOOKUP_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!belongs) return NextResponse.json({ ok: false, error: "COMMENT_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
   const body = (await request.json().catch(() => ({}))) as { emoji?: string }
   const emoji = String(body.emoji || "").trim().slice(0, 16)
   if (!emoji) {
@@ -81,20 +88,41 @@ export async function GET(
   if (!postId || !cId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
+  const belongs = await commentBelongsToPost(postId, cId)
+  if (belongs === null) return NextResponse.json({ ok: false, error: "COMMENT_LOOKUP_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!belongs) return NextResponse.json({ ok: false, error: "COMMENT_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
   if (!socialDbConfigured()) {
     return NextResponse.json({ ok: true, durable: false, counts: {} })
   }
   const result = await socialRpc("gh_comment_reaction_list", { p_comment_id: cId })
-  const data = (result.data || {}) as { ok?: boolean; counts?: Record<string, number>; error?: string }
+  const data = (result.data || {}) as {
+    ok?: boolean
+    counts?: Record<string, number>
+    reactions?: Array<{ emoji?: unknown }>
+    error?: string
+  }
   if (!result.ok || data.ok === false) {
     return NextResponse.json(
       { ok: false, error: data.error || result.error || "LIST_FAILED", durable: false },
       { status: 503 }
     )
   }
+  // The current service-role RPC returns a roster (`reactions`), not a
+  // pre-aggregated `counts` object. Aggregate server-side and never return the
+  // user roster to the client.
+  const counts = data.counts && typeof data.counts === "object"
+    ? data.counts
+    : (Array.isArray(data.reactions) ? data.reactions.reduce<Record<string, number>>((out, row) => {
+        const emoji = String(row?.emoji || "").trim().slice(0, 16)
+        if (emoji) out[emoji] = (out[emoji] || 0) + 1
+        return out
+      }, {}) : {})
   return NextResponse.json({
     ok: true,
     durable: true,
-    counts: data.counts || {},
+    counts,
   })
 }

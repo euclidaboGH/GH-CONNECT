@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Phase 23 — Screen-by-Screen Accessibility and Responsive Review
 
 **Status:** automated source assertions are not a substitute for human device review. Manual device review still required.

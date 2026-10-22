@@ -12,8 +12,9 @@ const profile = read('components/ghc/profile-screen.tsx')
 const profileCards = read('components/ghc/profile-components.tsx')
 check(
   'profile edit callback supports the media argument passed by the card',
-  /onEdit=\{\(postId, content, media\?\) => \{ void feed\.editPost\(postId, content, media\) \}\}/.test(profile) &&
-    /onEdit\?: \(postId: string, content: string, media\?: PostEditMedia\) => void/.test(profileCards),
+  /onEdit=\{\(postId, content, media\?\) => \{ void handleTimelineEdit\(postId, content, media\) \}\}/.test(profile) &&
+    /onEdit\?: \(postId: string, content: string, media\?: PostEditMedia\) => void/.test(profileCards) &&
+    /socialEditPost\(postId, content, media\)/.test(profile),
 )
 
 const editRoute = read('app/api/social/posts/[id]/edit/route.ts')

@@ -11,6 +11,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialRpc } from "@/lib/server/social/rpc"
+import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 import {
   listMessages,
   appendMessage,
@@ -132,34 +133,21 @@ export async function POST(request: Request, ctx: Ctx) {
       return NextResponse.json({ ok: false, error: "INVALID_REPLY_TARGET" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
 
-    // Durable media only: https URLs, max 4. Never accept blob:/data: from clients.
+    // Persist only durable first-party media IDs owned by the session actor.
+    // Arbitrary HTTPS URLs and expiring storage URLs are not accepted.
     const rawAtts = Array.isArray(body?.mediaAttachments) ? body.mediaAttachments : Array.isArray(body?.attachments) ? body.attachments : []
-    const mediaAttachments = rawAtts.slice(0, 4).map((item: unknown, i: number) => {
-      if (!item || typeof item !== "object") return null
-      const o = item as Record<string, unknown>
-      const url = String(o.url || "").trim()
-      if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.length > 2048) return null
-      try {
-        const u = new URL(url)
-        if (u.protocol !== "https:") return null
-      } catch {
-        return null
-      }
-      const typeRaw = String(o.type || "file").toLowerCase()
-      const type = typeRaw === "image" || typeRaw === "video" || typeRaw === "file" ? typeRaw : "file"
-      return {
-        id: String(o.id || `att_${i}`).slice(0, 80),
-        type,
-        url,
-        fileName: o.fileName != null ? String(o.fileName).slice(0, 180) : undefined,
-        mimeType: o.mimeType != null ? String(o.mimeType).slice(0, 120) : undefined,
-        sizeBytes: typeof o.sizeBytes === "number" ? o.sizeBytes : undefined,
-      }
-    }).filter(Boolean)
-
-    if (rawAtts.length > 0 && mediaAttachments.length === 0) {
-      return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENTS" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    const attachmentValidation = await validateOwnedMediaAttachments({
+      requestUrl: request.url,
+      ownerId: auth.userId,
+      raw: rawAtts,
+      maxItems: 4,
+    })
+    if (!attachmentValidation.ok) {
+      const status = attachmentValidation.error === "MEDIA_AUTHORIZATION_UNAVAILABLE" ? 503 : 400
+      return NextResponse.json({ ok: false, error: attachmentValidation.error }, { status, headers: { "Cache-Control": "no-store" } })
     }
+    const mediaAttachments = attachmentValidation.attachments
+
     if (!text && mediaAttachments.length === 0) {
       return NextResponse.json({ ok: false, error: "EMPTY_BODY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
@@ -171,7 +159,7 @@ export async function POST(request: Request, ctx: Ctx) {
       clientMessageId,
       replyToMessageId: replyToMessageId || undefined,
       sharedPostId: sharedPostId || undefined,
-      mediaAttachments: mediaAttachments.length ? mediaAttachments as any : undefined,
+      mediaAttachments: mediaAttachments.length ? mediaAttachments : undefined,
     })
     if (!result.ok) {
       const status =

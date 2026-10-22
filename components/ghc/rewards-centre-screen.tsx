@@ -453,8 +453,8 @@ export function RewardsCentreScreen({
         {((snapshot.wallet?.pending ?? 0) > 0 || snapshot.pending.length > 0) && (
           <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/80 px-3.5 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
             <p className="text-[11px] leading-snug text-amber-900 dark:text-amber-100">
-              Pending GHC is held for validation (usually within 24 hours) — not spendable until
-              cleared.
+              Pending GHC is not spendable until the server confirms its maturity and claim state.
+              Daily Claim rewards have a 48-hour lock.
             </p>
             {snapshot.pending.length > 0 ? (
               <button
@@ -491,7 +491,7 @@ export function RewardsCentreScreen({
         )}
 
         <p className="mx-3 mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Complete missions → pending GHC → claim to available. Daily caps limit spam.{" "}
+          Daily Claim rewards mature after 48 hours. Mission rewards are paused until the server can verify completion and prevent duplicate claims.{" "}
           <button
             type="button"
             className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
@@ -510,9 +510,10 @@ export function RewardsCentreScreen({
         )}
         {showLearnMore && (
           <p className="mx-3 mt-1 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-            Rewards need verified, meaningful actions. Self-likes, spam and artificial engagement
-            are capped. High-value rewards may stay pending until validation (~24h). Ledger
-            transactions always record event → rule → amount → status.
+            Rewards require server-verified, meaningful actions. Daily Claim rewards mature after
+            48 hours; pending funds cannot be spent or transferred. Mission rewards remain paused
+            until completion verification and one-time claim storage are available. Ledger
+            transactions should record event → rule → amount → status.
           </p>
         )}
 

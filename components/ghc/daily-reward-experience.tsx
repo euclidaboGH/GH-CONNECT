@@ -2,7 +2,7 @@
 
 /**
  * Home/Feed Daily Reward experience
- * — Premium bottom sheet after short delay when claimable
+ * — Compact bottom sheet available from the feed card / Rewards Centre
  * — Claimable feed card only while reward is available (hidden after claim)
  * — Claim history / streak details live in Rewards Centre, not on the feed
  * — One claim per Africa/Lagos reward day
@@ -18,7 +18,6 @@ import {
   claimDailyStreak,
   markDailyClaimedForUi,
   markDailyRewardDismissed,
-  wasDailyRewardDismissed,
   msUntilNextLagosMidnight,
   lagosDayKey,
   formatCountdown,
@@ -375,6 +374,21 @@ export function DailyRewardSheet({
   const tier = resolveTier()
   const [claiming, setClaiming] = useState(false)
   const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId, open)
+
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:daily-reward-sheet-visibility", { detail: { open } }))
+    } catch {
+      /* non-browser render */
+    }
+    return () => {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:daily-reward-sheet-visibility", { detail: { open: false } }))
+      } catch {
+        /* non-browser render */
+      }
+    }
+  }, [open])
   const localDaily = useMemo(() => {
     // Recompute when sheet opens so claimability is current
     void open
@@ -584,13 +598,8 @@ export function DailyRewardHomeExperience() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState<number>(0)
 
-  useEffect(() => {
-    const daily = getDailyStreak(userId, tier)
-    if (!daily.canClaimToday) return
-    if (wasDailyRewardDismissed(userId)) return
-    const t = window.setTimeout(() => setSheetOpen(true), 1600)
-    return () => window.clearTimeout(t)
-  }, [userId, tier, refreshKey])
+  // DailyClaimPrompt owns the single automatic popup. The feed card and Rewards
+  // Centre remain manual entry points for this detailed sheet.
 
   useEffect(() => {
     let observedDay = lagosDayKey()

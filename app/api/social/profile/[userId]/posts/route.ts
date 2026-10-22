@@ -9,6 +9,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
+import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -74,10 +75,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ userId: str
   }
   const data = result.data as { ok?: boolean; error?: string; posts?: unknown[]; hasMore?: boolean; nextBefore?: number | null; nextBeforeId?: string | null }
   if (data?.ok === false) return NextResponse.json({ ok: false, error: data.error || "PROFILE_CONTENT_UNAVAILABLE" }, { status: 400 })
+  const visiblePosts = await filterVisibleSocialPosts(auth.userId, Array.isArray(data?.posts) ? data.posts : [])
+  if (visiblePosts === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   return NextResponse.json({
     ok: true,
     durable: true,
-    posts: Array.isArray(data?.posts) ? data.posts : [],
+    posts: visiblePosts,
     hasMore: Boolean(data?.hasMore),
     nextBefore: typeof data?.nextBefore === "number" ? data.nextBefore : null,
     nextBeforeId: typeof data?.nextBeforeId === "string" ? data.nextBeforeId : null,

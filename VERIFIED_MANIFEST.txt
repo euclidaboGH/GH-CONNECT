@@ -1,12 +1,14 @@
 GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
-project_version=0.63.25
+inventory_status=BLOCKED_DUPLICATE_VERSION_PREFIXES
+duplicate_version_prefixes=202610210001,202610210002
+project_version=0.69.3
 manifest_format_version=1
-canonical_migrations=109
-classification_required=77
+canonical_migrations=112
+classification_required=79
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=29
+classification_review_required=30
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -111,11 +113,14 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=4141 path=supabase/migrations/202610200002_gh_comment_media_attachments.sql
 [REVIEW_REQUIRED] size=2725 path=supabase/migrations/20261020_ghpv_soft_delete_atomic.sql
 [REQUIRED] size=8959 path=supabase/migrations/202610210001_company_revenue_event_journal.sql
+[REQUIRED] size=5300 path=supabase/migrations/202610210001_gh_post_list_feed_curation_fields.sql
+[REQUIRED] size=2555 path=supabase/migrations/202610210002_ghc_credit_pack_purchase.sql
 [REVIEW_REQUIRED] size=951 path=supabase/migrations/202610210002_pi_payment_intent_idempotency_lookup.sql
 [REVIEW_REQUIRED] size=10617 path=supabase/migrations/202610210003_pi_payment_intent_atomic_transitions.sql
 [REVIEW_REQUIRED] size=3555 path=supabase/migrations/20261021_gh_social_notifications_types_extend.sql
+[REVIEW_REQUIRED] size=7885 path=supabase/migrations/202610220001_gh_social_canonical_visibility.sql
 [REVIEW_REQUIRED] size=9096 path=supabase/migrations/20261022_gh_content_rewards.sql
-[REVIEW_REQUIRED] size=7964 path=supabase/migrations/20261023_gh_profile_content_library.sql
+[REVIEW_REQUIRED] size=8419 path=supabase/migrations/20261023_gh_profile_content_library.sql
 [REVIEW_REQUIRED] size=2854 path=supabase/migrations/202610240003_gh_post_reaction_roster_visibility_guard.sql
 [REVIEW_REQUIRED] size=4346 path=supabase/migrations/202610240004_gh_story_creator_upgrade.sql
 [REVIEW_REQUIRED] size=8255 path=supabase/migrations/202610240005_gh_messaging_presence_delivery_receipts.sql

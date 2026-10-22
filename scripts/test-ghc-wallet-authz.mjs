@@ -32,6 +32,11 @@ for (const f of files) {
   const publicPolicyRoutes = new Map([
     ['app/api/economy/policy/route.ts', /getPublicGhcEconomyPolicy/],
     ['app/api/economy/pi-acquisition-policy/route.ts', /getPiGhcAcquisitionProposal/],
+    // Public pricing/catalog metadata and aggregate supply transparency are
+    // intentionally read-only. Their tests below require server-owned providers
+    // and reject mutating HTTP handlers or client-provided request bodies.
+    ['app/api/economy/catalog/route.ts', /listPublicSpendCatalog/],
+    ['app/api/economy/supply/route.ts', /rpcEconomicPopulationStats/],
   ])
   if (rel.includes('/health/')) {
     pass++

@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # Phases 1–4 audit (2026-10-21)
 
 ## Phase 1 — Dual-rail revenue

@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # Human Connection OS — Integration Audit (#60)
 
 **Pillar chain:** Discover → Connect → Communicate → Belong → Participate → Transact

@@ -7,12 +7,59 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function reply(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache", Vary: "Cookie, Authorization" } })
+}
+
+async function authorizeCommentAttachment(
+  base: string,
+  serviceKey: string,
+  mediaId: string,
+  viewerId: string,
+): Promise<{ ok: true; asset: { ok: true; mediaId: string; ownerId: string; bucket: string; storagePath: string; mime?: string; kind?: string } } | { ok: false; unavailable: boolean }> {
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
+  try {
+    const assetQuery = new URLSearchParams({
+      id: `eq.${mediaId}`, status: "eq.ready", deleted_at: "is.null",
+      select: "id,owner_id,bucket,storage_path,mime_type,media_kind", limit: "1",
+    })
+    const assetResponse = await fetch(`${base}/rest/v1/gh_media_assets?${assetQuery.toString()}`, {
+      headers, cache: "no-store", signal: AbortSignal.timeout(8_000),
+    })
+    if (!assetResponse.ok) return { ok: false, unavailable: true }
+    const assets = await assetResponse.json() as Array<{ id?: string; owner_id?: string; bucket?: string; storage_path?: string; mime_type?: string; media_kind?: string }>
+    const asset = assets[0]
+    if (!asset?.id || !asset.owner_id || !asset.bucket || !asset.storage_path) return { ok: false, unavailable: false }
+    const mediaFilter = JSON.stringify([{ id: mediaId }])
+    const commentQuery = new URLSearchParams({
+      deleted_at: "is.null", media: `cs.${mediaFilter}`,
+      select: "post_id,author_id,media", limit: "20",
+    })
+    const commentResponse = await fetch(`${base}/rest/v1/gh_post_comments?${commentQuery.toString()}`, {
+      headers, cache: "no-store", signal: AbortSignal.timeout(8_000),
+    })
+    if (!commentResponse.ok) return { ok: false, unavailable: true }
+    const comments = await commentResponse.json() as Array<{ post_id?: string; author_id?: string; media?: Array<{ id?: string }> }>
+    for (const comment of comments) {
+      if (comment.author_id !== asset.owner_id || !comment.post_id || !Array.isArray(comment.media) || !comment.media.some((item) => item?.id === mediaId)) continue
+      const visible = await canViewSocialPost(viewerId, comment.post_id)
+      if (visible === null) return { ok: false, unavailable: true }
+      if (visible) {
+        return { ok: true, asset: {
+          ok: true, mediaId: asset.id, ownerId: asset.owner_id, bucket: asset.bucket,
+          storagePath: asset.storage_path, mime: asset.mime_type, kind: asset.media_kind,
+        } }
+      }
+    }
+    return { ok: false, unavailable: false }
+  } catch {
+    return { ok: false, unavailable: true }
+  }
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -48,12 +95,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       signal: AbortSignal.timeout(8_000),
     })
     if (!authz.ok) return reply({ ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }, 503)
-    const asset = await authz.json() as {
+    let asset = await authz.json() as {
       ok?: boolean; error?: string; mediaId?: string; ownerId?: string;
       bucket?: string; storagePath?: string; mime?: string; kind?: string;
     }
     if (!asset || asset.ok !== true || asset.mediaId !== id || !asset.ownerId || !asset.bucket || !asset.storagePath) {
-      return reply({ ok: false, error: "MEDIA_NOT_FOUND" }, 404)
+      // Comment media references are stored on the comment rather than gh_post_media.
+      // Resolve them against the current comment and parent-post visibility at read time.
+      const fallback = await authorizeCommentAttachment(base, env.supabaseServiceRoleKey, id, auth.userId)
+      if (!fallback.ok) {
+        return reply({ ok: false, error: fallback.unavailable ? "MEDIA_AUTHORIZATION_UNAVAILABLE" : "MEDIA_NOT_FOUND" }, fallback.unavailable ? 503 : 404)
+      }
+      asset = fallback.asset
     }
     if (!asset.storagePath.startsWith(`${asset.ownerId}/`) || asset.storagePath.includes("..")) {
       return reply({ ok: false, error: "MEDIA_RECORD_INVALID" }, 503)

@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # GreenHaven Phase 5 source audit + Pass 11 (2026-10-19)
 
 **Source of truth:** `GreenHaven-Phase-5-Provider-Integration-Gates-2026-10-19`

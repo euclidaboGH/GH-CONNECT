@@ -1,8 +1,10 @@
-# GreenHaven — Testnet Verification Gate (Phases 1–13)
+# GreenHaven — Testnet Verification Gate
+
+> This gate is retained as an operator checklist, but its historical phase labels and any prior verification claims are not current release evidence. Use `docs/PROJECT_TRUTH.md` for the latest build status.
 
 **Scope:** Prove Phases **1–13** (and related foundations) on Testnet.  
 **Phase 14:** production hardening only (`docs/GH_PHASE_14.md`) — not a substitute for this Testnet gate.
-**Phase 15:** not started.
+**Later product phases:** consult current source and `docs/PROJECT_TRUTH.md`; historical phase numbering in this checklist is not a release-status claim.
 
 Static/automated green ≠ Testnet verified ≠ production ready.
 
@@ -34,11 +36,11 @@ Static/automated green ≠ Testnet verified ≠ production ready.
 
 ## 1. Migrations (Testnet only)
 
-Canonical on-disk count: **109** under `supabase/migrations/` (see generated `docs/MIGRATION_CHECKLIST.md` and `VERIFIED_MANIFEST.txt`).
+Canonical on-disk count: **112** SQL files under `supabase/migrations/`. The current diagnostic manifest is marked **BLOCKED** because version prefixes `202610210001` and `202610210002` are duplicated. Do not apply migrations until these identifiers and target history are reviewed. See `docs/PROJECT_TRUTH.md`.
 
 **Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md` and `docs/MIGRATION_GAP_REPORT.md`.
 
-Classification counts: **77 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **29 REVIEW_REQUIRED**.
+Current file classifications: **79 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **30 REVIEW_REQUIRED**. These counts do not override the duplicate-version blocker or authorize bulk application.
 Later groups include balance-lock (20261009–12), GHPV (20261013–20), content rewards (20261022).
 
 | Class | Action |

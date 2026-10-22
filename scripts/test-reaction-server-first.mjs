@@ -9,9 +9,11 @@ function ok(c, m) {
   }
 }
 const ctx = readFileSync("contexts/ghc-context.tsx", "utf8")
-const start = ctx.indexOf("const reactToPost = async")
-const end = ctx.indexOf("const likePost = async")
-const body = ctx.slice(start, end)
+// Match the current memoized callback declaration. Keep the slice bounded so
+// unrelated functions cannot accidentally satisfy these assertions.
+const start = ctx.indexOf("const reactToPost = useCallback(async")
+const end = ctx.indexOf("const likePost = useCallback", start)
+const body = start >= 0 && end > start ? ctx.slice(start, end) : ""
 ok(body.includes("socialToggleReaction"), "uses socialToggleReaction")
 ok(body.includes("Server-first") || body.includes("server-first") || body.includes("Server-first"), "server-first comment")
 ok(body.indexOf("socialToggleReaction") < body.indexOf("setState"), "API before setState")

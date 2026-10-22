@@ -34,7 +34,7 @@ function check(condition, label) {
 }
 
 check(pkg.version === lock.version && pkg.version === lock.packages?.['']?.version, 'package.json and lockfile root versions match')
-check(readme.includes(`Current implementation status — source baseline ${pkg.version}`), 'README current baseline matches package version')
+check(readme.includes(`Current source version:** \`${pkg.version}\``), 'README current baseline matches package version')
 check(deploy.includes(`Current source release: ${pkg.version}`), 'deployment runbook version matches package version')
 check(checklist.includes(expectedHeader), 'generated checklist migration count matches canonical directory')
 check(checklist.includes(expectedClassLine), 'generated checklist class counts match its migration rows')
@@ -44,8 +44,8 @@ check(gate.includes(`Canonical on-disk count: **${migrations.length}**`), 'Testn
 check(gate.includes(`**${counts.REQUIRED} REQUIRED**`) && gate.includes(`**${counts.REQUIRES_APPROVAL} REQUIRES_APPROVAL**`) && gate.includes(`**${counts.PROPOSAL} PROPOSAL**`) && gate.includes(`**${counts.REVIEW_REQUIRED} REVIEW_REQUIRED**`), 'Testnet gate uses all current migration classifications')
 check(!gate.includes('Canonical on-disk count: **70**') && !gate.includes('67 REQUIRED') && !gate.includes('Apply oldest → newest'), 'Testnet gate contains no stale inventory or blanket-apply instruction')
 check(!phase14.includes('51 REQUIRED migrations') && !phase15.includes('51 REQUIRED migrations'), 'Phase 14/15 operator guidance has no stale 51-migration count')
-check(status.includes(`\`${pkg.version}\` current source baseline`) && truth.includes(`**Current source baseline:** \`${pkg.version}\``), 'authoritative status documents match current source version')
-check(truth.toLowerCase().includes('not certified / not approved') && truth.includes('not proof of remote application'), 'project truth explicitly separates source inventory from release approval')
+check(status.includes(`current package version is \`${pkg.version}\``) && truth.includes(`**Current source version:** \`${pkg.version}\``), 'authoritative status documents match current source version')
+check(truth.toLowerCase().includes('not approved') && truth.includes('does not prove that any migration is applied'), 'project truth explicitly separates source inventory from release approval')
 check(pkg.scripts?.['check:project-truth'] === 'node scripts/check-project-truth.mjs', 'project-truth check is registered in npm scripts')
 
 if (errors.length) {

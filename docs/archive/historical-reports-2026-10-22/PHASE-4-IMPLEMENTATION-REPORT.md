@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # GH-CONNECT Phase 4 Implementation Report
 
 **Release source:** GH-CONNECT `0.63.20`  

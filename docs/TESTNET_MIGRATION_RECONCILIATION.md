@@ -1,6 +1,6 @@
 # Testnet migration reconciliation
 
-> **Historical snapshot (2026-09-28): superseded.** Its 54-migration count and old classifications are not current. Use [`MIGRATION_CHECKLIST.md`](MIGRATION_CHECKLIST.md), [`VERIFIED_MANIFEST.txt`](../VERIFIED_MANIFEST.txt), and [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) for the current 107-file source inventory and current conservative classification. Remote Testnet/Mainnet history is still not verified by this repository update.
+> **Historical snapshot (2026-09-28): superseded.** Counts and classifications in this file are not current. Use [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) and the diagnostic [`MIGRATION_CHECKLIST.md`](MIGRATION_CHECKLIST.md) for the latest on-disk inventory. The current inventory validation is blocked by duplicate migration version prefixes; resolve that issue and reconcile remote Testnet/Mainnet history before applying any migration.
 
 **Updated:** 2026-09-28  
 **Local migration count:** 54  

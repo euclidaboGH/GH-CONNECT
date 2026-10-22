@@ -49,13 +49,13 @@ check(logoutRoute.includes('STEP_UP_REVOCATION_UNAVAILABLE') && logoutRoute.incl
 check(revokeSessionRoute.includes('STEP_UP_REVOCATION_UNAVAILABLE') && revokeSessionRoute.includes('status: 503'), 'single-session route surfaces step-up durability failure')
 check(revokeSessionRoute.includes('if (isCurrent) failure.headers.append("Set-Cookie", buildClearSessionCookieHeader())'), 'current-session cookie is cleared when post-revoke step-up cleanup fails')
 check(revokeOthersRoute.includes('STEP_UP_REVOCATION_UNAVAILABLE') && revokeOthersRoute.includes('status: 503'), 'revoke-others route stops when step-up revocation cannot be persisted')
-check(migrations.length === 109, `canonical SQL inventory is 109 files (found ${migrations.length})`)
+check(migrations.length === 111, `canonical SQL inventory is 111 files (found ${migrations.length})`)
 for (const name of ['20261022_gh_content_rewards.sql','20261023_gh_profile_content_library.sql','202610250002_gh_post_restore_owner_window.sql','202610250003_gh_lifecycle_payout_quality_foundation.sql']) {
   check(generator.includes(`'${name}'`) && checklist.includes(`\`${name}\` | REVIEW_REQUIRED`), `${name} is held for review, not auto-approved`)
 }
 check(checklist.includes('Supabase CLI does not enforce these documentation classifications'), 'migration checklist warns classification labels do not constrain Supabase CLI')
 check(manifest.includes('APPLICATION_GUARD: Supabase CLI does not enforce this classification metadata'), 'generated manifest warns about CLI application behavior')
-check(checklist.includes('REQUIRED **77**') && checklist.includes('REVIEW_REQUIRED **29**'), 'generated migration counts reflect conservative review reclassification')
+check(checklist.includes('REQUIRED **79**') && checklist.includes('REVIEW_REQUIRED **29**') && manifest.includes('inventory_status=BLOCKED_DUPLICATE_VERSION_PREFIXES'), 'generated diagnostic inventory reflects current conservative classifications and blocker')
 check(migrationReadiness.includes('Duplicate Supabase migration version') && migrations.every((name) => /^\d+_/.test(name)), 'migration release gate rejects duplicate or unversioned migration files')
 console.log(`\nPhase 3 security/migration contract: ${passed} passed, ${failed} failed.`)
 if (failed) process.exit(1)

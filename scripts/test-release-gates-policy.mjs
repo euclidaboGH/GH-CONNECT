@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 const policy = read('docs/GREENHAVEN_REPUTATION_CURATION_POLICY.md')
-const status = read('PHASE_2_CURATION_IMPLEMENTATION_STATUS.md')
+const status = read('docs/archive/historical-reports-2026-10-22/PHASE_2_CURATION_IMPLEMENTATION_STATUS.md')
 const runbook = read('docs/TESTNET_LIVE_RELEASE_GATES.md')
 const settlement = read('supabase/migrations/202610170003_ghpv_calibration_bounds.sql')
 const checks = [

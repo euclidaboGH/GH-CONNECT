@@ -45,7 +45,8 @@ assert.equal(validateMediaMetadata({ mediaKind: 'image', mimeType: 'image/jpeg',
 assert.equal(validateMediaMetadata({ mediaKind: 'image', mimeType: 'image/jpeg', byteSize: 1024, width: 20001 }), 'INVALID_WIDTH')
 assert.equal(mediaCategoryMatches('images', 'image', 'image/jpeg'), true)
 assert.equal(mediaCategoryMatches('images', 'video', 'video/mp4'), false)
-assert.equal(validateMediaMetadata({ mediaKind: 'image', mimeType: 'image/jpeg', byteSize: 30 * 1024 * 1024 }), 'INVALID_BYTE_SIZE')
+// Shared upload policy intentionally permits media up to 50 MiB; test above the actual cap.
+assert.equal(validateMediaMetadata({ mediaKind: 'image', mimeType: 'image/jpeg', byteSize: 51 * 1024 * 1024 }), 'INVALID_BYTE_SIZE')
 assert.equal(isAllowedPaymentTransition('CREATED', 'APPROVAL_PENDING'), true)
 assert.equal(isAllowedPaymentTransition('APPROVAL_PENDING', 'APPROVED'), true)
 assert.equal(isAllowedPaymentTransition('APPROVED', 'COMPLETION_PENDING'), true)

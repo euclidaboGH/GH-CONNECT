@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 const read = (path) => fs.readFileSync(path, 'utf8')
 const messageRoute = read('app/api/messaging/conversations/[conversationId]/messages/route.ts')
 const messageStore = read('lib/server/messaging/message-store.ts')
+const attachmentValidator = read('lib/server/media/owned-attachment-validation.ts')
 const mediaSign = read('app/api/media/[id]/signed-url/route.ts')
 const mediaContent = read('app/api/media/[id]/content/route.ts')
 const mediaMigration = read('supabase/migrations/202610190002_gh_private_media_references_and_viewer_authz.sql')
@@ -15,9 +16,9 @@ const checks = [
   ['message reads require authenticated session', messageRoute.includes('resolveAuthenticatedUser(request.headers)') && messageRoute.includes('AUTH_REQUIRED')],
   ['message read and send routes disable caching', messageRoute.includes('Cache-Control') && messageRoute.includes('no-store')],
   ['conversation membership gates durable message access', messageStore.includes('if (!(await isMember(cid, uid)))')],
-  ['message sends enforce bounded attachment count', messageRoute.includes('rawAtts.slice(0, 4)')],
-  ['message attachment URLs reject blob and data URLs', messageRoute.includes('url.startsWith("blob:")') && messageRoute.includes('url.startsWith("data:")')],
-  ['message attachment URLs require HTTPS', messageRoute.includes('u.protocol !== "https:"') && messageStore.includes('parsed.protocol === "https:"')],
+  ['message sends enforce bounded attachment count before persistence', messageRoute.includes('maxItems: 4') && attachmentValidator.includes('raw.length > maxItems')],
+  ['message attachment references reject blob/data and arbitrary URLs', attachmentValidator.includes('rawUrl.startsWith("blob:")') && attachmentValidator.includes('rawUrl.startsWith("data:")') && attachmentValidator.includes('^\\/api\\/media\\/')],
+  ['message attachments are same-origin first-party media content references', attachmentValidator.includes('url.origin !== requestOrigin') && attachmentValidator.includes('url.protocol !== "https:" && url.protocol !== "http:"') && attachmentValidator.includes('gh_media_authorize_viewer')],
   ['private media authorization uses actual session viewer', mediaSign.includes('p_viewer_id: auth.userId') && mediaSign.includes('gh_media_authorize_viewer')],
   ['signed media links have short five-minute lifetime', mediaSign.includes('expiresIn: 300')],
   ['media content delivery restricts redirect to trusted HTTPS storage origin', mediaContent.includes('signed.protocol !== "https:" || signed.origin !== trustedStorageOrigin')],

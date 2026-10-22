@@ -18,7 +18,18 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const utilityOnly = url.searchParams.get("utility") === "1"
 
-  const items = utilityOnly ? listUtilitySinks() : listPublicSpendCatalog()
+  const rawItems = utilityOnly ? listUtilitySinks() : listPublicSpendCatalog()
+  const effectNotConfigured = new Set([
+    "boost", "boost_post", "boost_profile", "boost_listing", "feed_spotlight",
+    "community_tools_month", "creator_studio_day",
+  ])
+  const items = rawItems.map((item) => ({
+    ...item,
+    available: !effectNotConfigured.has(item.purpose),
+    ...(effectNotConfigured.has(item.purpose)
+      ? { unavailableReason: "Temporarily unavailable: durable activation is not configured. No GHC will be charged." }
+      : {}),
+  }))
 
   return NextResponse.json(
     {

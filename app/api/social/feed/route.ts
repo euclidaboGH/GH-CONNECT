@@ -7,6 +7,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
+import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -190,24 +191,39 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 40), 1), 50)
+  const rawLimit = url.searchParams.get("limit")
+  const parsedLimit = rawLimit === null ? 40 : Number(rawLimit)
+  if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+    return NextResponse.json({ ok: false, error: "INVALID_FEED_LIMIT" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const limit = parsedLimit
   const before = url.searchParams.get("before")
   const beforeIdRaw = (url.searchParams.get("beforeId") || "").trim()
-  const beforeMs = before ? Number(before) : null
   const hasCursor = before !== null || beforeIdRaw !== ""
-  if (hasCursor && (!beforeMs || !Number.isSafeInteger(beforeMs) || beforeMs <= 0 || !beforeIdRaw || beforeIdRaw.length > 160)) {
+  const beforeMs = before !== null && /^\d{1,16}$/.test(before) ? Number(before) : null
+  if (hasCursor && (before === null || beforeMs === null || !Number.isSafeInteger(beforeMs) || beforeMs <= 0 || !beforeIdRaw || beforeIdRaw.length > 160 || /[\u0000-\u001f\u007f]/.test(beforeIdRaw))) {
     return NextResponse.json({ ok: false, error: "INVALID_FEED_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
-  // V2 uses a stable (createdAt,id) cursor so equal-timestamp posts cannot be skipped.
-  // Fall back to the legacy RPC until the additive V2 migration is applied.
-  let result = await socialRpc("gh_post_list_feed_v2", {
+  // V3 applies canonical visibility in the database before returning post bodies,
+  // including mutual-follow and active-community membership rules. Keep stable
+  // cursor fallbacks for staged rollout, with a second server-side visibility gate below.
+  let result = await socialRpc("gh_post_list_feed_v3", {
     p_viewer_id: auth.userId,
     p_limit: limit,
     p_before_ms: hasCursor ? beforeMs : null,
     p_before_id: hasCursor ? beforeIdRaw : null,
   })
   let stableCursor = result.ok
+  if (!result.ok) {
+    result = await socialRpc("gh_post_list_feed_v2", {
+      p_viewer_id: auth.userId,
+      p_limit: limit,
+      p_before_ms: hasCursor ? beforeMs : null,
+      p_before_id: hasCursor ? beforeIdRaw : null,
+    })
+    stableCursor = result.ok
+  }
   if (!result.ok) {
     result = await socialRpc("gh_post_list_feed", {
       p_viewer_id: auth.userId,
@@ -230,9 +246,18 @@ export async function GET(request: Request) {
   }
 
   const payload = result.data as { ok?: boolean; posts?: unknown[] }
-  let posts = Array.isArray(payload?.posts) ? payload.posts : []
+  const rawPagePosts = Array.isArray(payload?.posts) ? payload.posts : []
+  let posts = rawPagePosts
 
-  // Server-side mute enforcement (RPC still handles blocks)
+  // Re-check canonical visibility before any post payload reaches the client.
+  // This covers community-bound posts and mutuals even while legacy RPCs remain installed.
+  const visiblePosts = await filterVisibleSocialPosts(auth.userId, posts)
+  if (visiblePosts === null) {
+    return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  posts = visiblePosts
+
+  // Server-side mute enforcement (canonical visibility has already checked blocks)
   const muted = await mutedAuthorIds(auth.userId)
   if (muted.size > 0) {
     posts = posts.filter((p) => {
@@ -253,7 +278,9 @@ export async function GET(request: Request) {
     /* engagement previews are an enhancement; never fail the feed for them */
   }
 
-  const last = posts.length ? (posts[posts.length - 1] as { id?: string; createdAt?: number }) : null
+  // Advance using the last raw server row, not the last visible/mute-filtered row,
+  // so a page containing hidden or muted posts cannot cause pagination to loop.
+  const last = rawPagePosts.length ? (rawPagePosts[rawPagePosts.length - 1] as { id?: string; createdAt?: number }) : null
   const nextCursor = last?.id && Number.isFinite(Number(last?.createdAt))
     ? { before: Number(last.createdAt), beforeId: String(last.id) }
     : null

@@ -1,3 +1,7 @@
+> HISTORICAL SNAPSHOT — dated findings and test counts are not current release evidence. Check `docs/PROJECT_TRUTH.md` and the latest CI run.
+
+---
+
 # Response to external audit (2026-10-20)
 
 Your friend's diagnosis matches the root cause we fixed in `GH-CONNECT-0.62.5-MEDIA-NOTIFY-CLAIM-2026-10-20`.

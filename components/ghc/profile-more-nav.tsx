@@ -11,7 +11,7 @@
  * Marketplace and Ecosystem are reached from Home → Ecosystem, not Profile.
  */
 
-import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles } from "lucide-react"
+import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles, Compass, ShoppingBag } from "lucide-react"
 import { navigateTo, openMembership } from "@/lib/navigation/navigate"
 
 type NavItem = {
@@ -60,6 +60,23 @@ export function ProfileMoreNav({
       onClick: () => {
         navigateTo("matches")
       },
+    },
+  ]
+
+  const explore: NavItem[] = [
+    {
+      id: "ecosystem",
+      label: "Ecosystem",
+      icon: <Compass size={16} />,
+      hint: "All services",
+      onClick: () => navigateTo("ecosystem"),
+    },
+    {
+      id: "marketplace",
+      label: "Marketplace",
+      icon: <ShoppingBag size={16} />,
+      hint: "Buy & sell",
+      onClick: () => navigateTo("marketplace"),
     },
   ]
 
@@ -126,6 +143,14 @@ export function ProfileMoreNav({
           Social
         </p>
         <NavGrid items={social} />
+      </div>
+
+      <div className="gh-surface-muted rounded-xl p-3">
+        <p className="mb-2 px-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          Explore GreenHaven
+        </p>
+        <NavGrid items={explore} />
+        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Find active services and clearly labelled upcoming features in the Ecosystem directory.</p>
       </div>
 
       <div className="gh-surface-muted rounded-xl border border-emerald-200/50 p-3 dark:border-emerald-900/40">

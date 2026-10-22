@@ -143,6 +143,18 @@ export async function POST(request: Request) {
       { status: 409 }
     )
   }
+  // A completed PI intent for some other product is not proof of a GHC pack
+  // purchase. Require the dedicated server-created pack binding, including the
+  // exact catalog product, PI rail, purpose, user-scoped reference and amount.
+  if (
+    intent.provider !== "pi" ||
+    intent.currency !== "PI" ||
+    intent.purpose !== "digital_product" ||
+    intent.metadata?.kind !== "ghc_pack" ||
+    !intent.providerPaymentId
+  ) {
+    return NextResponse.json({ ok: false, error: "PACK_INTENT_BINDING_MISMATCH", granted: false }, { status: 409 })
+  }
 
   const pack =
     getGhcPack(productId) ||
@@ -160,7 +172,12 @@ export async function POST(request: Request) {
     )
   }
 
-  if (Number(intent.amount) !== pack.piAmount) {
+  if (
+    Number(intent.amount) !== pack.piAmount ||
+    String(intent.metadata?.productId || "") !== pack.productId ||
+    Number(intent.metadata?.ghcAmount) !== pack.ghcAmount ||
+    !intent.referenceId.startsWith(`ghc_pack_${pack.productId}:${auth.userId}:`)
+  ) {
     return NextResponse.json(
       {
         ok: false,

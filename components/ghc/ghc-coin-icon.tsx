@@ -76,7 +76,7 @@ export function GhcCoinIcon({
         // Avoid layout shift / unwanted backgrounds
         verticalAlign: "middle",
       }}
-      loading="lazy"
+      loading="eager"
       decoding="async"
       onError={() => setFailed(true)}
     />

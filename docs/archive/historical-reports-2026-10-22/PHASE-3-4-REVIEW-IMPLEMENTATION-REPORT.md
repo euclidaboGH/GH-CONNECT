@@ -1,3 +1,7 @@
+> HISTORICAL RECORD — not current release status. Check `docs/PROJECT_TRUTH.md` and current CI evidence before relying on this report.
+
+---
+
 # Phase 3–4 Re-review Implementation Report — 2026-10-21
 
 **Baseline:** GH-CONNECT 0.63.25, from `GH-CONNECT-0.63.25-PHASE5-6-MASSIVE-REWORK-1.zip`  

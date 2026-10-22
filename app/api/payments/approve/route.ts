@@ -56,20 +56,20 @@ export async function POST(request: Request) {
       ? (await loadPaymentIntent(intentId))
       : (await loadByProviderPaymentId(paymentId))
 
-    if (intent && auth && intent.userId !== auth.userId) {
-      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
-    }
-    // Production: never approve a bound intent without authenticated ownership.
-    // Unbound pipeline checks (no intent) still go through Pi API verification below.
-    if (
-      intent &&
-      intent.userId &&
-      !auth &&
-      (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production")
-    ) {
+    // Any server-owned intent is bound to a GH account in every environment.
+    // Do not weaken ownership in Preview/Testnet: intent IDs and provider payment
+    // IDs are identifiers, not bearer credentials. Unbound pipeline checks remain
+    // a separate explicitly gated non-production path below.
+    if (intent?.userId && !auth) {
       return NextResponse.json(
         { ok: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to approve this payment" },
-        { status: 401 },
+        { status: 401, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    if (intent && auth && intent.userId !== auth.userId) {
+      return NextResponse.json(
+        { ok: false, error: "FORBIDDEN" },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
       )
     }
 

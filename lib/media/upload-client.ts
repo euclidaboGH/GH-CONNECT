@@ -11,7 +11,7 @@ const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
 /** Align with server MAX_VIDEO / elevated file limits for direct path. */
 const MAX_DIRECT_IMAGE_BYTES = 50 * 1024 * 1024
-const MAX_DIRECT_VIDEO_BYTES = 50 * 1024 * 1024
+const MAX_DIRECT_VIDEO_BYTES = 40 * 1024 * 1024
 const MAX_DIRECT_FILE_BYTES = 50 * 1024 * 1024
 const MAX_DIRECT_AUDIO_BYTES = 50 * 1024 * 1024
 
@@ -108,6 +108,39 @@ function authHeaders(): Record<string, string> {
   }
 }
 
+/**
+ * Recover a stale/missing GH session once using the already-held Pi access token.
+ * The server verifies that token against Pi before issuing a fresh HttpOnly cookie.
+ * No anonymous upload or client-supplied user ID is ever accepted as a fallback.
+ */
+async function fetchWithPiSessionRecovery(
+  input: RequestInfo | URL,
+  init: RequestInit
+): Promise<Response> {
+  const response = await fetch(input, init)
+  if (response.status !== 401) return response
+
+  const accessToken = IdentityService.getAccessToken()
+  if (!accessToken) return response
+
+  try {
+    const bridge = await fetch("/api/auth/pi", {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ accessToken }),
+    })
+    const result = (await bridge.json().catch(() => ({}))) as { ok?: boolean; verified?: boolean }
+    if (!bridge.ok || result.ok !== true || result.verified !== true) return response
+
+    // Reuse the original request body and cookie credentials; retry only once.
+    return await fetch(input, { ...init, credentials: "include" })
+  } catch {
+    return response
+  }
+}
+
 async function uploadViaProxy(
   uploadFile: Blob,
   uploadName: string,
@@ -128,7 +161,7 @@ async function uploadViaProxy(
 
   try {
     meta?.onProgress?.("Uploading…")
-    const res = await fetch("/api/media", {
+    const res = await fetchWithPiSessionRecovery("/api/media", {
       method: "POST",
       credentials: "include",
       headers: { ...authHeaders() },
@@ -176,7 +209,7 @@ async function uploadViaDirect(
 ): Promise<DurableMediaResult> {
   meta?.onProgress?.("Preparing secure upload…")
   try {
-    const intentRes = await fetch("/api/media/direct-upload-intent", {
+    const intentRes = await fetchWithPiSessionRecovery("/api/media/direct-upload-intent", {
       method: "POST",
       credentials: "include",
       headers: {
@@ -232,7 +265,7 @@ async function uploadViaDirect(
     }
 
     meta?.onProgress?.("Finalizing…")
-    const completeRes = await fetch("/api/media/direct-upload-complete", {
+    const completeRes = await fetchWithPiSessionRecovery("/api/media/direct-upload-complete", {
       method: "POST",
       credentials: "include",
       headers: {
