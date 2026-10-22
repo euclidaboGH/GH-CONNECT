@@ -1,0 +1,44 @@
+--- a/lib/server/social/post-visibility.ts
++++ b/lib/server/social/post-visibility.ts
+@@ -1,7 +1,7 @@
+ import { readGhcServerEnv } from "@/lib/server/economy/env"
+ 
+-type PostRow = { id: string; author_id: string; visibility: string | null; community_id: string | null; deleted_at: string | null }
++type PostRow = { id: string; author_id: string; visibility: string | null; community_id: string | null; deleted_at: string | null; archived_at: string | null }
+ type FollowRow = { follower_id: string; following_id: string }
+ 
+ /** Fail-closed server-side visibility check shared by comment and reaction routes. */
+ export async function canViewSocialPost(viewerId: string, postId: string): Promise<boolean | null> {
+--- a/app/api/media/[id]/signed-url/route.ts
++++ b/app/api/media/[id]/signed-url/route.ts
+@@ -107,15 +107,26 @@
+         return reply({ ok: false, error: fallback.unavailable ? "MEDIA_AUTHORIZATION_UNAVAILABLE" : "MEDIA_NOT_FOUND" }, fallback.unavailable ? 503 : 404)
+       }
+       asset = fallback.asset
+     }
+-    if (!asset.storagePath.startsWith(`${asset.ownerId}/`) || asset.storagePath.includes("..")) {
++    // Revalidate the RPC/fallback payload after assignment. The RPC schema is
++    // intentionally optional at the network boundary, so never rely on narrowing
++    // from the earlier branch when constructing a storage path.
++    const ownerId = asset.ownerId
++    const bucketName = asset.bucket
++    const storagePath = asset.storagePath
++    if (
++      typeof ownerId !== "string" || !ownerId ||
++      typeof bucketName !== "string" || !bucketName ||
++      typeof storagePath !== "string" || !storagePath ||
++      !storagePath.startsWith(`${ownerId}/`) || storagePath.includes("..") ||
++      storagePath.startsWith("/") || storagePath.split("/").some((part) => !part || part === ".")
++    ) {
+       return reply({ ok: false, error: "MEDIA_RECORD_INVALID" }, 503)
+     }
+ 
+-    const bucket = encodeURIComponent(asset.bucket)
+-    const objectPath = asset.storagePath.split("/").map((part) => encodeURIComponent(part)).join("/")
+-
++    const bucket = encodeURIComponent(bucketName)
++    const objectPath = storagePath.split("/").map((part) => encodeURIComponent(part)).join("/")
+     const signed = await fetch(`${base}/storage/v1/object/sign/${bucket}/${objectPath}`, {
+       method: "POST",
+       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, "Content-Type": "application/json" },
+       body: JSON.stringify({ expiresIn: 300 }),

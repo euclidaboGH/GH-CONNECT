@@ -50,10 +50,17 @@
 - Updated stale profile-edit and media-attachment tests to validate the current callback and owned-media-reference implementations.
 - Documented `GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR` in `.env.example` so environment-reference coverage passes.
 
+### 8. Latest GitHub Actions TypeScript failures (commit `aeb1c8a`)
+
+- Added `archived_at: string | null` to the local `PostRow` contract because both canonical visibility queries select `archived_at` and visibility decisions reject archived posts. This is a type-contract correction; it does not add or alter a database column.
+- Hardened `app/api/media/[id]/signed-url/route.ts` by validating `ownerId`, `bucket`, and `storagePath` again after the RPC/fallback assignment. The route now uses narrowed local values, requires the storage path to be under the validated owner prefix, rejects traversal/dot/empty path segments, and URL-encodes each path segment. This addresses the reported `string | undefined` errors without weakening media authorization.
+- Added `scripts/test-latest-ci-regressions.mjs` (8 assertions) and wired it into `ci:verify` ahead of the full test/typecheck sequence.
+
 ## Verification performed
 
 The following targeted source-level checks passed during this pass:
 
+- Latest CI regression checks for the reported `archived_at` and signed-URL narrowing errors: **8/8**.
 - New payment/economy stabilization contracts: **24/24**.
 - Pi durable payment tests: **54 passed, 0 failed**.
 - Critical security hardening: **20 assertions passed**.
@@ -85,7 +92,7 @@ These are source/static tests unless explicitly described otherwise; they are no
    The migration-history reconciler therefore fails with two local-collision blocks. Do not rename, reorder or apply these files until Testnet and Mainnet migration histories have been captured and compared.
 
 2. The migration release-readiness check identifies 14 migration files with filename dates later than the audit date. Review dependencies and remote histories before applying them.
-3. Full `npm run typecheck`, lint and production build were not run: the available runtime is Node `v22.16.0`, while `.nvmrc` requires Node `24.15.0`, and `node_modules` is absent. Run clean install and full CI on the pinned runtime.
+3. Full `npm run typecheck`, lint and production build were not run after this source patch: the available runtime is Node `v22.16.0`, while `.nvmrc` requires Node `24.15.0`, and `node_modules` is absent. Run clean install and full CI on the pinned runtime.
 4. Live Testnet verification is still required for account isolation, duplicate/concurrent payment callbacks, reward maturity boundary behavior, wallet balance reconciliation, listing fee payment binding, message/media visibility, and provider failure recovery.
 5. Mission rewards and boosts/paid tools are deliberately fail-closed until their durable verification/activation pipelines exist. Do not present them as live paid features.
 

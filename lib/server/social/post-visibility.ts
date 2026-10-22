@@ -1,6 +1,6 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
-type PostRow = { id: string; author_id: string; visibility: string | null; community_id: string | null; deleted_at: string | null }
+type PostRow = { id: string; author_id: string; visibility: string | null; community_id: string | null; deleted_at: string | null; archived_at: string | null }
 type FollowRow = { follower_id: string; following_id: string }
 
 /** Fail-closed server-side visibility check shared by comment and reaction routes. */

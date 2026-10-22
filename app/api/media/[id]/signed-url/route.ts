@@ -108,12 +108,24 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }
       asset = fallback.asset
     }
-    if (!asset.storagePath.startsWith(`${asset.ownerId}/`) || asset.storagePath.includes("..")) {
+    // Revalidate the RPC/fallback payload after assignment. The RPC schema is
+    // intentionally optional at the network boundary, so never rely on narrowing
+    // from the earlier branch when constructing a storage path.
+    const ownerId = asset.ownerId
+    const bucketName = asset.bucket
+    const storagePath = asset.storagePath
+    if (
+      typeof ownerId !== "string" || !ownerId ||
+      typeof bucketName !== "string" || !bucketName ||
+      typeof storagePath !== "string" || !storagePath ||
+      !storagePath.startsWith(`${ownerId}/`) || storagePath.includes("..") ||
+      storagePath.startsWith("/") || storagePath.split("/").some((part) => !part || part === ".")
+    ) {
       return reply({ ok: false, error: "MEDIA_RECORD_INVALID" }, 503)
     }
 
-    const bucket = encodeURIComponent(asset.bucket)
-    const objectPath = asset.storagePath.split("/").map(encodeURIComponent).join("/")
+    const bucket = encodeURIComponent(bucketName)
+    const objectPath = storagePath.split("/").map((part) => encodeURIComponent(part)).join("/")
     const signed = await fetch(`${base}/storage/v1/object/sign/${bucket}/${objectPath}`, {
       method: "POST",
       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, "Content-Type": "application/json" },
