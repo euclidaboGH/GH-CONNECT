@@ -2286,6 +2286,67 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate on profile id + after Pi identity ready
   }, [state.profile?.id])
 
+  // Domain state and services are initialized before callbacks that depend on them.
+  const getDomainState = useCallback(() => ({
+    profile: state.profile,
+    posts: state.posts,
+    stories: state.stories || [],
+    following: state.following || [],
+    followers: state.followers || [],
+    blockedUsers: Array.from(
+      new Set([...(state.settings?.blockedUsers || []), ...(state.blockedUsers || [])])
+    ),
+    mutedUsers: state.mutedUsers || state.settings?.mutedUsers || [],
+    restrictedUsers: state.restrictedUsers || state.settings?.restrictedUsers || [],
+    matches: state.matches || [],
+    likes: state.likes || [],
+    friends: state.friends || [],
+    outgoingFriendRequestIds: (state.friendRequests || [])
+      .filter((r: any) => {
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
+        const from = String(r.fromUserId || "")
+        return from === me || from === "current-user"
+      })
+      .map((r: any) => r.toUserId)
+      .filter(Boolean),
+    incomingFriendRequestIds: (state.friendRequests || [])
+      .filter((r: any) => {
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
+        const to = String(r.toUserId || "")
+        const from = String(r.fromUserId || "")
+        // Incoming: addressed to me (or legacy rows without toUserId from others)
+        if (to && me && to === me) return true
+        if (!to && from && from !== me && from !== "current-user") return true
+        return false
+      })
+      .map((r: any) => r.fromUserId)
+      .filter((id: string) => {
+        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
+        return id && id !== me && id !== "current-user"
+      }),
+    candidates: state.candidates || [],
+    conversations: state.conversations || [],
+  }), [state])
+
+  const domains: DomainServices = useMemo(
+    () =>
+      createDomainServices(getDomainState, {
+        currentUserId: IdentityService.getCurrentUserId(),
+        onReportPersist: (report) => {
+          try {
+            // recordModerationReport is defined later in this component; invoked only on user action.
+            recordModerationReport?.(report.targetType, report.targetId, report.reason)
+          } catch { /* */ }
+        },
+        getConversations: () => getDomainState().conversations,
+        setConversations: (updater) => {
+          setState((s) => ({ ...s, conversations: updater(s.conversations || []) }))
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recordModerationReport is declared below; getDomainState is stable
+    [getDomainState, identityUserId]
+  )
+
   const updateProfile = useCallback(async (updates: Partial<Profile>) => {
     try {
       // UX-layer validation (compatibility); domain re-validates on mutate path
@@ -2841,65 +2902,6 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     return reactToPost(postId, "like")
   }, [reactToPost])
 
-  const getDomainState = useCallback(() => ({
-    profile: state.profile,
-    posts: state.posts,
-    stories: state.stories || [],
-    following: state.following || [],
-    followers: state.followers || [],
-    blockedUsers: Array.from(
-      new Set([...(state.settings?.blockedUsers || []), ...(state.blockedUsers || [])])
-    ),
-    mutedUsers: state.mutedUsers || state.settings?.mutedUsers || [],
-    restrictedUsers: state.restrictedUsers || state.settings?.restrictedUsers || [],
-    matches: state.matches || [],
-    likes: state.likes || [],
-    friends: state.friends || [],
-    outgoingFriendRequestIds: (state.friendRequests || [])
-      .filter((r: any) => {
-        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
-        const from = String(r.fromUserId || "")
-        return from === me || from === "current-user"
-      })
-      .map((r: any) => r.toUserId)
-      .filter(Boolean),
-    incomingFriendRequestIds: (state.friendRequests || [])
-      .filter((r: any) => {
-        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
-        const to = String(r.toUserId || "")
-        const from = String(r.fromUserId || "")
-        // Incoming: addressed to me (or legacy rows without toUserId from others)
-        if (to && me && to === me) return true
-        if (!to && from && from !== me && from !== "current-user") return true
-        return false
-      })
-      .map((r: any) => r.fromUserId)
-      .filter((id: string) => {
-        const me = String(state.profile?.id || IdentityService.getCurrentUserId() || "").trim()
-        return id && id !== me && id !== "current-user"
-      }),
-    candidates: state.candidates || [],
-    conversations: state.conversations || [],
-  }), [state])
-
-  const domains: DomainServices = useMemo(
-    () =>
-      createDomainServices(getDomainState, {
-        currentUserId: IdentityService.getCurrentUserId(),
-        onReportPersist: (report) => {
-          try {
-            // recordModerationReport is defined later in this component; invoked only on user action.
-            recordModerationReport?.(report.targetType, report.targetId, report.reason)
-          } catch { /* */ }
-        },
-        getConversations: () => getDomainState().conversations,
-        setConversations: (updater) => {
-          setState((s) => ({ ...s, conversations: updater(s.conversations || []) }))
-        },
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recordModerationReport is declared below; getDomainState is stable
-    [getDomainState, identityUserId]
-  )
 
   // Migration foundation: non-React adapters can resolve active domain services
   useEffect(() => {

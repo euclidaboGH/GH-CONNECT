@@ -1,23 +1,23 @@
-# GH-CONNECT 0.69.3 — React Hook CI repair report
+# GH-CONNECT 0.69.3 — CI Repair Report (2026-10-22)
 
-## Source baseline
-This patch is based on the latest GH-CONNECT 0.69.3 archive previously supplied in this conversation: `GH-CONNECT-0.69.3-CI-TYPESCRIPT-WARNINGS-FIX-2026-10-22.zip`. It is not a fresh checkout of GitHub commit `bc17abc` and must be reconciled with any branch changes made after that archive.
+## Finding
+The reported TypeScript diagnostics (`Variable 'domains' is used before being assigned` and `Block-scoped variable 'domains' used before its declaration`) are caused by React callbacks referencing `domains.identity` and `domains.posts` in their dependency arrays before the `const domains` declaration later in the component. The callbacks are declared earlier in the component than the memoized domain service.
 
-## Changes
-- Updated the connection-inbox hydration effect dependencies to react to profile display-name and photo changes.
-- Refactored persistence effect state-slice capture into named render-scope aliases so the effect depends on the exact values it persists, rather than capturing the entire state object.
-- Added `domains.identity` and `state.isOnline` to the profile-update callback dependencies.
-- Removed unused `addToast` from the local-profile switch callback dependencies.
-- Added `domains.posts` and `state.isOnline` to post creation dependencies.
-- Added `domains.posts` to post deletion dependencies while retaining the state slice read by that callback.
-- Removed unnecessary `state.posts` and `state.profile` dependencies from post editing.
-- Added `domains.posts` and removed unused state dependencies from comment edit/delete/reaction callbacks that use functional state updates.
+## Change made
+- Moved the existing `getDomainState` callback and `domains: DomainServices` `useMemo` declaration before `updateProfile` and `createPost`, which consume `domains`.
+- Preserved the domain-service factory, options, dependency list, callbacks, and existing behavior.
+- Left the domain-service binding effects in their existing position.
+- No dependency versions, database schemas, API contracts, wallet logic, payment logic, or UI were changed.
+
+The `recordModerationReport` callback is captured by `onReportPersist` but is only invoked by user-triggered report persistence; it is not invoked during `createDomainServices` construction. The existing guard and existing explanatory lint comment were preserved.
 
 ## Verification
-- `node scripts/check-jsx-safety.mjs`: PASS (727 files scanned).
-- `node scripts/check-node-runtime.mjs`: NOT PASS in this environment; local Node is v22.16.0, while the project requires `^22.22.2 || ^24.15.0`.
-- `npm ci --legacy-peer-deps --ignore-scripts`: NOT VERIFIED; installation did not complete within the available execution window.
-- ESLint, TypeScript, tests, and full Next.js production build: NOT VERIFIED because dependencies could not be installed under the available runtime.
-- npm audit: NOT VERIFIED; no fresh audit report was generated.
+- JSX safety check: PASS — 727 files scanned.
+- Reported build regression suite: PASS — 7/7.
+- Vercel build repair regression suite: PASS — 9/9.
+- Source-order checks: PASS — `getDomainState` and `domains` are each declared once and before callbacks that reference them.
+- Full TypeScript check and production build: NOT VERIFIED. Available local Node.js is v22.16.0, below this project's required runtime, and dependencies were not installed in this verification run.
+- Full npm security audit: NOT RUN as part of this focused declaration-order repair.
 
-No dependency versions, application features, API contracts, database migrations, or payment logic were changed. This report does not claim that the full CI run is fixed until the supported-runtime checks pass.
+## Important source note
+This patch is based on the latest project archive available in this conversation. It addresses the exact declaration-order error shown in the supplied GitHub Actions annotations, but the full current GitHub commit tree was not fetched into this environment. Reconcile this one-file change with the current `testnet` branch before committing, and rerun the full CI suite.
