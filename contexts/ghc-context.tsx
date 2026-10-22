@@ -3170,6 +3170,8 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast, domains.posts, state.posts])
 
+  const pendingCommentRequestIdsRef = useRef(new Map<string, string>())
+
   const addComment = useCallback(async (
     postId: string,
     text: string,
@@ -3209,8 +3211,20 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       // Server-first: other accounts only see comments that hit durable storage.
       const { socialAddComment } = await import("@/lib/social/client")
       const profile = state.profile
+      const requestText = normalizedText || (safeMedia[0]?.type === "video" ? "🎥 Video" : "📷 Photo")
+      const requestKey = `${postId}|${replyToCommentId || ""}|${requestText}|${safeMedia.map((item) => `${item.id || ""}:${item.url}`).join(",")}`
+      let requestId = pendingCommentRequestIdsRef.current.get(requestKey)
+      if (!requestId) {
+        requestId = generateId()
+        pendingCommentRequestIdsRef.current.set(requestKey, requestId)
+        if (pendingCommentRequestIdsRef.current.size > 100) {
+          const oldest = pendingCommentRequestIdsRef.current.keys().next().value
+          if (oldest) pendingCommentRequestIdsRef.current.delete(oldest)
+        }
+      }
       const remote = await socialAddComment(postId, {
-        text: normalizedText || (safeMedia[0]?.type === "video" ? "🎥 Video" : "📷 Photo"),
+        id: requestId,
+        text: requestText,
         authorName: profile?.displayName || profile?.username || "Member",
         authorPhoto: profile?.photos?.[0] || "",
         parentId: replyToCommentId,
@@ -3235,6 +3249,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      pendingCommentRequestIdsRef.current.delete(requestKey)
       const remoteComment = remote.comment || {}
       const newComment = {
         id: String(remoteComment.id || `cmt_${Date.now().toString(36)}`),
@@ -3272,7 +3287,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           (remoteComment as { replyTo?: string }).replyTo,
         replies: [] as [],
         reactions: {},
-        reactionCounts: {},
+        reactionCounts: remoteComment.reactionCounts && typeof remoteComment.reactionCounts === "object"
+          ? remoteComment.reactionCounts as Record<string, number> : {},
+        viewerReactions: Array.isArray(remoteComment.viewerReactions) ? remoteComment.viewerReactions.map(String) : [],
       }
 
       setState((s) => ({
@@ -3299,7 +3316,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             // Feed hydration only loads a preview. Preserve the known durable
             // total instead of replacing it with the number loaded on device.
             engagement: normalizeEngagementMetrics(post.engagement, {
-              comments: currentCommentCount + 1,
+              comments: Number.isFinite(remote.commentCount)
+                ? Math.max(0, Number(remote.commentCount))
+                : currentCommentCount + (remote.idempotent ? 0 : 1),
             }),
           }
         }),
@@ -3312,8 +3331,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       broadcastPostEngagement({
         postId,
         kind: "comment",
-        commentDelta: 1,
-        commentCount: countBeforeComment + 1,
+        commentDelta: remote.idempotent ? 0 : 1,
+        commentCount: Number.isFinite(remote.commentCount)
+          ? Math.max(0, Number(remote.commentCount))
+          : countBeforeComment + (remote.idempotent ? 0 : 1),
       })
       try {
         window.dispatchEvent(
@@ -3339,7 +3360,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             replyTo: (c as { parentId?: string; replyTo?: string }).parentId || (c as { replyTo?: string }).replyTo,
             replies: [] as [],
             reactions: {},
-            reactionCounts: {},
+            reactionCounts: c.reactionCounts && typeof c.reactionCounts === "object"
+              ? c.reactionCounts as Record<string, number> : {},
+            viewerReactions: Array.isArray(c.viewerReactions) ? c.viewerReactions.map(String) : [],
+            isPinned: Boolean(c.isPinned),
+            isEdited: Boolean(c.isEdited),
+            editedAt: Number(c.editedAt) || undefined,
             mediaAttachments: Array.isArray((c as { mediaAttachments?: unknown }).mediaAttachments)
               ? (c as { mediaAttachments: unknown[] }).mediaAttachments
               : undefined,
@@ -3355,6 +3381,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                   // Reconciliation is capped at 80 comments; keep the larger
                   // known total rather than treating the loaded page as total.
                   comments: Math.max(
+                    Number.isFinite(remote.commentCount) ? Math.max(0, Number(remote.commentCount)) : 0,
                     Number(post.engagement?.comments ?? 0) || 0,
                     post.comments?.length ?? 0,
                     mapped.length,
@@ -3366,12 +3393,16 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           broadcastPostEngagement({
             postId,
             kind: "comment",
-            commentCount: Math.max(countBeforeComment + 1, mapped.length),
+            commentCount: Math.max(
+              Number.isFinite(remote.commentCount) ? Math.max(0, Number(remote.commentCount)) : 0,
+              countBeforeComment + (remote.idempotent ? 0 : 1),
+              mapped.length,
+            ),
           })
         }
       } catch { /* non-fatal */ }
       addToast(replyToCommentId ? "Reply posted" : "Comment posted", "success")
-      if (!replyToCommentId) {
+      if (!replyToCommentId && !remote.idempotent) {
         try {
           const { reportMissionProgress } = await import("@/lib/missions/progress")
           const m = await reportMissionProgress("first_comment", { postId })
@@ -3491,10 +3522,22 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           || (c as { replyTo?: string }).replyTo
           || undefined,
         replies: [] as [],
+        isEdited: Boolean(c.isEdited),
+        editedAt: Number(c.editedAt) || undefined,
+        isPinned: Boolean(c.isPinned),
+        reactionCounts: c.reactionCounts && typeof c.reactionCounts === "object"
+          ? c.reactionCounts as Record<string, number> : {},
+        viewerReactions: Array.isArray(c.viewerReactions) ? c.viewerReactions.map(String) : [],
       })).filter((c) => c.id)
       if (mapped.length === 0 && !remote.durable) {
         return { ok: true as const, count: 0, durable: false }
       }
+      const knownPost = postsSnapshotRef.current.find((post) => post.id === id)
+      const knownCommentCount = Math.max(
+        Number(knownPost?.engagement?.comments ?? 0) || 0,
+        knownPost?.comments?.length ?? 0,
+        mapped.length,
+      )
       setState((s) => ({
         ...s,
         posts: s.posts.map((post) => {
@@ -3515,7 +3558,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             ...post,
             comments: nextComments as typeof post.comments,
             engagement: normalizeEngagementMetrics(post.engagement, {
-              comments: nextComments.length,
+              comments: Math.max(Number(post.engagement?.comments ?? 0) || 0, nextComments.length),
             }),
           }
         }),
@@ -3523,7 +3566,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       broadcastPostEngagement({
         postId: id,
         kind: "comment",
-        commentCount: mapped.length,
+        commentCount: knownCommentCount,
       })
       return { ok: true as const, count: mapped.length, durable: Boolean(remote.durable) }
     } catch (e) {
@@ -3696,59 +3739,60 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const result = await domains.posts.editComment(postId, commentId, normalized)
-      if (!result.ok) {
-        addToast(result.error, "error")
+      const response = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
+        body: JSON.stringify({ text: normalized }),
+      })
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; durable?: boolean; error?: string; text?: string; editedAt?: number }
+      if (!response.ok || result.ok !== true || result.durable === false) {
+        addToast(result.error || "Comment edit was not saved", "error")
         return
       }
       setState((s) => ({
         ...s,
-        posts: s.posts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                comments: p.comments.map((c) =>
-                  c.id === commentId
-                    ? { ...c, text: result.data.text, isEdited: true, editedAt: Date.now() }
-                    : c
-                ),
-              }
-            : p
-        ),
+        posts: s.posts.map((p) => p.id === postId ? {
+          ...p,
+          comments: p.comments.map((c) => c.id === commentId
+            ? { ...c, text: result.text || normalized, isEdited: true, editedAt: Number(result.editedAt) || Date.now() }
+            : c),
+        } : p),
       }))
       addToast("Comment updated", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not edit comment", "error")
     }
-  }, [addToast, domains.posts])
+  }, [addToast])
 
   const deleteComment = useCallback(async (postId: string, commentId: string) => {
     try {
-      const result = await domains.posts.deleteComment(postId, commentId)
-      if (!result.ok) {
-        addToast(result.error, "error")
+      const response = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
+        method: "DELETE", credentials: "include",
+        headers: { Accept: "application/json", ...IdentityService.getAuthHeaders() },
+      })
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; durable?: boolean; error?: string; commentCount?: number }
+      if (!response.ok || result.ok !== true || result.durable === false) {
+        addToast(result.error || "Comment delete was not saved", "error")
         return
       }
       setState((s) => ({
         ...s,
-        posts: s.posts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                comments: p.comments.filter(
-                  (c) => c.id !== commentId && c.replyTo !== commentId
-                ),
-              }
-            : p
-        ),
+        posts: s.posts.map((p) => p.id !== postId ? p : {
+          ...p,
+          // Keep replies from other authors; the deleted parent becomes an orphan root.
+          comments: p.comments.filter((c) => c.id !== commentId),
+          engagement: normalizeEngagementMetrics(p.engagement, {
+            comments: Number.isFinite(result.commentCount) ? Math.max(0, Number(result.commentCount)) : Math.max(0, (Number(p.engagement?.comments ?? p.comments.length) || 0) - 1),
+          }),
+        }),
       }))
       addToast("Comment deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete comment", "error")
     }
-  }, [addToast, domains.posts])
+  }, [addToast])
 
   const addCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
     const em = String(emoji || "").trim().slice(0, 16)
@@ -3783,68 +3827,25 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast("Reaction not visible to others yet — server not durable", "error")
         return
       }
-      // Local domain update for optimistic UI counts when available
-      try {
-        const result = await domains.posts.reactToComment(postId, commentId, em)
-        if (result.ok) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    comments: post.comments.map((c) =>
-                      c.id === commentId
-                        ? {
-                            ...c,
-                            reactions: result.data.reactions,
-                            reactionCounts:
-                              body.counts ??
-                              Object.fromEntries(
-                                Object.entries(result.data.reactions).map(([reaction, users]) => [
-                                  reaction,
-                                  users.length,
-                                ])
-                              ),
-                          }
-                        : c
-                    ),
-                  }
-                : post
-            ),
-          }))
-        } else if (body.counts) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    comments: post.comments.map((c) =>
-                      c.id === commentId ? { ...c, reactionCounts: body.counts } : c
-                    ),
-                  }
-                : post
-            ),
-          }))
-        }
-      } catch {
-        if (body.counts) {
-          setState((s) => ({
-            ...s,
-            posts: s.posts.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    comments: post.comments.map((c) =>
-                      c.id === commentId ? { ...c, reactionCounts: body.counts } : c
-                    ),
-                  }
-                : post
-            ),
-          }))
-        }
-      }
+      // The API response is authoritative. Do not run a second local-domain
+      // toggle after the database write; that could invert or double-count it.
+      setState((s) => ({
+        ...s,
+        posts: s.posts.map((post) => post.id !== postId ? post : {
+          ...post,
+          comments: post.comments.map((c) => {
+            if (c.id !== commentId) return c
+            const viewerReactions = new Set(c.viewerReactions || [])
+            if (body.active) viewerReactions.add(em)
+            else viewerReactions.delete(em)
+            return {
+              ...c,
+              reactionCounts: body.counts || c.reactionCounts || {},
+              viewerReactions: Array.from(viewerReactions),
+            }
+          }),
+        }),
+      }))
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:social-mutation", {
@@ -3858,63 +3859,50 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not react to comment", "error")
     }
-  }, [addToast, domains.posts])
+  }, [addToast])
 
 
   const removeCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
-    setState((s) => ({
-      ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: post.comments.map((c) => {
-                if (c.id === commentId) {
-                  const reactions = { ...c.reactions }
-                  if (reactions[emoji]) {
-                    reactions[emoji] = reactions[emoji].filter((id) => id !== s.profile.displayName)
-                    if (reactions[emoji].length === 0) delete reactions[emoji]
-                  }
-                  return { ...c, reactions }
-                }
-                return c
-              }),
-            }
-          : post
-      ),
-    }))
-  }, [])
+    // Removal is the same durable toggle as addition; never edit a local roster.
+    await addCommentReaction(postId, commentId, emoji)
+  }, [addCommentReaction])
 
   const pinComment = useCallback(async (postId: string, commentId: string) => {
-    // Local preference only — no durable comment-pin API/RPC in this build.
-    setState((s) => ({
-      ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: post.comments.map((c) => (c.id === commentId ? { ...c, isPinned: true } : c)),
-            }
-          : post
-      ),
-    }))
-    addToast("Pinned on this device only — not synced to other accounts yet", "info")
+    try {
+      const response = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
+        body: JSON.stringify({ isPinned: true }),
+      })
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; durable?: boolean; error?: string; isPinned?: boolean }
+      if (!response.ok || result.ok !== true || result.durable === false) {
+        addToast(result.error || "Comment pin was not saved", "error")
+        return
+      }
+      setState((s) => ({ ...s, posts: s.posts.map((post) => post.id !== postId ? post : {
+        ...post, comments: post.comments.map((c) => c.id === commentId ? { ...c, isPinned: Boolean(result.isPinned) } : c),
+      }) }))
+      addToast("Comment pinned", "success")
+    } catch { addToast("Could not pin comment", "error") }
   }, [addToast])
 
   const unpinComment = useCallback(async (postId: string, commentId: string) => {
-    // Local preference only — no durable comment-pin API/RPC in this build.
-    setState((s) => ({
-      ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: post.comments.map((c) => (c.id === commentId ? { ...c, isPinned: false } : c)),
-            }
-          : post
-      ),
-    }))
-    addToast("Unpinned on this device only", "info")
+    try {
+      const response = await fetch(`/api/social/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
+        body: JSON.stringify({ isPinned: false }),
+      })
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; durable?: boolean; error?: string; isPinned?: boolean }
+      if (!response.ok || result.ok !== true || result.durable === false) {
+        addToast(result.error || "Comment unpin was not saved", "error")
+        return
+      }
+      setState((s) => ({ ...s, posts: s.posts.map((post) => post.id !== postId ? post : {
+        ...post, comments: post.comments.map((c) => c.id === commentId ? { ...c, isPinned: Boolean(result.isPinned) } : c),
+      }) }))
+      addToast("Comment unpinned", "success")
+    } catch { addToast("Could not unpin comment", "error") }
   }, [addToast])
 
   const createQuoteRepost = useCallback(async (originalPostId: string, quoteText: string) => {
@@ -4268,10 +4256,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     await followUser(userId)
   }
 
-  const unfollowFromPost = async (userId: string) => {
+  const unfollowFromPost = useCallback(async (userId: string) => {
     // Canonical: toggleFollow via graph — never dual-write following alone
     await followUser(userId)
-  }
+  }, [followUser])
 
   const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     const messagingPrivacyUpdates: Record<string, string> = {}
@@ -4301,13 +4289,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
   const isMatchOrFriend = (userId: string) => state.matches.some((match) => match.userId === userId) || state.friends.includes(userId)
   const canViewProfile = (userId: string) => userId === "current-user" || state.settings.profileVisibility === "everyone" || (state.settings.profileVisibility === "matches-only" && isMatchOrFriend(userId))
-  const canMessageUser = (userId: string) => {
+  const canMessageUser = useCallback((userId: string) => {
     if (userId === "current-user") return false
     const blocked = new Set([...(state.settings?.blockedUsers || []), ...(state.blockedUsers || [])])
     if (blocked.has(userId)) return false
     // whoCanMessage is an inbound privacy setting; the server checks the recipient's saved preference.
     return true
-  }
+  }, [state.settings?.blockedUsers, state.blockedUsers])
   const canViewStory = (ownerId: string) => ownerId === "current-user" || state.settings.storyVisibility === "everyone" || (state.settings.storyVisibility === "matches-only" && isMatchOrFriend(ownerId))
   const canSeeOnlineStatus = (userId: string) => userId === "current-user" || state.settings.onlineStatus === "everyone" || (state.settings.onlineStatus === "matches-only" && isMatchOrFriend(userId))
 
@@ -4505,7 +4493,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error processing action", "error")
     }
-  }, [state.candidates, state.profile, state.likes, state.matches, domains, addToast])
+  }, [state, domains, addToast])
 
   
 
@@ -4650,7 +4638,7 @@ const dismissMatchCelebration = useCallback(() => {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Error adding friend", "error")
     }
-  }, [state.friends, state.friendRequests, state.profile, domains, addToast])
+  }, [state.friends, state.profile, domains, addToast])
 
   const reportUser = useCallback(async (userId: string, reason: string) => {
     try {
@@ -4781,7 +4769,7 @@ const dismissMatchCelebration = useCallback(() => {
       addToast("Error starting conversation", "error")
       return null
     }
-  }, [state.conversations, state.settings.whoCanMessage, domains, addToast, canMessageUser])
+  }, [state.conversations, domains, addToast, canMessageUser])
 
   const acceptMatch = useCallback(async (userId: string) => {
     try {
@@ -5165,7 +5153,7 @@ const dismissMatchCelebration = useCallback(() => {
   }, [domains, state.isOnline, state.profile, state.conversations, addToast])
 
   
-  const applyShareResult = async (result: import("@/lib/share-service").ShareResult) => {
+  const applyShareResult = useCallback(async (result: import("@/lib/share-service").ShareResult) => {
     if (!result.ok) return
     let shareRecord = result.share
     if (result.messages?.length) {
@@ -5187,7 +5175,7 @@ const dismissMatchCelebration = useCallback(() => {
       reposts: result.repost ? [result.repost, ...(current.reposts || [])].slice(0, 100) : current.reposts,
       stories: result.story ? [result.story as any, ...(current.stories || [])] : current.stories,
     }))
-  }
+  }, [sendMessage, addToast])
 
   // Phase 7: flush queued profile updates when online
   useEffect(() => {
@@ -5883,7 +5871,7 @@ const dismissMatchCelebration = useCallback(() => {
         addToast("Failed to send voice note", "error")
       }
     },
-    [state.profile.displayName, state.conversations, addToast]
+    [state.profile.displayName, addToast]
   )
 
   const sendMediaMessage = useCallback(
@@ -6030,7 +6018,7 @@ const dismissMatchCelebration = useCallback(() => {
       analytics.trackEvent("message_scheduled", { conversationId }, state.profile.displayName)
       addToast("Message scheduled on this device only — not server durable yet", "info")
     },
-    [state.profile.displayName, state.conversations, addToast]
+    [state.profile.displayName, addToast]
   )
 
   const sendDisappearingMessage = useCallback(
@@ -6061,7 +6049,7 @@ const dismissMatchCelebration = useCallback(() => {
       analytics.trackEvent("disappearing_message_sent", { conversationId }, state.profile.displayName)
       addToast("Disappearing message is device-local only — not durable messaging", "info")
     },
-    [state.profile.displayName, state.conversations, addToast]
+    [state.profile.displayName, addToast]
   )
 
   const saveDraft = useCallback((conversationId: string, text: string) => {
@@ -7718,7 +7706,7 @@ const dismissMatchCelebration = useCallback(() => {
     const fromState = ((state as { mutedUsers?: string[] }).mutedUsers) || []
     const fromSettings = state.settings?.mutedUsers || []
     return Array.from(new Set([...fromState, ...fromSettings]))
-  }, [state, state.settings?.mutedUsers])
+  }, [state])
 
   const visibleSession = useMemo(
     () =>

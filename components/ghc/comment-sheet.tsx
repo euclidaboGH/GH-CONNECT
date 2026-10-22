@@ -232,9 +232,9 @@ useEffect(() => {
   }
 
   const reactionCount = (c: PostComment, emoji?: string) => {
-    const reactions = c.reactions || {}
-    if (emoji) return Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0
-    return Object.values(reactions).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
+    const counts = c.reactionCounts || {}
+    if (emoji) return Math.max(0, Number(counts[emoji] || 0))
+    return Object.values(counts).reduce((sum, count) => sum + Math.max(0, Number(count || 0)), 0)
   }
 
   const renderComment = (c: PostComment, depth = 0) => {
@@ -339,8 +339,9 @@ useEffect(() => {
             <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-muted-foreground">
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition hover:bg-rose-50 hover:text-rose-600"
+                className={`inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition hover:bg-rose-50 hover:text-rose-600 ${c.viewerReactions?.includes("❤️") ? "bg-rose-50 text-rose-600" : ""}`}
                 onClick={() => void handleLikeComment(c)}
+                aria-pressed={Boolean(c.viewerReactions?.includes("❤️"))}
                 aria-label={heartCount ? `React with heart; ${heartCount} heart reactions` : "React with heart"}
               >
                 <Heart size={14} />
@@ -408,8 +409,9 @@ useEffect(() => {
                   <button
                     key={emoji}
                     type="button"
-                    className="inline-flex min-h-8 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90"
+                    className={`inline-flex min-h-8 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90 ${c.viewerReactions?.includes(emoji) ? "bg-emerald-50 ring-1 ring-emerald-400" : ""}`}
                     onClick={() => void handleLikeComment(c, emoji)}
+                    aria-pressed={Boolean(c.viewerReactions?.includes(emoji))}
                     aria-label={`React ${emoji}${reactionCount(c, emoji) ? `; ${reactionCount(c, emoji)} reactions` : ""}`}
                     title={reactionCount(c, emoji) ? `${reactionCount(c, emoji)} reactions` : `React ${emoji}`}
                   >

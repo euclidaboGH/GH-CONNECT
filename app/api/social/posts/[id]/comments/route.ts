@@ -5,13 +5,14 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { socialDbConfigured, socialRest, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
+import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -63,11 +64,55 @@ export async function GET(
   const chosen = v2.ok ? v2 : await socialRpc("gh_comment_list", { p_post_id: postId })
   const data = chosen.data as { comments?: unknown[] }
   let comments = Array.isArray(data?.comments) ? data.comments : []
+  // Some staged Testnet databases have an older comment-list RPC that can
+  // return an empty payload while rows are present. Recover from the canonical
+  // table using the already-authorized post ID; never return local-only comments
+  // as if they were durable server data.
+  let directReadSucceeded = false
+  if (!chosen.ok || comments.length === 0) {
+    const q = new URLSearchParams({
+      post_id: `eq.${postId}`,
+      deleted_at: "is.null",
+      select: "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at,media,is_edited,edited_at,is_pinned,pinned_at",
+      order: "created_at.desc",
+      limit: String(limit + 1),
+    })
+    const direct = await socialRest<Array<{
+      id?: string; post_id?: string; author_id?: string; author_name?: string;
+      author_photo?: string; text?: string; parent_id?: string | null; created_at?: string; media?: unknown; is_edited?: boolean; edited_at?: string | null; is_pinned?: boolean; pinned_at?: string | null;
+    }>>(`gh_post_comments?${q.toString()}`)
+    if (direct.ok && Array.isArray(direct.data)) {
+      directReadSucceeded = true
+      comments = direct.data.map((row) => ({
+        id: String(row.id || ""), postId: String(row.post_id || postId),
+        authorId: String(row.author_id || ""), authorName: String(row.author_name || "Member"),
+        authorPhoto: String(row.author_photo || ""), text: String(row.text || ""),
+        parentId: row.parent_id ? String(row.parent_id) : null,
+        replyTo: row.parent_id ? String(row.parent_id) : null,
+        mediaAttachments: Array.isArray(row.media) ? row.media : [],
+        isEdited: Boolean(row.is_edited),
+        editedAt: row.edited_at ? new Date(row.edited_at).getTime() : undefined,
+        isPinned: Boolean(row.is_pinned),
+        createdAt: row.created_at ? new Date(row.created_at).getTime() : 0,
+      })).filter((row) => row.id)
+    }
+  }
   const hasMore = comments.length > limit
   if (hasMore) comments = comments.slice(0, limit)
   const last = comments[comments.length - 1] as { id?: unknown; createdAt?: unknown } | undefined
   const nextCursor = hasMore && last ? { before: Number(last.createdAt) || 0, beforeId: String(last.id || "") } : null
-  return NextResponse.json({ ok: true, durable: chosen.ok, comments, nextCursor, stableCursor: v3.ok || v2.ok })
+  const reactionStates = await loadCommentReactionState(
+    comments.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")),
+    auth.userId,
+  )
+  const hydratedComments = comments.map((row) => {
+    if (!row || typeof row !== "object") return row
+    const comment = row as Record<string, unknown>
+    const state = reactionStates.get(String(comment.id || ""))
+    return state ? { ...comment, reactionCounts: state.reactionCounts, viewerReactions: state.viewerReactions } : comment
+  })
+  const rpcReadSucceeded = Boolean(chosen.ok && Array.isArray(data?.comments) && (data as { ok?: boolean })?.ok !== false)
+  return NextResponse.json({ ok: true, durable: rpcReadSucceeded || directReadSucceeded, comments: hydratedComments, nextCursor, stableCursor: Boolean((v3.ok && (v3.data as { ok?: boolean } | null)?.ok !== false) || (v2.ok && (v2.data as { ok?: boolean } | null)?.ok !== false)) }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(
@@ -124,14 +169,23 @@ export async function POST(
   void body.userId
   const actorProfile = await getServerProfile(auth.userId).catch(() => null)
   // Display identity is server-derived too; client may not impersonate another profile snapshot.
+  const requestedCommentId = String(body.id || "").trim()
+  if (requestedCommentId && (requestedCommentId.length > 160 || !/^[a-zA-Z0-9_-]+$/.test(requestedCommentId))) {
+    return NextResponse.json({ ok: false, error: "INVALID_COMMENT_ID" }, { status: 400 })
+  }
+  const parentRaw = body.parentId ?? body.replyTo ?? null
+  const parentId = parentRaw == null || parentRaw === "" ? null : String(parentRaw).trim()
+  if (parentId && (parentId.length > 160 || /[\u0000-\u001f\u007f]/.test(parentId))) {
+    return NextResponse.json({ ok: false, error: "INVALID_PARENT_ID" }, { status: 400 })
+  }
   const comment = {
-    id: String(body.id || "").trim() || genId(),
+    id: requestedCommentId || genId(),
     postId,
     authorId: auth.userId,
     authorName: String(actorProfile?.displayName || auth.username || "Member").slice(0, 120),
     authorPhoto: String(actorProfile?.photos?.[0] || "").slice(0, 2000),
     text: text || (media.length ? (media[0] as { type?: string }).type === "video" ? "🎥 Video" : "📷 Photo" : ""),
-    parentId: body.parentId || body.replyTo || null,
+    parentId,
     createdAt: Date.now(),
     media,
   }
@@ -142,9 +196,11 @@ export async function POST(
   }
 
   const result = await socialRpc("gh_comment_create", { p_row: comment })
-  const data = result.data as { ok?: boolean; error?: string }
+  const data = result.data as { ok?: boolean; error?: string; id?: string; idempotent?: boolean; commentCount?: number }
   if (!result.ok || data?.ok === false) {
-    const status = data?.error === "POST_NOT_FOUND" || data?.error === "PARENT_NOT_FOUND" ? 404 : 503
+    const status = data?.error === "POST_NOT_FOUND" || data?.error === "PARENT_NOT_FOUND" ? 404
+      : data?.error === "COMMENT_ID_CONFLICT" ? 409
+        : data?.error === "INVALID" ? 400 : 503
     return NextResponse.json(
       { ok: false, error: data?.error || result.error || "COMMENT_FAILED" },
       { status }
@@ -204,5 +260,5 @@ export async function POST(
       }))
     } catch { /* mentions are non-critical */ }
   })()
-  return NextResponse.json({ ok: true, durable: true, comment })
+  return NextResponse.json({ ok: true, durable: true, idempotent: Boolean(data.idempotent), commentCount: Number.isFinite(data.commentCount) ? Math.max(0, Number(data.commentCount)) : undefined, comment: { ...comment, id: String(data.id || comment.id) } }, { headers: { "Cache-Control": "no-store" } })
 }

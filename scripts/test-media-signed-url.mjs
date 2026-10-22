@@ -5,7 +5,7 @@ assert.match(route, /resolveAuthenticatedUser/)
 assert.match(route, /checkRateLimit\(`media-sign:/)
 assert.match(route, /gh_media_authorize_viewer/)
 assert.match(route, /p_media_id: id, p_viewer_id: auth\.userId/)
-assert.match(route, /asset\.storagePath\.startsWith\(`\$\{asset\.ownerId\}\/`\)/)
+assert.match(route, /typeof storagePath !== "string" \|\| !storagePath/); assert.match(route, /storagePath\.startsWith\(`\$\{ownerId\}\/`\)/); assert.match(route, /storagePath\.split\("\/"\)\.some/);
 assert.match(route, /expiresIn: 300/)
 assert.match(route, /Cache-Control.*private, no-store/)
 assert.match(route, /MEDIA_NOT_FOUND/)

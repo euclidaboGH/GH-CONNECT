@@ -8,6 +8,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
 import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
+import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -38,6 +39,11 @@ type FeedCommentRow = {
   text?: string
   parent_id?: string | null
   created_at?: string
+  media?: unknown
+  is_edited?: boolean
+  edited_at?: string | null
+  is_pinned?: boolean
+  pinned_at?: string | null
 }
 
 type FeedReactionRow = { post_id?: string; user_id?: string; reaction?: string }
@@ -56,7 +62,7 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
   const q = new URLSearchParams()
   q.set("post_id", postIdsFilter(ids))
   q.set("deleted_at", "is.null")
-  q.set("select", "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at")
+  q.set("select", "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at,media,is_edited,edited_at,is_pinned,pinned_at")
   q.set("order", "created_at.desc")
   q.set("limit", String(Math.min(ids.length * 12, 600)))
   const rq = new URLSearchParams()
@@ -78,6 +84,9 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
       commentsByPost.set(postId, bucket)
     }
   }
+  const commentReactionStates = commentsResult.ok && Array.isArray(commentsResult.data)
+    ? await loadCommentReactionState(commentsResult.data, viewerId)
+    : new Map()
   const countsByPost = new Map<string, Record<string, number>>()
   const mineByPost = new Map<string, string[]>()
   if (reactionsResult.ok && Array.isArray(reactionsResult.data)) {
@@ -99,20 +108,18 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
   // Curation (upvote/downvote) — independent of emoji reactions.
   type FeedCurationRow = { post_id?: string; user_id?: string; choice?: string }
   const curationByPost = new Map<string, { up: number; down: number; mine?: string }>()
-  const needCuration = rows.some((p) => {
-    const id = String(p.id || "")
-    const hasCounts =
-      p.upvoteCount != null || p.upvote_count != null || p.downvoteCount != null || p.downvote_count != null
-    const hasMine = p.viewerCurationChoice != null || p.viewer_curation_choice != null
-    return id && (!hasCounts || !hasMine)
-  })
-  if (needCuration && ids.length) {
+  // Always reconcile curation from the durable vote table. Older feed RPCs can
+  // return stale zero-valued counters and omit the viewer's choice; treating
+  // those fields as present made votes appear to disappear after a refresh.
+  let curationReadSucceeded = false
+  if (ids.length) {
     const cq = new URLSearchParams()
     cq.set("post_id", postIdsFilter(ids))
     cq.set("select", "post_id,user_id,choice")
-    cq.set("limit", "2000")
+    cq.set("limit", "10000")
     const curationResult = await socialRest<FeedCurationRow[]>(`gh_post_curations?${cq.toString()}`)
     if (curationResult.ok && Array.isArray(curationResult.data)) {
+      curationReadSucceeded = true
       for (const row of curationResult.data) {
         const postId = String(row.post_id || "")
         const choice = String(row.choice || "").trim().toLowerCase()
@@ -138,21 +145,33 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
       text: String(comment.text || ""),
       createdAt: comment.created_at ? new Date(comment.created_at).getTime() : Date.now(),
       replyTo: comment.parent_id ? String(comment.parent_id) : undefined,
+      mediaAttachments: Array.isArray(comment.media) ? comment.media : [],
+      isEdited: Boolean(comment.is_edited),
+      editedAt: comment.edited_at ? new Date(comment.edited_at).getTime() : undefined,
+      isPinned: Boolean(comment.is_pinned),
+      ...(commentReactionStates.has(String(comment.id || "")) ? {
+        reactionCounts: commentReactionStates.get(String(comment.id || ""))!.reactionCounts,
+        viewerReactions: commentReactionStates.get(String(comment.id || ""))!.viewerReactions,
+      } : {}),
     })).filter((comment) => comment.id)
     const reactionCounts = countsByPost.get(id) || {}
     const likes = Number(post.likes ?? post.likeCount ?? post.like_count ?? 0) || 0
-    const commentCount = Number(post.commentCount ?? post.comment_count ?? comments.length) || 0
+    const commentCount = Math.max(
+      Number(post.commentCount ?? post.comment_count ?? 0) || 0,
+      comments.length,
+    )
     const shares = Number(post.shares ?? post.shareCount ?? post.share_count ?? 0) || 0
     const curation = curationByPost.get(id)
-    const upvoteCount =
-      Number(post.upvoteCount ?? post.upvote_count ?? (curation ? curation.up : 0)) || 0
-    const downvoteCount =
-      Number(post.downvoteCount ?? post.downvote_count ?? (curation ? curation.down : 0)) || 0
-    const viewerCurationChoice =
-      (post.viewerCurationChoice as string | undefined) ||
-      (post.viewer_curation_choice as string | undefined) ||
-      curation?.mine ||
-      undefined
+    const upvoteCount = curationReadSucceeded
+      ? (curation?.up || 0)
+      : (Number(post.upvoteCount ?? post.upvote_count ?? 0) || 0)
+    const downvoteCount = curationReadSucceeded
+      ? (curation?.down || 0)
+      : (Number(post.downvoteCount ?? post.downvote_count ?? 0) || 0)
+    const rpcChoice = String(post.viewerCurationChoice ?? post.viewer_curation_choice ?? "").toLowerCase()
+    const viewerCurationChoice = curationReadSucceeded
+      ? curation?.mine
+      : (rpcChoice === "upvote" || rpcChoice === "downvote" ? rpcChoice : undefined)
     return {
       ...post,
       comments,

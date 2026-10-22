@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,9 +29,12 @@ export async function POST(
 
   const { id } = await ctx.params
   const postId = String(id || "").trim()
-  if (!postId) {
+  if (!postId || postId.length > 128) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Share post", { extra: { postId } })
@@ -54,7 +58,7 @@ export async function POST(
     const status =
       code === "NOT_FOUND" || code === "DELETED"
         ? 404
-        : code === "BLOCKED"
+        : code === "BLOCKED" || code === "FORBIDDEN"
           ? 403
           : 503
     return NextResponse.json({ ok: false, error: code }, { status })

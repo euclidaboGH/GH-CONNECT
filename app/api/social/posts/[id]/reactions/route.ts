@@ -9,6 +9,7 @@ import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/r
 import { normalizeReactionType } from "@/lib/social/reactions"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,9 +28,12 @@ export async function POST(
   }
   const { id } = await ctx.params
   const postId = String(id || "").trim()
-  if (!postId) {
+  if (!postId || postId.length > 128) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
 
   let body: { reaction?: string } = {}
   try {
@@ -66,7 +70,9 @@ export async function POST(
   }
   if (!result.ok || data?.ok === false) {
     const status =
-      data?.error === "NOT_FOUND" ? 404 : data?.error === "INVALID_REACTION" ? 400 : 503
+      data?.error === "NOT_FOUND" ? 404
+        : data?.error === "FORBIDDEN" ? 403
+          : data?.error === "INVALID_REACTION" ? 400 : 503
     return NextResponse.json(
       { ok: false, error: data?.error || result.error || "REACTION_FAILED" },
       { status }

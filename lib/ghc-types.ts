@@ -291,6 +291,7 @@ export interface PostComment {
   // Reactions with counts
   reactions?: Record<string, string[]> // emoji -> user ids
   reactionCounts?: Record<string, number> // emoji -> count
+  viewerReactions?: string[] // emojis selected by the current viewer
   // Editing & history
   isPinned?: boolean
   isEdited?: boolean

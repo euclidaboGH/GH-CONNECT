@@ -4,11 +4,11 @@ inventory_status=BLOCKED_DUPLICATE_VERSION_PREFIXES
 duplicate_version_prefixes=202610210001,202610210002
 project_version=0.69.3
 manifest_format_version=1
-canonical_migrations=112
+canonical_migrations=113
 classification_required=79
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=30
+classification_review_required=31
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -119,6 +119,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=10617 path=supabase/migrations/202610210003_pi_payment_intent_atomic_transitions.sql
 [REVIEW_REQUIRED] size=3555 path=supabase/migrations/20261021_gh_social_notifications_types_extend.sql
 [REVIEW_REQUIRED] size=7885 path=supabase/migrations/202610220001_gh_social_canonical_visibility.sql
+[REVIEW_REQUIRED] size=29652 path=supabase/migrations/202610220002_gh_social_engagement_write_integrity.sql
 [REVIEW_REQUIRED] size=9096 path=supabase/migrations/20261022_gh_content_rewards.sql
 [REVIEW_REQUIRED] size=8419 path=supabase/migrations/20261023_gh_profile_content_library.sql
 [REVIEW_REQUIRED] size=2854 path=supabase/migrations/202610240003_gh_post_reaction_roster_visibility_guard.sql

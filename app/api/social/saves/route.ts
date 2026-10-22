@@ -6,6 +6,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,9 +22,12 @@ export async function POST(request: Request) {
   }
   const body = await request.json().catch(() => ({}))
   const postId = String(body.postId || "").trim()
-  if (!postId) {
+  if (!postId || postId.length > 128) {
     return NextResponse.json({ ok: false, error: "POST_REQUIRED" }, { status: 400 })
   }
+  const canView = await canViewSocialPost(auth.userId, postId)
+  if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Save post")
     return NextResponse.json(nd.body, { status: nd.status })
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
   if (!result.ok || data?.ok === false) {
     return NextResponse.json(
       { ok: false, error: data?.error || result.error || "SAVE_FAILED" },
-      { status: data?.error === "NOT_FOUND" ? 404 : 503 }
+      { status: data?.error === "NOT_FOUND" ? 404 : data?.error === "FORBIDDEN" ? 403 : 503 }
     )
   }
   return NextResponse.json({

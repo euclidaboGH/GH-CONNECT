@@ -54,6 +54,7 @@ const reviewRequired = new Set([
   '202610210002_pi_payment_intent_idempotency_lookup.sql',
   '202610210003_pi_payment_intent_atomic_transitions.sql',
   '202610220001_gh_social_canonical_visibility.sql',
+  '202610220002_gh_social_engagement_write_integrity.sql',
 ])
 
 const notes = {
@@ -90,6 +91,7 @@ const notes = {
   '202610210002_pi_payment_intent_idempotency_lookup.sql': 'New payment-intent idempotency RPC; review service-role ACLs and unique-index behavior, apply only after target history reconciliation, and test duplicate/concurrent creation on disposable PostgreSQL before deploying the calling code.',
   '202610210003_pi_payment_intent_atomic_transitions.sql': 'Financially critical row-lock RPCs for provider binding and payment status transitions. Review transition matrix, RLS/grants, unique provider/txid conflicts and concurrent approve/complete/recovery tests on disposable PostgreSQL and Testnet before deploying callers.',
   '202610220001_gh_social_canonical_visibility.sql': 'Security-sensitive additive feed/comment RPCs; validate schema, grants, mutual-follow and community membership policy, stable cursors, and cross-account denial on disposable PostgreSQL and Testnet before applying.',
+  '202610220002_gh_social_engagement_write_integrity.sql': 'Security-sensitive durable vote/reaction/comment/save/share write-path repair. Review all RPC signatures and table columns, run disposable PostgreSQL concurrency/idempotency tests, reconcile counters, and validate two-account visibility/ownership on Testnet before applying.',
 }
 
 function classify(file) {

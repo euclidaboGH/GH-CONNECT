@@ -42,6 +42,32 @@ import ProfileStorySection from "./profile-story-section"
 
 type PhotoTarget = "photo" | "cover" | null
 
+function mapProfilePostComments(raw: unknown): Post["comments"] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {}
+    return {
+      id: String(row.id || ""),
+      authorId: String(row.authorId || row.author_id || ""),
+      authorName: String(row.authorName || row.author_name || "Member"),
+      authorPhoto: String(row.authorPhoto || row.author_photo || ""),
+      text: String(row.text || ""),
+      createdAt: Number(row.createdAt ?? row.created_at) || 0,
+      replyTo: row.replyTo || row.parentId || row.parent_id ? String(row.replyTo || row.parentId || row.parent_id) : undefined,
+      replies: [],
+      reactions: {},
+      reactionCounts: row.reactionCounts && typeof row.reactionCounts === "object"
+        ? Object.fromEntries(Object.entries(row.reactionCounts as Record<string, unknown>).map(([emoji, count]) => [emoji, Math.max(0, Number(count) || 0)]))
+        : {},
+      viewerReactions: Array.isArray(row.viewerReactions) ? row.viewerReactions.map(String) : [],
+      isEdited: Boolean(row.isEdited ?? row.is_edited),
+      editedAt: Number(row.editedAt ?? row.edited_at) || undefined,
+      isPinned: Boolean(row.isPinned ?? row.is_pinned),
+      mediaAttachments: Array.isArray(row.mediaAttachments) ? row.mediaAttachments as Post["comments"][number]["mediaAttachments"] : [],
+    }
+  }).filter((comment) => comment.id) as Post["comments"]
+}
+
 export function ProfileScreen({
   onSettings,
   onOpenWallet,
@@ -109,7 +135,8 @@ export function ProfileScreen({
             authorName: String(row.authorName || "Member"), authorPhoto: String(row.authorPhoto || ""),
             content: String(row.content || ""), images: Array.isArray(row.images) ? row.images.map(String) : [],
             video: row.video == null ? null : String(row.video), pdf: row.pdf == null ? null : String(row.pdf),
-            pdfName: row.pdfName == null ? null : String(row.pdfName), likes, comments: [],
+            pdfName: row.pdfName == null ? null : String(row.pdfName), likes,
+            comments: mapProfilePostComments(row.comments),
             createdAt: Number(row.createdAt) || 0, isEdited: Boolean(row.isEdited),
             shares, visibility: (String(row.visibility || "public") as Post["visibility"]),
             communityId: row.communityId == null ? undefined : String(row.communityId),
@@ -118,6 +145,10 @@ export function ProfileScreen({
             upvoteCount: Math.max(0, Number(row.upvoteCount) || 0),
             downvoteCount: Math.max(0, Number(row.downvoteCount) || 0),
             viewerCurationChoice: row.viewerCurationChoice === "upvote" || row.viewerCurationChoice === "downvote" ? row.viewerCurationChoice : undefined,
+            reactionCounts: row.reactionCounts && typeof row.reactionCounts === "object"
+              ? Object.fromEntries(Object.entries(row.reactionCounts as Record<string, unknown>).map(([reaction, count]) => [reaction, Math.max(0, Number(count) || 0)]))
+              : {},
+            viewerReactions: Array.isArray(row.viewerReactions) ? row.viewerReactions.map(String) : [],
             engagement: { likes, comments: commentCount, shares, views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
           }
         }).filter((post) => post.id && post.authorId === meId)
@@ -158,13 +189,17 @@ export function ProfileScreen({
           authorPhoto: String(row.authorPhoto || ""), content: String(row.content || ""),
           images: Array.isArray(row.images) ? row.images.map(String) : [], video: row.video == null ? null : String(row.video),
           pdf: row.pdf == null ? null : String(row.pdf), pdfName: row.pdfName == null ? null : String(row.pdfName),
-          likes, comments: [], createdAt: Number(row.createdAt) || 0, isEdited: Boolean(row.isEdited), shares,
+          likes, comments: mapProfilePostComments(row.comments), createdAt: Number(row.createdAt) || 0, isEdited: Boolean(row.isEdited), shares,
           visibility: String(row.visibility || "public") as Post["visibility"],
           communityId: row.communityId == null ? undefined : String(row.communityId),
           communityName: row.communityName == null ? undefined : String(row.communityName),
           contentType: String(row.contentType || "standard") as Post["contentType"],
           upvoteCount: Math.max(0, Number(row.upvoteCount) || 0), downvoteCount: Math.max(0, Number(row.downvoteCount) || 0),
           viewerCurationChoice: row.viewerCurationChoice === "upvote" || row.viewerCurationChoice === "downvote" ? row.viewerCurationChoice : undefined,
+          reactionCounts: row.reactionCounts && typeof row.reactionCounts === "object"
+            ? Object.fromEntries(Object.entries(row.reactionCounts as Record<string, unknown>).map(([reaction, count]) => [reaction, Math.max(0, Number(count) || 0)]))
+            : {},
+          viewerReactions: Array.isArray(row.viewerReactions) ? row.viewerReactions.map(String) : [],
           engagement: { likes, comments: commentCount, shares, views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
         }
       }).filter((post) => post.id && post.authorId === meId)

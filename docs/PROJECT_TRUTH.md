@@ -1,7 +1,7 @@
 # GH-CONNECT project truth and release authority
 
 **Current source version:** `0.69.3` (confirm `package.json` and `lib/app-release.ts`).
-**Latest supplied deployment evidence:** Vercel build for branch `testnet`, commit `a04ebff`, 2026-10-22.
+**Latest supplied CI evidence:** GitHub Actions for branch `testnet`, commit `540b980`, failed static checks on React Hooks dependencies; the supplied Vercel build for `aeb1c8a` also failed TypeScript validation. This repair candidate has not been exported from a fresh remote checkout and has no confirmed green build.
 
 This document describes the checked-in source and the latest evidence supplied to the maintainer. It does not prove that a remote environment matches the source. The migration inventory does not prove that any migration is applied to a remote database; production is not certified / not approved. When this document and live CI differ, capture the latest run and update this document.
 
@@ -19,11 +19,12 @@ This document describes the checked-in source and the latest evidence supplied t
 |---|---|---|
 | Vercel source checkout | Branch `testnet`, commit `a04ebff` | Confirm fixes are committed to this exact branch/commit. |
 | Dependency installation | `npm ci --legacy-peer-deps` completed in supplied Vercel log; npm reported 19 vulnerabilities and package deprecation/install-script warnings | Review `npm audit` output and install-script provenance; do not use `npm audit fix --force` blindly. |
-| JSX safety | Passed: 727 files scanned | Re-run in current CI. |
+| JSX safety | Passed: 730 files scanned | Re-run in current CI. |
+| Social write-path static regressions | Passed: 27/27 focused assertions; 10/10 refresh persistence; 13/13 comment server-first; 39 social authz checks passed | Source/static only; no live Supabase write test or SQL execution has been performed. |
 | Next.js compilation | Passed: optimized compilation completed | Compilation alone is not a successful build. |
-| TypeScript / production build | **FAILED**: `contexts/ghc-context.tsx:2450`, `domains.identity` is used before `domains` declaration | Move the existing `getDomainState` and `domains` initialization above callbacks that reference it in the exact branch source; preserve factory options and dependency arrays; rerun full CI. |
+| TypeScript / production build | **FAILED in supplied evidence**: Vercel `aeb1c8a` stopped at `app/api/media/[id]/signed-url/route.ts:111` (`asset.storagePath` possibly undefined); GitHub static CI for `540b980` also failed on React Hooks lint. The focused repair candidate has not yet completed a full typecheck/build. |
 | Full lint and typecheck | Not passed by the supplied run; build stops during type checking | Run the project's configured checks after the fix. |
-| Migration inventory | **CHECK BLOCKED**: 111 SQL files; classifications 79 REQUIRED, 1 REQUIRES_APPROVAL, 2 PROPOSAL, 29 REVIEW_REQUIRED. Duplicate version prefixes `202610210001` and `202610210002` block normal inventory validation | Resolve duplicate migration identifiers through reviewed, migration-history-safe remediation; do not rename applied migrations blindly. |
+| Migration inventory | **CHECK BLOCKED**: 113 SQL files; classifications 79 REQUIRED, 1 REQUIRES_APPROVAL, 2 PROPOSAL, 31 REVIEW_REQUIRED. Duplicate version prefixes `202610210001` and `202610210002` block normal inventory validation | Resolve duplicate migration identifiers through reviewed, migration-history-safe remediation; do not rename applied migrations blindly. The new `202610220002_gh_social_engagement_write_integrity.sql` is REVIEW_REQUIRED and must not be applied before target history and dependencies are reconciled. |
 | Supabase migrations and live database | Not verified by this build log | Reconcile remote migration history and use disposable PostgreSQL/Testnet gates before applying changes. |
 | Pi Browser, payment, payout and multi-user runtime | Not verified by this build log | Perform dedicated Testnet and provider verification with evidence. |
 | Production/Mainnet release | **Not approved** | Require all release gates and explicit operator sign-off. |

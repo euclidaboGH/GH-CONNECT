@@ -126,7 +126,7 @@ export async function socialAddComment(
     id?: string
     mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>
   }
-): Promise<{ ok: boolean; durable: boolean; comment?: Partial<PostComment>; error?: string }> {
+): Promise<{ ok: boolean; durable: boolean; comment?: Partial<PostComment>; commentCount?: number; idempotent?: boolean; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(postId)}/comments`, {
     method: "POST",
     body: JSON.stringify(input),

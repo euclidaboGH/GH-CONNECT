@@ -101,7 +101,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
         "Content-Type": "application/json",
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "return=minimal",
+        Prefer: "return=representation",
       },
       body: JSON.stringify({
         content,
@@ -116,5 +116,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!patchRes.ok) {
     return NextResponse.json({ ok: false, error: "EDIT_FAILED" }, { status: 503 })
   }
-  return NextResponse.json({ ok: true, durable: true, content, ...(hasImages ? { images } : {}), ...(hasVideo ? { video } : {}) })
+  const updatedRows = await patchRes.json().catch(() => []) as Array<{ id?: string; author_id?: string }>
+  if (!Array.isArray(updatedRows) || !updatedRows.some((row) => row.id === postId && row.author_id === auth.userId)) {
+    return NextResponse.json({ ok: false, error: "EDIT_NOT_CONFIRMED" }, { status: 503 })
+  }
+  return NextResponse.json({ ok: true, durable: true, content, ...(hasImages ? { images } : {}), ...(hasVideo ? { video } : {}) }, { headers: { "Cache-Control": "no-store" } })
 }

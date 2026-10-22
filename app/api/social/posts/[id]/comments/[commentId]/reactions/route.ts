@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost, commentBelongsToPost } from "@/lib/server/social/post-visibility"
 
@@ -61,7 +61,7 @@ export async function POST(
   }
   if (!result.ok || data.ok === false) {
     const code = String(data.error || result.error || "REACTION_FAILED")
-    const status = code === "COMMENT_NOT_FOUND" ? 404 : 503
+    const status = code === "COMMENT_NOT_FOUND" || code === "POST_NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 503
     return NextResponse.json({ ok: false, error: code, durable: false }, { status })
   }
   return NextResponse.json({
@@ -120,9 +120,21 @@ export async function GET(
         if (emoji) out[emoji] = (out[emoji] || 0) + 1
         return out
       }, {}) : {})
+  const viewerQuery = new URLSearchParams({
+    comment_id: `eq.${cId}`,
+    post_id: `eq.${postId}`,
+    user_id: `eq.${auth.userId}`,
+    select: "emoji",
+    limit: "100",
+  })
+  const viewerResult = await socialRest<Array<{ emoji?: string }>>(`gh_comment_reactions?${viewerQuery.toString()}`)
+  const viewerReactions = viewerResult.ok && Array.isArray(viewerResult.data)
+    ? viewerResult.data.map((row) => String(row.emoji || "").trim().slice(0, 16)).filter(Boolean)
+    : []
   return NextResponse.json({
     ok: true,
     durable: true,
     counts,
-  })
+    viewerReactions,
+  }, { headers: { "Cache-Control": "no-store" } })
 }
