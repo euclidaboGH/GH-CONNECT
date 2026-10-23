@@ -545,8 +545,33 @@ export async function socialSetCuration(
 }> {
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
+  type CurationResult = {
+    ok?: boolean
+    durable?: boolean
+    choice?: string
+    upvoteCount?: number | null
+    downvoteCount?: number | null
+    error?: string
+    reason?: string
+    reward?: { credited?: boolean; amount?: number; reason?: string; status?: string }
+    redistribute?: {
+      credited?: boolean
+      amount?: number
+      reason?: string
+      availableBalanceAfter?: number
+      requiredBalance?: number
+      contentRewardRecorded?: boolean
+    }
+    funding?: {
+      enabled?: boolean
+      balanceFunded?: boolean
+      contributionRecorded?: boolean
+      contentRewardRecorded?: boolean
+      reason?: string | null
+    }
+  }
   try {
-    const result = await json(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
+    const result = await json<CurationResult>(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
       method: "POST",
       body: JSON.stringify({ choice, rewardPercentage }),
     })
@@ -562,10 +587,11 @@ export async function socialSetCuration(
             downvoteCount: result.downvoteCount,
           },
         })
+        const c = result.choice
         broadcastPostEngagement({
           postId: id,
           kind: "curation",
-          choice: result.choice === "upvote" || result.choice === "downvote" || result.choice === "neutral" ? result.choice : undefined,
+          choice: c === "upvote" || c === "downvote" || c === "neutral" ? c : undefined,
           upvoteCount: typeof result.upvoteCount === "number" ? result.upvoteCount : undefined,
           downvoteCount: typeof result.downvoteCount === "number" ? result.downvoteCount : undefined,
         })
@@ -573,7 +599,18 @@ export async function socialSetCuration(
         /* fail-soft */
       }
     }
-    return result
+    return {
+      ok: Boolean(result?.ok),
+      durable: result?.durable,
+      choice: result?.choice,
+      upvoteCount: result?.upvoteCount,
+      downvoteCount: result?.downvoteCount,
+      error: result?.error,
+      reason: result?.reason,
+      reward: result?.reward,
+      redistribute: result?.redistribute,
+      funding: result?.funding,
+    }
   } catch {
     // Phase 1: do not invent success or vote totals offline
     return { ok: false, durable: false, error: "NETWORK", reason: "NETWORK" }
