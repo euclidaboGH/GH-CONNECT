@@ -57,6 +57,8 @@ import { AddGhcSheet } from "./add-ghc-sheet"
 import { GhcUtilityPanel } from "@/components/ghc/ghc-utility-panel"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdServer } from "@/lib/domains/greenhaven-id"
+import { socialEconomyStatus } from "@/lib/social/client"
+import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 
 const formatGhc = formatGhcShared
 
@@ -186,6 +188,7 @@ function navigateSettingsSection(section: string) {
 
 export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHCShell()
+  const { snapshot: authoritativeWallet, refresh: refreshWalletAuthority } = useWalletRead()
   /* wallet-refresh listener attached below */
 
   const [tab, setTab] = useState<Tab>("activity")
@@ -204,6 +207,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [p2pError, setP2pError] = useState<string | null>(null)
   const [p2pSuccess, setP2pSuccess] = useState<string | null>(null)
   const [refreshFailed, setRefreshFailed] = useState(false)
+  const [socialEconomy, setSocialEconomy] = useState<Awaited<ReturnType<typeof socialEconomyStatus>> | null>(null)
   const [lastSynced, setLastSynced] = useState<number | null>(null)
   const [offline, setOffline] = useState(
     typeof navigator !== "undefined" ? !navigator.onLine : false
@@ -294,7 +298,25 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [economyPolicyRetry])
 
   useEffect(() => {
-    const onRefresh = () => setTick((x) => x + 1)
+    let cancelled = false
+    const refreshSocialEconomy = async () => {
+      const status = await socialEconomyStatus()
+      if (!cancelled && status.ok) setSocialEconomy(status)
+    }
+    const refreshAuthoritativeWallet = async () => {
+      void refreshWalletAuthority()
+      void refreshSocialEconomy()
+      try {
+        const eco = getBoundDomainServices()?.economy
+        await eco?.refresh?.()
+      } catch {
+        // The wallet remains fail-closed; the existing cached snapshot is retained.
+      } finally {
+        if (!cancelled) setTick((x) => x + 1)
+      }
+    }
+    void refreshAuthoritativeWallet()
+    const onRefresh = () => { void refreshAuthoritativeWallet() }
     const onOnline = () => setWalletOnline(true)
     const onOffline = () => setWalletOnline(false)
     const onFocus = () => { try { window.dispatchEvent(new CustomEvent("ghc:wallet-refresh")) } catch { /* */ } }
@@ -303,6 +325,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     window.addEventListener("ghc:wallet-focus", onFocus)
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     return () => {
+      cancelled = true
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
       window.removeEventListener("ghc:wallet-focus", onFocus)
@@ -439,9 +462,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [tick])
 
   const wallet = data?.wallet
-  const balance = wallet?.balance ?? 0
-  const pending = wallet?.pending ?? 0
-  const locked = wallet?.locked ?? 0
+  const balance = authoritativeWallet.availableGhc ?? wallet?.balance ?? 0
+  const pending = authoritativeWallet.pendingGhc ?? wallet?.pending ?? 0
+  const locked = authoritativeWallet.lockedGhc ?? wallet?.locked ?? 0
+  const escrowLocked = authoritativeWallet.escrowLocked ?? 0
   const earned = wallet?.lifetimeEarned ?? (wallet as { earned?: number })?.earned ?? 0
   const spent = wallet?.lifetimeSpent ?? (wallet as { spent?: number })?.spent ?? 0
   // Keep empty fallbacks referentially stable. Fresh [] values here invalidate
@@ -1011,6 +1035,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   const lowBalance = balance === 0 && displayPending === 0
   const showAuthorityBanner = offline || refreshFailed
+  const socialFunding = socialEconomy?.curation
+  const claimableToday = Boolean(socialEconomy?.claim && (socialEconomy.claim as { claimable?: boolean }).claimable)
 
   const SOURCE_LABEL: Record<PendingHold["source"], string> = {
     achievement: "Achievement reward",
@@ -1030,6 +1056,33 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="gh-wallet-shell gh-world-wallet flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GHC wallet">
+      {lowBalance ? (
+        <div className="mx-3 mt-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" role="status">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Your GHC wallet is currently empty</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Social actions do not mint GHC. Use an available daily claim or another funded GreenHaven source first; curation can then move existing GHC to creators.
+              </p>
+              {claimableToday ? <p className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim is available.</p> : null}
+            </div>
+            <span className="shrink-0 rounded-full border border-border bg-background px-2 py-1 text-[10px] font-bold uppercase tracking-wide">Ledger-backed</span>
+          </div>
+        </div>
+      ) : null}
+      {socialFunding ? (
+        <div className="mx-3 mt-2 rounded-2xl border border-border bg-card p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold">Social economy</p>
+              <p className="text-[11px] text-muted-foreground">Curation contribution: {formatGhc(Number(socialFunding.suggestedContribution || 0))} from your existing balance.</p>
+            </div>
+            <span className={`text-[11px] font-semibold ${socialFunding.canFundSuggestedContribution ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
+              {socialFunding.canFundSuggestedContribution ? "Ready" : "Needs balance"}
+            </span>
+          </div>
+        </div>
+      ) : null}
       <WalletHeader
         onBack={onBack}
         onRefresh={() => void refresh()}
@@ -1074,6 +1127,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}
           />
+          <div className="mt-3 grid grid-cols-3 gap-2" aria-label="GHC wallet state">
+            {[
+              ["Available", balance, "Spendable"],
+              ["Pending", displayPending, "Awaiting validation"],
+              ["Locked", locked, escrowLocked > 0 ? `Escrow ${formatGhc(escrowLocked)}` : "Reserved"],
+            ].map(([label, amount, note]) => (
+              <div key={String(label)} className="rounded-2xl border border-border/70 bg-card/80 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+                <p className="mt-1 text-sm font-bold tabular-nums text-foreground">{formatGhc(Number(amount))}</p>
+                <p className="mt-0.5 text-[9px] text-muted-foreground">{note}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ZONE: ACTIONS — balance → primary actions (not withdraw first) */}

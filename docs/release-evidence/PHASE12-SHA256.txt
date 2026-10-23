@@ -1,0 +1,2 @@
+4ae74f7ab36a18c613642a5e84acd171187e4e8b2d75ffceab7925d66f6bdf99  supabase/migrations/20261022120001_gh_marketplace_saved_listings.sql
+cb3986da5d61a1fe7a350e8c7afe1310365768587b65da0f83ec0437e1e8a425  supabase/GREENHAVEN-CANONICAL-SUPABASE-INSTALL.sql

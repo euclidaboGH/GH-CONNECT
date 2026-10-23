@@ -425,6 +425,13 @@ export function createEconomyDomain(deps: {
   }
 
   return {
+    /** Refresh authoritative server ledger/snapshot into the economy cache. */
+    async refresh(): Promise<void> {
+      if (typeof repo.hydrate === "function") {
+        await repo.hydrate(userId)
+      }
+    },
+
     /** Wallet view — never mix with Pi or other assets */
     getWallet(): GhcWalletSnapshot {
       return wallet()

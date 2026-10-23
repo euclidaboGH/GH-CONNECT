@@ -54,13 +54,13 @@ export function MessagingPremiumSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center" role="dialog">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="messaging-tools-title">
       <button type="button" className="absolute inset-0 bg-black/45" aria-label="Close" onClick={onClose} />
       <div className="relative z-[81] max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-border bg-card p-4 shadow-2xl sm:rounded-3xl">
         <div className="mb-2 flex items-center gap-2">
           <Sparkles className="text-emerald-600" size={18} />
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-foreground">Message tools</h2>
+            <h2 id="messaging-tools-title" className="text-sm font-bold text-foreground">Message tools</h2>
             <p className="text-[11px] text-muted-foreground">{MESSAGING_FREE_GUARANTEE}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted" aria-label="Close">

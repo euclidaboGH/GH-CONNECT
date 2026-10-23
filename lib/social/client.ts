@@ -13,21 +13,42 @@ function headers(): HeadersInit {
   }
 }
 
+const inFlightGets = new Map<string, Promise<unknown>>()
+
 async function json<T>(
   path: string,
   init?: RequestInit
 ): Promise<T & { ok?: boolean; error?: string; durable?: boolean }> {
-  const res = await fetch(path, {
-    credentials: "include",
-    cache: "no-store",
-    ...init,
-    headers: { ...headers(), ...(init?.headers || {}) },
-  })
-  const data = (await res.json().catch(() => ({}))) as T & {
-    ok?: boolean
-    error?: string
-    durable?: boolean
+  const method = String(init?.method || "GET").toUpperCase()
+  const run = async () => {
+    const res = await fetch(path, {
+      credentials: "include",
+      cache: "no-store",
+      ...init,
+      headers: { ...headers(), ...(init?.headers || {}) },
+    })
+    const data = (await res.json().catch(() => ({}))) as T & {
+      ok?: boolean
+      error?: string
+      durable?: boolean
+    }
+    return { res, data }
   }
+  // Coalesce identical concurrent reads across Feed/Profile/Search consumers.
+  // No response cache is retained: the server remains authoritative on every later read.
+  let pair: { res: Response; data: T & { ok?: boolean; error?: string; durable?: boolean } }
+  if (method === "GET" && !init?.signal) {
+    const key = path
+    let pending = inFlightGets.get(key) as Promise<typeof pair> | undefined
+    if (!pending) {
+      pending = run().finally(() => inFlightGets.delete(key))
+      inFlightGets.set(key, pending)
+    }
+    pair = await pending
+  } else {
+    pair = await run()
+  }
+  const { res, data } = pair
   if (res.status === 401) {
     return { ...data, ok: false, error: data.error || "AUTH_REQUIRED", durable: false }
   }
@@ -49,13 +70,14 @@ export async function socialFetchFeed(opts?: {
   limit?: number
   before?: number
   beforeId?: string
+  signal?: AbortSignal
 }): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; stableCursor?: boolean; error?: string }> {
   const q = new URLSearchParams()
   if (opts?.limit) q.set("limit", String(opts.limit))
   if (opts?.before) q.set("before", String(opts.before))
   if (opts?.beforeId) q.set("beforeId", opts.beforeId)
   const path = `/api/social/feed${q.toString() ? `?${q}` : ""}`
-  const data = await json<{ posts?: Partial<Post>[] }>(path)
+  const data = await json<{ posts?: Partial<Post>[] }>(path, opts?.signal ? { signal: opts.signal } : undefined)
   return {
     ok: data.ok !== false,
     durable: Boolean(data.durable),
@@ -64,6 +86,10 @@ export async function socialFetchFeed(opts?: {
     stableCursor: Boolean((data as any).stableCursor),
     error: data.error,
   }
+}
+
+export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { contentReward?: unknown }; error?: string }> {
+  return json(`/api/social/posts/${encodeURIComponent(String(postId || "").trim())}`)
 }
 
 export async function socialCreatePost(
@@ -333,7 +359,7 @@ export async function socialSharePost(
  */
 export async function socialRecordAttention(
   postId: string,
-  eventType: "view" | "qualified_view" | "complete" | "save" | "share",
+  eventType: "view" | "qualified_view" | "complete" | "save" | "share" | "progress_25" | "progress_50" | "progress_75",
   opts?: { dwellMs?: number }
 ): Promise<void> {
   const id = String(postId || "").trim()
@@ -360,6 +386,7 @@ export async function socialFetchPostInsights(postId: string): Promise<{
   error?: string
   reason?: string
   reward?: { credited?: boolean; amount?: number; reason?: string; status?: string }
+  redistribute?: { attempted?: boolean; ok?: boolean; credited?: boolean; amount?: number; reason?: string }
 }> {
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
@@ -511,6 +538,8 @@ export async function socialSetCuration(
   error?: string
   reason?: string
   reward?: { credited?: boolean; amount?: number; reason?: string; status?: string }
+  redistribute?: { credited?: boolean; amount?: number; reason?: string; availableBalanceAfter?: number; requiredBalance?: number; contentRewardRecorded?: boolean }
+  funding?: { enabled?: boolean; balanceFunded?: boolean; contributionRecorded?: boolean; contentRewardRecorded?: boolean; reason?: string | null }
 }> {
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
@@ -522,6 +551,24 @@ export async function socialSetCuration(
   } catch {
     // Phase 1: do not invent success or vote totals offline
     return { ok: false, durable: false, error: "NETWORK", reason: "NETWORK" }
+  }
+}
+
+
+/** Server-authoritative social economy state: wallet + curation funding capacity + claim rules. */
+export async function socialEconomyStatus(): Promise<{
+  ok: boolean
+  wallet?: { balance?: number; pending?: number; locked?: number; lifetimeEarned?: number; lifetimeSpent?: number }
+  curation?: { enabled?: boolean; suggestedContribution?: number; spendableBalance?: number; canFundSuggestedContribution?: boolean; model?: string }
+  claim?: Record<string, unknown>
+  rules?: Record<string, unknown>
+  server?: Record<string, unknown>
+  error?: string
+}> {
+  try {
+    return await json("/api/social/economy/status", { method: "GET" })
+  } catch {
+    return { ok: false, error: "NETWORK" }
   }
 }
 
@@ -569,6 +616,7 @@ export async function socialFetchContentReward(postId: string): Promise<{
   totalEarned?: number | null
   authorReward?: number | null
   curationReward?: number | null
+  curationFunded?: number | null
   upvoteCount?: number
   downvoteCount?: number
   error?: string
@@ -740,6 +788,22 @@ export async function socialCreateMarketplaceListing(input: {
 }
 
 
+/** Durable marketplace saves — server-authoritative and session-bound. */
+export async function socialFetchMarketplaceSaved(limit = 50): Promise<{
+  ok: boolean
+  durable: boolean
+  saved: Array<Record<string, unknown>>
+  error?: string
+}> {
+  const data = await json<{ saved?: unknown[] }>(`/api/marketplace/saves?limit=${Math.min(100, Math.max(1, Math.floor(limit)))}`)
+  return { ok: data.ok !== false, durable: Boolean(data.durable), saved: Array.isArray(data.saved) ? data.saved as Array<Record<string, unknown>> : [], error: data.error }
+}
+
+export async function socialToggleMarketplaceSaved(listingId: string): Promise<{ ok: boolean; durable?: boolean; saved?: boolean; listingId?: string; error?: string }> {
+  return json('/api/marketplace/saves', { method: 'POST', body: JSON.stringify({ listingId }) })
+}
+
+
 /** Server-backed people for multi-user discovery (canonical gh_user_id). */
 export async function socialDiscoverPeople(limit = 30): Promise<{
   ok: boolean
@@ -840,4 +904,16 @@ export async function socialListStoryViewers(
     users: Array.isArray(data.users) ? (data.users as Array<Record<string, unknown>>) : [],
     error: data.error,
   }
+}
+
+export async function socialGetProfile(userId: string): Promise<{
+  ok: boolean
+  durable: boolean
+  profile?: Record<string, unknown>
+  relationship?: { isFollowing?: boolean; blocked?: boolean; followersCount?: number; followingCount?: number }
+  reputation?: { level?: number; levelName?: string; totalPoints?: number; eventCount?: number; progressRatio?: number } | null
+  privacy?: { activityVisible?: boolean; interestsVisible?: boolean; communitiesVisible?: boolean; locationVisible?: boolean }
+  error?: string
+}> {
+  return json(`/api/social/profile/${encodeURIComponent(String(userId || "").trim())}`)
 }

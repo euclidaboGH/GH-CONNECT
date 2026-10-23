@@ -24,6 +24,7 @@ import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
 import { notifyRewardClaimed } from "@/lib/notifications"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
+import { postDailyClaim } from "@/lib/rewards/claim-daily-client"
 
 function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
@@ -125,25 +126,20 @@ export function RewardsJourneyHero({
     if (claimingDaily) return
     setClaimingDaily(true)
     try {
-      const res = await fetch("/api/economy/rewards/daily", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json", ...(IdentityService.getAuthHeaders?.() || {}) },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) {
-        if (res.status === 409 || data.code === "ALREADY_CLAIMED_TODAY" || data.alreadyClaimed === true || data.idempotent === true) {
+      const data = await postDailyClaim()
+      if (!data.ok) {
+        if (data.alreadyClaimed) {
           try { markDailyClaimedForUi(userId) } catch { /* */ }
           ghc.addToast?.("Today's reward has already been claimed.", "info")
         } else {
-          ghc.addToast?.(data.error || data.message || "Claim failed — your reward remains available to retry", "error")
+          ghc.addToast?.(data.error || "Claim failed — your reward remains available to retry", "error")
         }
         void refreshServerStatus()
         setTick((t) => t + 1)
         return
       }
-      const amt = data.userAmount ?? data.amount ?? data.ghc ?? 0
-      const day = data.cycleDay ?? data.day ?? ""
+      const amt = data.serverAmount ?? 0
+      const day = data.cycleDay ?? ""
       // Server ledger → client wallet (no optimistic credit)
       try {
         const { syncWalletAfterServerClaim } = await import(

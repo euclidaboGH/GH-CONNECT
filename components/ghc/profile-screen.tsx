@@ -39,6 +39,8 @@ import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 import ProfileStorySection from "./profile-story-section"
+import { UnifiedActivityCenter } from "./unified-activity-center"
+import { ProfileIdentityOverview } from "./profile-identity-overview"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -107,6 +109,7 @@ export function ProfileScreen({
   )
   const posts = timelinePosts ?? fallbackPosts
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [authoritativeFollowCounts, setAuthoritativeFollowCounts] = useState<{ followers: number; following: number } | null>(null)
 
   useEffect(() => {
     if (!meId) return
@@ -676,8 +679,8 @@ export function ProfileScreen({
               {[
                 { label: "Posts" as const, value: posts.length },
                 { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
-                { label: "Following" as const, value: Array.isArray(ghc.following) ? ghc.following.length : 0 },
-                { label: "Followers" as const, value: Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers!.length : 0 },
+                { label: "Following" as const, value: authoritativeFollowCounts?.following ?? (Array.isArray(ghc.following) ? ghc.following.length : 0) },
+                { label: "Followers" as const, value: authoritativeFollowCounts?.followers ?? (Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers!.length : 0) },
               ].map((s) => (
                 <button key={s.label} type="button" onClick={() => setSocialList(s.label)} className="flex min-w-0 flex-col items-center rounded-xl py-2.5 text-center transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${s.label.toLowerCase()} list`}>
                   <span className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</span>
@@ -685,6 +688,7 @@ export function ProfileScreen({
                 </button>
               ))}
             </div>
+            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
                 type="button"
@@ -827,6 +831,7 @@ export function ProfileScreen({
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8">
             <ProfileEcosystemHub userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
+            <div className="mt-4"><UnifiedActivityCenter limit={40} /></div>
             <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Your communities">
               <h3 className="mb-2 text-sm font-bold">Your communities</h3>
               <ProfileMyCommunities conversations={messaging?.conversations} viewerId={meId} />

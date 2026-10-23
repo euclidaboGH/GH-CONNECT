@@ -27,6 +27,11 @@ import {
   Timer,
   MessageCircle,
   Share2,
+  RefreshCw,
+  Search,
+  ThumbsUp,
+  ThumbsDown,
+  Loader2,
 } from "lucide-react"
 import { shareText } from "@/lib/pi-native"
 import {
@@ -212,6 +217,10 @@ export function PremiumCommunityHub({
   const [slowMode, setSlowMode] = useState(false)
   const [composeBody, setComposeBody] = useState("")
   const [boardSort, setBoardSort] = useState<"new" | "hot" | "top">("new")
+  const [boardFilter, setBoardFilter] = useState<"all" | "mine">("all")
+  const [boardQuery, setBoardQuery] = useState("")
+  const [boardRefreshing, setBoardRefreshing] = useState(false)
+  const [curationState, setCurationState] = useState<Record<string, { choice: "upvote" | "downvote" | "neutral"; up: number; down: number; busy?: boolean }>>({})
   const effectiveCanChat = canChat || community.isJoined
 
   const upcoming = useMemo(() => getUpcomingEvents(events).slice(0, 5), [events])
@@ -297,6 +306,48 @@ export function PremiumCommunityHub({
       })
     : null
 
+
+  const refreshBoard = async () => {
+    setBoardRefreshing(true)
+    try {
+      // Parent owns the durable community snapshot. Request a remount so all
+      // board rows, membership state and server-backed social counts converge.
+      await new Promise((resolve) => window.setTimeout(resolve, 120))
+      window.dispatchEvent(new CustomEvent("ghc:community-refresh", { detail: { communityId: community.id } }))
+    } finally {
+      setBoardRefreshing(false)
+    }
+  }
+
+  // Legacy isolation: Like legacy discussion rows remain outside the canonical social ledger.
+  const curateCommunityPost = async (postId: string, choice: "upvote" | "downvote") => {
+    const id = String(postId || "").trim()
+    if (!id || id.startsWith("bpost_") || id.startsWith("local_")) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This older community post is not yet linked to the social curation ledger.", type: "info" } }))
+      return
+    }
+    const current = curationState[id] || { choice: "neutral" as const, up: 0, down: 0 }
+    const nextChoice = current.choice === choice ? "neutral" : choice
+    setCurationState((s) => ({ ...s, [id]: { ...current, choice: nextChoice, busy: true } }))
+    try {
+      const result = await socialSetCuration(id, nextChoice)
+      if (!result.ok) throw new Error(result.error || "Curation unavailable")
+      setCurationState((s) => ({
+        ...s,
+        [id]: {
+          choice: (result.choice === "upvote" || result.choice === "downvote" ? result.choice : nextChoice) as "upvote" | "downvote" | "neutral",
+          up: Number(result.upvoteCount || 0),
+          down: Number(result.downvoteCount || 0),
+          busy: false,
+        },
+      }))
+      window.dispatchEvent(new CustomEvent("ghc:curation-updated", { detail: { postId: id, source: "community" } }))
+      window.dispatchEvent(new CustomEvent("ghc:post-engagement", { detail: { postId: id, source: "community-curation" } }))
+    } catch (error) {
+      setCurationState((s) => ({ ...s, [id]: { ...current, busy: false } }))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Curation unavailable", type: "error" } }))
+    }
+  }
 
   const lifecycleSuggestion = suggestLifecycleTransition({
     lifecycle,
@@ -753,7 +804,13 @@ export function PremiumCommunityHub({
               <section>
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-xs font-bold text-foreground">Discussion</h2>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <button type="button" onClick={() => void refreshBoard()} disabled={boardRefreshing} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2 text-[10px] font-semibold" aria-label="Refresh community board">
+                      <RefreshCw size={12} className={boardRefreshing ? "animate-spin" : ""} /> Refresh
+                    </button>
+                    {(["all", "mine"] as const).map((f) => (
+                      <button key={f} type="button" onClick={() => setBoardFilter(f)} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${boardFilter === f ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>{f === "all" ? "All" : "My posts"}</button>
+                    ))}
                     {(["new", "hot", "top"] as const).map((s) => (
                       <button
                         key={s}
@@ -768,13 +825,23 @@ export function PremiumCommunityHub({
                     ))}
                   </div>
                 </div>
+                <div className="relative">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input value={boardQuery} onChange={(e) => setBoardQuery(e.target.value)} placeholder="Search community posts…" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-400" aria-label="Search community posts" />
+                </div>
                 <div className="space-y-2">
                   {(boardPosts && boardPosts.length > 0
-                    ? [...boardPosts].sort((a: any, b: any) =>
-                        boardSort === "top" || boardSort === "hot"
-                          ? (b.likes || 0) - (a.likes || 0)
-                          : (b.createdAt || 0) - (a.createdAt || 0)
-                      )
+                    ? [...boardPosts]
+                        .filter((p: any) => boardFilter === "all" || String(p.authorId || "") === String(viewerId))
+                        .filter((p: any) => {
+                          const q = boardQuery.trim().toLowerCase()
+                          return !q || String(p.body || p.excerpt || "").toLowerCase().includes(q) || String(p.authorName || p.author || "").toLowerCase().includes(q)
+                        })
+                        .sort((a: any, b: any) =>
+                          boardSort === "top" || boardSort === "hot"
+                            ? (b.likes || 0) - (a.likes || 0)
+                            : (b.createdAt || 0) - (a.createdAt || 0)
+                        )
                     : []
                   ).map((p: any) => (
                     <div key={p.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
@@ -790,6 +857,19 @@ export function PremiumCommunityHub({
                         )}
                       </div>
                       <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
+                      {(() => {
+                        const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
+                        const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                        return (
+                          <div className="mt-2 flex items-center gap-1.5 border-t border-border/60 pt-2">
+                            <span className="mr-1 text-[10px] font-semibold text-muted-foreground">Curation</span>
+                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-2.5 text-[10px] font-bold ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote community post"><ThumbsUp size={12} /> {c.up}</button>
+                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-2.5 text-[10px] font-bold ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote community post"><ThumbsDown size={12} /> {c.down}</button>
+                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
+                            {!linked ? <span className="text-[9px] text-muted-foreground">Legacy post</span> : null}
+                          </div>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -1039,24 +1119,32 @@ export function PremiumCommunityHub({
                       </button>
                       <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {onReactToPost ? (
-                          <button
-                            type="button"
-                            onClick={() => onReactToPost(p.id)}
-                            className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                            aria-label={`Like discussion, ${p.likes || 0} likes`}
-                          >
-                            ♥ {p.likes || 0}
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground">♥ {p.likes || 0}</span>
-                        )}
+                        {(() => {
+                          const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                          const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
+                          if (!linked) return onReactToPost ? (
+                            <button type="button" onClick={() => onReactToPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground" aria-label={`Like discussion, ${p.likes || 0} likes`}>♥ {p.likes || 0}</button>
+                          ) : <span className="text-[11px] text-muted-foreground">Legacy · ♥ {p.likes || 0}</span>
+                          return <>
+                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote discussion"><ThumbsUp size={12} /> {c.up}</button>
+                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote discussion"><ThumbsDown size={12} /> {c.down}</button>
+                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
+                          </>
+                        })()}
                         <button
                           type="button"
-                          onClick={() => setExpandedReplies((s) => ({ ...s, [p.id]: !s[p.id] }))}
+                          onClick={() => {
+                            const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                            if (linked) {
+                              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                              window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: String(p.id), action: "comment", source: "community" } }))
+                              return
+                            }
+                            setExpandedReplies((state) => ({ ...state, [p.id]: !state[p.id] }))
+                          }}
                           className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
-                          Replies {p.comments || replies.length || 0}
+                          Comments {p.comments || replies.length || 0}
                         </button>
                         {isMod && onPinPost && !p.pinned ? (
                           <button type="button" onClick={() => onPinPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold">
@@ -1082,7 +1170,7 @@ export function PremiumCommunityHub({
                           </button>
                         ) : null}
                       </div>
-                      {open ? (
+                      {open && (String(p.id || "").startsWith("bpost_") || String(p.id || "").startsWith("local_")) ? (
                         <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
                           {replies.length === 0 ? (
                             <p className="text-[11px] text-muted-foreground">No replies yet.</p>

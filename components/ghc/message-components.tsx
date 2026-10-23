@@ -639,6 +639,7 @@ function MessageBubbleBase({
             className="fixed inset-0 z-[70] flex items-end bg-black/40 sm:items-center sm:justify-center"
             role="dialog"
             aria-modal="true"
+            aria-labelledby="message-actions-title"
             onClick={() => setMenuOpen(false)}
           >
             <div

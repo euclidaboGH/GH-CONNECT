@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server"
 import { verifyPiAccessToken } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId } from "@/lib/server/security/control-plane"
 import { createHash } from "node:crypto"
 import {
   findOrCreateFromVerifiedPi,
@@ -35,8 +35,10 @@ export async function POST(request: Request) {
     const forwardedParts = (request.headers.get("x-forwarded-for") || "").split(",").map((part) => part.trim()).filter(Boolean)
     const forwarded = forwardedParts.length ? forwardedParts[forwardedParts.length - 1] : ""
     const clientIp = request.headers.get("x-real-ip")?.trim() || forwarded || "unknown"
-    const rate = checkRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000)
+    const correlationId = requestCorrelationId(request)
+    const rate = await checkDurableRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000)
     if (!rate.ok) {
+      void appendSecurityEvent({ eventType: "auth.pi.rate_limited", outcome: "blocked", reasonCode: "RATE_LIMITED", correlationId })
       return NextResponse.json(
         { ok: false, error: "RATE_LIMITED", retryAfterSec: rate.retryAfterSec },
         { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rate.retryAfterSec) } }
@@ -77,6 +79,7 @@ export async function POST(request: Request) {
 
     const piUser = await verifyPiAccessToken(accessToken)
     if (!piUser?.uid) {
+      void appendSecurityEvent({ eventType: "auth.pi.rejected", outcome: "blocked", reasonCode: "INVALID_PI_TOKEN", correlationId })
       return NextResponse.json(
         {
           ok: false,
@@ -206,6 +209,7 @@ export async function POST(request: Request) {
       buildSessionCookieHeader(issued.rawToken)
     )
 
+    void appendSecurityEvent({ eventType: "auth.pi.success", outcome: "allowed", actorUserId: record.ghUserId, correlationId })
     return res
   } catch (err) {
     console.error(

@@ -322,6 +322,8 @@ export function CommunitiesScreen() {
   const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
   const [hubKey, setHubKey] = useState<number>(0)
+  const [platformSnapshots, setPlatformSnapshots] = useState<Record<string, any>>({})
+  const [platformLoading, setPlatformLoading] = useState(false)
   const [joinPickerRow, setJoinPickerRow] = useState<CommunityRow | null>(null)
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
@@ -433,6 +435,37 @@ export function CommunitiesScreen() {
     window.addEventListener("ghc:open-community", onOpen as EventListener)
     return () => window.removeEventListener("ghc:open-community", onOpen as EventListener)
   }, [])
+
+
+  useEffect(() => {
+    if (!selectedCommunityId) return
+    let cancelled = false
+    setPlatformLoading(true)
+    void fetch(`/api/communities/${encodeURIComponent(selectedCommunityId)}/platform`, { credentials: "include", cache: "no-store" })
+      .then(async (r) => ({ ok: r.ok, payload: await r.json().catch(() => ({})) }))
+      .then(({ ok, payload }) => {
+        if (cancelled) return
+        if (ok && payload?.durable === true && payload?.community) {
+          setPlatformSnapshots((prev) => ({ ...prev, [selectedCommunityId]: payload.community }))
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setPlatformLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedCommunityId, hubKey])
+  useEffect(() => {
+    const onRefresh = (e: Event) => {
+      const id = String((e as CustomEvent).detail?.communityId || "").trim()
+      if (id && id !== selectedCommunityId) return
+      setHubKey((k) => k + 1)
+      setDirectoryLoading(true)
+      // The directory loader is intentionally mounted once; this event only
+      // forces the selected hub to re-read its durable parent snapshot.
+      window.setTimeout(() => setDirectoryLoading(false), 150)
+    }
+    window.addEventListener("ghc:community-refresh", onRefresh as EventListener)
+    return () => window.removeEventListener("ghc:community-refresh", onRefresh as EventListener)
+  }, [selectedCommunityId])
   const [localBoard, setLocalBoard] = useState<
     Record<string, NonNullable<CommunityRow["boardPosts"]>>
   >(() => {
@@ -542,8 +575,27 @@ export function CommunitiesScreen() {
   }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, sortBy])
 
   const selected = selectedCommunityId
-    ? communityGroups.find((c) => c.id === selectedCommunityId) ||
-      (createdSnapshot && createdSnapshot.id === selectedCommunityId ? createdSnapshot : null)
+    ? (() => {
+        const base = communityGroups.find((c) => c.id === selectedCommunityId) ||
+          (createdSnapshot && createdSnapshot.id === selectedCommunityId ? createdSnapshot : null)
+        const snapshot = platformSnapshots[selectedCommunityId]
+        if (!base || !snapshot) return base
+        return {
+          ...base,
+          groupName: snapshot.name || base.groupName,
+          participantName: snapshot.name || base.participantName,
+          description: snapshot.description ?? base.description,
+          privacy: snapshot.privacy ?? base.privacy,
+          category: snapshot.category ?? base.category,
+          members: Array.isArray(snapshot.members) ? snapshot.members : base.members,
+          createdBy: snapshot.createdBy || base.createdBy,
+          groupRoles: snapshot.role ? { ...(base.groupRoles || {}), [IdentityService.getCurrentUserId() || "current-user"]: snapshot.role } : base.groupRoles,
+          pendingJoinRequests: Array.isArray(snapshot.pendingJoinRequests) ? snapshot.pendingJoinRequests : base.pendingJoinRequests,
+          announcements: Array.isArray(snapshot.announcements) ? snapshot.announcements : base.announcements,
+          events: Array.isArray(snapshot.events) ? snapshot.events : base.events,
+          resources: Array.isArray(snapshot.resources) ? snapshot.resources : (base as any).resources,
+        } as CommunityRow
+      })()
     : null
 
   /** Open join-reason picker; membership only after authoritative join succeeds */

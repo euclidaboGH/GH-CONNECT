@@ -36,11 +36,11 @@ Static/automated green ≠ Testnet verified ≠ production ready.
 
 ## 1. Migrations (Testnet only)
 
-Canonical on-disk count: **115** SQL files under `supabase/migrations/`. The canonical source uses unique 14-digit migration versions and has no duplicate-version blocker. Runtime installation is still required before Testnet consideration.
+Canonical on-disk count: **116** SQL files under `supabase/migrations/`. The canonical source uses unique 14-digit migration versions and has no duplicate-version blocker. Runtime installation is still required before Testnet consideration.
 
 **Do not apply every file without reading classification** — see `docs/MIGRATION_CHECKLIST.md` and `docs/MIGRATION_GAP_REPORT.md`.
 
-Current file classifications: **81 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **31 REVIEW_REQUIRED**. These counts are review metadata only and do not authorize bulk application.
+Current file classifications: **82 REQUIRED** · **1 REQUIRES_APPROVAL** · **2 PROPOSAL** · **31 REVIEW_REQUIRED**. These counts are review metadata only and do not authorize bulk application.
 Later groups include balance-lock (20261009–12), GHPV (20261013–20), canonical visibility (202610220001), and social engagement write-integrity hardening (202610220002). The new social write migration is review-required; it must be tested on disposable PostgreSQL and Testnet only after duplicate migration-version history is reconciled.
 
 | Class | Action |

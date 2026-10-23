@@ -59,142 +59,59 @@ async function hydrateFeedEngagement(posts: unknown[], viewerId: string): Promis
   const ids = Array.from(new Set(rows.map((p) => String(p.id || "").trim()).filter(Boolean))).slice(0, 50)
   if (!ids.length) return posts
 
-  const q = new URLSearchParams()
-  q.set("post_id", postIdsFilter(ids))
-  q.set("deleted_at", "is.null")
-  q.set("select", "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at,media,is_edited,edited_at,is_pinned,pinned_at")
-  q.set("order", "created_at.desc")
-  q.set("limit", String(Math.min(ids.length * 12, 600)))
-  const rq = new URLSearchParams()
-  rq.set("post_id", postIdsFilter(ids))
-  rq.set("select", "post_id,user_id,reaction")
-  rq.set("limit", "2000")
-
-  const [commentsResult, reactionsResult] = await Promise.all([
-    socialRest<FeedCommentRow[]>(`gh_post_comments?${q.toString()}`),
-    socialRest<FeedReactionRow[]>(`gh_post_reactions?${rq.toString()}`),
-  ])
-  const commentsByPost = new Map<string, FeedCommentRow[]>()
-  if (commentsResult.ok && Array.isArray(commentsResult.data)) {
-    for (const comment of commentsResult.data) {
-      const postId = String(comment.post_id || "")
-      if (!postId || !ids.includes(postId)) continue
-      const bucket = commentsByPost.get(postId) || []
-      if (bucket.length < 3) bucket.push(comment)
-      commentsByPost.set(postId, bucket)
+  // Phase 37: one service-role RPC replaces the previous multi-query fan-out
+  // (comments + comment reactions + post reactions + curations). This keeps the
+  // feed payload identical while materially reducing database round trips.
+  const batch = await socialRpc("gh_post_feed_engagement_batch", {
+    p_post_ids: ids,
+    p_viewer_id: viewerId,
+  })
+  if (batch.ok && Array.isArray(batch.data)) {
+    const byPost = new Map<string, Record<string, unknown>>()
+    for (const row of batch.data as Array<Record<string, unknown>>) {
+      const id = String(row.postId || "").trim()
+      if (id) byPost.set(id, row)
     }
-  }
-  const commentReactionStates = commentsResult.ok && Array.isArray(commentsResult.data)
-    ? await loadCommentReactionState(commentsResult.data, viewerId)
-    : new Map()
-  const countsByPost = new Map<string, Record<string, number>>()
-  const mineByPost = new Map<string, string[]>()
-  if (reactionsResult.ok && Array.isArray(reactionsResult.data)) {
-    for (const row of reactionsResult.data) {
-      const postId = String(row.post_id || "")
-      const reaction = String(row.reaction || "").trim().toLowerCase()
-      if (!postId || !reaction || !ids.includes(postId)) continue
-      const counts = countsByPost.get(postId) || {}
-      counts[reaction] = (counts[reaction] || 0) + 1
-      countsByPost.set(postId, counts)
-      if (String(row.user_id || "") === viewerId) {
-        const mine = mineByPost.get(postId) || []
-        if (!mine.includes(reaction)) mine.push(reaction)
-        mineByPost.set(postId, mine)
-      }
-    }
-  }
-
-  // Curation (upvote/downvote) — independent of emoji reactions.
-  type FeedCurationRow = { post_id?: string; user_id?: string; choice?: string }
-  const curationByPost = new Map<string, { up: number; down: number; mine?: string }>()
-  // Always reconcile curation from the durable vote table. Older feed RPCs can
-  // return stale zero-valued counters and omit the viewer's choice; treating
-  // those fields as present made votes appear to disappear after a refresh.
-  let curationReadSucceeded = false
-  if (ids.length) {
-    const cq = new URLSearchParams()
-    cq.set("post_id", postIdsFilter(ids))
-    cq.set("select", "post_id,user_id,choice")
-    cq.set("limit", "10000")
-    const curationResult = await socialRest<FeedCurationRow[]>(`gh_post_curations?${cq.toString()}`)
-    if (curationResult.ok && Array.isArray(curationResult.data)) {
-      curationReadSucceeded = true
-      for (const row of curationResult.data) {
-        const postId = String(row.post_id || "")
-        const choice = String(row.choice || "").trim().toLowerCase()
-        if (!postId || !ids.includes(postId)) continue
-        const bucket = curationByPost.get(postId) || { up: 0, down: 0 }
-        if (choice === "upvote") bucket.up += 1
-        else if (choice === "downvote") bucket.down += 1
-        if (String(row.user_id || "") === viewerId && (choice === "upvote" || choice === "downvote")) {
-          bucket.mine = choice
-        }
-        curationByPost.set(postId, bucket)
-      }
-    }
-  }
-
-  return rows.map((post) => {
-    const id = String(post.id || "")
-    const comments = (commentsByPost.get(id) || []).slice().reverse().map((comment) => ({
-      id: String(comment.id || ""),
-      authorId: String(comment.author_id || ""),
-      authorName: String(comment.author_name || "Member"),
-      authorPhoto: String(comment.author_photo || ""),
-      text: String(comment.text || ""),
-      createdAt: comment.created_at ? new Date(comment.created_at).getTime() : Date.now(),
-      replyTo: comment.parent_id ? String(comment.parent_id) : undefined,
-      mediaAttachments: Array.isArray(comment.media) ? comment.media : [],
-      isEdited: Boolean(comment.is_edited),
-      editedAt: comment.edited_at ? new Date(comment.edited_at).getTime() : undefined,
-      isPinned: Boolean(comment.is_pinned),
-      ...(commentReactionStates.has(String(comment.id || "")) ? {
-        reactionCounts: commentReactionStates.get(String(comment.id || ""))!.reactionCounts,
-        viewerReactions: commentReactionStates.get(String(comment.id || ""))!.viewerReactions,
-      } : {}),
-    })).filter((comment) => comment.id)
-    const reactionCounts = countsByPost.get(id) || {}
-    const likes = Number(post.likes ?? post.likeCount ?? post.like_count ?? 0) || 0
-    const commentCount = Math.max(
-      Number(post.commentCount ?? post.comment_count ?? 0) || 0,
-      comments.length,
-    )
-    const shares = Number(post.shares ?? post.shareCount ?? post.share_count ?? 0) || 0
-    const curation = curationByPost.get(id)
-    const upvoteCount = curationReadSucceeded
-      ? (curation?.up || 0)
-      : (Number(post.upvoteCount ?? post.upvote_count ?? 0) || 0)
-    const downvoteCount = curationReadSucceeded
-      ? (curation?.down || 0)
-      : (Number(post.downvoteCount ?? post.downvote_count ?? 0) || 0)
-    const rpcChoice = String(post.viewerCurationChoice ?? post.viewer_curation_choice ?? "").toLowerCase()
-    const viewerCurationChoice = curationReadSucceeded
-      ? curation?.mine
-      : (rpcChoice === "upvote" || rpcChoice === "downvote" ? rpcChoice : undefined)
-    return {
-      ...post,
-      comments,
-      commentCount,
-      reactionCounts,
-      viewerReactions: mineByPost.get(id) || [],
-      upvoteCount,
-      downvoteCount,
-      viewerCurationChoice:
-        viewerCurationChoice === "upvote" || viewerCurationChoice === "downvote"
+    return rows.map((post) => {
+      const id = String(post.id || "")
+      const extra = byPost.get(id)
+      if (!extra) return post
+      const comments = Array.isArray(extra.comments) ? extra.comments : []
+      const reactionCounts = extra.reactionCounts && typeof extra.reactionCounts === "object"
+        ? extra.reactionCounts as Record<string, number>
+        : {}
+      const viewerReactions = Array.isArray(extra.viewerReactions) ? extra.viewerReactions : []
+      const likes = Number(post.likes ?? post.likeCount ?? post.like_count ?? reactionCounts.like ?? 0) || 0
+      const commentCount = Math.max(Number(post.commentCount ?? post.comment_count ?? 0) || 0, comments.length)
+      const shares = Number(post.shares ?? post.shareCount ?? post.share_count ?? 0) || 0
+      const viewerCurationChoice = String(extra.viewerCurationChoice || "").toLowerCase()
+      return {
+        ...post,
+        comments,
+        commentCount,
+        reactionCounts,
+        viewerReactions,
+        upvoteCount: Number(extra.upvoteCount ?? 0) || 0,
+        downvoteCount: Number(extra.downvoteCount ?? 0) || 0,
+        viewerCurationChoice: viewerCurationChoice === "upvote" || viewerCurationChoice === "downvote"
           ? viewerCurationChoice
           : undefined,
-      engagement: {
-        ...((post.engagement && typeof post.engagement === "object") ? post.engagement as Record<string, unknown> : {}),
-        likes,
-        comments: commentCount,
-        shares,
-        views: Number(post.viewCount ?? post.view_count ?? 0) || 0,
-      },
-    }
-  })
+        engagement: {
+          ...((post.engagement && typeof post.engagement === "object") ? post.engagement as Record<string, unknown> : {}),
+          likes,
+          comments: commentCount,
+          shares,
+          views: Number(post.viewCount ?? post.view_count ?? 0) || 0,
+        },
+      }
+    })
+  }
+
+  throw new Error("FEED_ENGAGEMENT_BATCH_RPC_UNAVAILABLE")
 }
 
+/* Legacy per-table engagement hydration was retired in Phase 39. The canonical
+ * batch RPC is now the only production engagement authority. */
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
@@ -224,33 +141,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "INVALID_FEED_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
-  // V3 applies canonical visibility in the database before returning post bodies,
-  // including mutual-follow and active-community membership rules. Keep stable
-  // cursor fallbacks for staged rollout, with a second server-side visibility gate below.
-  let result = await socialRpc("gh_post_list_feed_v3", {
+  // Final canonical feed contract. Historical v2/v1 RPCs are no longer
+  // runtime fallbacks; schema drift must fail closed and be fixed at release.
+  const result = await socialRpc("gh_post_list_feed_v3", {
     p_viewer_id: auth.userId,
     p_limit: limit,
     p_before_ms: hasCursor ? beforeMs : null,
     p_before_id: hasCursor ? beforeIdRaw : null,
   })
-  let stableCursor = result.ok
-  if (!result.ok) {
-    result = await socialRpc("gh_post_list_feed_v2", {
-      p_viewer_id: auth.userId,
-      p_limit: limit,
-      p_before_ms: hasCursor ? beforeMs : null,
-      p_before_id: hasCursor ? beforeIdRaw : null,
-    })
-    stableCursor = result.ok
-  }
-  if (!result.ok) {
-    result = await socialRpc("gh_post_list_feed", {
-      p_viewer_id: auth.userId,
-      p_limit: limit,
-      p_before_ms: hasCursor ? beforeMs : null,
-    })
-    stableCursor = false
-  }
+  const stableCursor = result.ok
 
   if (!result.ok) {
     return NextResponse.json(

@@ -19,6 +19,7 @@ import { Calendar, Briefcase, Sparkles } from "lucide-react"
 import { navigateTo, openCommunity, openChat } from "@/lib/navigation/navigate"
 import { openListing } from "@/lib/marketplace/commerce-actions"
 import { piLocalGet, piLocalSet } from "@/lib/pi-local-storage"
+import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
 
 type SearchTab = "all" | "people" | "posts" | "communities" | "events" | "activities" | "services" | "ids"
 
@@ -98,6 +99,24 @@ export function GlobalSearchModal({
   const [serverOk, setServerOk] = useState(false)
   const requestGen = useRef(0)
   const [resultGen, setResultGen] = useState<number>(0)
+
+  // Search results are snapshots, but already-visible results should not show
+  // deleted/archived/stale edited content after a mutation elsewhere in the app.
+  useEffect(() => {
+    if (!open) return
+    const onPostSync = (event: Event) => {
+      const detail = readPostSyncDetail(event)
+      if (!detail) return
+      const reconcile = <T extends { id?: string; content?: string }>(rows: T[]) => {
+        if (detail.operation === "delete" || detail.operation === "archive") return rows.filter((row) => String(row.id || "") !== detail.postId)
+        return rows.map((row) => String(row.id || "") === detail.postId ? { ...row, ...(detail.patch || {}) } : row)
+      }
+      setServerPosts((rows) => reconcile(rows))
+      setServerVideos((rows) => reconcile(rows))
+    }
+    window.addEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+    return () => window.removeEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+  }, [open])
 
   // Debounce — prevents stale rapid typing results
   useEffect(() => {

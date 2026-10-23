@@ -24,6 +24,7 @@ export async function createMediaAssetRecord(input: {
   thumbPath?: string | null
   thumbUrl?: string | null
   metadata?: Record<string, unknown>
+  id?: string
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
@@ -41,7 +42,7 @@ export async function createMediaAssetRecord(input: {
     try { if (new URL(input.publicUrl).protocol !== "https:") return { ok: false, error: "INVALID_PUBLIC_URL" } }
     catch { return { ok: false, error: "INVALID_PUBLIC_URL" } }
   }
-  const id = genMediaId()
+  const id = input.id || genMediaId()
   try {
     const res = await fetch(
       `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_asset_create`,

@@ -15,7 +15,7 @@ export async function redistributeCurationReward(input: {
   postId: string
   amount: number
   referenceId: string
-}): Promise<{ ok: boolean; credited?: boolean; amount?: number; error?: string; reason?: string }> {
+}): Promise<{ ok: boolean; credited?: boolean; amount?: number; error?: string; reason?: string; availableBalanceAfter?: number; requiredBalance?: number; contentRewardRecorded?: boolean }> {
   if (!curationRedistributeEnabled()) {
     return { ok: false, error: "CURATION_REDISTRIBUTE_DISABLED" }
   }
@@ -48,6 +48,9 @@ export async function redistributeCurationReward(input: {
       credited: Boolean(data.credited),
       amount: data.amount != null ? Number(data.amount) : undefined,
       reason: data.reason ? String(data.reason) : undefined,
+      availableBalanceAfter: data.availableBalanceAfter != null ? Number(data.availableBalanceAfter) : undefined,
+      requiredBalance: data.requiredBalance != null ? Number(data.requiredBalance) : undefined,
+      contentRewardRecorded: Boolean(data.contentRewardRecorded || data.contentRewardProjected),
     }
   } catch {
     return { ok: false, error: "RPC_FAILED" }

@@ -9,6 +9,9 @@ export const ATTENTION_EVENT_TYPES = [
   "complete",
   "save",
   "share",
+  "progress_25",
+  "progress_50",
+  "progress_75",
 ] as const
 
 export type AttentionEventType = (typeof ATTENTION_EVENT_TYPES)[number]

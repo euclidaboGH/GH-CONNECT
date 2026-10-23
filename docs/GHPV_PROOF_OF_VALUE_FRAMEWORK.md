@@ -88,3 +88,7 @@ Settlement is a system operation. `POST /api/social/posts/[id]/ghpv/settle` requ
 Calibration bounds are enforced in `20261022010070_ghpv_calibration_bounds.sql`: JCS 0–100, per-event delta ±2.5, unresolved/protected delta forced to 0.
 
 Quality status values in `gh_content_quality_state.settlement_status`: open, pending, settled, unresolved, quarantined.
+
+## Phase 34 V2 implementation status — 2026-10-23
+
+Implemented server-authoritative reputation/curation intelligence, durable curator activity audit, daily curation limits, rapid/concentrated activity risk controls, and an authenticated intelligence projection. The atomic curation pipeline now performs the V2 guard before vote/reward/active-weight mutation and records activity only within the same transaction. Curation Power uses the durable intelligence snapshot when available and never uses GHC balance.

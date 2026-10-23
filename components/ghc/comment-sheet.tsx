@@ -88,6 +88,23 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
 
   useEffect(() => {
     if (!open || !post?.id) return
+    const onFocusComment = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ postId?: string; commentId?: string }>).detail
+      if (!detail?.commentId || detail.postId !== post.id) return
+      setExpandedThreads((prev) => ({ ...prev, [detail.commentId as string]: true }))
+      window.setTimeout(() => {
+        try {
+          const el = document.querySelector(`[data-comment-id="${CSS.escape(detail.commentId as string)}"]`) as HTMLElement | null
+          el?.scrollIntoView({ behavior: "smooth", block: "center" })
+        } catch { /* */ }
+      }, 120)
+    }
+    window.addEventListener("ghc:focus-comment", onFocusComment as EventListener)
+    return () => window.removeEventListener("ghc:focus-comment", onFocusComment as EventListener)
+  }, [open, post?.id])
+
+  useEffect(() => {
+    if (!open || !post?.id) return
     const onMut = (ev: Event) => {
       const d = (ev as CustomEvent<{ postId?: string; type?: string }>).detail
       if (!d?.postId || d.postId !== post.id) return
@@ -248,6 +265,7 @@ useEffect(() => {
     return (
       <div
         key={c.id}
+        data-comment-id={c.id}
         className={`${depth > 0 ? "ml-3 border-l-2 border-emerald-200/80 pl-3" : ""} py-1.5`}
       >
         <div className="flex gap-2.5">

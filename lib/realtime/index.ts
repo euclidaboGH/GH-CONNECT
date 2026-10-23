@@ -30,3 +30,5 @@ export type {
   WalletPayload,
   RewardPayload,
 } from "./domain-event-catalog"
+
+export { recoverRealtimeEvents, resetRealtimeRecoveryCursor } from "./recovery"

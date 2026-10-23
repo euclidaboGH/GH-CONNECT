@@ -151,6 +151,7 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
     .filter(
       (post) =>
         !context.blockedUserIds.includes(post.authorId) &&
+        !(context.mutedUserIds || []).includes(post.authorId) &&
         !post.isDraft &&
         !post.isScheduled &&
         matchesLocationLane(post, context)
@@ -384,8 +385,9 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
       let score = engagementScore * Math.pow(0.8, Math.min(timeRecency, 24))
 
       const reason: PostVisibilityReason = {
-        reason: `Trending with ${post.likes} likes`,
+        reason: "Rising through recent discussion, saves and shares",
         category: "trending",
+        shortLabel: "Trending",
       }
       return { post, score, reason }
     })
@@ -399,12 +401,9 @@ export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[
   const ranked = posts
     .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post): RankedPost => {
-      let score = Date.now() - post.createdAt
-
-      // Bonus for following
-      if (context.followingIds.includes(post.authorId)) {
-        score *= 1.2
-      }
+      // Newer timestamps sort first. A small following bonus must never invert chronology.
+      let score = post.createdAt || 0
+      if (context.followingIds.includes(post.authorId)) score += 1
 
       const reason: PostVisibilityReason = {
         reason: "Latest posts",
@@ -471,6 +470,23 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
     .sort((a, b) => b.score - a.score)
 }
 
+/** Prevent a single author from monopolising For You while preserving score order. */
+export function diversifyRankedFeed(items: RankedPost[], maxConsecutiveAuthor = 2): RankedPost[] {
+  if (items.length < 3) return items
+  const remaining = [...items]
+  const out: RankedPost[] = []
+  while (remaining.length) {
+    const recent = out.slice(-maxConsecutiveAuthor)
+    const blockedAuthor = recent.length === maxConsecutiveAuthor && recent.every((x) => x.post.authorId === recent[0].post.authorId)
+      ? recent[0].post.authorId
+      : null
+    let index = blockedAuthor ? remaining.findIndex((x) => x.post.authorId !== blockedAuthor) : 0
+    if (index < 0) index = 0
+    out.push(remaining.splice(index, 1)[0])
+  }
+  return out
+}
+
 // Main feed ranking function — one content system, mode = filter/rank strategy
 export function rankFeed(
   posts: Post[],
@@ -479,7 +495,7 @@ export function rankFeed(
 ): RankedPost[] {
   switch (filterType) {
     case "for-you":
-      return rankForYouFeed(posts, context)
+      return diversifyRankedFeed(rankForYouFeed(posts, context))
     case "following":
       return rankFollowingFeed(posts, context)
     case "friends":

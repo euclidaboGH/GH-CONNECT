@@ -34,7 +34,6 @@ export function PostRewardPanel({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!open) return
     let cancelled = false
     setLoading(true)
     void (async () => {
@@ -64,7 +63,31 @@ export function PostRewardPanel({
     return () => {
       cancelled = true
     }
-  }, [open, postId])
+  }, [postId])
+
+  // A successful wallet-funded curation/tip/creator settlement updates the
+  // durable content-reward projection. Refresh an already-open panel immediately
+  // instead of waiting for the user to close and reopen it.
+  useEffect(() => {
+    const onRewardUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: string }>).detail
+      if (!detail?.postId || detail.postId !== postId) return
+      setReward((current) => current ? { ...current } : current)
+      setLoading(true)
+      void fetch(`/api/social/posts/${encodeURIComponent(postId)}/reward`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          const data = (await response.json().catch(() => null)) as (ContentRewardPublic & { ok?: boolean }) | null
+          if (data?.ok === true) setReward(data as ContentRewardPublic)
+        })
+        .catch(() => { /* preserve the last confirmed reward */ })
+        .finally(() => setLoading(false))
+    }
+    window.addEventListener("ghc:content-reward-updated", onRewardUpdated)
+    return () => window.removeEventListener("ghc:content-reward-updated", onRewardUpdated)
+  }, [postId])
 
   const up = reward?.upvoteCount ?? upvoteCount
   const down = reward?.downvoteCount ?? downvoteCount
@@ -72,6 +95,7 @@ export function PostRewardPanel({
   const total = num(r?.totalEarned)
   const author = num(r?.authorShare ?? r?.authorReward)
   const curator = num(r?.curatorShare ?? r?.curationReward)
+  const funded = num(r?.curationFunded)
   const showMoney =
     reward?.enabled === true &&
     Number.isFinite(total) &&
@@ -128,13 +152,19 @@ export function PostRewardPanel({
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {Number.isFinite(author) ? (
                     <div className="rounded-xl bg-muted/40 p-3">
-                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Author</p>
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Creator received</p>
                       <p className="font-semibold tabular-nums">{formatGhc(author)}</p>
                     </div>
                   ) : null}
-                  {Number.isFinite(curator) ? (
+                  {Number.isFinite(funded) && funded > 0 ? (
                     <div className="rounded-xl bg-muted/40 p-3">
-                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Curation</p>
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Curation funded</p>
+                      <p className="font-semibold tabular-nums">{formatGhc(funded)}</p>
+                    </div>
+                  ) : null}
+                  {Number.isFinite(curator) && curator > 0 ? (
+                    <div className="rounded-xl bg-muted/40 p-3">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Curation pool</p>
                       <p className="font-semibold tabular-nums">{formatGhc(curator)}</p>
                     </div>
                   ) : null}

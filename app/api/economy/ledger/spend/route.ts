@@ -18,6 +18,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
 
 async function rpcSpend(input: {
@@ -162,6 +163,7 @@ export async function POST(request: Request) {
         const status = rpc.error === "INSUFFICIENT_BALANCE" ? 402 : 503
         return jsonErr(rpc.error || "SPEND_FAILED", rpc.error || "Spend failed", status)
       }
+      await attachLedgerCorrelation({ userId: auth.userId, referenceId, envelope: buildCorrelationEnvelope({ kind: "marketplace", event: "MARKETPLACE_PURCHASE", orderId: order.id, listingId: order.listingId }) })
       return jsonOk({
         ok: true,
         idempotent: rpc.idempotent,

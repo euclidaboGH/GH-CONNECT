@@ -11,6 +11,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { refreshReputationIntelligence } from "@/lib/server/reputation/intelligence"
 import {
   resolveWeightedVote,
   stripClientAuthority,
@@ -85,14 +86,22 @@ export async function POST(
   // Compute reviewer weight from server-side reputation/calibration before the
   // transaction. The DB RPC atomically persists the vote, reward decision, and
   // percentage-scaled active GHPV weight; no client authority is accepted.
+  // Refresh the server-owned intelligence snapshot before deriving curation power.
+  // If the DB is temporarily unavailable, the existing formula remains the safe fallback.
+  await refreshReputationIntelligence(auth.userId)
+
   let weightedVote: Awaited<ReturnType<typeof resolveWeightedVote>>
   try {
     weightedVote = await resolveWeightedVote({
       reviewerId: auth.userId,
       choice,
     })
-  } catch {
-    return NextResponse.json({ ok: false, error: "CURATION_WEIGHT_UNAVAILABLE", durable: false }, { status: 503 })
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "CURATION_WEIGHT_UNAVAILABLE"
+    if (reason === "CURATION_REVIEW_REQUIRED") {
+      return NextResponse.json({ ok: false, error: reason, durable: true }, { status: 403 })
+    }
+    return NextResponse.json({ ok: false, error: "CURATION_INTELLIGENCE_UNAVAILABLE", durable: false }, { status: 503 })
   }
   const judgmentMode = inferJudgmentMode({})
   const result = await socialRpc("gh_post_curation_set_with_reward", {
@@ -119,7 +128,7 @@ export async function POST(
     if (err === "NOT_FOUND") {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
     }
-    if (err === "FORBIDDEN" || err === "SELF_CURATION_FORBIDDEN") {
+    if (err === "FORBIDDEN" || err === "SELF_CURATION_FORBIDDEN" || err === "DAILY_CURATION_LIMIT" || err === "CURATION_REVIEW_REQUIRED") {
       return NextResponse.json(
         {
           ok: false,
@@ -127,32 +136,22 @@ export async function POST(
           message:
             err === "SELF_CURATION_FORBIDDEN"
               ? "You cannot upvote or downvote your own post."
-              : "You cannot curate this post.",
+              : err === "DAILY_CURATION_LIMIT"
+                ? "Your daily curation limit has been reached. Try again tomorrow."
+                : err === "CURATION_REVIEW_REQUIRED"
+                  ? "Curation is temporarily limited while this activity is reviewed."
+                  : "You cannot curate this post.",
         },
-        { status: 403 }
+        { status: err === "DAILY_CURATION_LIMIT" ? 429 : 403 }
       )
     }
     if (err === "INVALID_CHOICE") {
       return NextResponse.json({ ok: false, error: "INVALID_CHOICE" }, { status: 400 })
     }
-    // Signature miss / schema cache / true missing function
-    if (
-      /_HTTP_404$/.test(err) ||
-      result.status === 404 ||
-      result.diagnosticCode === "PGRST202" ||
-      result.diagnosticCode === "PGRST203"
-    ) {
+    if (result.status === 404 || result.diagnosticCode === "PGRST202" || result.diagnosticCode === "PGRST203") {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "SOCIAL_RPC_UNAVAILABLE",
-          diagnosticCode: result.diagnosticCode || null,
-          diagnosticMessage: result.diagnosticMessage || null,
-          message:
-            "Curation RPC could not be resolved (missing signature or schema cache). Confirm gh_post_curation_set_with_reward(text,text,text,numeric,numeric,text) is exposed to PostgREST and run NOTIFY pgrst, 'reload schema'.",
-          durable: false,
-        },
-        { status: 503 }
+        { ok: false, error: "SOCIAL_RPC_UNAVAILABLE", diagnosticCode: result.diagnosticCode || null, durable: false },
+        { status: 503 },
       )
     }
     return NextResponse.json(
@@ -176,33 +175,17 @@ export async function POST(
     ghcMutated: false,
   }
 
-  // Reward decision only when the atomic reward-aware RPC ran.
-  // Fallback to gh_post_curation_set must never claim a reward credit.
-  const rewardAware =
-    result.fn === "gh_post_curation_set_with_reward" && !result.usedFallback
-      ? true
-      : result.fn === "gh_post_curation_set_with_reward"
+  // Reward decision is valid only from the canonical atomic RPC. There is no
+  // vote-only fallback in the final convergence architecture.
   const rewardData = data.reward
-  let reward: Record<string, unknown>
-  if (result.usedFallback && result.fn === "gh_post_curation_set") {
-    reward = {
-      credited: false,
-      amount: 0,
-      reason: "REWARD_RPC_UNAVAILABLE",
-      status: "skipped",
-      path: "vote_only_fallback",
-    }
-  } else if (rewardData) {
-    reward = {
-      credited: Boolean(rewardData.credited),
-      amount: Number(rewardData.amount || 0),
-      reason: rewardData.reason,
-      status: rewardData.status,
-    }
-  } else {
-    reward = { credited: false, amount: 0, reason: "NO_REWARD_FOR_NON_UPVOTE" }
-  }
-  void rewardAware
+  const reward: Record<string, unknown> = rewardData
+    ? {
+        credited: Boolean(rewardData.credited),
+        amount: Number(rewardData.amount || 0),
+        reason: rewardData.reason,
+        status: rewardData.status,
+      }
+    : { credited: false, amount: 0, reason: "NO_REWARD_FOR_NON_UPVOTE" }
 
   // Safe public curation notice — no JCS/weights/private calibration
   if (finalChoice === "upvote" || finalChoice === "downvote") {
@@ -252,6 +235,9 @@ export async function POST(
           credited: red.credited,
           amount: red.amount,
           reason: red.reason || red.error,
+          availableBalanceAfter: (red as { availableBalanceAfter?: number }).availableBalanceAfter,
+          requiredBalance: (red as { requiredBalance?: number }).requiredBalance,
+          contentRewardRecorded: (red as { contentRewardRecorded?: boolean }).contentRewardRecorded,
         }
       }
     }
@@ -260,11 +246,19 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     durable: true,
+    contentRewardUpdated: Boolean(redistribute?.credited) || Boolean(reward?.credited),
     redistribute,
     choice: finalChoice,
     upvoteCount: data.upvoteCount ?? 0,
     downvoteCount: data.downvoteCount ?? 0,
     ghpv,
     reward,
+    funding: {
+      enabled: curationRedistributeEnabled(),
+      balanceFunded: true,
+      contributionRecorded: Boolean(redistribute?.credited),
+      contentRewardRecorded: Boolean((redistribute as Record<string, unknown> | undefined)?.contentRewardRecorded),
+      reason: redistribute?.reason || null,
+    },
   })
 }

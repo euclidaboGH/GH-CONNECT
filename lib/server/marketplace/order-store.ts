@@ -43,6 +43,15 @@ export type ServerMarketOrder = {
   txid?: string
   ghcSpendRef?: string
   reservationExpiresAt?: number
+  escrowStatus?: "none" | "held" | "releasable" | "released" | "refund_pending" | "refunded"
+  deliveryStatus?: "not_started" | "processing" | "shipped" | "delivered" | "service_active" | "completed"
+  disputeReason?: string
+  cancellationReason?: string
+  buyerNote?: string
+  sellerNote?: string
+  deliveredAt?: number
+  buyerConfirmedAt?: number
+  sellerConfirmedAt?: number
   createdAt: number
   updatedAt: number
   confirmedAt?: number
@@ -120,6 +129,12 @@ function orderToRow(order: ServerMarketOrder): Record<string, unknown> {
     fulfilledAt: order.fulfilledAt ? new Date(order.fulfilledAt).toISOString() : null,
     completedAt: order.completedAt ? new Date(order.completedAt).toISOString() : null,
     cancelledAt: order.cancelledAt ? new Date(order.cancelledAt).toISOString() : null,
+    escrowStatus: order.escrowStatus ?? "none", deliveryStatus: order.deliveryStatus ?? "not_started",
+    disputeReason: order.disputeReason ?? null, cancellationReason: order.cancellationReason ?? null,
+    buyerNote: order.buyerNote ?? null, sellerNote: order.sellerNote ?? null,
+    deliveredAt: order.deliveredAt ? new Date(order.deliveredAt).toISOString() : null,
+    buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
+    sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
   }
 }
 
@@ -142,6 +157,10 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     txid: data.txid ? String(data.txid) : undefined,
     ghcSpendRef: data.ghcSpendRef ? String(data.ghcSpendRef) : undefined,
     reservationExpiresAt: data.reservationExpiresAt != null ? Number(data.reservationExpiresAt) : undefined,
+    escrowStatus: data.escrowStatus as ServerMarketOrder["escrowStatus"], deliveryStatus: data.deliveryStatus as ServerMarketOrder["deliveryStatus"],
+    disputeReason: data.disputeReason ? String(data.disputeReason) : undefined, cancellationReason: data.cancellationReason ? String(data.cancellationReason) : undefined,
+    buyerNote: data.buyerNote ? String(data.buyerNote) : undefined, sellerNote: data.sellerNote ? String(data.sellerNote) : undefined,
+    deliveredAt: data.deliveredAt != null ? Number(data.deliveredAt) : undefined, buyerConfirmedAt: data.buyerConfirmedAt != null ? Number(data.buyerConfirmedAt) : undefined, sellerConfirmedAt: data.sellerConfirmedAt != null ? Number(data.sellerConfirmedAt) : undefined,
     createdAt: Number(data.createdAt) || Date.now(),
     updatedAt: Number(data.updatedAt) || Date.now(),
     confirmedAt: data.confirmedAt != null ? Number(data.confirmedAt) : undefined,
@@ -331,6 +350,15 @@ export async function transitionOrder(
   const saved = await saveOrder(order)
   if (!saved.ok) return { ok: false, error: saved.error }
   return { ok: true, order }
+}
+
+export async function updateCommerceOrder(orderId: string, actorId: string, action: "seller_fulfill" | "seller_mark_delivered" | "buyer_confirm" | "dispute" | "cancel_unpaid", note?: string): Promise<{ok:true;order:ServerMarketOrder}|{ok:false;error:string}> {
+  if (!dbConfigured()) return {ok:false,error:"DATABASE_REQUIRED"}
+  const result=await rpcJson("gh_marketplace_order_commerce_update",{p_order_id:orderId,p_actor_id:actorId,p_action:action,p_note:note||null})
+  if (!result || typeof result!=="object") return {ok:false,error:"COMMERCE_RPC_UNAVAILABLE"}
+  const payload=result as Record<string,unknown>
+  if(payload.ok!==true || !payload.order || typeof payload.order!=="object") return {ok:false,error:String(payload.error||"COMMERCE_UPDATE_FAILED")}
+  const order=rowToOrder(payload.order as Record<string,unknown>); map().set(order.id,order); return {ok:true,order}
 }
 
 export function marketplaceOrdersDurable(): boolean {

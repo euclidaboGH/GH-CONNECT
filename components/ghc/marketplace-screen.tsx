@@ -33,6 +33,8 @@ import {
 import { messageListingSeller, openPayForListing } from "@/lib/marketplace/commerce-actions"
 import { openCommunity } from "@/lib/navigation/navigate"
 import { EmptyState } from "./empty-state"
+import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
+import { IdentityService } from "@/lib/identity/identity-service"
 
 function formatPrice(listing: MarketplaceListing): string {
   const amount = Number(listing.price)
@@ -272,6 +274,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
             listingId: listing.id,
             sellerId: listing.sellerId,
             title: listing.title,
+            orderId: order.id,
           },
           "pi",
         )
@@ -351,6 +354,8 @@ function ListingDetail({
   const chip = statusChip(listing.status)
   const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
   const [mediaIndex, setMediaIndex] = useState(0)
+  const [saved, setSaved] = useState(false)
+  const [saveBusy, setSaveBusy] = useState(false)
   const media = mediaItems[mediaIndex] || mediaItems[0]
   const canBuy = listing.status === "active"
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
@@ -358,6 +363,31 @@ function ListingDetail({
   const communitySuggestions = useMemo(() => suggestedCommunitiesFor(listing, 5), [listing])
   const when = listedWhen(listing.createdAt)
   const locationLine = [listing.location, when].filter(Boolean).join(" · ")
+
+  useEffect(() => {
+    let cancelled = false
+    void socialFetchMarketplaceSaved(100).then((result) => {
+      if (cancelled || !result.ok || !result.durable) return
+      setSaved(result.saved.some((row) => String(row.listingId || row.listing_id || "") === listing.id))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [listing.id])
+
+  const toggleSaved = async () => {
+    if (saveBusy) return
+    setSaveBusy(true)
+    try {
+      const result = await socialToggleMarketplaceSaved(listing.id)
+      if (!result.ok || !result.durable) throw new Error(result.error || "Saved listings are unavailable")
+      setSaved(Boolean(result.saved))
+      window.dispatchEvent(new CustomEvent("ghc:marketplace-saves-changed"))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: result.saved ? "Listing saved" : "Listing removed from saved", type: "success" } }))
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Could not update saved listing", type: "error" } }))
+    } finally {
+      setSaveBusy(false)
+    }
+  }
 
   const quickTemplates = [
     "Is this still available?",
@@ -490,21 +520,7 @@ function ListingDetail({
           {[
             { label: "Message", icon: MessageCircle, onClick: () => messageSeller() },
             { label: "Share", icon: Share2, onClick: () => void shareListing() },
-            {
-              label: "Save",
-              icon: Bookmark,
-              onClick: () => {
-                try {
-                  window.dispatchEvent(
-                    new CustomEvent("ghc:toast", {
-                      detail: { message: "Save listing is coming soon", type: "info" },
-                    }),
-                  )
-                } catch {
-                  /* */
-                }
-              },
-            },
+            { label: saved ? "Saved" : "Save", icon: Bookmark, onClick: () => void toggleSaved() },
             {
               label: "More",
               icon: MoreHorizontal,
@@ -525,7 +541,8 @@ function ListingDetail({
               key={a.label}
               type="button"
               onClick={a.onClick}
-              className="flex w-16 flex-col items-center gap-1.5 text-muted-foreground"
+              disabled={a.label === "Saved" && saveBusy}
+              className={`flex w-16 flex-col items-center gap-1.5 text-muted-foreground ${a.label === "Saved" ? "text-emerald-700 dark:text-emerald-300" : ""}`}
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted/80">
                 <a.icon size={18} aria-hidden />
@@ -853,7 +870,7 @@ export function MarketplaceScreen({
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
-  const [bucket, setBucket] = useState<"browse" | "orders" | "sell">("browse")
+  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell">("browse")
   const [showCategories, setShowCategories] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -867,8 +884,45 @@ export function MarketplaceScreen({
   const [sellLocation, setSellLocation] = useState("")
   const [sellBusy, setSellBusy] = useState(false)
   const [sellError, setSellError] = useState<string | null>(null)
+  const [savedListings, setSavedListings] = useState<MarketplaceListing[]>([])
+  const [savedLoading, setSavedLoading] = useState(false)
+  const [durableOrders, setDurableOrders] = useState<MarketplaceOrder[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [orderBusy, setOrderBusy] = useState<string | null>(null)
 
   const refresh = useCallback(() => setTick((n) => n + 1), [])
+
+  const loadSavedListings = useCallback(async () => {
+    setSavedLoading(true)
+    try {
+      const remote = await socialFetchMarketplaceSaved(100)
+      if (!remote.ok || !remote.durable) { setSavedListings([]); return }
+      const mapped = remote.saved.map((row): MarketplaceListing => ({
+        id: String(row.listingId || row.listing_id || ""),
+        kind: (String(row.kind || "product") as MarketplaceListing["kind"]),
+        title: String(row.title || "Listing"), description: String(row.description || ""),
+        media: row.metadata && typeof row.metadata === "object" && Array.isArray((row.metadata as Record<string, unknown>).media)
+          ? ((row.metadata as Record<string, unknown>).media as unknown[]).map(String) : [],
+        category: row.metadata && typeof row.metadata === "object" ? String((row.metadata as Record<string, unknown>).category || "Goods") : "Goods",
+        tags: row.metadata && typeof row.metadata === "object" && Array.isArray((row.metadata as Record<string, unknown>).tags)
+          ? ((row.metadata as Record<string, unknown>).tags as unknown[]).map(String) : undefined,
+        price: Number(row.price) || 0, currency: String(row.currency || "GHC"), condition: "not_applicable",
+        location: row.metadata && typeof row.metadata === "object" ? String((row.metadata as Record<string, unknown>).location || "") || undefined : undefined,
+        sellerId: String(row.sellerId || row.seller_id || ""), availability: Number(row.availability) || 0,
+        status: (String(row.status || "active") as MarketplaceListing["status"]),
+        createdAt: Number(row.createdAt) || Date.now(), updatedAt: Number(row.createdAt) || Date.now(),
+      })).filter((row) => row.id)
+      setSavedListings(mapped)
+    } finally { setSavedLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (bucket !== "saved") return
+    void loadSavedListings()
+    const handler = () => void loadSavedListings()
+    window.addEventListener("ghc:marketplace-saves-changed", handler)
+    return () => window.removeEventListener("ghc:marketplace-saves-changed", handler)
+  }, [bucket, loadSavedListings])
 
   useEffect(() => {
     const onListing = (e: Event) => {
@@ -886,6 +940,58 @@ export function MarketplaceScreen({
   useEffect(() => {
     if (initialListingId) setSelectedId(initialListingId)
   }, [initialListingId])
+
+  const loadDurableOrders = useCallback(async () => {
+    setOrdersLoading(true)
+    try {
+      const res = await fetch("/api/marketplace/orders", { cache: "no-store", credentials: "include" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !Array.isArray(data.orders)) { setDurableOrders([]); return }
+      setDurableOrders(data.orders.map((o: Record<string, unknown>) => ({
+        id: String(o.id || ""), listingId: String(o.listingId || ""), buyerId: String(o.buyerId || ""), sellerId: String(o.sellerId || ""),
+        quantity: Number(o.quantity) || 1, unitPrice: Number(o.unitPrice) || 0, currency: String(o.currency || "GHC"),
+        status: String(o.status || "created") as MarketplaceOrder["status"], createdAt: Number(o.createdAt) || Date.now(), updatedAt: Number(o.updatedAt) || Date.now(),
+        confirmedAt: Number(o.confirmedAt) || undefined, fulfilledAt: Number(o.fulfilledAt) || undefined, completedAt: Number(o.completedAt) || undefined, cancelledAt: Number(o.cancelledAt) || undefined,
+        paymentStatus: String(o.paymentStatus || "none") as MarketplaceOrder["paymentStatus"], paymentMethod: String(o.paymentMethod || "none") as MarketplaceOrder["paymentMethod"], serverOrderId: String(o.id || ""),
+      })))
+    } catch { setDurableOrders([]) } finally { setOrdersLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (bucket !== "orders") return
+    void loadDurableOrders()
+    const handler = () => void loadDurableOrders()
+    window.addEventListener("ghc:marketplace-order-changed", handler)
+    return () => window.removeEventListener("ghc:marketplace-order-changed", handler)
+  }, [bucket, loadDurableOrders])
+
+  const openOrderConversation = useCallback(async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/conversation`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}", cache: "no-store",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.conversation?.id) return
+      window.dispatchEvent(new CustomEvent("ghc:open-conversation", { detail: { conversationId: data.conversation.id, kind: "direct", contextType: "marketplace_order", orderId } }))
+      window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: { tab: "messages" } }))
+    } catch {
+      /* Keep marketplace usable if messaging is temporarily unavailable. */
+    }
+  }, [])
+
+  const runOrderAction = useCallback(async (orderId: string, action: string) => {
+    if (orderBusy) return
+    setOrderBusy(orderId + ":" + action)
+    try {
+      const res = await fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/commerce`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(String(data.error || "Order action failed"))
+      await loadDurableOrders()
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Order updated", type: "success" } }))
+    } catch (e) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: e instanceof Error ? e.message : "Order action failed", type: "error" } }))
+    } finally { setOrderBusy(null) }
+  }, [loadDurableOrders, orderBusy])
 
   const domain = getMarketplaceDomain()
 
@@ -963,13 +1069,10 @@ export function MarketplaceScreen({
 
   const orders = useMemo(() => {
     void tick
+    if (durableOrders.length) return durableOrders
     if (!domain?.getOrders) return [] as MarketplaceOrder[]
-    try {
-      return domain.getOrders?.() || []
-    } catch {
-      return []
-    }
-  }, [domain, tick])
+    try { return domain.getOrders?.() || [] } catch { return [] }
+  }, [domain, tick, durableOrders])
 
   const selected = useMemo(() => {
     if (!selectedId) return null
@@ -1023,6 +1126,7 @@ export function MarketplaceScreen({
             { id: "browse" as const, label: "Browse", icon: Store },
             { id: "sell" as const, label: "Sell", icon: Plus },
             { id: "orders" as const, label: "Orders", icon: Package },
+            { id: "saved" as const, label: "Saved", icon: Bookmark },
           ].map((chip) => (
             <button
               key={chip.id}
@@ -1137,7 +1241,21 @@ export function MarketplaceScreen({
       </header>
 
       <div className="gh-marketplace-content min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
-        {bucket === "sell" ? (
+        {bucket === "saved" ? (
+        <div className="p-1">
+          <div className="mx-auto w-full max-w-[var(--gh-content-max,42rem)]">
+            <div className="mb-3 flex items-center justify-between">
+              <div><h2 className="text-base font-bold">Saved listings</h2><p className="text-xs text-muted-foreground">Your marketplace shortlist stays synced to your account.</p></div>
+              <Bookmark size={18} className="text-emerald-700" aria-hidden />
+            </div>
+            {savedLoading ? <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">Loading saved listings…</div>
+              : savedListings.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{savedListings.map((listing) => <ListingCard key={listing.id} listing={listing} onOpen={(id) => setSelectedId(id)} />)}</div>
+              : <EmptyState title="Nothing saved yet" description="Save a listing from its detail page and it will appear here." actionLabel="Browse marketplace" onAction={() => setBucket("browse")} />}
+          </div>
+        </div>
+      ) : null}
+
+      {bucket === "sell" ? (
           <SellListingForm
             title={sellTitle}
             setTitle={setSellTitle}
@@ -1299,38 +1417,37 @@ export function MarketplaceScreen({
             }}
           />
         ) : bucket === "orders" ? (
-          orders.length === 0 ? (
-            <EmptyState
-              variant="transactions"
-              title="No orders yet"
-              description="Your Marketplace purchases and sales will appear here with their latest status."
-              icon={Package}
-            />
+          ordersLoading && orders.length === 0 ? (
+            <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">Loading durable orders…</div>
+          ) : orders.length === 0 ? (
+            <EmptyState variant="transactions" title="No orders yet" description="Purchases and sales appear here from the durable Marketplace order authority." icon={Package} />
           ) : (
             <ul className="space-y-2.5">
-              {orders.map((o) => (
-                <li
-                  key={o.id}
-                  className="rounded-[1.5rem] border border-violet-200/35 bg-card p-4 shadow-[var(--gh-card-shadow)]"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        Marketplace order
-                      </p>
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">
-                        {o.quantity} × {o.unitPrice} {o.currency}
-                      </p>
+              {orders.map((o) => {
+                const viewerId = IdentityService.getCurrentUserId() || ""
+                const isSeller = viewerId === o.sellerId
+                const status = String(o.status || "created")
+                const busy = Boolean(orderBusy)
+                return (
+                  <li key={o.id} className="rounded-[1.5rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0"><p className="truncate text-sm font-semibold">Marketplace order</p><p className="mt-0.5 text-[12px] text-muted-foreground">{o.quantity} × {o.unitPrice} {o.currency} · {isSeller ? "Seller" : "Buyer"}</p></div>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">{status.replace(/_/g," ")}</span>
                     </div>
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                      {o.status}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    {new Date(o.updatedAt || o.createdAt).toLocaleString()}
-                  </p>
-                </li>
-              ))}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" disabled={busy} onClick={() => void openOrderConversation(o.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-bold">
+                        <MessageCircle className="h-3.5 w-3.5" /> Chat
+                      </button>
+                      {!isSeller && ["created","payment_pending"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"cancel_unpaid")} className="min-h-9 rounded-full border border-border px-3 text-xs font-bold">Cancel</button> : null}
+                      {isSeller && status === "confirmed" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_fulfill")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Start fulfillment</button> : null}
+                      {isSeller && status === "fulfilling" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark delivered</button> : null}
+                      {!isSeller && ["confirmed","fulfilling"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"buyer_confirm")} className="min-h-9 rounded-full bg-emerald-600 px-3 text-xs font-bold text-white">Confirm received</button> : null}
+                      {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>
+                  </li>
+                )
+              })}
             </ul>
           )
         ) : listings.length === 0 ? (

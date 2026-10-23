@@ -1,0 +1,40 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
+const root = process.cwd()
+const read = p => fs.readFileSync(path.join(root,p),'utf8')
+const exists = p => fs.existsSync(path.join(root,p))
+const checks = []
+function ok(name, cond, detail='') { checks.push({name,pass:Boolean(cond),detail}) }
+
+ok('security control-plane migration exists', exists('supabase/migrations/20261023040002_gh_security_control_plane_v2.sql'))
+const mig = read('supabase/migrations/20261023040002_gh_security_control_plane_v2.sql')
+ok('durable rate-limit table', /gh_security_rate_limit_buckets/.test(mig))
+ok('durable security event table', /gh_security_events/.test(mig))
+ok('rate-limit RPC is SECURITY DEFINER', /gh_security_rate_limit_consume[\s\S]*?SECURITY DEFINER/.test(mig))
+ok('security-event RPC is SECURITY DEFINER', /gh_security_event_append[\s\S]*?SECURITY DEFINER/.test(mig))
+ok('security RLS deny-all', /REVOKE ALL ON TABLE public\.gh_security_rate_limit_buckets FROM PUBLIC, anon, authenticated/.test(mig) && /REVOKE ALL ON TABLE public\.gh_security_events FROM PUBLIC, anon, authenticated/.test(mig))
+ok('rate-limit RPC service-role only', /GRANT EXECUTE ON FUNCTION public\.gh_security_rate_limit_consume[\s\S]*?TO service_role/.test(mig))
+ok('event RPC service-role only', /GRANT EXECUTE ON FUNCTION public\.gh_security_event_append[\s\S]*?TO service_role/.test(mig))
+const cp = read('lib/server/security/control-plane.ts')
+ok('durable limiter falls back safely', /checkDurableRateLimit[\s\S]*?localRateLimit/.test(cp))
+ok('security telemetry excludes secrets by contract', /metadata.*must never/i.test(mig))
+const pi = read('app/api/auth/pi/route.ts')
+ok('Pi auth uses durable limiter', /checkDurableRateLimit/.test(pi))
+ok('Pi auth emits rejection audit', /auth\.pi\.rejected/.test(pi))
+ok('Pi auth emits success audit', /auth\.pi\.success/.test(pi))
+const blocks = read('app/api/social/blocks/route.ts')
+const mutes = read('app/api/social/mutes/route.ts')
+ok('block route authenticated', /resolveAuthenticatedUser\(request\.headers\)/.test(blocks))
+ok('block route durable rate limited', /checkDurableRateLimit/.test(blocks))
+ok('mute route authenticated', /resolveAuthenticatedUser\(request\.headers\)/.test(mutes))
+ok('mute route durable rate limited', /checkDurableRateLimit/.test(mutes))
+const verification = read('app/api/verification/review/route.ts')
+ok('verification secret comparison timing-safe', /timingSafeEqual/.test(verification) && !/provided === serviceKey/.test(verification))
+const packageJson = JSON.parse(read('package.json'))
+ok('phase36 test script wired', packageJson.scripts?.['test:phase36-security-privacy-abuse-v2'] === 'node scripts/test-phase36-security-privacy-abuse-v2.mjs')
+
+const failed = checks.filter(x=>!x.pass)
+for (const c of checks) console.log(`${c.pass?'PASS':'FAIL'} ${c.name}${c.detail?` — ${c.detail}`:''}`)
+console.log(`\nPHASE 36 SECURITY CHECKS: ${checks.length-failed.length}/${checks.length}`)
+if (failed.length) process.exit(1)

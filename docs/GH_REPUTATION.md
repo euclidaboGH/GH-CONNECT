@@ -88,3 +88,7 @@ Client-supplied idempotency keys cannot farm multiple awards for these actions.
 ## Migration
 
 `supabase/migrations/20261022010046_gh_reputation.sql`
+
+## Phase 34 V2 implementation note — 2026-10-23
+
+Reputation intelligence now has a durable server-derived projection (`gh_reputation_intelligence`) covering CQS, JCS, CIS, EVS, Growth XP, Curation Power and abuse risk. Curation mutations pass an atomic server guard with daily volume, rapid-activity and same-author concentration controls. Risk internals are not exposed through the public projection. GHC balance remains excluded from Curation Power.

@@ -10,6 +10,7 @@
 
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import type { DomainResult } from "@/lib/domains/contracts/types"
+import type { WalletV2Categories } from "@/lib/domains/wallet-v2"
 
 export type WalletReadStatus = "loading" | "ready" | "unavailable" | "error"
 
@@ -26,6 +27,16 @@ export interface WalletReadSnapshot {
   message?: string
   source: "session" | "empty" | "error"
   updatedAt: number
+  categories: WalletV2Categories
+  ledgerBalance: number | null
+  escrowLocked: number
+  reconciliation: {
+    availablePlusLockedEqualsLedger: boolean
+    availableNonNegative: boolean
+    pendingNonNegative: boolean
+    ledgerNonNegative: boolean
+    unclassifiedAmount: number
+  }
 }
 
 function numOrNull(v: unknown): number | null {
@@ -65,6 +76,9 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         message: "Wallet services are not bound yet.",
         source: "empty",
         updatedAt: now,
+        categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+        ledgerBalance: null, escrowLocked: 0,
+        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
       }
     }
 
@@ -83,6 +97,9 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         message: "Balance unavailable from authoritative wallet.",
         source: "empty",
         updatedAt: now,
+        categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+        ledgerBalance: null, escrowLocked: 0,
+        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
       }
     }
 
@@ -117,6 +134,9 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       message: e instanceof Error ? e.message : "Wallet read failed",
       source: "error",
       updatedAt: now,
+      categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+      ledgerBalance: null, escrowLocked: 0,
+      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
     }
   }
 }

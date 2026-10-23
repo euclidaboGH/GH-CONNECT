@@ -17,7 +17,7 @@ const checks = [
   ['Claim-ready attention notice is deduplicated per user and reward day', /daily-reward-ready-notice/.test(feed) && /Your daily GHC reward is ready to claim/.test(feed) && /ghc:open-rewards/.test(feed)],
   ['Reward remains visible while server status hydrates', /Until the server confirms\s+\/\/ today's status, keep the claim visible/.test(rewards) && /canClaimToday: true/.test(rewards)],
   ['Daily claim remains server-authoritative', /fetch\("\/api\/economy\/rewards\/daily"/.test(rewards)],
-  ['Notification center loads durable social activity', /api\/social\/notifications\?limit=60/.test(bell)],
+  ['Notification center loads unified durable notification activity', /api\/notifications\?limit=80/.test(bell)],
   ['Notification center loads durable GHC/economy alerts', /api\/economy\/notifications\?limit=60/.test(bell)],
   ['Notification center combines local, social, economy, and system-announcement unread counts', /setUnread\(localUnread \+ socialUnread \+ economyUnread \+ announcementUnread\)/.test(bell)],
   ['Durable social alerts can be marked read', /action: "mark_read"/.test(bell)],

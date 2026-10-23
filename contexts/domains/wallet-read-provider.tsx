@@ -20,6 +20,7 @@ import {
   WALLET_READ_SEAM_MUTATIONS,
 } from "@/lib/domains/adapters/wallet-read-seam"
 import { domainEvents } from "@/lib/realtime/event-bus"
+import { fetchWalletV2, emptyWalletV2 } from "@/lib/domains/wallet-v2"
 
 export interface WalletReadProviderValue {
   snapshot: WalletReadSnapshot
@@ -32,14 +33,35 @@ export interface WalletReadProviderValue {
 const WalletReadContext = createContext<WalletReadProviderValue | null>(null)
 
 export function WalletReadProvider({ children }: { children: ReactNode }) {
-  const [snapshot, setSnapshot] = useState<WalletReadSnapshot>(() => readWalletSnapshot())
-
+  const [snapshot, setSnapshot] = useState<WalletReadSnapshot>(() => {
+    const local = readWalletSnapshot()
+    const empty = emptyWalletV2()
+    return { ...local, categories: empty.categories, ledgerBalance: null, escrowLocked: 0, reconciliation: empty.reconciliation }
+  })
   const refresh = useCallback(() => {
-    setSnapshot(readWalletSnapshot())
+    const local = readWalletSnapshot()
+    void fetchWalletV2().then((wallet) => {
+      setSnapshot({
+        status: "ready",
+        availableGhc: wallet.available,
+        pendingGhc: wallet.pending,
+        lockedGhc: wallet.locked,
+        currency: "GHC",
+        membershipTier: local.membershipTier,
+        source: "session",
+        updatedAt: wallet.updatedAt,
+        categories: wallet.categories,
+        ledgerBalance: wallet.ledgerBalance,
+        escrowLocked: wallet.escrowLocked,
+        reconciliation: wallet.reconciliation,
+      })
+    }).catch(() => {
+      setSnapshot({ ...local, categories: emptyWalletV2().categories, ledgerBalance: null, escrowLocked: 0, reconciliation: emptyWalletV2().reconciliation })
+    })
   }, [])
 
   useEffect(() => {
-    refresh()
+    void refresh()
     const types = [
       "WALLET_BALANCE_UPDATED",
       "WALLET_TRANSFER_COMPLETED",
@@ -51,7 +73,7 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     ] as const
     const unsubs = types.map((type) =>
       domainEvents.on(type, () => {
-        refresh()
+        void refresh()
       })
     )
     const onClaimed = () => {
@@ -98,8 +120,10 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
 export function useWalletRead(): WalletReadProviderValue {
   const ctx = useContext(WalletReadContext)
   if (!ctx) {
+    const local = readWalletSnapshot()
+    const empty = emptyWalletV2()
     return {
-      snapshot: readWalletSnapshot(),
+      snapshot: { ...local, categories: empty.categories, ledgerBalance: null, escrowLocked: 0, reconciliation: empty.reconciliation },
       refresh: () => {},
       canMutateFinances: false,
       mutationsAllowed: WALLET_READ_SEAM_MUTATIONS,

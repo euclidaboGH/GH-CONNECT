@@ -135,55 +135,18 @@ function isMissingOrAmbiguousSignature(r: SocialRpcResult): boolean {
 }
 
 /**
- * Call PostgREST RPC with optional ordered fallbacks.
- * Fallbacks run only when the primary is missing/ambiguous (404 / PGRST202 / PGRST203).
+ * Call the canonical PostgREST RPC.
+ *
+ * Phase 39 final convergence rule: production no longer probes historical
+ * overloads or legacy function names. A missing/ambiguous signature is a
+ * deployment/schema error and must surface as a 503 rather than silently
+ * switching business logic.
  */
 export async function socialRpc(
   fn: string,
   body: Record<string, unknown>,
-  options?: {
-    /** Ordered alternate { name, body } pairs tried only on signature-miss */
-    fallbacks?: Array<{ fn: string; body: Record<string, unknown> }>
-  }
 ): Promise<SocialRpcResult> {
-  const primary = await socialRpcOnce(fn, body)
-  if (!isMissingOrAmbiguousSignature(primary)) return primary
-
-  const builtIn: Array<{ fn: string; body: Record<string, unknown> }> = []
-  if (fn === "gh_post_curation_set_with_reward") {
-    // 4-arg historical overload (pre-GHPV weight)
-    builtIn.push({
-      fn: "gh_post_curation_set_with_reward",
-      body: {
-        p_post_id: body.p_post_id,
-        p_user_id: body.p_user_id,
-        p_choice: body.p_choice,
-        p_percentage: body.p_percentage ?? 100,
-      },
-    })
-    // Vote-only — reward path not executed
-    builtIn.push({
-      fn: "gh_post_curation_set",
-      body: {
-        p_post_id: body.p_post_id,
-        p_user_id: body.p_user_id,
-        p_choice: body.p_choice,
-      },
-    })
-  }
-
-  const chain = [...(options?.fallbacks || []), ...builtIn]
-  for (const step of chain) {
-    if (step.fn === fn && JSON.stringify(step.body) === JSON.stringify(body)) continue
-    const secondary = await socialRpcOnce(step.fn, step.body)
-    if (!isMissingOrAmbiguousSignature(secondary)) {
-      return {
-        ...secondary,
-        usedFallback: true,
-      }
-    }
-  }
-  return primary
+  return socialRpcOnce(fn, body)
 }
 
 export async function socialRest<T = unknown>(

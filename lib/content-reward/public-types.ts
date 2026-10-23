@@ -21,6 +21,8 @@ export interface ContentRewardPublic {
   totalEarned: number | null
   authorReward: number | null
   curationReward: number | null
+  /** Actual GHC funded by curator wallet redistributions for this post. */
+  curationFunded?: number | null
   upvoteImpact: number | null
   downvoteImpact: number | null
   netImpact: number | null

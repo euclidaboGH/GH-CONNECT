@@ -1,6 +1,7 @@
 "use client"
 
 import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
+import { broadcastPostSync } from "@/lib/social/post-sync"
 import { emitSocialMutation, SOCIAL_MUTATION_EVENT } from "@/lib/social/social-events"
 import { isLikelyServerUserId } from "@/lib/social/is-server-user-id"
 import {
@@ -677,6 +678,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
   const postsSnapshotRef = useRef(state.posts)
+  const feedRequestRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
   // Keep a current snapshot without making refreshFeed's callback identity change
   // on every feed update (which can retrigger consumer effects).
   useEffect(() => {
@@ -3160,9 +3162,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           payload: { id: postId },
           maxRetries: 3,
         })
+        broadcastPostSync({ postId, operation: "delete", source: "post-delete-offline" })
         addToast("Delete queued — will sync when online", "info")
         return
       }
+      broadcastPostSync({ postId, operation: "delete", source: "post-delete" })
       addToast("Post deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3623,6 +3627,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         try {
           const { broadcastPostEngagement } = await import("@/lib/engagement/post-engagement")
           broadcastPostEngagement({ postId, kind: "edit" })
+          broadcastPostSync({ postId, operation: "edit", patch: { content: result.data.content, ...(result.data.media || {}) }, source: "post-edit" })
         } catch {
           /* */
         }
@@ -3672,6 +3677,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(data.error || "Could not archive post on the server", "error")
         return
       }
+      broadcastPostSync({ postId, operation: "archive", patch: { isArchived: true, archivedAt: Date.now() }, source: "post-archive" })
       addToast("Post archived", "success")
     } catch {
       setState((s) => ({
@@ -3720,6 +3726,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(data.error || "Could not restore post on the server", "error")
         return
       }
+      broadcastPostSync({ postId, operation: "restore", patch: { isArchived: false, archivedAt: undefined }, source: "post-restore" })
       addToast("Post restored", "success")
     } catch {
       setState((s) => ({
@@ -7189,6 +7196,15 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not submit report", "error")
           return false
         }
+        const durableResponse = await fetch(`/api/communities/${encodeURIComponent(communityId)}/platform`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "report_create", ...input }),
+        })
+        const durablePayload = await durableResponse.json().catch(() => ({}))
+        if (!durableResponse.ok || durablePayload?.durable !== true) {
+          addToast(durablePayload?.error || "Report could not be saved on the server", "error")
+          return false
+        }
         try {
           createCommunityReport({
             communityId,
@@ -7220,7 +7236,16 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not announce", "error")
           return false
         }
-        const announcement = result.data.announcement
+        const durableResponse = await fetch(`/api/communities/${encodeURIComponent(communityId)}/platform`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "announcement_create", ...input }),
+        })
+        const durablePayload = await durableResponse.json().catch(() => ({}))
+        if (!durableResponse.ok || durablePayload?.durable !== true || !durablePayload?.announcement) {
+          addToast(durablePayload?.error || "Announcement could not be saved on the server", "error")
+          return false
+        }
+        const announcement = durablePayload.announcement
         const communityName =
           (state.conversations.find((c) => c.id === communityId))?.groupName || "community"
         setState((s) => ({
@@ -7272,7 +7297,16 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(result.error || "Could not create event", "error")
           return false
         }
-        const event = result.data.event
+        const durableResponse = await fetch(`/api/communities/${encodeURIComponent(communityId)}/platform`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "event_create", title: input.title, description: input.description, startsAt: new Date(input.startTime).toISOString(), endsAt: new Date(input.endTime).toISOString(), location: input.location, category: input.category }),
+        })
+        const durablePayload = await durableResponse.json().catch(() => ({}))
+        if (!durableResponse.ok || durablePayload?.durable !== true || !durablePayload?.event) {
+          addToast(durablePayload?.error || "Event could not be saved on the server", "error")
+          return false
+        }
+        const event = durablePayload.event
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) => {
@@ -7294,7 +7328,15 @@ const dismissMatchCelebration = useCallback(() => {
   const rsvpCommunityEvent = useCallback(
     async (communityId: string, eventId: string): Promise<boolean> => {
       try {
-        // Best-effort local RSVP until server calendar exists
+        const durableResponse = await fetch(`/api/communities/${encodeURIComponent(communityId)}/platform`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "event_rsvp", eventId, status: "going" }),
+        })
+        const durablePayload = await durableResponse.json().catch(() => ({}))
+        if (!durableResponse.ok || durablePayload?.durable !== true) {
+          addToast(durablePayload?.error || "RSVP could not be saved", "error")
+          return false
+        }
         setState((s) => ({
           ...s,
           conversations: s.conversations.map((c) => {
@@ -7336,14 +7378,27 @@ const dismissMatchCelebration = useCallback(() => {
 
   const removeGroupMember = useCallback(
     async (conversationId: string, userId: string) => {
-      setState((s) => ({
-        ...s,
-        conversations: s.conversations.map((c) =>
-          c.id === conversationId ? applyRemoveGroupMember(c, userId) : c
-        ),
-      }))
-      analytics.trackEvent("group_member_removed", { conversationId, userId }, state.profile.displayName)
-      addToast("Member removed", "success")
+      try {
+        const response = await fetch(`/api/communities/${encodeURIComponent(conversationId)}/platform`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "member_remove", targetUserId: userId }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || payload?.durable !== true) {
+          addToast(payload?.error || "Member could not be removed", "error")
+          return
+        }
+        setState((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId ? applyRemoveGroupMember(c, userId) : c
+          ),
+        }))
+        analytics.trackEvent("group_member_removed", { conversationId, userId }, state.profile.displayName)
+        addToast("Member removed", "success")
+      } catch {
+        addToast("Could not reach the community server", "error")
+      }
     },
     [state.profile.displayName, addToast]
   )
@@ -7625,11 +7680,21 @@ const dismissMatchCelebration = useCallback(() => {
   }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
     try {
       const { socialFetchFeed } = await import("@/lib/social/client")
+      // A fresh top-level refresh supersedes any older top-level refresh. Append
+      // requests keep their own generation so a late page cannot overwrite newer state.
+      const generation = feedRequestRef.current.generation + 1
+      if (!opts?.append) feedRequestRef.current.controller?.abort()
+      const controller = new AbortController()
+      feedRequestRef.current = { generation, controller }
       const feed = await socialFetchFeed({
         limit: opts?.limit ?? 40,
         before: opts?.before,
         beforeId: opts?.beforeId,
+        signal: controller.signal,
       })
+      if (generation !== feedRequestRef.current.generation) {
+        return { ok: false, durable: false, error: "STALE_FEED_RESPONSE" }
+      }
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
       }
@@ -7673,6 +7738,9 @@ const dismissMatchCelebration = useCallback(() => {
       // Server reachable but empty / non-durable — preserve existing local feed
       return { ok: true, durable: Boolean(feed.durable), appended: 0 }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return { ok: false, durable: false, error: "FEED_REQUEST_SUPERSEDED" }
+      }
       const message = err instanceof Error ? err.message : "Could not refresh feed"
       return { ok: false, durable: false, error: message }
     }

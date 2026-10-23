@@ -10,6 +10,7 @@ import { uploadDurableMedia, isMediaStorageUnavailable, mediaUploadErrorMessage 
 import { getPostDraft, removePostDraft, upsertPostDraft } from "@/lib/creator/post-drafts"
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
 import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
+import { validatePulseVideo } from "@/lib/media/video-inspection"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 
@@ -352,6 +353,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       setUploadProgress(MEDIA_PROGRESS.uploading)
       const up = await uploadDurableMedia(file, {
         fileName: file.name,
+        width: videoMeta.width,
+        height: videoMeta.height,
+        durationMs: videoMeta.durationMs,
+        category: "videos",
         onProgress: (label) => setUploadProgress(label),
       })
       if (up.ok && up.url && isDurableMediaUrl(up.url)) {
@@ -388,6 +393,21 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
     if (file.size > 40 * 1024 * 1024) {
       addToast("Video is too large (max 40 MB). Please choose a shorter clip.", "error")
+      return
+    }
+    let videoMeta: { durationMs: number; width: number; height: number }
+    try {
+      videoMeta = await validatePulseVideo(file)
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "VIDEO_METADATA_INVALID"
+      const message = code === "PULSE_VIDEO_TOO_LONG"
+        ? "GH Pulse videos can be up to 3 minutes."
+        : code === "PULSE_VIDEO_DIMENSIONS_TOO_LARGE"
+          ? "This video is too high-resolution. Please choose a video up to 3840px."
+          : code === "VIDEO_METADATA_TIMEOUT"
+            ? "Video metadata could not be read in time. Please try the clip again."
+            : "This video could not be prepared for GreenHaven."
+      addToast(message, "error")
       return
     }
     setUploadProgress(

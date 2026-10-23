@@ -2336,3 +2336,73 @@ body { overflow-x: clip; }
   .gh-post-card { transition: border-color 160ms ease, box-shadow 160ms ease; }
   .gh-post-card:hover { border-color: color-mix(in srgb, var(--primary) 25%, var(--gh-ref-line)); }
 }
+
+/* Phase 38 — accessibility and interaction contract.
+   Keep these rules global so every surface inherits the same keyboard, motion,
+   touch-target and contrast behaviour without requiring per-screen duplication. */
+:root {
+  --gh-focus-ring-width: 3px;
+  --gh-focus-ring-offset: 2px;
+  --gh-touch-target: 44px;
+}
+
+.gh-app-shell :where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+  outline: var(--gh-focus-ring-width) solid var(--ring);
+  outline-offset: var(--gh-focus-ring-offset);
+}
+
+.gh-app-shell :where(button, [role="button"], a) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gh-app-shell :where(button, [role="button"]):not(.gh-touch-compact) {
+  min-height: max(40px, var(--gh-touch-target));
+}
+
+.gh-app-shell :where(input, textarea, select) {
+  color-scheme: light;
+}
+
+.dark .gh-app-shell :where(input, textarea, select) {
+  color-scheme: dark;
+}
+
+/* Keep zoom available. Only prevent accidental horizontal layout overflow. */
+.gh-app-shell,
+.gh-app-shell * {
+  max-width: 100%;
+}
+
+/* Keyboard users get a stronger, consistent focus treatment. */
+@media (forced-colors: active) {
+  .gh-app-shell :where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 3px;
+  }
+  .gh-app-shell :where(button, [role="button"]) {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Users who request reduced motion should never receive decorative motion from
+   the shell, sheets, cards or navigation. Functional state changes remain. */
+@media (prefers-reduced-motion: reduce) {
+  .gh-app-shell *,
+  .gh-app-shell *::before,
+  .gh-app-shell *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Better text wrapping on narrow phones and Pi Browser WebViews. */
+.gh-app-shell :where(p, h1, h2, h3, h4, h5, h6, button, a, label) {
+  overflow-wrap: anywhere;
+}
+
+/* Do not allow text to disappear behind the mobile navigation/safe area. */
+.gh-app-shell :where([data-gh-sticky-footer], .gh-world-compose) {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}

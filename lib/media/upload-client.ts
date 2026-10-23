@@ -274,6 +274,7 @@ async function uploadViaDirect(
         ...authHeaders(),
       },
       body: JSON.stringify({
+        uploadId: intent.uploadId,
         objectPath: intent.objectPath,
         bucket: intent.bucket,
         mimeType,

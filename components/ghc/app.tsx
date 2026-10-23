@@ -19,6 +19,7 @@ import { ThemeApplier } from "./theme-applier"
 import { OfflineBanner } from "./offline-banner"
 import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
+import { AccessibilityAnnouncer } from "./accessibility-announcer"
 import { SessionResumeToast } from "./session-resume-toast"
 import { NetworkStatusStrip } from "./network-status-strip"
 import { GlobalHotkeys } from "./global-hotkeys"
@@ -32,6 +33,8 @@ import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 import { CreatorStudioOverlay } from "./creator-studio-overlay"
 import ProfileStorySection from "./profile-story-section"
+import { PostComposer } from "./post-composer"
+import { socialGetProfile } from "@/lib/social/client"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -394,13 +397,44 @@ export function GHConnectApp() {
         startTransition(() => setTab("profile"))
         return
       }
-      const candidate = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
-      if (!candidate) {
-        addToast("This profile is not available in your current connection results yet.", "info")
-        startTransition(() => setTab("discover"))
+      const local = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
+      if (local) {
+        setPeerProfile(local)
         return
       }
-      setPeerProfile(candidate)
+      // Profiles opened from Wallet/Activity/Notifications/Messaging must not depend
+      // on the current discovery result set. Hydrate the canonical public projection.
+      void socialGetProfile(userId).then((result) => {
+        if (!result.ok || !result.profile) {
+          addToast(result.error === "PROFILE_PRIVATE" ? "This profile is private." : "This profile is not available.", "info")
+          return
+        }
+        const row = result.profile
+        const photos = Array.isArray(row.photos) ? row.photos.map(String).filter(Boolean) : []
+        const city = String(row.city || "").trim()
+        const country = String(row.country || "").trim()
+        const hydrated: Candidate = {
+          id: userId,
+          name: String(row.displayName || row.username || "Member"),
+          age: Math.max(18, Number(row.age) || 18),
+          location: [city, country].filter(Boolean).join(", ") || "Global",
+          bio: String(row.bio || ""),
+          photo: photos[0] || "",
+          photos,
+          coverPhoto: row.coverPhoto ? String(row.coverPhoto) : null,
+          interests: Array.isArray(row.interests) ? row.interests.map(String).filter(Boolean) : [],
+          verified: Boolean(row.verified || row.isVerified),
+          online: Boolean(row.online || row.isOnline),
+          lastSeen: Number(row.lastActiveAt) || 0,
+          city: city || undefined, country: country || undefined,
+          profession: row.profession ? String(row.profession) : undefined,
+          education: row.education ? String(row.education) : undefined,
+          primaryMode: row.primaryMode ? String(row.primaryMode) : undefined,
+          joinedAt: typeof row.createdAt === "number" || typeof row.createdAt === "string" ? row.createdAt : undefined,
+          isSample: false,
+        }
+        setPeerProfile(hydrated)
+      }).catch(() => addToast("This profile could not be loaded right now.", "error"))
     }
     window.addEventListener("ghc:open-profile", openProfile as EventListener)
     return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
@@ -427,6 +461,8 @@ export function GHConnectApp() {
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
   const [showCreateHub, setShowCreateHub] = useState(false)
+  const [showGlobalComposer, setShowGlobalComposer] = useState(false)
+  const [globalComposeMode, setGlobalComposeMode] = useState<"post" | "story">("post")
   const [showShortVideo, setShowShortVideo] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const [challengeOpen, setChallengeOpen] = useState(false)
@@ -640,7 +676,16 @@ export function GHConnectApp() {
     }
     window.addEventListener("ghc:bottom-nav-visibility", onVis)
     const onCreateHub = () => setShowCreateHub(true)
+    const onOpenCompose = (event: Event) => {
+      const detail = (event as CustomEvent<{ mode?: unknown }>).detail || {}
+      const mode = detail.mode === "story" ? "story" : "post"
+      setGlobalComposeMode(mode)
+      setShowGlobalComposer(true)
+    }
+    const onCloseCompose = () => setShowGlobalComposer(false)
     window.addEventListener("ghc:open-create-hub", onCreateHub)
+    window.addEventListener("ghc:open-compose", onOpenCompose as EventListener)
+    window.addEventListener("ghc:close-compose", onCloseCompose)
     const onPoll = () => setPollOpen(true)
     const onChallenge = () => setChallengeOpen(true)
     window.addEventListener("ghc:open-poll", onPoll)
@@ -648,10 +693,30 @@ export function GHConnectApp() {
     return () => {
       window.removeEventListener("ghc:bottom-nav-visibility", onVis)
       window.removeEventListener("ghc:open-create-hub", onCreateHub)
+      window.removeEventListener("ghc:open-compose", onOpenCompose as EventListener)
+      window.removeEventListener("ghc:close-compose", onCloseCompose)
       window.removeEventListener("ghc:open-poll", onPoll)
       window.removeEventListener("ghc:open-challenge", onChallenge)
     }
   }, [])
+
+  // Cross-screen post routing: Profile/notifications can request a post even when
+  // the Feed screen is currently unmounted. Move to Home first, then replay the
+  // request after the feed has mounted. This prevents lost synchronous events.
+  useEffect(() => {
+    const onOpenPost = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail || {}
+      const postId = typeof detail.postId === "string" ? detail.postId.trim() : ""
+      if (!postId) return
+      const action = detail.action === "comment" || detail.action === "share" || detail.action === "insights" ? detail.action : undefined
+      startTransition(() => setTab("home"))
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action } }))
+      }, 180)
+    }
+    window.addEventListener("ghc:open-post", onOpenPost as EventListener)
+    return () => window.removeEventListener("ghc:open-post", onOpenPost as EventListener)
+  }, [setTab])
 
   // Browser back / page show: clear disposable overlays without wiping domain state
   useEffect(() => {
@@ -969,6 +1034,9 @@ export function GHConnectApp() {
     <>
     {themeLayer}
     <ConsentGate>
+    <SkipToContent />
+    <AccessibilityAnnouncer label={NAV_ITEMS.find((item) => item.id === activeTab)?.label || "GreenHaven"} />
+    <GlobalHotkeys />
     <div
       className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full"
       data-nav-hidden={bottomNavHidden ? "true" : "false"}
@@ -979,6 +1047,9 @@ export function GHConnectApp() {
       <PaymentRecoveryListener />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
+        id="ghc-main-content"
+        tabIndex={-1}
+        aria-label="GreenHaven main content"
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"
         onPointerDown={() => {
           if (bottomNavHidden) setBottomNavHidden(false)
@@ -1061,6 +1132,14 @@ export function GHConnectApp() {
         </div>
         )}
       </main>
+
+      {/* Global composer: mounted at app-shell level so Profile, Home,
+          notifications and other screens can open the same durable composer. */}
+      <PostComposer
+        open={showGlobalComposer}
+        onOpenChange={setShowGlobalComposer}
+        initialMode={globalComposeMode}
+      />
 
       {/* Bottom navigation — fixed to bottom edge so main can use full height.
           Auto-hides on scroll-down (translate off-screen); tap or scroll-up reveals.

@@ -8,6 +8,7 @@ import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice } from "
 import { durableMembershipUpsert } from "@/lib/server/economy/durable-emission"
 import { hasPrivilegedDatabase, readGhcServerEnv } from "@/lib/server/economy/env"
 import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
+import { listIntentsForUserAsync, type PaymentIntent } from "@/lib/server/payments/intent-store"
 
 export type MembershipTier = "free" | "vip" | "vvip"
 export type BillingPeriod = "monthly" | "four_months" | "eight_months" | "yearly" | "comp"
@@ -221,6 +222,68 @@ export function getEntitlement(userId: string): ServerMembershipEntitlement {
   const next = applyExpiry(existing)
   if (next !== existing) map().set(userId, next)
   return next
+}
+
+/**
+ * Recover a membership entitlement from the durable payment-intent history.
+ * This is intentionally server-selected: callers cannot choose an intent, tier,
+ * amount, or purchase reference. Only a verified COMPLETED/FULFILLED membership
+ * intent can be converted into an entitlement, and an already-active paid
+ * entitlement is never replaced by an older or different purchase.
+ */
+export async function reconcileMembershipFromPaymentHistory(userId: string): Promise<{
+  ok: boolean
+  recovered: boolean
+  entitlement?: ServerMembershipEntitlement
+  intentId?: string
+  error?: string
+}> {
+  const uid = String(userId || '').trim()
+  if (!uid) return { ok: false, recovered: false, error: 'INVALID_USER' }
+
+  const current = await tryGetEntitlementAuthoritative(uid)
+  if (!current.ok) return { ok: false, recovered: false, error: current.error }
+  if (current.entitlement.tier !== 'free' && current.entitlement.active &&
+      (!current.entitlement.expiresAt || current.entitlement.expiresAt > Date.now())) {
+    return { ok: true, recovered: false, entitlement: current.entitlement }
+  }
+
+  let intents: PaymentIntent[]
+  try {
+    intents = await listIntentsForUserAsync(uid)
+  } catch {
+    return { ok: false, recovered: false, error: 'PAYMENT_INTENT_STORE_UNAVAILABLE' }
+  }
+
+  const candidates = intents
+    .filter((intent) => intent.userId === uid && (intent.status === 'COMPLETED' || intent.status === 'FULFILLED'))
+    .filter((intent) => intent.currency === 'PI')
+    .filter((intent) => {
+      const productId = String(intent.metadata?.productId || '').toLowerCase()
+      return intent.purpose === 'membership' || /^membership_(vip|vvip)_(monthly|four_months|eight_months|yearly)$/.test(productId)
+    })
+    .sort((a, b) => (b.completedAt || b.fulfilledAt || b.createdAt) - (a.completedAt || a.fulfilledAt || a.createdAt))
+
+  for (const intent of candidates) {
+    const result = await tryGrantMembershipFromCompletedIntent({
+      userId: uid,
+      intent: {
+        id: intent.id,
+        userId: intent.userId,
+        purpose: intent.purpose,
+        status: intent.status,
+        amount: intent.amount,
+        currency: intent.currency,
+        providerPaymentId: intent.providerPaymentId,
+        metadata: intent.metadata,
+      },
+    })
+    if (result.granted && result.entitlement) {
+      return { ok: true, recovered: true, entitlement: result.entitlement, intentId: intent.id }
+    }
+  }
+
+  return { ok: true, recovered: false, entitlement: current.entitlement }
 }
 
 export async function grantEntitlement(input: {

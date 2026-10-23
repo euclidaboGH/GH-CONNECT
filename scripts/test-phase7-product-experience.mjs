@@ -27,6 +27,7 @@ check('reaction totals are not duplicated in a second summary row', !card.includ
 check('upvote and downvote rosters remain discoverable with long-press/context menu', card.includes('openRoster("upvotes")') && card.includes('openRoster("downvotes")'))
 check('post engagement requests remain server-authoritative', card.includes('socialSetCuration(post.id, choice, rewardPercentage)') && card.includes('res.durable === false'))
 check('feed has a named accessible feed landmark', feed.includes('role="feed"') && feed.includes('aria-label={`${activeFilter} feed`}'))
+check('feed pagination increments visible count once per fetched page', (feed.match(/setDisplayedPostsCount\(\(prev\) => prev \+ Math\.min\(20, fetchedCount\)\)/g) || []).length === 1 && feed.includes('One state transition per server page'))
 check('feed loading state is exposed to assistive technology', feed.includes('aria-busy={isRefreshing || isLoadingMore}'))
 check('feed includes stories and moments before timeline items', feed.includes('<ProfileStorySection scope="feed" />'))
 check('story rail is named for assistive technology', stories.includes('aria-label="Stories from your community"'))

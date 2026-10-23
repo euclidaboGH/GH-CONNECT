@@ -142,7 +142,7 @@ export function ActionSheet({
       className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby={`${id}-title`}
     >
       <button
         type="button"
@@ -162,7 +162,7 @@ export function ActionSheet({
         <div className="flex shrink-0 items-center justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
         </div>
-        <p className="shrink-0 px-5 pb-2 pt-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+        <p id={`${id}-title`} className="shrink-0 px-5 pb-2 pt-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
           {title}
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2">

@@ -3,6 +3,7 @@
  * Never credits GHC/Pi or mutates ledger/membership.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 
 export type SocialNotificationType =
   | "follow"
@@ -79,7 +80,17 @@ export async function emitSocialNotification(input: {
     p_title: input.title,
     p_body: input.body,
     p_dedupe_key: input.dedupeKey,
-    p_metadata: input.metadata || {},
+    p_metadata: {
+      ...(input.metadata || {}),
+      correlation: buildCorrelationEnvelope({
+        kind: input.metadata?.communityId ? "community" : "social",
+        event: input.type,
+        postId: String(input.metadata?.postId || (input.entityType === "post" ? input.entityId || "" : "")) || undefined,
+        commentId: String(input.metadata?.commentId || (input.entityType === "comment" ? input.entityId || "" : "")) || undefined,
+        communityId: input.metadata?.communityId ? String(input.metadata.communityId) : undefined,
+        counterpartyId: input.actorUserId,
+      }),
+    },
   }).catch(() => null)
 }
 

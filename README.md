@@ -43,3 +43,8 @@ A successful static test or local source check does not establish that Supabase 
 - `docs/`: current architecture, product-domain, security, and release documentation. Historical reports are segregated under `docs/archive/` and are not current status authority.
 
 Private / proprietary unless otherwise stated by the repository owner.
+
+
+## Latest engineering milestone
+
+Phase 37 — Performance, Mobile & Pi Browser V2 is complete. See `PHASE37-PERFORMANCE-MOBILE-PI-BROWSER-V2-REPORT.md`.

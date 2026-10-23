@@ -166,6 +166,50 @@ export const contentVisibilityAutoStyle: {
   containIntrinsicSize: "1px 280px",
 }
 
+export type DevicePerformanceProfile = {
+  saveData: boolean
+  effectiveType: string | null
+  reducedMotion: boolean
+  hardwareConcurrency: number
+  lowPower: boolean
+}
+
+/** Snapshot browser capabilities for low-end/mobile rendering decisions. */
+export function getDevicePerformanceProfile(): DevicePerformanceProfile {
+  if (typeof window === "undefined") {
+    return { saveData: false, effectiveType: null, reducedMotion: false, hardwareConcurrency: 4, lowPower: false }
+  }
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string }; deviceMemory?: number }
+  const connection = nav.connection
+  const effectiveType = connection?.effectiveType || null
+  const saveData = Boolean(connection?.saveData)
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
+  const cores = Number(nav.hardwareConcurrency) || 4
+  const memory = Number(nav.deviceMemory) || 4
+  const lowPower = saveData || cores <= 2 || memory <= 2 || effectiveType === "2g" || effectiveType === "slow-2g"
+  return { saveData, effectiveType, reducedMotion, hardwareConcurrency: cores, lowPower }
+}
+
+/** Only prefetch non-critical data on a visible, adequately connected device. */
+export function shouldPrefetchNonCritical(): boolean {
+  const profile = getDevicePerformanceProfile()
+  return !profile.lowPower && typeof document !== "undefined" && document.visibilityState === "visible" && navigator.onLine
+}
+
+/** Defer non-critical work until the browser has idle time. */
+export function scheduleNonCriticalWork(fn: () => void, timeout = 1500): () => void {
+  if (typeof window === "undefined") { fn(); return () => undefined }
+  let cancelled = false
+  const run = () => { if (!cancelled) fn() }
+  const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback
+  const id = typeof ric === "function" ? ric(run, { timeout }) : window.setTimeout(run, Math.min(timeout, 250))
+  return () => {
+    cancelled = true
+    if (typeof ric === "function" && typeof (window as any).cancelIdleCallback === "function") (window as any).cancelIdleCallback(id)
+    else window.clearTimeout(id as number)
+  }
+}
+
 /**
  * Video: only attach src when near viewport — caller uses IntersectionObserver.
  */

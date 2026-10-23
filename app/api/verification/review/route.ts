@@ -11,6 +11,7 @@
  * not invent external identity providers.
  */
 import { NextRequest, NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import {
   listPendingForReview,
   updateVerificationRequestStatus,
@@ -27,7 +28,10 @@ function authorize(req: NextRequest): boolean {
   const provided =
     req.headers.get("x-verification-secret") ||
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-  return Boolean(serviceKey && provided && provided === serviceKey)
+  if (!serviceKey || !provided) return false
+  const a = Buffer.from(serviceKey, "utf8")
+  const b = Buffer.from(provided, "utf8")
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 export async function GET(req: NextRequest) {

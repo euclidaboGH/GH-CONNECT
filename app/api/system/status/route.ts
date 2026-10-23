@@ -7,6 +7,8 @@ import { NextResponse } from "next/server"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { isDatabaseConfigured } from "@/lib/server/economy/http"
 import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
+import { backendAuthoritySnapshot } from "@/lib/server/platform/backend-authority"
+import { BACKEND_CONTRACT_VERSION } from "@/lib/server/platform/backend-contracts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -109,6 +111,8 @@ export async function GET() {
         supabase,
         storage: { bucket: storageBucket, ...bucket },
         probes: rpcProbe,
+        backendContract: { version: BACKEND_CONTRACT_VERSION },
+        authorities: backendAuthoritySnapshot(),
         blockers,
         hint:
           blockers.length === 0

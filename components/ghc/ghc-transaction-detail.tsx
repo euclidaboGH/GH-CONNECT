@@ -5,11 +5,11 @@
  * Does not invent transactions; only presents GhcTransaction fields.
  */
 
-import { ArrowLeft, Copy, X } from "lucide-react"
+import { ArrowLeft, Copy, ExternalLink, X } from "lucide-react"
 import { useState } from "react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import type { GhcTransaction } from "@/lib/domains/economy-types"
-import { activityTitle, formatGhcAmount, formatGhcWhen } from "@/lib/domains/ghc-wallet-ux"
+import { navigateGhcActivityTarget, resolveGhcActivityAttribution } from "@/lib/domains/ghc-activity-attribution"
 
 const KIND_LABELS: Record<string, string> = {
   earned: "Earned",
@@ -74,6 +74,7 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
   if (!open || !tx) return null
 
   const positive = tx.amount >= 0
+  const attribution = resolveGhcActivityAttribution(tx)
   const kindLabel = KIND_LABELS[tx.kind] || tx.kind
   const counterparty =
     metaString(tx.metadata, "counterpartyName") ||
@@ -199,6 +200,20 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
                 <dd className="text-right text-xs">{formatWhen(tx.expiresAt)}</dd>
               </div>
             )}
+            <div className="border-b border-border/60 pb-2">
+              <dt className="text-muted-foreground">Linked activity</dt>
+              <dd className="mt-0.5 font-semibold">{attribution.label}</dd>
+              {attribution.related.length ? (
+                <div className="mt-1 space-y-0.5">
+                  {attribution.related.map((item) => <p key={`${item.label}:${item.value}`} className="break-all text-[10px] text-muted-foreground"><span className="font-semibold">{item.label}:</span> {item.value}</p>)}
+                </div>
+              ) : <p className="mt-1 text-[10px] text-muted-foreground">No durable product reference was attached to this ledger row.</p>}
+              {attribution.target && attribution.target.kind !== "reward" && attribution.target.kind !== "payment" ? (
+                <button type="button" onClick={() => { if (navigateGhcActivityTarget(attribution.target!)) onClose() }} className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-muted">
+                  <ExternalLink size={12} /> Open source activity
+                </button>
+              ) : null}
+            </div>
             <div className="border-b border-border/60 pb-2">
               <dt className="text-muted-foreground">Reference</dt>
               <dd className="mt-0.5 break-all font-mono text-[11px]">

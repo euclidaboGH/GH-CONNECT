@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/creator/store"
 import { createPaymentIntent, assertDurableWrite, loadPaymentIntent } from "@/lib/server/payments/intent-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -125,6 +126,13 @@ export async function POST(request: Request) {
         const error = String(settled?.error || "GHC_TIP_SETTLEMENT_UNAVAILABLE")
         const status = ["INSUFFICIENT_BALANCE", "TRANSFER_LIMIT_EXCEEDED", "ACCOUNT_RESTRICTED", "BLOCKED_USER", "IDEMPOTENCY_CONFLICT", "SELF_TRANSFER"].includes(error) ? 409 : 503
         return NextResponse.json({ ok: false, error, retryable: status === 503, intentId: result.intentId }, { status })
+      }
+      const transferReference = String(settled.transferReference || "")
+      if (transferReference) {
+        await Promise.allSettled([
+          attachLedgerCorrelation({ userId: auth.userId, referenceId: transferReference, envelope: buildCorrelationEnvelope({ kind: "creator_tip", event: "CREATOR_TIP_SENT", postId: contentId || undefined, tipIntentId: result.intentId, counterpartyId: recipientId }) }),
+          attachLedgerCorrelation({ userId: recipientId, referenceId: transferReference, envelope: buildCorrelationEnvelope({ kind: "creator_tip", event: "CREATOR_TIP_RECEIVED", postId: contentId || undefined, tipIntentId: result.intentId, counterpartyId: auth.userId }) }),
+        ])
       }
       return NextResponse.json({ ok: true, durable: true, intentId: result.intentId, status: "settled", settlement: "atomic_ghc_transfer", settlementId: settled.settlementId, transferReference: settled.transferReference, amount, currency: "GHC", creatorPaid: true, duplicate: Boolean(result.duplicate || settled.idempotent) })
     } catch {

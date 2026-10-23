@@ -262,15 +262,33 @@ function EnhancedPostCardInner({
         const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
-        if (res.reward?.credited && Number(res.reward.amount) > 0) {
-          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC credited`, type: "success" } })) } catch { /* */ }
+        const redistributed = Boolean(res.redistribute?.credited) && Number(res.redistribute?.amount) > 0
+        if (redistributed) {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.redistribute?.amount).toFixed(4).replace(/\.?0+$/, "")} GHC contributed to this creator`, type: "success" } }))
+          } catch { /* */ }
+        } else if (res.reward?.credited && Number(res.reward.amount) > 0) {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC credited`, type: "success" } }))
+          } catch { /* */ }
         } else {
-          // A curation vote is a quality signal, not proof of a financial credit.
-          // Be explicit so users do not mistake a successful vote for GHC earnings.
+          // A curation vote is a quality signal. GHC movement is a separate,
+          // balance-funded redistribution and is never invented by the client.
+          const redReason = String(res.redistribute?.reason || "").toUpperCase()
           const rewardReason = String(res.reward?.reason || "").toUpperCase()
-          const message = rewardReason.includes("DISABLED") || rewardReason.includes("DAILY_CLAIM_ONLY")
-            ? "Vote saved. Curation rewards are currently disabled; no GHC was credited."
-            : "Vote saved. No GHC was credited for this vote."
+          const required = Number(res.redistribute?.requiredBalance || 0)
+          const available = Number(res.redistribute?.availableBalanceAfter || 0)
+          const message = redReason.includes("INSUFFICIENT")
+            ? required > 0
+              ? `Vote saved. Your wallet needs ${required.toFixed(4).replace(/\.?0+$/, "")} GHC to fund this contribution.`
+              : "Vote saved. Fund your GHC wallet to make a curation contribution."
+            : rewardReason.includes("DISABLED") || rewardReason.includes("DAILY_CLAIM_ONLY")
+              ? "Vote saved. Curation reward issuance is gated; no GHC was created."
+              : "Vote saved. No GHC movement was recorded for this vote."
           try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message, type: "success" } })) } catch { /* */ }
         }
         broadcastPostEngagement({

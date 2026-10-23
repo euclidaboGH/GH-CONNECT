@@ -47,6 +47,7 @@ export async function GET(request: Request, ctx: Ctx) {
     const rawLimit = Number(url.searchParams.get("limit") || "50")
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100)
     const before = url.searchParams.get("before")
+    const beforeId = url.searchParams.get("beforeId")
     // Ignore client identity query params
     void url.searchParams.get("userId")
     void url.searchParams.get("senderId")
@@ -56,6 +57,7 @@ export async function GET(request: Request, ctx: Ctx) {
       ghUserId: auth.userId,
       limit,
       before,
+      beforeId,
     })
     if (!result.ok) {
       const status = result.error === "FORBIDDEN" ? 403 : result.error === "INVALID_CURSOR" ? 400 : 503

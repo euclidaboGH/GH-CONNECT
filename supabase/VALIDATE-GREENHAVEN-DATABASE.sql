@@ -47,7 +47,10 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname ~ '^(gh|ghc|ghpv)';
 
-  IF table_count < 101 THEN RAISE EXCEPTION 'Unexpected GreenHaven table count: % (expected at least 101)', table_count; END IF;
+  -- The canonical source currently contains 100 executable GreenHaven table definitions.
+  -- Two additional CREATE TABLE strings are intentionally comment-only proposal/note text.
+  -- Keep this as a floor while the named-table contract above remains authoritative.
+  IF table_count < 100 THEN RAISE EXCEPTION 'Unexpected GreenHaven table count: % (expected at least 100)', table_count; END IF;
   IF function_count < 173 THEN RAISE EXCEPTION 'Unexpected GreenHaven function count: % (expected at least 173)', function_count; END IF;
 END $$;
 

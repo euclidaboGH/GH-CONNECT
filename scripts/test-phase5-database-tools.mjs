@@ -35,13 +35,15 @@ assert.match(readFileSync(files.generator, 'utf8'), /db:generate-canonical|Canon
 assert.match(validate, /GREENHAVEN DATABASE VALIDATION: PASS/)
 assert.match(validate, /greenhaven_tables/)
 assert.match(validate, /greenhaven_functions/)
+assert.match(validate, /table_count < 100/)
+assert.doesNotMatch(validate, /table_count < 101|expected at least 101/)
 
 const migrationDir = join(root, 'supabase', 'migrations')
 const { readdirSync } = await import('node:fs')
 const migrations = readdirSync(migrationDir).filter(n => /^\d{14}_.+\.sql$/.test(n))
 const sourceMarkers = (install.match(/^-- SOURCE \d{3}: \d{14}_.+\.sql$/gm) ?? []).length
 assert.equal(sourceMarkers, migrations.length, `canonical installer has ${sourceMarkers} sources but ${migrations.length} migrations exist`)
-assert.equal(migrations.length, 115, `current baseline expected 115 clean migrations, found ${migrations.length}`)
+assert.equal(migrations.length, 131, `current baseline expected 131 clean migrations, found ${migrations.length}`)
 assert.match(readFileSync(files.ops, 'utf8'), /npm run db:generate-canonical/)
 assert.match(readFileSync(files.ops, 'utf8'), /object-based, not migration-count-based/)
 

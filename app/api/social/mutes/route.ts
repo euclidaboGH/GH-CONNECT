@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,6 +12,12 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const rate = await checkDurableRateLimit(`social-write:${auth.userId}:mute`, 60, 60_000)
+  const correlationId = requestCorrelationId(request)
+  if (!rate.ok) {
+    void appendSecurityEvent({ eventType: "social.mute.rate_limited", outcome: "blocked", reasonCode: "RATE_LIMITED", actorUserId: auth.userId, correlationId })
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED", retryAfterSec: rate.retryAfterSec }, { status: 429 })
   }
   const body = await request.json().catch(() => ({}))
   const targetUserId = String(body.targetUserId || "").trim()
@@ -34,5 +41,6 @@ export async function POST(request: Request) {
       { status: 503 }
     )
   }
+  void appendSecurityEvent({ eventType: "social.mute", outcome: "allowed", actorUserId: auth.userId, targetUserId, correlationId, metadata: { muted: mute } })
   return NextResponse.json({ ok: true, durable: true, muted: mute })
 }

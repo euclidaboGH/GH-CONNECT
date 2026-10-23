@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+import { readFileSync, existsSync } from "node:fs"
+let failed = 0
+function ok(condition, message) { if (condition) console.log(`PASS ${message}`); else { console.log(`FAIL ${message}`); failed++ } }
+const migration = readFileSync("supabase/migrations/20261022120001_gh_marketplace_saved_listings.sql", "utf8")
+const route = readFileSync("app/api/marketplace/saves/route.ts", "utf8")
+const ui = readFileSync("components/ghc/marketplace-screen.tsx", "utf8")
+const client = readFileSync("lib/social/client.ts", "utf8")
+ok(/^CREATE TABLE IF NOT EXISTS public\.gh_marketplace_saved_listings/m.test(migration), "saved-listings table is additive and canonical")
+ok(migration.includes("PRIMARY KEY (user_id, listing_id)"), "saved-listings toggle is idempotent")
+ok(migration.includes("pg_advisory_xact_lock"), "concurrent save toggles are serialized")
+ok(migration.includes("USING (false) WITH CHECK (false)"), "saved-listings table denies direct client access")
+ok(migration.includes("GRANT EXECUTE ON FUNCTION public.gh_marketplace_saved_listing_toggle"), "toggle RPC is service-role only")
+ok(migration.includes("GRANT EXECUTE ON FUNCTION public.gh_marketplace_saved_listings_list"), "list RPC is service-role only")
+ok(route.includes("resolveAuthenticatedUser"), "save route derives identity from authenticated session")
+ok(route.includes("checkRateLimit"), "save route is rate limited")
+ok(route.includes("gh_marketplace_saved_listing_toggle"), "save route uses authoritative toggle RPC")
+ok(route.includes("gh_marketplace_saved_listings_list"), "save route uses authoritative list RPC")
+ok(client.includes("socialFetchMarketplaceSaved"), "client exposes durable saved-listings read")
+ok(client.includes("socialToggleMarketplaceSaved"), "client exposes durable saved-listings toggle")
+ok(ui.includes('"Saved"'), "marketplace exposes a Saved surface")
+ok(ui.includes("socialToggleMarketplaceSaved(listing.id)"), "listing detail uses durable save toggle")
+ok(ui.includes("ghc:marketplace-saves-changed"), "save mutations refresh the saved-listings surface")
+ok(existsSync("app/api/marketplace/saves/route.ts"), "saved-listings API route exists")
+if (failed) process.exit(1)
+console.log(`\nPHASE 12 MARKETPLACE SAVES: ${17 - failed}/17 passed`)

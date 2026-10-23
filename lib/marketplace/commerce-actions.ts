@@ -13,6 +13,7 @@ export type ListingRef = {
   title?: string | null
   /** Optional message body for compose prefill */
   messageTemplate?: string | null
+  orderId?: string | null
 }
 
 /** Open marketplace surface focused on a listing (ecosystem until dedicated tab exists). */
@@ -70,7 +71,7 @@ export function openPayForListing(listing: ListingRef, rail: "pi" | "ghc" = "pi"
   try {
     window.dispatchEvent(
       new CustomEvent("ghc:open-gh-pay", {
-        detail: { listingId: listing.listingId, purpose: "marketplace" },
+        detail: { listingId: listing.listingId, orderId: listing.orderId, purpose: "marketplace" },
       }),
     )
   } catch {

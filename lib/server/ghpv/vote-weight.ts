@@ -1,7 +1,8 @@
 /**
  * GHPV-1A — weighted judgment from session identity + server CP only.
  * Never accepts client power/reputation/balance.
- * Loads stored calibration when available; safe defaults otherwise.
+ * Loads durable intelligence/calibration. Curation fails closed when the
+ * authoritative intelligence snapshot is unavailable.
  */
 
 import { getReputationState } from "@/lib/server/reputation/store"
@@ -32,6 +33,35 @@ export type WeightedVoteResult = {
   integrity: number
   maxConsensusShare: number
   calibrationSource: "stored" | "default"
+  intelligenceSource?: "stored" | "formula"
+  riskScore?: number | null
+}
+
+async function loadStoredIntelligence(
+  userId: string
+): Promise<{ curationPower: number; riskScore: number; eligible: boolean } | null> {
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !userId) return null
+  try {
+    const url =
+      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_reputation_intelligence` +
+      `?user_id=eq.${encodeURIComponent(userId)}` +
+      `&select=curation_power,risk_score,curation_eligible&limit=1`
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Accept: "application/json" },
+      cache: "no-store",
+    })
+    if (!res.ok) return null
+    const rows = (await res.json()) as Array<{ curation_power?: number; risk_score?: number; curation_eligible?: boolean }>
+    if (!rows[0]) return null
+    const cp = Number(rows[0].curation_power)
+    const risk = Number(rows[0].risk_score)
+    if (!Number.isFinite(cp) || !Number.isFinite(risk)) return null
+    return { curationPower: Math.max(0.25, Math.min(25, cp)), riskScore: Math.max(0, Math.min(100, risk)), eligible: rows[0].curation_eligible !== false }
+  } catch {
+    return null
+  }
 }
 
 async function loadStoredCalibration(
@@ -98,7 +128,8 @@ export async function resolveWeightedVote(
     }
   }
 
-  const curationPower = computeCurationPower({
+  const intelligence = reviewerId ? await loadStoredIntelligence(reviewerId) : null
+  const computedPower = computeCurationPower({
     reputationLevel: level,
     judgmentCalibration: jcs,
     integrityScore: integrity,
@@ -106,6 +137,15 @@ export async function resolveWeightedVote(
     independenceFactor: 1,
     antiAbuseFactor: integrity / 100,
   })
+  // Phase 34/39/42: durable intelligence is the only curation authority.
+  // Never silently substitute a legacy/formula path after convergence.
+  if (!intelligence) {
+    throw new Error("CURATION_INTELLIGENCE_UNAVAILABLE")
+  }
+  if (!intelligence.eligible) {
+    throw new Error("CURATION_REVIEW_REQUIRED")
+  }
+  const curationPower = intelligence.curationPower
 
   // Raw unit weight for active contribution. 12% anti-whale is settlement-only.
   const effectiveWeight = curationPower
@@ -120,6 +160,8 @@ export async function resolveWeightedVote(
     integrity,
     maxConsensusShare: MAX_REVIEWER_CONSENSUS_SHARE,
     calibrationSource,
+    intelligenceSource: "stored",
+    riskScore: intelligence?.riskScore ?? null,
   }
 }
 

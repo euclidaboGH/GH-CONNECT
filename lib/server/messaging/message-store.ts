@@ -21,6 +21,11 @@ export type DurableConversation = {
   lastMessagePreview: string | null
   memberIds: string[]
   unreadCount?: number
+  contextType?: string | null
+  contextId?: string | null
+  avatarUrl?: string | null
+  isPinned?: boolean
+  isArchived?: boolean
 }
 
 export type DurableMediaAttachment = {
@@ -47,6 +52,8 @@ export type DurableMessage = {
   replyTo?: string
   replyToPreview?: { senderName: string; text: string }
   sharedPostId?: string
+  sharedType?: string | null
+  sharedId?: string | null
   mediaAttachments?: DurableMediaAttachment[]
   deliveredAt?: number | null
   readAt?: number | null
@@ -216,12 +223,23 @@ export async function listConversationsForUser(
       if (!convRes.ok || !Array.isArray(convRes.data)) return []
       {
         const out: DurableConversation[] = []
-        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(
-          `gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`
+        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string; is_pinned?: boolean; is_archived?: boolean }>>(
+          `gh_conversation_members?conversation_id=in.(${inList})&gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id,gh_user_id,is_pinned,is_archived`
         )
         const membersByConversation = new Map<string, string[]>()
         if (memberRows.ok && Array.isArray(memberRows.data)) {
           for (const member of memberRows.data) {
+            const list = membersByConversation.get(member.conversation_id) || []
+            list.push(member.gh_user_id)
+            membersByConversation.set(member.conversation_id, list)
+          }
+        }
+        const selfPrefs = new Map<string, {is_pinned:boolean; is_archived:boolean}>()
+        if (memberRows.ok && Array.isArray(memberRows.data)) for (const m of memberRows.data) selfPrefs.set(m.conversation_id,{is_pinned:Boolean(m.is_pinned),is_archived:Boolean(m.is_archived)})
+        const allMemberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(`gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`)
+        if (allMemberRows.ok && Array.isArray(allMemberRows.data)) {
+          membersByConversation.clear()
+          for (const member of allMemberRows.data) {
             const list = membersByConversation.get(member.conversation_id) || []
             list.push(member.gh_user_id)
             membersByConversation.set(member.conversation_id, list)
@@ -257,6 +275,11 @@ export async function listConversationsForUser(
                 : null,
             memberIds: members,
             ...(unreadResult.ok && Array.isArray(unreadResult.data) ? { unreadCount: unreadCounts.get(id) || 0 } : {}),
+            contextType: row.context_type != null ? String(row.context_type) : null,
+            contextId: row.context_id != null ? String(row.context_id) : null,
+            avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
+            isPinned: Boolean(selfPrefs.get(id)?.is_pinned),
+            isArchived: Boolean(selfPrefs.get(id)?.is_archived),
           })
         }
         return out
@@ -550,6 +573,36 @@ export async function createDirectConversation(input: {
 }
 
 
+export async function setConversationContext(input: {
+  conversationId: string
+  actorId: string
+  contextType: "marketplace_order" | "community" | "post" | "system"
+  contextId: string
+  title?: string | null
+  avatarUrl?: string | null
+}): Promise<{ ok: true; durable: boolean } | { ok: false; error: string }> {
+  const cid = String(input.conversationId || "").trim()
+  const uid = String(input.actorId || "").trim()
+  const contextId = String(input.contextId || "").trim()
+  if (!cid || !uid || !contextId) return { ok: false, error: "INVALID_INPUT" }
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+  if (dbConfigured()) {
+    const data = await rest<{ ok?: boolean; error?: string }>("rpc/gh_messaging_set_conversation_context", {
+      method: "POST",
+      body: JSON.stringify({
+        p_conversation_id: cid, p_actor_id: uid, p_context_type: input.contextType,
+        p_context_id: contextId, p_title: input.title ?? null, p_avatar_url: input.avatarUrl ?? null,
+      }),
+    })
+    if (!data.ok) return { ok: false, error: "CONTEXT_SAVE_FAILED" }
+    return { ok: true, durable: true }
+  }
+  if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
+  const existing = memConv.get(cid)
+  if (existing) { existing.contextType = input.contextType; existing.contextId = contextId; existing.title = input.title ?? existing.title; existing.avatarUrl = input.avatarUrl ?? existing.avatarUrl; existing.updatedAt = Date.now() }
+  return { ok: true, durable: false }
+}
+
 /** Ensure a community/group conversation exists and owner is a member. */
 export async function ensureCommunityConversation(input: {
   communityId: string
@@ -668,6 +721,7 @@ export async function listMessages(input: {
   ghUserId: string
   limit?: number
   before?: string | null // ISO or ms cursor on created_at
+  beforeId?: string | null
 }): Promise<{ ok: true; messages: DurableMessage[] } | { ok: false; error: string }> {
   const cid = String(input.conversationId || "").trim()
   const uid = String(input.ghUserId || "").trim()
@@ -681,16 +735,14 @@ export async function listMessages(input: {
     if (input.before) {
       const cursor = String(input.before).trim()
       const numericCursor = cursor !== "" ? Number(cursor) : Number.NaN
-      let cursorMs: number
-      if (Number.isFinite(numericCursor)) {
-        if (Math.abs(numericCursor) > 8.64e15) return { ok: false, error: "INVALID_CURSOR" }
-        cursorMs = numericCursor
-      } else {
-        cursorMs = Date.parse(cursor)
-      }
+      const cursorMs = Number.isFinite(numericCursor) ? numericCursor : Date.parse(cursor)
       if (!Number.isFinite(cursorMs) || Math.abs(cursorMs) > 8.64e15) return { ok: false, error: "INVALID_CURSOR" }
       const beforeIso = new Date(cursorMs).toISOString()
-      q += `&created_at=lt.${encodeURIComponent(beforeIso)}`
+      if (input.beforeId) {
+        const safeId = String(input.beforeId).trim()
+        if (!safeId || safeId.length > 180 || /[\u0000-\u001f\u007f]/.test(safeId)) return { ok: false, error: "INVALID_CURSOR" }
+        q += `&or=(created_at.lt.${encodeURIComponent(beforeIso)},and(created_at.eq.${encodeURIComponent(beforeIso)},id.lt.${encodeURIComponent(safeId)}))`
+      } else q += `&created_at=lt.${encodeURIComponent(beforeIso)}`
     }
     const { ok, data } = await rest<Array<Record<string, unknown>>>(q)
     if (ok && Array.isArray(data)) {
@@ -777,9 +829,11 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
       const atts = normalizeAttachments(meta.attachments ?? meta.mediaAttachments)
       return atts.length ? atts : undefined
     })(),
-    replyTo: typeof (row.meta as Record<string, unknown> | null)?.replyToMessageId === "string"
-      ? String((row.meta as Record<string, unknown>).replyToMessageId)
-      : undefined,
+    replyTo: typeof row.reply_to_message_id === "string"
+      ? String(row.reply_to_message_id)
+      : typeof (row.meta as Record<string, unknown> | null)?.replyToMessageId === "string"
+        ? String((row.meta as Record<string, unknown>).replyToMessageId)
+        : undefined,
     replyToPreview: (() => {
       const meta = row.meta && typeof row.meta === "object" ? row.meta as Record<string, unknown> : {}
       const preview = meta.replyToPreview && typeof meta.replyToPreview === "object" ? meta.replyToPreview as Record<string, unknown> : null
@@ -788,8 +842,12 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
     })(),
     sharedPostId: (() => {
       const meta = row.meta && typeof row.meta === "object" ? row.meta as Record<string, unknown> : {}
-      return typeof meta.sharedPostId === "string" ? meta.sharedPostId.slice(0, 180) : undefined
+      return typeof row.shared_id === "string" && String(row.shared_type || "") === "post"
+        ? row.shared_id.slice(0, 180)
+        : typeof meta.sharedPostId === "string" ? meta.sharedPostId.slice(0, 180) : undefined
     })(),
+    sharedType: typeof row.shared_type === "string" ? row.shared_type : undefined,
+    sharedId: typeof row.shared_id === "string" ? row.shared_id : undefined,
   }
 }
 
@@ -980,6 +1038,8 @@ export async function appendMessage(input: {
           ...(sharedPostId ? { sharedPostId } : {}),
           ...(mediaAttachments.length ? { attachments: mediaAttachments } : {}),
         },
+        ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
+        ...(sharedPostId ? { shared_type: "post", shared_id: sharedPostId } : {}),
       }),
     })
     if (!ins.ok) {

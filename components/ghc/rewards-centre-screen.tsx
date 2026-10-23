@@ -34,6 +34,7 @@ import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { EconomyProgramStatus } from "./economy-program-status"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
+import { navigateGhcActivityTarget, resolveRewardActivityTarget } from "@/lib/domains/ghc-activity-attribution"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
@@ -143,6 +144,13 @@ export function RewardsCentreScreen({
   const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
     []
   )
+  const [serverEconomy, setServerEconomy] = useState<{
+    balance: number | null
+    pending: number | null
+    locked: number | null
+    curationBalance: number | null
+    canFundCuration: boolean | null
+  }>({ balance: null, pending: null, locked: null, curationBalance: null, canFundCuration: null })
   const ghc = useGHC()
   const profile = ghc.profile
   // Optional community lists may be present on the provider value without being
@@ -221,6 +229,31 @@ export function RewardsCentreScreen({
       }
     }
   }, [tick, userId, signals, serverAchievements])
+
+  // Use the same server-authoritative economy snapshot as Wallet.
+  // Rewards Centre is presentation only; it never invents balances or issuance.
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/social/economy/status", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled || !data?.ok) return
+        setServerEconomy({
+          balance: Number.isFinite(Number(data.wallet?.balance)) ? Number(data.wallet.balance) : null,
+          pending: Number.isFinite(Number(data.wallet?.pending)) ? Number(data.wallet.pending) : null,
+          locked: Number.isFinite(Number(data.wallet?.locked)) ? Number(data.wallet.locked) : null,
+          curationBalance: Number.isFinite(Number(data.curation?.spendableBalance)) ? Number(data.curation.spendableBalance) : null,
+          canFundCuration: typeof data.curation?.canFundSuggestedContribution === "boolean"
+            ? data.curation.canFundSuggestedContribution
+            : null,
+        })
+      })
+      .catch(() => { /* retain last confirmed snapshot */ })
+    return () => { cancelled = true }
+  }, [tick, userId])
 
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
@@ -355,6 +388,16 @@ export function RewardsCentreScreen({
 
   return (
     <div className="flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground">
+      {(serverEconomy.balance !== null || serverEconomy.curationBalance !== null) ? (
+        <div className="mx-auto w-full max-w-3xl px-3 pt-3">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-card p-3 sm:grid-cols-4">
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.balance ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pending</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.pending ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Locked</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.locked ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Curation</p><p className="mt-0.5 text-sm font-bold tabular-nums">{serverEconomy.canFundCuration === true ? "Fundable" : serverEconomy.curationBalance !== null ? `₲ ${serverEconomy.curationBalance.toLocaleString(undefined,{maximumFractionDigits:4})}` : "Unavailable"}</p></div>
+          </div>
+        </div>
+      ) : null}
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border/60 bg-card/95 px-3 py-3 backdrop-blur-md">
         <button
           type="button"
@@ -759,6 +802,9 @@ export function RewardsCentreScreen({
                           <p className="mt-1 text-[10px] text-muted-foreground/80">
                             {formatWhen(r.createdAt)}
                           </p>
+                          {resolveRewardActivityTarget(r) ? (
+                            <button type="button" onClick={() => navigateGhcActivityTarget(resolveRewardActivityTarget(r)!)} className="mt-2 inline-flex min-h-9 items-center rounded-full border border-border px-3 text-[11px] font-bold text-emerald-700 hover:bg-muted">Open source activity</button>
+                          ) : null}
                           {(status === "pending_validation" ||
                             status === "eligible" ||
                             status === "approved") && (

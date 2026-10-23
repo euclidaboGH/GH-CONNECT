@@ -109,12 +109,24 @@ export async function POST(request: Request) {
 
   const requestedCategory = String(body.category || "").toLowerCase()
   const category = requestedCategory === "avatars" && isImage ? "avatars" : isAudio ? "audio" : isFile ? "documents" : isVideo ? "videos" : "images"
+  const uploadId = `upload_${randomUUID().replace(/-/g, "")}`
   const objectName = `${randomUUID()}.${ext}`
   const objectPath = buildOwnedMediaPath(auth.userId, category, objectName)
   if (!objectPath) return jsonNoStore({ ok: false, error: "MEDIA_PATH_INVALID" }, { status: 400 })
   const base = env.supabaseUrl.replace(/\/$/, "")
 
   try {
+    const sessionRes = await fetch(`${base}/rest/v1/rpc/gh_media_upload_session_create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey!, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+      body: JSON.stringify({
+        p_upload_id: uploadId, p_owner_id: auth.userId, p_bucket: storageBucket, p_storage_path: objectPath,
+        p_category: category, p_mime_type: mime, p_media_kind: isFile || isAudio ? "file" : isVideo ? "video" : "image",
+        p_expected_bytes: byteSize, p_metadata: { source: "direct_upload_v2" },
+      }), cache: "no-store", signal: AbortSignal.timeout(8_000),
+    })
+    const session = await sessionRes.json().catch(() => ({})) as Record<string, unknown>
+    if (!sessionRes.ok || session.ok !== true) return jsonNoStore({ ok: false, error: "UPLOAD_SESSION_UNAVAILABLE" }, { status: 503 })
     // Supabase Storage: create signed upload URL (token for client PUT/POST)
     const signRes = await fetch(
       `${base}/storage/v1/object/upload/sign/${storageBucket}/${objectPath
@@ -169,6 +181,7 @@ export async function POST(request: Request) {
     return jsonNoStore({
       ok: true,
       durable: false,
+      uploadId,
       uploadUrl,
       token: signJson.token || null,
       objectPath,

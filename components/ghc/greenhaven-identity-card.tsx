@@ -240,11 +240,11 @@ export function GreenHavenIdentityCard({
 
       {/* QR modal */}
       {showQr && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" role="dialog">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="gh-identity-qr-title">
           <button type="button" className="absolute inset-0 bg-black/50" aria-label="Close" onClick={() => setShowQr(false)} />
           <div className="relative z-[91] w-full max-w-xs rounded-3xl border border-border bg-card p-5 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-bold">Your QR · {display}</p>
+              <p id="gh-identity-qr-title" className="text-sm font-bold">Your QR · {display}</p>
               <button type="button" onClick={() => setShowQr(false)} className="rounded-full p-1.5 hover:bg-muted" aria-label="Close">
                 <X size={18} />
               </button>
@@ -268,11 +268,11 @@ export function GreenHavenIdentityCard({
 
       {/* Scan / paste */}
       {showScan && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center" role="dialog">
+        <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="gh-identity-scan-title">
           <button type="button" className="absolute inset-0 bg-black/50" aria-label="Close" onClick={() => setShowScan(false)} />
           <div className="relative z-[91] w-full max-w-md rounded-t-3xl border border-border bg-card p-4 shadow-2xl sm:rounded-3xl">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-bold">Scan or paste GreenHaven ID</p>
+              <p id="gh-identity-scan-title" className="text-sm font-bold">Scan or paste GreenHaven ID</p>
               <button type="button" onClick={() => setShowScan(false)} className="rounded-full p-1.5 hover:bg-muted" aria-label="Close">
                 <X size={18} />
               </button>
@@ -300,11 +300,11 @@ export function GreenHavenIdentityCard({
 
       {/* Find */}
       {findOpen && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center" role="dialog">
+        <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="gh-identity-find-title">
           <button type="button" className="absolute inset-0 bg-black/50" aria-label="Close" onClick={() => setFindOpen(false)} />
           <div className="relative z-[91] w-full max-w-md rounded-t-3xl border border-border bg-card p-4 shadow-2xl sm:rounded-3xl">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-bold">Find by GreenHaven ID</p>
+              <p id="gh-identity-find-title" className="text-sm font-bold">Find by GreenHaven ID</p>
               <button type="button" onClick={() => setFindOpen(false)} className="rounded-full p-1.5 hover:bg-muted" aria-label="Close">
                 <X size={18} />
               </button>

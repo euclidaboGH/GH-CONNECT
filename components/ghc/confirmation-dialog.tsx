@@ -29,13 +29,13 @@ export function ConfirmationDialog({
     <div className="fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div className="fixed inset-0 bg-black/45 backdrop-blur-[1px]" onClick={onCancel} />
 
-      <div className="gh-premium-dialog relative w-full max-w-md space-y-4 rounded-t-[1.75rem] border border-violet-200/45 bg-card p-5 text-card-foreground shadow-[0_24px_70px_rgba(23,19,59,0.18)] sm:rounded-[1.75rem] sm:p-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="gh-confirmation-title" aria-describedby="gh-confirmation-message" className="gh-premium-dialog relative w-full max-w-md space-y-4 rounded-t-[1.75rem] border border-violet-200/45 bg-card p-5 text-card-foreground shadow-[0_24px_70px_rgba(23,19,59,0.18)] sm:rounded-[1.75rem] sm:p-6">
         <div className="flex items-center gap-3">
           {isDangerous && <AlertCircle size={24} className="text-destructive flex-shrink-0" />}
-          <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
+          <h2 id="gh-confirmation-title" className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
         </div>
 
-        <p className="text-muted-foreground text-sm leading-relaxed">{message}</p>
+        <p id="gh-confirmation-message" className="text-muted-foreground text-sm leading-relaxed">{message}</p>
 
         <div className="flex gap-3 pt-4">
           <button

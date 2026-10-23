@@ -90,6 +90,7 @@ export type NotificationDeepLink = {
   greenHavenId?: string
   /** Marketplace deep-link target */
   listingId?: string
+  commentId?: string
 }
 
 const SOCIAL_TYPES = new Set<NotificationType>([
@@ -206,7 +207,9 @@ export function filterByBucket(
 
 /** Resolve deep-link from notification data + type — never default to Settings. */
 export function resolveNotificationDeepLink(n: Notification): NotificationDeepLink {
-  const data = (n.data || {}) as Record<string, unknown>
+  const rawData = (n.data || {}) as Record<string, unknown>
+  const correlation = rawData.correlation && typeof rawData.correlation === "object" ? rawData.correlation as Record<string, unknown> : {}
+  const data = { ...rawData, ...correlation }
   if (data.deepLink && typeof data.deepLink === "object") {
     const forced = data.deepLink as NotificationDeepLink
     // Guard: social/share types must not be forced into settings
@@ -540,6 +543,7 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
           new CustomEvent("ghc:open-post", {
             detail: {
               postId: link.postId,
+              commentId: link.commentId,
               action: link.section === "comments" ? "comment" : "focus",
             },
           })

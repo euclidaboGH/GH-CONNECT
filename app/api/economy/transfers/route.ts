@@ -16,6 +16,7 @@ import {
   jsonOk,
 } from "@/lib/server/economy/http"
 import { notifyTransferCompleted } from "@/lib/server/economy/notifications"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
@@ -103,6 +104,11 @@ export async function POST(request: Request) {
               : 400
       return jsonErr(result.error.code, result.error.message, status)
     }
+    const transferRef = result.referenceId || referenceId
+    await Promise.allSettled([
+      attachLedgerCorrelation({ userId: auth.userId, referenceId: transferRef, envelope: buildCorrelationEnvelope({ kind: "transfer", event: "GHC_TRANSFER_SENT", counterpartyId: toUserId, requestId }) }),
+      attachLedgerCorrelation({ userId: toUserId, referenceId: transferRef, envelope: buildCorrelationEnvelope({ kind: "transfer", event: "GHC_TRANSFER_RECEIVED", counterpartyId: auth.userId, requestId }) }),
+    ])
     try {
       await notifyTransferCompleted({
         senderId: auth.userId,

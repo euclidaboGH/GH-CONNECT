@@ -16,6 +16,7 @@
  */
 
 import { domainEvents, isDomainEventType, type DomainEvent } from "./event-bus"
+import { recoverRealtimeEvents } from "./recovery"
 
 const MAX_EVENT_JSON = 48_000
 
@@ -178,6 +179,7 @@ export class WebSocketTransport implements RealtimeTransport {
         this.ws.onopen = () => {
           this.attempt = 0
           this.setState("connected")
+          void recoverRealtimeEvents()
           this.flushOutbound()
           // Signal domains to reconcile stale lists after reconnect
           try {

@@ -263,3 +263,7 @@ Rules:
 | 2.1.0 | Spec-only; grounded in current `gh_posts` / `gh_saves` / `gh_story_views` |
 
 **Next engineering step (separate prompt):** Phase 2.2 migration + RPC + API — only after this spec is approved and Testnet capacity allows.
+
+## Phase 35 GH Pulse milestones
+
+Short-video surfaces may additionally record `progress_25`, `progress_50`, and `progress_75`. These are server-authorized analytics milestones only; they do not create GHC or financial value. `qualified_view` and `complete` remain the authoritative attention milestones.

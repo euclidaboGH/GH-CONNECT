@@ -9,7 +9,7 @@ import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
-import { socialRecordAttention } from "@/lib/social/client"
+import { socialGetPost, socialRecordAttention } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
@@ -29,7 +29,6 @@ import { CommentSheet } from "./comment-sheet"
 import { PostDetailSheet } from "./post-detail-sheet"
 import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
-import { PostComposer } from "./post-composer"
 import ProfileStorySection from "./profile-story-section"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
@@ -146,9 +145,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [feedError, setFeedError] = useState<Error | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [feedStatusMsg, setFeedStatusMsg] = useState<string | null>(null)
-  const [showComposer, setShowComposer] = useState(false)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
-  const [composeMode, setComposeMode] = useState<"post" | "story">("post")
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [saveCollectionPostId, setSaveCollectionPostId] = useState<string | null>(null)
@@ -217,6 +214,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         setHasMorePosts(false)
         return
       }
+      // One state transition per server page. This prevents a page from being revealed twice.
       setDisplayedPostsCount((prev) => prev + Math.min(20, fetchedCount))
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to load more posts")
@@ -406,28 +404,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     [reactToPost, addToast]
   )
 
-  useEffect(() => {
-    const open = (e: Event) => {
-      const d = (e as CustomEvent).detail || {}
-      if (d.mode === "story") {
-        window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
-        return
-      }
-      setComposeMode("post")
-      setShowComposer(true)
-    }
-    window.addEventListener("ghc:open-compose", open as EventListener)
-    const close = () => setShowComposer(false)
-    window.addEventListener("ghc:close-compose", close)
-    window.addEventListener("ghc:tab-change", close)
-    window.addEventListener("ghc:close-transient-ui", close)
-    return () => {
-      window.removeEventListener("ghc:open-compose", open as EventListener)
-      window.removeEventListener("ghc:close-compose", close)
-      window.removeEventListener("ghc:tab-change", close)
-      window.removeEventListener("ghc:close-transient-ui", close)
-    }
-  }, [])
 
   const handleSave = useCallback(async (postId: string) => {
     const isBookmarked = bookmarkedPostIds.includes(postId)
@@ -467,39 +443,72 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // Profile owner-post actions route through the canonical Feed overlays so the
   // same comment, share, and insights flows are reused instead of duplicated.
+  const [routedPost, setRoutedPost] = useState<Post | null>(null)
+
   useEffect(() => {
-    const handleOpenPostAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail
+    let cancelled = false
+    const handleOpenPostAction = async (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: unknown; commentId?: unknown; action?: unknown }>).detail
       const postId = typeof detail?.postId === "string" ? detail.postId.trim() : ""
       if (!postId) return
       const action = typeof detail?.action === "string" ? detail.action : ""
-      // Bring the post into view when routed from Profile or notifications
-      window.setTimeout(() => {
+      const commentId = typeof detail?.commentId === "string" ? detail.commentId.trim() : ""
+      const openLoadedPost = (target: Post) => {
+        if (cancelled) return
+        if (action === "comment") {
+          openComments(target.id)
+          if (commentId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:focus-comment", { detail: { postId: target.id, commentId } })), 80)
+        } else if (action === "share") setSharePostId(target.id)
+        else if (action === "insights") setInsightsPost(target)
         try {
-          const el = document.querySelector(`[data-post-id="${CSS.escape(postId)}"]`) as HTMLElement | null
-          if (el) {
-            el.scrollIntoView({ behavior: "smooth", block: "center" })
-            el.classList.add("ring-2", "ring-emerald-400/80")
-            window.setTimeout(() => el.classList.remove("ring-2", "ring-emerald-400/80"), 1600)
-          }
+          window.setTimeout(() => {
+            const el = document.querySelector(`[data-post-id="${CSS.escape(target.id)}"]`) as HTMLElement | null
+            el?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }, 80)
         } catch { /* */ }
-      }, 120)
-      if (action === "comment") {
-        if (posts.some((post) => post.id === postId)) openComments(postId)
+      }
+
+      const local = posts.find((post) => post.id === postId) || rankedPosts.find((ranked) => ranked.post.id === postId)?.post
+      if (local) {
+        openLoadedPost(local)
         return
       }
-      if (action === "share") {
-        if (posts.some((post) => post.id === postId)) setSharePostId(postId)
-        return
-      }
-      if (action === "insights") {
-        const target = posts.find((post) => post.id === postId)
-        if (target) setInsightsPost(target)
+
+      // Profile posts can be older than the currently loaded feed page. Hydrate
+      // the requested post directly instead of treating a missing feed-page row
+      // as a missing post. This fixes Profile → Comment/Share/Insights routing.
+      try {
+        const result = await socialGetPost(postId)
+        if (!result.ok || !result.post || cancelled) {
+          addToast(result.error === "POST_NOT_FOUND" ? "This post is no longer available." : "Could not open this post. Please try again.", "error")
+          return
+        }
+        const raw = result.post as Partial<Post>
+        const hydrated: Post = {
+          ...(raw as Post),
+          id: postId,
+          authorId: String(raw.authorId || ""),
+          authorName: String(raw.authorName || "Member"),
+          authorPhoto: String(raw.authorPhoto || ""),
+          content: String(raw.content || ""),
+          images: Array.isArray(raw.images) ? raw.images : [],
+          comments: Array.isArray(raw.comments) ? raw.comments : [],
+          engagement: raw.engagement || { likes: Number(raw.likes || 0), comments: Number(raw.commentCount || 0), shares: Number(raw.shares || 0), views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
+        }
+        setRoutedPost(hydrated)
+        openLoadedPost(hydrated)
+      } catch {
+        if (!cancelled) addToast("Could not open this post. Please try again.", "error")
       }
     }
-    window.addEventListener("ghc:open-post", handleOpenPostAction)
-    return () => window.removeEventListener("ghc:open-post", handleOpenPostAction)
-  }, [openComments, posts])
+    window.addEventListener("ghc:open-post", handleOpenPostAction as EventListener)
+    window.addEventListener("ghc:open-post-ready", handleOpenPostAction as EventListener)
+    return () => {
+      cancelled = true
+      window.removeEventListener("ghc:open-post", handleOpenPostAction as EventListener)
+      window.removeEventListener("ghc:open-post-ready", handleOpenPostAction as EventListener)
+    }
+  }, [openComments, posts, rankedPosts, addToast, setRoutedPost])
 
   const handleShowVisibilityReason = useCallback((postId: string) => {
     setVisibilityReasonPostId(postId)
@@ -528,21 +537,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
   const currentUserId = IdentityService.getCurrentUserId() || ""
   const dailyClaim = useDailyClaimStatus(currentUserId, Boolean(currentUserId))
-  const [rewardReadyNotice, setRewardReadyNotice] = useState(false)
-
-  // One actionable in-app notice per user/reward day; server status is authoritative.
-  useEffect(() => {
-    if (!currentUserId || !dailyClaim.status?.claimable || !dailyClaim.status?.dayKey) {
-      setRewardReadyNotice(false)
-      return
-    }
-    const key = `ghc:daily-reward-ready-notice:${currentUserId}:${dailyClaim.status.dayKey}`
-    try {
-      if (window.localStorage.getItem(key) === "1") return
-      window.localStorage.setItem(key, "1")
-    } catch { /* show this session's notice if storage is unavailable */ }
-    setRewardReadyNotice(true)
-  }, [currentUserId, dailyClaim.status?.claimable, dailyClaim.status?.dayKey])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -674,37 +668,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           </>
         }
       />
-
-      {rewardReadyNotice && (
-        <div
-          className="mx-3 mt-2 flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3 shadow-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="mt-0.5 text-emerald-700 dark:text-emerald-300" aria-hidden>◈</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Your daily GHC reward is ready to claim</p>
-            <button
-              type="button"
-              className="mt-1 text-xs font-semibold text-emerald-800 underline underline-offset-2 dark:text-emerald-200"
-              onClick={() => {
-                setRewardReadyNotice(false)
-                window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
-              }}
-            >
-              Open rewards
-            </button>
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss daily reward notice"
-            className="rounded-full px-2 py-1 text-muted-foreground hover:bg-background/60"
-            onClick={() => setRewardReadyNotice(false)}
-          >
-            ×
-          </button>
-        </div>
-      )}
 
       <div className="sr-only" role="status" aria-live="polite">
         {feedStatusMsg || (isRefreshing ? "Refreshing feed" : "")}
@@ -857,7 +820,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                         try {
                           window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } }))
                         } catch {
-                          setShowComposer(true)
+                          /* App shell owns the global composer. */
                         }
                       },
                     }
@@ -1004,7 +967,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
                     } catch {
-                      setShowComposer(true)
+                      /* App shell owns the global composer. */
                     }
                   }}
                   className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
@@ -1017,7 +980,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
                     } catch {
-                      setShowComposer(true)
+                      /* App shell owns the global composer. */
                     }
                   }}
                   className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95"
@@ -1084,7 +1047,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       })()}
 
       <PostDetailSheet
-        post={selectedPostId ? posts.find((p) => p.id === selectedPostId) || rankedPosts.find((r) => r.post.id === selectedPostId)?.post || null : null}
+        post={selectedPostId ? posts.find((p) => p.id === selectedPostId) || rankedPosts.find((r) => r.post.id === selectedPostId)?.post || (routedPost?.id === selectedPostId ? routedPost : null) : null}
         open={Boolean(selectedPostId)}
         onClose={() => setSelectedPostId(null)}
         onComments={(postId) => { setSelectedPostId(null); setCommentingPostId(postId) }}
@@ -1094,15 +1057,12 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       />
 
       <CommentSheet
-        post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || null : null}
+        post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || (routedPost?.id === commentingPostId ? routedPost : null) : null}
         open={Boolean(commentingPostId)}
         onClose={() => {
           setCommentingPostId(null)
         }}
       />
-
-      {/* Create: bottom-nav Create hub only (no floating FAB) */}
-      <PostComposer open={showComposer} onOpenChange={setShowComposer} initialMode={composeMode} />
 
 
       {/* Visibility reason tooltip */}

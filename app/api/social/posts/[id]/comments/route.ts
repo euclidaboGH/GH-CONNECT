@@ -9,7 +9,7 @@ import { socialDbConfigured, socialRest, socialRpc } from "@/lib/server/social/r
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
@@ -50,53 +50,20 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
-  // V3 repeats post visibility inside the database RPC, not only in this route.
-  // Stable-cursor fallbacks are retained for staged rollout; canViewSocialPost above
-  // remains a fail-closed gate while older database functions are still installed.
-  const v3 = await socialRpc("gh_comment_list_v3", {
+  // Final canonical comment contract. Historical v2/v1 RPCs and direct table
+  // recovery are retired; a missing RPC is a deployment/schema error.
+  const chosen = await socialRpc("gh_comment_list_v3", {
     p_post_id: postId, p_viewer_id: auth.userId, p_limit: limit + 1,
     p_before_ms: before, p_before_id: hasCursor ? beforeId : null,
   })
-  const v2 = v3.ok ? v3 : await socialRpc("gh_comment_list_v2", {
-    p_post_id: postId, p_viewer_id: auth.userId, p_limit: limit + 1,
-    p_before_ms: before, p_before_id: hasCursor ? beforeId : null,
-  })
-  const chosen = v2.ok ? v2 : await socialRpc("gh_comment_list", { p_post_id: postId })
+  if (!chosen.ok) {
+    return NextResponse.json(
+      { ok: false, error: "COMMENT_RPC_UNAVAILABLE", durable: false },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
+  }
   const data = chosen.data as { comments?: unknown[] }
   let comments = Array.isArray(data?.comments) ? data.comments : []
-  // Some staged Testnet databases have an older comment-list RPC that can
-  // return an empty payload while rows are present. Recover from the canonical
-  // table using the already-authorized post ID; never return local-only comments
-  // as if they were durable server data.
-  let directReadSucceeded = false
-  if (!chosen.ok || comments.length === 0) {
-    const q = new URLSearchParams({
-      post_id: `eq.${postId}`,
-      deleted_at: "is.null",
-      select: "id,post_id,author_id,author_name,author_photo,text,parent_id,created_at,media,is_edited,edited_at,is_pinned,pinned_at",
-      order: "created_at.desc",
-      limit: String(limit + 1),
-    })
-    const direct = await socialRest<Array<{
-      id?: string; post_id?: string; author_id?: string; author_name?: string;
-      author_photo?: string; text?: string; parent_id?: string | null; created_at?: string; media?: unknown; is_edited?: boolean; edited_at?: string | null; is_pinned?: boolean; pinned_at?: string | null;
-    }>>(`gh_post_comments?${q.toString()}`)
-    if (direct.ok && Array.isArray(direct.data)) {
-      directReadSucceeded = true
-      comments = direct.data.map((row) => ({
-        id: String(row.id || ""), postId: String(row.post_id || postId),
-        authorId: String(row.author_id || ""), authorName: String(row.author_name || "Member"),
-        authorPhoto: String(row.author_photo || ""), text: String(row.text || ""),
-        parentId: row.parent_id ? String(row.parent_id) : null,
-        replyTo: row.parent_id ? String(row.parent_id) : null,
-        mediaAttachments: Array.isArray(row.media) ? row.media : [],
-        isEdited: Boolean(row.is_edited),
-        editedAt: row.edited_at ? new Date(row.edited_at).getTime() : undefined,
-        isPinned: Boolean(row.is_pinned),
-        createdAt: row.created_at ? new Date(row.created_at).getTime() : 0,
-      })).filter((row) => row.id)
-    }
-  }
   const hasMore = comments.length > limit
   if (hasMore) comments = comments.slice(0, limit)
   const last = comments[comments.length - 1] as { id?: unknown; createdAt?: unknown } | undefined
@@ -112,7 +79,7 @@ export async function GET(
     return state ? { ...comment, reactionCounts: state.reactionCounts, viewerReactions: state.viewerReactions } : comment
   })
   const rpcReadSucceeded = Boolean(chosen.ok && Array.isArray(data?.comments) && (data as { ok?: boolean })?.ok !== false)
-  return NextResponse.json({ ok: true, durable: rpcReadSucceeded || directReadSucceeded, comments: hydratedComments, nextCursor, stableCursor: Boolean((v3.ok && (v3.data as { ok?: boolean } | null)?.ok !== false) || (v2.ok && (v2.data as { ok?: boolean } | null)?.ok !== false)) }, { headers: { "Cache-Control": "no-store" } })
+  return NextResponse.json({ ok: true, durable: true, comments: hydratedComments, nextCursor, stableCursor: true }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(
@@ -220,6 +187,25 @@ export async function POST(
     )
   }
   void (async () => {
+    // A durable comment is an attention/conversation signal, not a GHC mint.
+    // These calls are idempotent and must never block comment creation.
+    await socialRpc("gh_content_event_record", {
+      p_content_id: postId,
+      p_content_kind: "post",
+      p_actor_id: auth.userId,
+      p_event_type: "comment",
+      p_window_key: `comment:${comment.id}`,
+      p_metadata: { commentId: comment.id, parentId: comment.parentId },
+    }).catch(() => null)
+    await socialRpc("gh_reputation_apply_event", {
+      p_user_id: auth.userId,
+      p_event_type: "comment_created",
+      p_points: 1,
+      p_idempotency_key: `comment:${comment.id}`,
+      p_source_ref: comment.id,
+      p_metadata: { postId, parentId: comment.parentId },
+    }).catch(() => null)
+
     const postAuthorId = await lookupPostAuthor(postId)
     let replyRecipientId: string | null = null
     if (comment.parentId) {

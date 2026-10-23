@@ -27,6 +27,7 @@ import {
   ArrowUp,
   ArrowDown,
   Store,
+  RefreshCw,
 } from "lucide-react"
 import {
   notificationSystem,
@@ -137,6 +138,7 @@ export function NotificationBell({
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
+  const [readFilter, setReadFilter] = useState<"all" | "unread">("all")
   const [isOffline, setIsOffline] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
@@ -182,7 +184,7 @@ export function NotificationBell({
       setListLoading(true)
       try {
         const [socialRes, economyRes, socialCountRes, economyCountRes, announcementsRes] = await Promise.all([
-          fetch("/api/social/notifications?limit=60", {
+          fetch("/api/notifications?limit=80", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
           fetch("/api/economy/notifications?limit=60", {
@@ -191,34 +193,68 @@ export function NotificationBell({
           fetch("/api/social/notifications?countOnly=1", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
-          fetch("/api/economy/notifications/unread-count", {
+          fetch("/api/notifications?countOnly=1", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
           fetch("/api/system/announcements?limit=25", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
         ])
-        const [socialData, economyData, socialCountData, economyCountData, announcementsData] = await Promise.all([
+        const [unifiedData, economyData, socialCountData, economyCountData, announcementsData] = await Promise.all([
           socialRes?.json().catch(() => ({})) || {},
           economyRes?.json().catch(() => ({})) || {},
           socialCountRes?.json().catch(() => ({})) || {},
           economyCountRes?.json().catch(() => ({})) || {},
           announcementsRes?.json().catch(() => ({})) || {},
         ]) as [
-          { ok?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: number; readAt?: string | null; actorUserId?: string; entityId?: string; entityType?: string; metadata?: Record<string, unknown> }> },
+          { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null }> },
           { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
           { ok?: boolean; unreadCount?: number },
           { ok?: boolean; count?: number },
           { ok?: boolean; announcements?: Array<{ id?: string; title?: string; body?: string; severity?: string; actionPath?: string | null; publishedAt?: number; read?: boolean }>; unreadCount?: number },
         ]
 
-        const socialRows = socialRes?.ok && socialData.ok && Array.isArray(socialData.notifications)
-          ? socialData.notifications : []
+        const socialRows = socialRes?.ok && unifiedData.ok && Array.isArray(unifiedData.notifications)
+          ? unifiedData.notifications : []
         const economyRows = economyRes?.ok && economyData.ok && Array.isArray(economyData.items)
           ? economyData.items : []
-        setDurableOk(Boolean(socialRows.length || economyRows.length || (socialData.ok && economyData.ok)))
+        setDurableOk(Boolean(socialRows.length || economyRows.length || (unifiedData.ok && economyData.ok)))
 
-        const mappedSocial: Notification[] = socialRows.map((n) => {
+        const unifiedRows = socialRows
+        const mappedUnified: Notification[] = unifiedRows.map((n) => {
+          const eventType = String(n.type || "system")
+          const meta = (n.metadata || {}) as Record<string, unknown>
+          const postId = typeof meta.postId === "string" ? meta.postId : undefined
+          const commentId = typeof meta.commentId === "string" ? meta.commentId : undefined
+          const conversationId = typeof meta.conversationId === "string" ? meta.conversationId : undefined
+          const open = typeof meta.open === "string" ? meta.open : undefined
+          const type: NotificationType =
+            /message|chat/i.test(eventType) || open === "messages" ? "message" :
+            /reward|claim|streak/i.test(eventType) ? "reward" :
+            /ghc|transfer|payment/i.test(eventType) ? "ghc_received" :
+            /follow|connection|friend/i.test(eventType) ? "friend_request" :
+            /like|curation|upvote|downvote/i.test(eventType) ? "like" :
+            /comment|reply|mention/i.test(eventType) ? "comment" :
+            /marketplace|order|listing/i.test(eventType) ? "marketplace_order" : "system"
+          return {
+            id: String(n.id || ""), type,
+            title: String(n.title || "Activity"), message: String(n.body || ""),
+            icon: type === "message" ? "✉️" : type === "like" ? "❤️" : type === "comment" ? "💬" : type === "reward" ? "🎁" : "🔔",
+            timestamp: n.createdAt ? new Date(n.createdAt).getTime() : Date.now(),
+            read: Boolean(n.readAt),
+            data: {
+              ...meta, durable: true, actorUserId: n.actorUserId, sourceId: n.sourceId, sourceType: n.sourceType,
+              postId, commentId, conversationId,
+              transactionId: meta.transactionId,
+              requestId: n.requestId,
+              fromUserId: n.actorUserId, userId: meta.userId || n.actorUserId,
+              open: open || (type === "message" ? "messages" : undefined),
+              correlationId: n.correlationId,
+            },
+          }
+        })
+
+        const mappedSocial: Notification[] = unifiedData?.durable ? [] : unifiedRows.map((n) => {
           const socialType = String(n.type || "")
           const type = (
             socialType === "follow" ? "follow"
@@ -326,7 +362,7 @@ export function NotificationBell({
             return !d?.durable && !d?.durableEconomy
           })
           const byId = new Map<string, Notification>()
-          for (const x of [...durableSocialVisible, ...durableEconomyVisible, ...mappedAnnouncements, ...localOnly]) {
+          for (const x of [...mappedUnified, ...durableEconomyVisible, ...mappedAnnouncements, ...localOnly]) {
             if (x.id && !byId.has(x.id)) byId.set(x.id, x)
           }
           return Array.from(byId.values())
@@ -341,10 +377,10 @@ export function NotificationBell({
         })
 
         const localUnread = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers).filter((n) => !n.read).length
-        const socialUnread = socialCountData.ok && typeof socialCountData.unreadCount === "number"
-          ? Math.max(0, socialCountData.unreadCount) : mappedSocial.filter((n) => !n.read).length
-        const economyUnread = economyCountData.ok && typeof economyCountData.count === "number"
-          ? Math.max(0, economyCountData.count) : mappedEconomy.filter((n) => !n.read).length
+        const socialUnread = economyCountData.ok && typeof (economyCountData as any).unreadCount === "number"
+          ? Math.max(0, Number((economyCountData as any).unreadCount)) : mappedUnified.filter((n) => !n.read).length
+        const economyUnread = unifiedData?.durable ? 0 : (economyCountData.ok && typeof (economyCountData as any).count === "number"
+          ? Math.max(0, Number((economyCountData as any).count)) : mappedEconomy.filter((n) => !n.read).length)
         const announcementUnread = announcementsRes?.ok && announcementsData.ok && typeof announcementsData.unreadCount === "number"
           ? Math.max(0, announcementsData.unreadCount) : mappedAnnouncements.filter((n) => !n.read).length
         setUnread(localUnread + socialUnread + economyUnread + announcementUnread)
@@ -359,9 +395,24 @@ export function NotificationBell({
 
   useEffect(() => {
     refresh()
-    const id = window.setInterval(refresh, 12000)
-    return () => window.clearInterval(id)
-  }, [refresh])
+    let id: number | null = null
+    const schedule = () => {
+      if (id !== null) window.clearInterval(id)
+      if (document.visibilityState !== "visible") return
+      const interval = open ? 12000 : 30000
+      id = window.setInterval(refresh, interval)
+    }
+    schedule()
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") { refresh(); schedule() }
+      else if (id !== null) { window.clearInterval(id); id = null }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      if (id !== null) window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [open, refresh])
 
   // Phase 8: refresh when app returns to foreground
   useEffect(() => {
@@ -435,7 +486,17 @@ export function NotificationBell({
     return () => window.removeEventListener("keydown", onKey)
   }, [open])
 
-  const filtered = useMemo(() => filterByBucket(items, bucket), [items, bucket])
+  const filtered = useMemo(() => {
+    const bucketed = filterByBucket(items, bucket)
+    return readFilter === "unread" ? bucketed.filter((n) => !n.read) : bucketed
+  }, [items, bucket, readFilter])
+  const bucketUnreadCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const b of NOTIFICATION_CENTER_BUCKETS) {
+      counts[b.id] = filterByBucket(items, b.id as NotificationCenterBucket).filter((n) => !n.read).length
+    }
+    return counts
+  }, [items])
   const threads = useMemo(() => groupNotificationsIntoThreads(filtered), [filtered])
   const expanded = useMemo(
     () => (expandedId ? filtered.find((x) => x.id === expandedId) || null : null),
@@ -478,7 +539,7 @@ export function NotificationBell({
       announcementId?: string
     }
     if (notificationData.durable && n.id) {
-      void fetch("/api/social/notifications", {
+      void fetch("/api/notifications", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -603,6 +664,16 @@ export function NotificationBell({
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => { setStatusMsg("Refreshing notifications…"); refresh() }}
+                  disabled={listLoading}
+                  className="inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  aria-label="Refresh notifications"
+                >
+                  <RefreshCw size={14} className={listLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
                 {unread > 0 ? (
                   <button
                     type="button"
@@ -679,6 +750,19 @@ export function NotificationBell({
                   </button>
                 )
               })}
+            </div>
+            <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2" aria-label="Notification read filter">
+              {(["all", "unread"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setReadFilter(mode)}
+                  className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${readFilter === mode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
+                >
+                  {mode === "all" ? "All" : `Unread${bucketUnreadCounts[bucket] ? ` (${bucketUnreadCounts[bucket]})` : ""}`}
+                </button>
+              ))}
+              <span className="ml-auto text-[10px] text-muted-foreground">Auto-sync 12s</span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">

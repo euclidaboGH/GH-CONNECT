@@ -230,51 +230,64 @@ export class ConnectionMonitor {
   private isOnline: boolean =
     typeof navigator !== 'undefined' ? navigator.onLine : true
   private listeners: ((isOnline: boolean) => void)[] = []
+  private connectivityTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor() {
     this.setupListeners()
   }
 
-  /**
-   * Initialize connection monitoring (browser only)
-   */
   private setupListeners(): void {
     if (typeof window === 'undefined') return
-
-    const handleOnline = () => this.setOnlineStatus(true)
-    const handleOffline = () => this.setOnlineStatus(false)
-
+    const handleOnline = () => {
+      this.setOnlineStatus(true)
+      void this.checkConnectivity()
+      this.scheduleConnectivityCheck()
+    }
+    const handleOffline = () => {
+      this.setOnlineStatus(false)
+      this.stopConnectivityChecks()
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') this.scheduleConnectivityCheck()
+      else this.stopConnectivityChecks()
+    }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-
-    // Periodic connectivity check with fallback
-    setInterval(() => {
-      this.checkConnectivity()
-    }, 30000) // Check every 30 seconds
+    document.addEventListener('visibilitychange', handleVisibility)
+    // Do not run a background timer until a consumer subscribes.
   }
 
-  /**
-   * Check actual connectivity by attempting a small request
-   */
+  private scheduleConnectivityCheck(): void {
+    if (typeof window === 'undefined' || document.visibilityState !== 'visible' || this.listeners.length === 0) return
+    this.stopConnectivityChecks()
+    this.connectivityTimer = setTimeout(async () => {
+      await this.checkConnectivity()
+      this.scheduleConnectivityCheck()
+    }, 60000)
+  }
+
+  private stopConnectivityChecks(): void {
+    if (this.connectivityTimer !== null) {
+      clearTimeout(this.connectivityTimer)
+      this.connectivityTimer = null
+    }
+  }
+
   private async checkConnectivity(): Promise<void> {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || document.visibilityState !== 'visible' || !navigator.onLine) return
     try {
       await Promise.race([
-        fetch(window.location.href, { method: 'HEAD', mode: 'no-cors' }),
+        fetch('/api/health', { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' }),
         new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error('Connectivity check timeout')), 5000)
+          setTimeout(() => reject(new Error('Connectivity check timeout')), 4000)
         ),
       ])
-
       this.setOnlineStatus(true)
     } catch {
       this.setOnlineStatus(false)
     }
   }
 
-  /**
-   * Set online status and notify listeners
-   */
   private setOnlineStatus(online: boolean): void {
     if (this.isOnline !== online) {
       this.isOnline = online
@@ -282,50 +295,29 @@ export class ConnectionMonitor {
     }
   }
 
-  /**
-   * Notify all listeners of status change
-   */
   private notifyListeners(): void {
     this.listeners.forEach((listener) => {
-      try {
-        listener(this.isOnline)
-      } catch (error) {
-        console.error('[v0] Connection monitor listener error:', error)
-      }
+      try { listener(this.isOnline) } catch (error) { console.error('[v0] Connection monitor listener error:', error) }
     })
   }
 
-  /**
-   * Get current online status
-   */
-  getStatus(): boolean {
-    return this.isOnline
-  }
+  getStatus(): boolean { return this.isOnline }
 
-  /**
-   * Subscribe to connection status changes
-   */
   subscribe(listener: (isOnline: boolean) => void): () => void {
     this.listeners.push(listener)
-
-    // Return unsubscribe function
+    try { listener(this.isOnline) } catch { /* consumer callback is isolated */ }
+    this.scheduleConnectivityCheck()
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener)
+      if (this.listeners.length === 0) this.stopConnectivityChecks()
     }
   }
 
-  /**
-   * Wait for connection to be restored
-   */
   async waitForConnection(): Promise<void> {
     if (this.isOnline) return
-
     return new Promise((resolve) => {
       const unsubscribe = this.subscribe((online) => {
-        if (online) {
-          unsubscribe()
-          resolve()
-        }
+        if (online) { unsubscribe(); resolve() }
       })
     })
   }

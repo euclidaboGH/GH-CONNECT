@@ -44,8 +44,11 @@ export async function POST(request: Request) {
     width?: number
     height?: number
     durationMs?: number
+    uploadId?: string
   }
 
+  const uploadId = String(body.uploadId || "").trim()
+  if (!/^upload_[a-f0-9]{24,40}$/.test(uploadId)) return jsonNoStore({ ok: false, error: "INVALID_UPLOAD_ID" }, { status: 400 })
   const objectPath = String(body.objectPath || "")
   const parsedPath = parseOwnedMediaPath(auth.userId, objectPath)
   if (String(body.bucket || storageBucket) !== storageBucket || !parsedPath) {
@@ -53,6 +56,23 @@ export async function POST(request: Request) {
   }
   const bucket = storageBucket
   const mime = String(body.mimeType || "").toLowerCase()
+  let uploadSession: Record<string, unknown> | null = null
+  try {
+    const sessionRes = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_upload_session_get`, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey!, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+      body: JSON.stringify({ p_upload_id: uploadId, p_owner_id: auth.userId }), cache: "no-store", signal: AbortSignal.timeout(8_000),
+    })
+    uploadSession = await sessionRes.json().catch(() => null) as Record<string, unknown> | null
+    if (!sessionRes.ok || uploadSession?.ok !== true || String(uploadSession.storagePath || "") !== objectPath || String(uploadSession.bucket || "") !== bucket) {
+      return jsonNoStore({ ok: false, error: "UPLOAD_SESSION_MISMATCH" }, { status: 403 })
+    }
+    if (String(uploadSession.status) === "finalized" && uploadSession.mediaId) {
+      const origin = new URL(request.url).origin
+      return jsonNoStore({ ok: true, durable: true, mediaId: String(uploadSession.mediaId), url: `${origin}/api/media/${encodeURIComponent(String(uploadSession.mediaId))}/content`, kind: String(uploadSession.mediaKind || "file"), mime: String(uploadSession.mimeType || mime), ownerUserId: auth.userId, idempotent: true })
+    }
+  } catch {
+    return jsonNoStore({ ok: false, error: "UPLOAD_SESSION_UNAVAILABLE" }, { status: 503 })
+  }
   const allowedImages = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"])
   const allowedVideos = new Set(["video/mp4", "video/webm", "video/quicktime"])
   const allowedAudio = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm", "audio/flac"])
@@ -102,6 +122,7 @@ export async function POST(request: Request) {
   }
 
   const record = await createMediaAssetRecord({
+    id: `media_${uploadId.slice(7)}`,
     ownerId: auth.userId,
     bucket,
     storagePath: objectPath,
@@ -124,6 +145,17 @@ export async function POST(request: Request) {
       },
       { status: 503 }
     )
+  }
+
+  try {
+    const finalizeRes = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_upload_session_finalize`, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey!, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+      body: JSON.stringify({ p_upload_id: uploadId, p_owner_id: auth.userId, p_media_id: record.id }), cache: "no-store", signal: AbortSignal.timeout(8_000),
+    })
+    const finalized = await finalizeRes.json().catch(() => ({})) as Record<string, unknown>
+    if (!finalizeRes.ok || finalized.ok !== true) return jsonNoStore({ ok: false, error: "UPLOAD_SESSION_FINALIZE_FAILED" }, { status: 503 })
+  } catch {
+    return jsonNoStore({ ok: false, error: "UPLOAD_SESSION_FINALIZE_FAILED" }, { status: 503 })
   }
 
   const origin = new URL(request.url).origin

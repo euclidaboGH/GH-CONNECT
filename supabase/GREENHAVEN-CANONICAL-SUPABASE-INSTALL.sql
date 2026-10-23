@@ -19570,3 +19570,2641 @@ COMMENT ON TABLE public.gh_bank_payout_daily_limits IS 'UTC daily reserved NGN t
 COMMENT ON TABLE public.gh_bank_payout_obligations IS 'Verified NGN liabilities only. GHC/PI balances must never be converted into NGN without a separately funded and approved FX settlement.';
 COMMENT ON TABLE public.gh_bank_payout_requests IS 'Paystack NGN transfer requests; only verified signed webhooks may mark a payout paid.';
 
+-- ============================================================================
+-- SOURCE 116: 20261022120001_gh_marketplace_saved_listings.sql
+-- SHA256: 4ae74f7ab36a18c613642a5e84acd171187e4e8b2d75ffceab7925d66f6bdf99
+-- ============================================================================
+-- GreenHaven Marketplace — durable saved listings.
+-- Server-authoritative toggle/list. No client-direct table access.
+
+CREATE TABLE IF NOT EXISTS public.gh_marketplace_saved_listings (
+  user_id text NOT NULL,
+  listing_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, listing_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gh_marketplace_saved_listings_user_created
+  ON public.gh_marketplace_saved_listings (user_id, created_at DESC, listing_id DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_marketplace_saved_listings_listing
+  ON public.gh_marketplace_saved_listings (listing_id);
+
+ALTER TABLE public.gh_marketplace_saved_listings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_marketplace_saved_listings_no_client ON public.gh_marketplace_saved_listings;
+CREATE POLICY gh_marketplace_saved_listings_no_client
+  ON public.gh_marketplace_saved_listings
+  FOR ALL USING (false) WITH CHECK (false);
+
+CREATE OR REPLACE FUNCTION public.gh_marketplace_saved_listing_toggle(
+  p_user_id text,
+  p_listing_id text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id, ''));
+  v_listing text := trim(coalesce(p_listing_id, ''));
+  v_saved boolean;
+BEGIN
+  IF v_user = '' OR v_listing = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+  END IF;
+
+  -- Serialize concurrent toggles for this exact user/listing pair.
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_user || ':' || v_listing, 0));
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.gh_marketplace_listings l
+    WHERE l.id = v_listing
+      AND l.status = 'active'
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'LISTING_NOT_FOUND');
+  END IF;
+
+  DELETE FROM public.gh_marketplace_saved_listings
+  WHERE user_id = v_user AND listing_id = v_listing;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object('ok', true, 'saved', false, 'listingId', v_listing);
+  END IF;
+
+  INSERT INTO public.gh_marketplace_saved_listings (user_id, listing_id)
+  VALUES (v_user, v_listing)
+  ON CONFLICT (user_id, listing_id) DO NOTHING;
+
+  v_saved := EXISTS (
+    SELECT 1 FROM public.gh_marketplace_saved_listings s
+    WHERE s.user_id = v_user AND s.listing_id = v_listing
+  );
+
+  RETURN jsonb_build_object('ok', true, 'saved', v_saved, 'listingId', v_listing);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_marketplace_saved_listings_list(
+  p_user_id text,
+  p_limit integer DEFAULT 50
+) RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id, ''));
+  v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 100);
+  v_rows jsonb;
+BEGIN
+  IF v_user = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_USER');
+  END IF;
+
+  SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q."createdAt" DESC, q."listingId" DESC), '[]'::jsonb)
+  INTO v_rows
+  FROM (
+    SELECT
+      s.listing_id AS "listingId",
+      (extract(epoch FROM s.created_at) * 1000)::bigint AS "createdAt",
+      l.seller_id AS "sellerId",
+      l.title,
+      l.description,
+      l.price,
+      l.currency,
+      l.availability,
+      l.status,
+      l.kind,
+      l.metadata
+    FROM public.gh_marketplace_saved_listings s
+    JOIN public.gh_marketplace_listings l ON l.id = s.listing_id
+    WHERE s.user_id = v_user
+      AND l.status = 'active'
+    ORDER BY s.created_at DESC, s.listing_id DESC
+    LIMIT v_limit
+  ) q;
+
+  RETURN jsonb_build_object('ok', true, 'saved', coalesce(v_rows, '[]'::jsonb));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_marketplace_saved_listing_status(
+  p_user_id text,
+  p_listing_id text
+) RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id, ''));
+  v_listing text := trim(coalesce(p_listing_id, ''));
+BEGIN
+  IF v_user = '' OR v_listing = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+  END IF;
+  RETURN jsonb_build_object(
+    'ok', true,
+    'listingId', v_listing,
+    'saved', EXISTS (
+      SELECT 1 FROM public.gh_marketplace_saved_listings s
+      WHERE s.user_id = v_user AND s.listing_id = v_listing
+    )
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_marketplace_saved_listing_toggle(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.gh_marketplace_saved_listings_list(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.gh_marketplace_saved_listing_status(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_saved_listing_toggle(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_saved_listings_list(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_saved_listing_status(text, text) TO service_role;
+
+-- ============================================================================
+-- SOURCE 117: 20261022120002_gh_social_economy_wallet_bridge.sql
+-- SHA256: 2fc0ab894ee1bca83ae20447c94613077637330b3ed23c3a42c0df66243b28f9
+-- ============================================================================
+-- GreenHaven Phase 14.1 — social/economy bridge.
+-- Purpose: make balance-funded curation visible as a durable content reward and
+-- keep the wallet UI synchronized with the authoritative ledger.
+-- IMPORTANT: this is redistribution, not new GHC issuance.
+
+ALTER TABLE public.gh_content_rewards
+  ADD COLUMN IF NOT EXISTS curation_funded numeric(24, 8) NOT NULL DEFAULT 0
+    CHECK (curation_funded >= 0);
+
+COMMENT ON COLUMN public.gh_content_rewards.curation_funded IS
+  'Cumulative GHC actually contributed by curators to this post through balance-funded redistribution. Not newly issued GHC.';
+
+CREATE OR REPLACE FUNCTION public.gh_content_reward_get_public(p_post_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id text := trim(COALESCE(p_post_id, ''));
+  v_row public.gh_content_rewards%ROWTYPE;
+  v_contrib jsonb := '[]'::jsonb;
+BEGIN
+  IF v_id = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_ID');
+  END IF;
+
+  SELECT * INTO v_row FROM public.gh_content_rewards WHERE post_id = v_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'enabled', false,
+      'status', 'inactive',
+      'totalEarned', null,
+      'authorReward', null,
+      'curationReward', null,
+      'curationFunded', 0
+    );
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'username', c.username,
+      'amount', c.amount
+    ) ORDER BY c.amount DESC, c.username ASC
+  ), '[]'::jsonb)
+  INTO v_contrib
+  FROM (
+    SELECT username, amount
+    FROM public.gh_content_reward_contributors
+    WHERE post_id = v_id
+    ORDER BY amount DESC, username ASC
+    LIMIT 10
+  ) c;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'enabled', v_row.enabled,
+    'status', v_row.status,
+    'totalEarned', v_row.total_earned,
+    'authorReward', v_row.author_reward,
+    'curationReward', v_row.curation_reward,
+    'curationFunded', v_row.curation_funded,
+    'upvoteImpact', v_row.upvote_impact,
+    'downvoteImpact', v_row.downvote_impact,
+    'netImpact', v_row.net_impact,
+    'currency', v_row.currency,
+    'topContributors', v_contrib,
+    'finalizedAt', v_row.finalized_at,
+    'distributedAt', v_row.distributed_at
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_content_reward_get_public(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_content_reward_get_public(text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.ghc_curation_redistribute(
+  p_voter_id text,
+  p_author_id text,
+  p_post_id text,
+  p_amount numeric,
+  p_reference_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_available numeric;
+  v_ref text := trim(COALESCE(p_reference_id, ''));
+  v_debit_id uuid;
+  v_credit_id uuid;
+  v_now timestamptz := now();
+  v_amount numeric := round(COALESCE(p_amount, 0), 4);
+  v_post_author text;
+  v_choice text;
+  v_username text;
+BEGIN
+  IF trim(COALESCE(p_voter_id, '')) = ''
+     OR trim(COALESCE(p_author_id, '')) = ''
+     OR trim(COALESCE(p_post_id, '')) = ''
+     OR v_ref = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+  END IF;
+
+  IF p_voter_id = p_author_id THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'reason', 'SELF_VOTE');
+  END IF;
+
+  IF v_amount <= 0 THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'reason', 'ZERO_AMOUNT');
+  END IF;
+  IF v_amount > 1 THEN v_amount := 1; END IF;
+
+  -- The RPC itself derives the post owner and active vote; the route cannot
+  -- redirect a contribution to an arbitrary account.
+  SELECT author_id INTO v_post_author
+  FROM public.gh_posts
+  WHERE id = trim(p_post_id) AND deleted_at IS NULL;
+  IF v_post_author IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'POST_NOT_FOUND');
+  END IF;
+  IF v_post_author <> trim(p_author_id) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'AUTHOR_MISMATCH');
+  END IF;
+
+  SELECT choice INTO v_choice
+  FROM public.gh_post_curations
+  WHERE post_id = trim(p_post_id) AND user_id = trim(p_voter_id);
+  IF v_choice <> 'upvote' THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'reason', 'UPVOTE_NOT_ACTIVE');
+  END IF;
+
+  -- Idempotent replay. Existing ledger evidence is the authority.
+  IF EXISTS (
+    SELECT 1 FROM public.ghc_transactions
+    WHERE reference_id = v_ref
+      AND kind = 'transfer_out'
+      AND status = 'posted'
+      AND source_event = 'CURATION_REDISTRIBUTE_V1'
+  ) THEN
+    RETURN jsonb_build_object('ok', true, 'idempotent', true, 'referenceId', v_ref);
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('ghc_balance:' || trim(p_voter_id)));
+  PERFORM pg_advisory_xact_lock(hashtext('ghc_curation_redist:' || trim(p_post_id) || ':' || trim(p_voter_id)));
+
+  v_available := public.ghc_available_balance(trim(p_voter_id));
+  IF v_available < v_amount THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'credited', false,
+      'amount', 0,
+      'reason', 'INSUFFICIENT_SPENDABLE',
+      'availableBalance', greatest(0, v_available)
+    );
+  END IF;
+
+  INSERT INTO public.ghc_transactions (
+    user_id, kind, amount, status, reason, source_event, reference_id,
+    counterparty_id, metadata, posted_at
+  ) VALUES (
+    trim(p_voter_id), 'transfer_out', -v_amount, 'posted',
+    'Curation contribution', 'CURATION_REDISTRIBUTE_V1', v_ref,
+    trim(p_author_id),
+    jsonb_build_object('postId', trim(p_post_id), 'redistribute', true), v_now
+  ) RETURNING id INTO v_debit_id;
+
+  INSERT INTO public.ghc_transactions (
+    user_id, kind, amount, status, reason, source_event, reference_id,
+    counterparty_id, metadata, posted_at
+  ) VALUES (
+    trim(p_author_id), 'transfer_in', v_amount, 'posted',
+    'Curation reward', 'CURATION_REDISTRIBUTE_V1', v_ref,
+    trim(p_voter_id),
+    jsonb_build_object('postId', trim(p_post_id), 'redistribute', true), v_now
+  ) RETURNING id INTO v_credit_id;
+
+  -- The public content reward is an audit/display projection of actual ledger
+  -- movement. It is never a source of GHC and never mints value.
+  INSERT INTO public.gh_content_rewards (
+    post_id, status, enabled, total_earned, author_reward,
+    curation_reward, curation_funded, epoch_key, metadata, updated_at
+  ) VALUES (
+    trim(p_post_id), 'accruing', true, v_amount, v_amount,
+    0, v_amount, 'CURATION_REDISTRIBUTE_V1',
+    jsonb_build_object('fundingSource', 'curator_wallet_redistribution'), v_now
+  )
+  ON CONFLICT (post_id) DO UPDATE SET
+    status = CASE
+      WHEN public.gh_content_rewards.status = 'voided' THEN 'accruing'
+      ELSE public.gh_content_rewards.status
+    END,
+    enabled = true,
+    total_earned = public.gh_content_rewards.total_earned + EXCLUDED.total_earned,
+    author_reward = public.gh_content_rewards.author_reward + EXCLUDED.author_reward,
+    curation_funded = public.gh_content_rewards.curation_funded + EXCLUDED.curation_funded,
+    epoch_key = COALESCE(public.gh_content_rewards.epoch_key, EXCLUDED.epoch_key),
+    metadata = public.gh_content_rewards.metadata || EXCLUDED.metadata,
+    updated_at = v_now;
+
+  SELECT COALESCE(NULLIF(trim(username), ''), 'member') INTO v_username
+  FROM public.gh_user_profiles
+  WHERE gh_user_id = trim(p_voter_id)
+  LIMIT 1;
+  v_username := COALESCE(v_username, 'member');
+
+  INSERT INTO public.gh_content_reward_contributors (post_id, user_id, username, amount, rank)
+  VALUES (trim(p_post_id), trim(p_voter_id), v_username, v_amount, 0)
+  ON CONFLICT (post_id, user_id) DO UPDATE SET
+    username = EXCLUDED.username,
+    amount = public.gh_content_reward_contributors.amount + EXCLUDED.amount,
+    rank = 0;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'idempotent', false,
+    'credited', true,
+    'amount', v_amount,
+    'referenceId', v_ref,
+    'debitId', v_debit_id,
+    'creditId', v_credit_id,
+    'contentRewardRecorded', true
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ghc_curation_redistribute(text, text, text, numeric, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ghc_curation_redistribute(text, text, text, numeric, text) TO service_role;
+
+COMMENT ON FUNCTION public.ghc_curation_redistribute(text, text, text, numeric, text) IS
+  'Balance-funded curation contribution: validates the active upvote and post owner, atomically transfers existing GHC to the creator, and records a public content-reward projection. No issuance.';
+
+-- ============================================================================
+-- SOURCE 118: 20261022120003_gh_social_economy_settlement_projection.sql
+-- SHA256: edc87af8ef802da862590039becc2a5fdaa0a3070b31000122d3a234077271d9
+-- ============================================================================
+-- GreenHaven Phase 14.2 — social/economy settlement projection bridge.
+-- Purpose: every REAL, balance-funded creator payment that references content
+-- becomes visible on that content and can refresh the wallet UI.
+-- No issuance. No client writes. Settlement remains authoritative in ghc_transactions.
+
+CREATE OR REPLACE FUNCTION public.gh_content_reward_record_funded_settlement(
+  p_post_id text,
+  p_amount numeric,
+  p_source text,
+  p_reference_id text,
+  p_contributor_id text DEFAULT NULL,
+  p_author_id text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_post_id text := trim(COALESCE(p_post_id, ''));
+  v_source text := lower(trim(COALESCE(p_source, '')));
+  v_ref text := trim(COALESCE(p_reference_id, ''));
+  v_amount numeric(24,8) := round(COALESCE(p_amount, 0), 4);
+  v_author text;
+  v_username text;
+  v_existing numeric(24,8) := 0;
+BEGIN
+  IF v_post_id = '' OR v_ref = '' OR v_amount <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+  END IF;
+  IF v_amount > 100000000 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'AMOUNT_TOO_LARGE');
+  END IF;
+  IF v_source NOT IN ('curation', 'tip', 'creator_reward') THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_SOURCE');
+  END IF;
+
+  SELECT author_id INTO v_author
+  FROM public.gh_posts
+  WHERE id = v_post_id AND deleted_at IS NULL;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'POST_NOT_FOUND');
+  END IF;
+  IF p_author_id IS NOT NULL AND trim(p_author_id) <> v_author THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'AUTHOR_MISMATCH');
+  END IF;
+
+  -- Idempotency is anchored to the settlement reference in metadata, not to
+  -- client state. This prevents duplicate display totals after a retry.
+  SELECT COALESCE((metadata->'fundedSettlements'->>v_ref)::numeric, 0)
+  INTO v_existing
+  FROM public.gh_content_rewards
+  WHERE post_id = v_post_id;
+  IF v_existing > 0 THEN
+    RETURN jsonb_build_object('ok', true, 'idempotent', true, 'amount', v_existing, 'postId', v_post_id);
+  END IF;
+
+  INSERT INTO public.gh_content_rewards (
+    post_id, status, enabled, total_earned, author_reward, curation_reward,
+    curation_funded, epoch_key, metadata, updated_at
+  ) VALUES (
+    v_post_id, 'accruing', true,
+    v_amount,
+    v_amount,
+    0,
+    CASE WHEN v_source = 'curation' THEN v_amount ELSE 0 END,
+    'SOCIAL_FUNDED_SETTLEMENT_V1',
+    jsonb_build_object(
+      'fundingSource', v_source,
+      'fundedSettlements', jsonb_build_object(v_ref, v_amount)
+    ),
+    now()
+  )
+  ON CONFLICT (post_id) DO UPDATE SET
+    status = CASE WHEN public.gh_content_rewards.status = 'voided' THEN 'accruing' ELSE public.gh_content_rewards.status END,
+    enabled = true,
+    total_earned = public.gh_content_rewards.total_earned + EXCLUDED.total_earned,
+    author_reward = public.gh_content_rewards.author_reward + EXCLUDED.author_reward,
+    curation_funded = public.gh_content_rewards.curation_funded + EXCLUDED.curation_funded,
+    metadata = public.gh_content_rewards.metadata || jsonb_build_object(
+      'fundedSettlements',
+      COALESCE(public.gh_content_rewards.metadata->'fundedSettlements', '{}'::jsonb) ||
+      jsonb_build_object(v_ref, v_amount)
+    ),
+    updated_at = now();
+
+  IF p_contributor_id IS NOT NULL AND trim(p_contributor_id) <> '' THEN
+    SELECT COALESCE(NULLIF(trim(username), ''), 'member') INTO v_username
+    FROM public.gh_user_profiles
+    WHERE gh_user_id = trim(p_contributor_id)
+    LIMIT 1;
+    v_username := COALESCE(v_username, 'member');
+
+    INSERT INTO public.gh_content_reward_contributors(post_id, user_id, username, amount, rank)
+    VALUES(v_post_id, trim(p_contributor_id), v_username, v_amount, 0)
+    ON CONFLICT(post_id, user_id) DO UPDATE SET
+      username = EXCLUDED.username,
+      amount = public.gh_content_reward_contributors.amount + EXCLUDED.amount,
+      rank = 0;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'idempotent', false,
+    'amount', v_amount,
+    'postId', v_post_id,
+    'source', v_source,
+    'authorId', v_author
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_content_reward_record_funded_settlement(text,numeric,text,text,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_content_reward_record_funded_settlement(text,numeric,text,text,text,text) TO service_role;
+
+COMMENT ON FUNCTION public.gh_content_reward_record_funded_settlement(text,numeric,text,text,text,text) IS
+  'Projects an already-settled balance-funded tip, curation contribution, or approved creator reward onto the content reward view. Never mints GHC.';
+
+-- Re-apply GHC tip settlement with content projection. Existing ledger transfer
+-- remains the source of truth; the projection is in the same DB transaction.
+CREATE OR REPLACE FUNCTION public.gh_tip_settle_ghc_atomic(
+ p_tip_intent_id text, p_tipper_id text, p_amount numeric
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE
+ v_tip public.gh_tip_intents%ROWTYPE;
+ v_existing public.gh_tip_ghc_settlements%ROWTYPE;
+ v_transfer jsonb;
+ v_debit jsonb;
+ v_credit jsonb;
+ v_ref text;
+ v_id text;
+ v_projection jsonb;
+BEGIN
+ IF COALESCE(trim(p_tip_intent_id),'')='' OR COALESCE(trim(p_tipper_id),'')='' OR
+    p_amount IS NULL OR p_amount<=0 OR p_amount<>round(p_amount,4) THEN
+  RETURN jsonb_build_object('ok',false,'error','INVALID_GHC_TIP');
+ END IF;
+ SELECT * INTO v_tip FROM public.gh_tip_intents WHERE id=trim(p_tip_intent_id) FOR UPDATE;
+ IF NOT FOUND OR v_tip.tipper_id<>trim(p_tipper_id) THEN
+  RETURN jsonb_build_object('ok',false,'error','TIP_NOT_FOUND');
+ END IF;
+ IF v_tip.currency<>'GHC' OR v_tip.amount_units IS NULL OR v_tip.amount_units<>p_amount OR
+    v_tip.payment_intent_id IS NOT NULL OR v_tip.tipper_id=v_tip.recipient_id OR v_tip.status IN ('cancelled','failed') THEN
+  RETURN jsonb_build_object('ok',false,'error','TIP_NOT_SETTLEABLE');
+ END IF;
+ SELECT * INTO v_existing FROM public.gh_tip_ghc_settlements WHERE tip_intent_id=v_tip.id;
+ IF FOUND THEN
+  IF v_existing.tipper_id<>v_tip.tipper_id OR v_existing.creator_id<>v_tip.recipient_id OR v_existing.amount<>p_amount THEN
+   RETURN jsonb_build_object('ok',false,'error','TIP_SETTLEMENT_CONFLICT');
+  END IF;
+  RETURN jsonb_build_object('ok',true,'idempotent',true,'intentId',v_tip.id,
+    'settlementId',v_existing.id,'transferReference',v_existing.transfer_reference,
+    'amount',v_existing.amount,'currency','GHC','creatorPaid',true);
+ END IF;
+ IF v_tip.status='settled' THEN RETURN jsonb_build_object('ok',false,'error','SETTLEMENT_RECORD_MISSING'); END IF;
+ v_ref := 'tip_ghc_' || v_tip.id;
+ v_transfer := public.ghc_execute_transfer(v_tip.tipper_id,v_tip.recipient_id,p_amount,v_ref,
+   'GreenHaven creator tip',NULL);
+ IF COALESCE((v_transfer->>'ok')::boolean,false) IS NOT TRUE THEN
+  RETURN jsonb_build_object('ok',false,'error',COALESCE(v_transfer->>'code','GHC_TRANSFER_FAILED'),
+    'message',COALESCE(v_transfer->>'message','GHC transfer did not complete'));
+ END IF;
+ v_debit := v_transfer->'debitTx';
+ v_credit := v_transfer->'creditTx';
+ IF v_debit IS NULL OR v_credit IS NULL OR
+    v_debit->>'userId'<>v_tip.tipper_id OR v_credit->>'userId'<>v_tip.recipient_id OR
+    v_debit->>'kind'<>'transfer_out' OR v_credit->>'kind'<>'transfer_in' OR
+    COALESCE(v_debit->>'id','')='' OR COALESCE(v_credit->>'id','')='' OR
+    v_debit->>'referenceId'<>v_ref OR v_credit->>'referenceId'<>v_ref OR
+    abs(COALESCE((v_debit->>'amount')::numeric,0))<>p_amount OR
+    COALESCE((v_credit->>'amount')::numeric,0)<>p_amount THEN
+  RAISE EXCEPTION 'GHC_TRANSFER_LEDGER_VERIFICATION_FAILED';
+ END IF;
+ v_id := 'tipghc_'||replace(gen_random_uuid()::text,'-','');
+ INSERT INTO public.gh_tip_ghc_settlements(id,tip_intent_id,transfer_reference,tipper_id,creator_id,amount,debit_transaction_id,credit_transaction_id)
+ VALUES(v_id,v_tip.id,v_ref,v_tip.tipper_id,v_tip.recipient_id,p_amount,
+   COALESCE(v_debit->>'id',''),COALESCE(v_credit->>'id',''));
+ UPDATE public.gh_tip_intents SET status='settled',updated_at=now(),
+   metadata=metadata||jsonb_build_object('settlementId',v_id,'settlementStatus','settled','settlementCurrency','GHC')
+ WHERE id=v_tip.id;
+
+ IF v_tip.content_id IS NOT NULL AND trim(v_tip.content_id)<>'' THEN
+   v_projection := public.gh_content_reward_record_funded_settlement(
+     v_tip.content_id, p_amount, 'tip', v_ref, v_tip.tipper_id, v_tip.recipient_id
+   );
+   IF COALESCE((v_projection->>'ok')::boolean,false) IS NOT TRUE THEN
+     RAISE EXCEPTION 'CONTENT_REWARD_PROJECTION_FAILED: %', COALESCE(v_projection->>'error','UNKNOWN');
+   END IF;
+ END IF;
+
+ RETURN jsonb_build_object('ok',true,'idempotent',false,'intentId',v_tip.id,'settlementId',v_id,
+   'transferReference',v_ref,'amount',p_amount,'currency','GHC','creatorPaid',true,
+   'contentRewardProjected', v_tip.content_id IS NOT NULL AND trim(v_tip.content_id)<>'' );
+EXCEPTION WHEN unique_violation THEN
+ RETURN jsonb_build_object('ok',false,'error','GHC_TIP_REFERENCE_CONFLICT');
+END; $$;
+
+REVOKE ALL ON FUNCTION public.gh_tip_settle_ghc_atomic(text,text,numeric) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_tip_settle_ghc_atomic(text,text,numeric) TO service_role;
+
+-- Re-apply funded creator reward settlement with content projection.
+CREATE OR REPLACE FUNCTION public.gh_creator_reward_settle_funded(p_reward_event_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE
+ v_reward public.gh_creator_reward_events%ROWTYPE;
+ v_old public.gh_creator_reward_pool_movements%ROWTYPE;
+ v_transfer jsonb;
+ v_debit jsonb;
+ v_credit jsonb;
+ v_ref text;
+ v_id text;
+ v_projection jsonb;
+ v_pool constant text := '__GH_CREATOR_REWARD_POOL__';
+BEGIN
+ IF COALESCE(trim(p_reward_event_id),'')='' THEN RETURN jsonb_build_object('ok',false,'error','REWARD_EVENT_REQUIRED'); END IF;
+ SELECT * INTO v_reward FROM public.gh_creator_reward_events WHERE id=trim(p_reward_event_id) FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','REWARD_EVENT_NOT_FOUND'); END IF;
+ SELECT * INTO v_old FROM public.gh_creator_reward_pool_movements WHERE reward_event_id=v_reward.id;
+ IF FOUND THEN
+  IF v_old.recipient_id<>v_reward.creator_id OR v_old.amount<>v_reward.proposed_amount OR v_old.movement_kind<>'distribution' THEN
+   RETURN jsonb_build_object('ok',false,'error','REWARD_SETTLEMENT_CONFLICT');
+  END IF;
+  RETURN jsonb_build_object('ok',true,'idempotent',true,'movementId',v_old.id,'amount',v_old.amount,'currency','GHC','status','settled');
+ END IF;
+ IF v_reward.status<>'approved' OR v_reward.currency<>'GHC' OR v_reward.proposed_amount IS NULL OR
+    v_reward.proposed_amount<=0 OR v_reward.proposed_amount<>round(v_reward.proposed_amount,4) THEN
+  RETURN jsonb_build_object('ok',false,'error','APPROVED_FUNDED_GHC_REWARD_REQUIRED');
+ END IF;
+ v_ref:='creator_reward_'||v_reward.id;
+ v_transfer:=public.ghc_execute_transfer(v_pool,v_reward.creator_id,v_reward.proposed_amount,v_ref,'Funded creator reward distribution',NULL);
+ IF COALESCE((v_transfer->>'ok')::boolean,false) IS NOT TRUE THEN
+  RETURN jsonb_build_object('ok',false,'error',COALESCE(v_transfer->>'code','REWARD_POOL_INSUFFICIENT_OR_TRANSFER_FAILED'),
+    'message',COALESCE(v_transfer->>'message','Reward distribution did not complete'));
+ END IF;
+ v_debit:=v_transfer->'debitTx';
+ v_credit:=v_transfer->'creditTx';
+ IF v_debit IS NULL OR v_credit IS NULL OR v_debit->>'userId'<>v_pool OR v_credit->>'userId'<>v_reward.creator_id OR
+    v_debit->>'kind'<>'transfer_out' OR v_credit->>'kind'<>'transfer_in' OR
+    COALESCE(v_debit->>'id','')='' OR COALESCE(v_credit->>'id','')='' OR
+    v_debit->>'referenceId'<>v_ref OR v_credit->>'referenceId'<>v_ref OR
+    abs(COALESCE((v_debit->>'amount')::numeric,0))<>v_reward.proposed_amount OR
+    COALESCE((v_credit->>'amount')::numeric,0)<>v_reward.proposed_amount THEN
+  RAISE EXCEPTION 'REWARD_TRANSFER_LEDGER_VERIFICATION_FAILED';
+ END IF;
+ v_id:='crpm_'||replace(gen_random_uuid()::text,'-','');
+ INSERT INTO public.gh_creator_reward_pool_movements(id,movement_kind,reference_id,reward_event_id,actor_id,recipient_id,amount,debit_transaction_id,credit_transaction_id)
+ VALUES(v_id,'distribution',v_ref,v_reward.id,v_pool,v_reward.creator_id,v_reward.proposed_amount,
+   COALESCE(v_debit->>'id',''),COALESCE(v_credit->>'id',''));
+ UPDATE public.gh_creator_reward_events SET status='settled',settlement_reference=v_ref,updated_at=now() WHERE id=v_reward.id;
+
+ v_projection := public.gh_content_reward_record_funded_settlement(
+   v_reward.content_id, v_reward.proposed_amount, 'creator_reward', v_ref, NULL, v_reward.creator_id
+ );
+ IF COALESCE((v_projection->>'ok')::boolean,false) IS NOT TRUE THEN
+   RAISE EXCEPTION 'CONTENT_REWARD_PROJECTION_FAILED: %', COALESCE(v_projection->>'error','UNKNOWN');
+ END IF;
+
+ RETURN jsonb_build_object('ok',true,'idempotent',false,'movementId',v_id,'amount',v_reward.proposed_amount,
+   'currency','GHC','status','settled','contentRewardProjected',true);
+EXCEPTION WHEN unique_violation THEN RETURN jsonb_build_object('ok',false,'error','REWARD_SETTLEMENT_REFERENCE_CONFLICT');
+END; $$;
+
+REVOKE ALL ON FUNCTION public.gh_creator_reward_settle_funded(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_creator_reward_settle_funded(text) TO service_role;
+
+-- ============================================================================
+-- SOURCE 119: 20261022120004_gh_social_economy_control_plane.sql
+-- SHA256: e74f3b3dab4caaca7a174cf61584fef84d3d29be00aceb6cf232482b1659073f
+-- ============================================================================
+-- GreenHaven Phase 15 — Social Economy Control Plane.
+-- Connects comments, curation, content rewards and wallet state without minting.
+-- Comments create durable attention/reputation signals only.
+-- Curation may redistribute existing GHC from curator -> creator.
+
+CREATE OR REPLACE FUNCTION public.gh_social_economy_snapshot(p_user_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id, ''));
+  v_wallet jsonb;
+  v_streak jsonb;
+  v_curation_balance numeric := 0;
+BEGIN
+  IF v_user = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'USER_REQUIRED');
+  END IF;
+
+  v_wallet := public.ghc_wallet_snapshot(v_user);
+  v_curation_balance := greatest(0, coalesce((v_wallet->>'balance')::numeric, 0));
+
+  IF to_regprocedure('public.ghc_get_claim_streak(text)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.ghc_get_claim_streak($1)' INTO v_streak USING v_user;
+  ELSE
+    v_streak := jsonb_build_object();
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'wallet', v_wallet,
+    'curation', jsonb_build_object(
+      'enabled', true,
+      'suggestedContribution', 0.1,
+      'maxContributionPerVote', 1,
+      'spendableBalance', v_curation_balance,
+      'canFundSuggestedContribution', v_curation_balance >= 0.1,
+      'model', 'balance_redistribution'
+    ),
+    'claim', v_streak,
+    'rules', jsonb_build_object(
+      'commentsMintGhc', false,
+      'likesMintGhc', false,
+      'viewsMintGhc', false,
+      'curationMintsGhc', false,
+      'curationMovesExistingGhc', true,
+      'walletIsLedgerAuthoritative', true
+    )
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_social_economy_snapshot(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_social_economy_snapshot(text) TO service_role;
+
+-- Harden the curation redistribution path: project the confirmed ledger transfer
+-- through the canonical content-reward projection after the transfer succeeds.
+-- This is intentionally repeated here after the earlier bridge migration so the
+-- latest function definition is authoritative regardless of older staging state.
+CREATE OR REPLACE FUNCTION public.ghc_curation_redistribute(
+  p_voter_id text,
+  p_author_id text,
+  p_post_id text,
+  p_amount numeric,
+  p_reference_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_voter text := trim(coalesce(p_voter_id, ''));
+  v_author text := trim(coalesce(p_author_id, ''));
+  v_post text := trim(coalesce(p_post_id, ''));
+  v_ref text := trim(coalesce(p_reference_id, ''));
+  v_amount numeric := round(coalesce(p_amount, 0), 4);
+  v_available numeric := 0;
+  v_post_author text;
+  v_choice text;
+  v_debit_id uuid;
+  v_credit_id uuid;
+  v_projection jsonb;
+  v_now timestamptz := now();
+BEGIN
+  IF v_voter = '' OR v_author = '' OR v_post = '' OR v_ref = '' OR v_amount <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+  END IF;
+  IF v_voter = v_author THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'amount', 0, 'reason', 'SELF_VOTE');
+  END IF;
+  IF v_amount > 1 THEN v_amount := 1; END IF;
+
+  SELECT author_id INTO v_post_author
+  FROM public.gh_posts
+  WHERE id = v_post AND deleted_at IS NULL;
+  IF v_post_author IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'POST_NOT_FOUND');
+  END IF;
+  IF v_post_author <> v_author THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'AUTHOR_MISMATCH');
+  END IF;
+
+  SELECT choice INTO v_choice
+  FROM public.gh_post_curations
+  WHERE post_id = v_post AND user_id = v_voter;
+  IF v_choice <> 'upvote' THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'amount', 0, 'reason', 'UPVOTE_NOT_ACTIVE');
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('gh_social_economy:' || v_post || ':' || v_voter));
+
+  IF EXISTS (
+    SELECT 1 FROM public.ghc_transactions
+    WHERE reference_id = v_ref
+      AND kind = 'transfer_out'
+      AND status = 'posted'
+      AND source_event = 'CURATION_REDISTRIBUTE_V1'
+  ) THEN
+    RETURN jsonb_build_object('ok', true, 'credited', true, 'idempotent', true, 'amount', v_amount, 'referenceId', v_ref, 'contentRewardRecorded', true);
+  END IF;
+
+  v_available := public.ghc_available_balance(v_voter);
+  IF v_available < v_amount THEN
+    RETURN jsonb_build_object('ok', true, 'credited', false, 'amount', 0, 'reason', 'INSUFFICIENT_SPENDABLE', 'availableBalance', greatest(0, v_available), 'requiredBalance', v_amount);
+  END IF;
+
+  INSERT INTO public.ghc_transactions (
+    user_id, kind, amount, status, reason, source_event, reference_id,
+    counterparty_id, metadata, posted_at
+  ) VALUES (
+    v_voter, 'transfer_out', -v_amount, 'posted', 'Curation contribution',
+    'CURATION_REDISTRIBUTE_V1', v_ref, v_author,
+    jsonb_build_object('postId', v_post, 'redistribute', true), v_now
+  ) RETURNING id INTO v_debit_id;
+
+  INSERT INTO public.ghc_transactions (
+    user_id, kind, amount, status, reason, source_event, reference_id,
+    counterparty_id, metadata, posted_at
+  ) VALUES (
+    v_author, 'transfer_in', v_amount, 'posted', 'Curation reward',
+    'CURATION_REDISTRIBUTE_V1', v_ref, v_voter,
+    jsonb_build_object('postId', v_post, 'redistribute', true), v_now
+  ) RETURNING id INTO v_credit_id;
+
+  v_projection := public.gh_content_reward_record_funded_settlement(
+    v_post, v_amount, 'curation', v_ref, v_voter, v_author
+  );
+  IF coalesce((v_projection->>'ok')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'CONTENT_REWARD_PROJECTION_FAILED: %', coalesce(v_projection->>'error', 'UNKNOWN');
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'credited', true,
+    'idempotent', false,
+    'amount', v_amount,
+    'referenceId', v_ref,
+    'debitId', v_debit_id,
+    'creditId', v_credit_id,
+    'availableBalanceAfter', greatest(0, v_available - v_amount),
+    'contentRewardRecorded', true,
+    'contentRewardProjected', true
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ghc_curation_redistribute(text,text,text,numeric,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ghc_curation_redistribute(text,text,text,numeric,text) TO service_role;
+
+COMMENT ON FUNCTION public.gh_social_economy_snapshot(text) IS
+  'Authoritative social economy state: wallet, curation funding capacity, claim state and non-minting rules.';
+COMMENT ON FUNCTION public.ghc_curation_redistribute(text,text,text,numeric,text) IS
+  'Atomic curator-wallet to creator redistribution plus canonical content reward projection. Never mints GHC.';
+
+-- ============================================================================
+-- SOURCE 120: 20261022120005_gh_reputation_social_events.sql
+-- SHA256: 70cffc167129b992f7ec84206e4d424fdec6b3839c39b3b08b56a97ed4a6d4b3
+-- ============================================================================
+-- GreenHaven Phase 15 — social participation reputation events.
+-- Reputation remains non-financial; these events never touch GHC balances.
+
+CREATE OR REPLACE FUNCTION public.gh_reputation_apply_event(
+  p_user_id text,
+  p_event_type text,
+  p_points integer,
+  p_idempotency_key text,
+  p_source_ref text DEFAULT NULL,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_type text := lower(trim(coalesce(p_event_type, '')));
+  v_pts integer := greatest(0, least(coalesce(p_points, 0), 10000));
+  v_id text;
+  v_existing public.gh_reputation_events%ROWTYPE;
+  v_total integer;
+  v_level integer;
+  v_count integer;
+  v_snap_id text;
+BEGIN
+  IF coalesce(trim(p_user_id), '') = '' THEN RETURN jsonb_build_object('ok', false, 'error', 'USER_REQUIRED'); END IF;
+  IF v_type = '' THEN RETURN jsonb_build_object('ok', false, 'error', 'EVENT_TYPE_REQUIRED'); END IF;
+  IF v_type NOT IN (
+    'profile_complete','first_post','community_join','marketplace_order_complete',
+    'report_resolved_helpful','manual_adjustment_credit','comment_created'
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_EVENT_TYPE');
+  END IF;
+  IF coalesce(trim(p_idempotency_key), '') = '' THEN RETURN jsonb_build_object('ok', false, 'error', 'IDEMPOTENCY_REQUIRED'); END IF;
+  IF v_type = 'manual_adjustment_credit' AND v_pts = 0 THEN RETURN jsonb_build_object('ok', false, 'error', 'INVALID_POINTS'); END IF;
+  IF v_type = 'comment_created' AND v_pts <> 1 THEN RETURN jsonb_build_object('ok', false, 'error', 'INVALID_POINTS'); END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('gh_rep:' || trim(p_user_id)));
+  SELECT * INTO v_existing FROM public.gh_reputation_events
+  WHERE user_id = trim(p_user_id) AND idempotency_key = trim(p_idempotency_key) LIMIT 1;
+  IF FOUND THEN
+    SELECT total_points, level, event_count INTO v_total, v_level, v_count
+    FROM public.gh_reputation_state WHERE user_id = trim(p_user_id);
+    RETURN jsonb_build_object('ok', true, 'duplicate', true, 'eventId', v_existing.id,
+      'totalPoints', coalesce(v_total,0), 'level', coalesce(v_level,1), 'eventCount', coalesce(v_count,0));
+  END IF;
+
+  v_id := 're_' || replace(gen_random_uuid()::text, '-', '');
+  INSERT INTO public.gh_reputation_events(id,user_id,event_type,points,source_ref,idempotency_key,metadata)
+  VALUES(v_id,trim(p_user_id),v_type,v_pts,NULLIF(trim(coalesce(p_source_ref,'')),''),trim(p_idempotency_key),coalesce(p_metadata,'{}'::jsonb));
+
+  INSERT INTO public.gh_reputation_state(user_id,total_points,level,event_count,updated_at)
+  VALUES(trim(p_user_id),v_pts,public.gh_reputation_level_from_points(v_pts),1,now())
+  ON CONFLICT(user_id) DO UPDATE SET
+    total_points=public.gh_reputation_state.total_points+EXCLUDED.total_points,
+    level=public.gh_reputation_level_from_points(public.gh_reputation_state.total_points+EXCLUDED.total_points),
+    event_count=public.gh_reputation_state.event_count+1,
+    updated_at=now();
+
+  SELECT total_points, level, event_count INTO v_total, v_level, v_count
+  FROM public.gh_reputation_state WHERE user_id=trim(p_user_id);
+
+  v_snap_id := 'rs_' || replace(gen_random_uuid()::text, '-', '');
+  INSERT INTO public.gh_reputation_snapshots(id,user_id,total_points,level,reason,event_id)
+  VALUES(v_snap_id,trim(p_user_id),v_total,v_level,'event',v_id);
+
+  RETURN jsonb_build_object('ok',true,'duplicate',false,'eventId',v_id,
+    'totalPoints',coalesce(v_total,0),'level',coalesce(v_level,1),'eventCount',coalesce(v_count,0));
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_reputation_apply_event(text,text,integer,text,text,jsonb) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_reputation_apply_event(text,text,integer,text,text,jsonb) TO service_role;
+
+-- ============================================================================
+-- SOURCE 121: 20261022130001_marketplace_commerce_v2.sql
+-- SHA256: 73bf90149a8b5c93851c8354c7c5d6177073e046f9ecba1317c09397eb8e5a1f
+-- ============================================================================
+-- Phase 30 — Marketplace Commerce V2: durable buyer/seller lifecycle metadata.
+ALTER TABLE public.gh_marketplace_orders
+  ADD COLUMN IF NOT EXISTS escrow_status text NOT NULL DEFAULT 'none' CHECK (escrow_status IN ('none','held','releasable','released','refund_pending','refunded')),
+  ADD COLUMN IF NOT EXISTS delivery_status text NOT NULL DEFAULT 'not_started' CHECK (delivery_status IN ('not_started','processing','shipped','delivered','service_active','completed')),
+  ADD COLUMN IF NOT EXISTS dispute_reason text,
+  ADD COLUMN IF NOT EXISTS cancellation_reason text,
+  ADD COLUMN IF NOT EXISTS buyer_note text,
+  ADD COLUMN IF NOT EXISTS seller_note text,
+  ADD COLUMN IF NOT EXISTS delivered_at timestamptz,
+  ADD COLUMN IF NOT EXISTS buyer_confirmed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS seller_confirmed_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_gh_market_orders_escrow ON public.gh_marketplace_orders (escrow_status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_market_orders_delivery ON public.gh_marketplace_orders (delivery_status, updated_at DESC);
+
+CREATE OR REPLACE FUNCTION public.gh_marketplace_order_commerce_update(p_order_id text,p_actor_id text,p_action text,p_note text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r public.gh_marketplace_orders%ROWTYPE; v_action text:=lower(trim(coalesce(p_action,''))); v_note text:=left(trim(coalesce(p_note,'')),500);
+BEGIN
+ SELECT * INTO r FROM public.gh_marketplace_orders WHERE id=trim(p_order_id) FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+ IF r.buyer_id<>p_actor_id AND r.seller_id<>p_actor_id THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+ IF v_action='seller_fulfill' THEN
+   IF r.seller_id<>p_actor_id THEN RETURN jsonb_build_object('ok',false,'error','SELLER_ONLY'); END IF;
+   IF r.payment_status<>'verified' OR r.status<>'confirmed' THEN RETURN jsonb_build_object('ok',false,'error','PAYMENT_REQUIRED'); END IF;
+   UPDATE public.gh_marketplace_orders SET status='fulfilling',delivery_status='processing',seller_note=NULLIF(v_note,''),fulfilled_at=now(),updated_at=now(),audit=coalesce(audit,'[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',(extract(epoch from now())*1000)::bigint,'action','SELLER_FULFILL','detail',v_note)) WHERE id=r.id;
+ ELSIF v_action='seller_mark_delivered' THEN
+   IF r.seller_id<>p_actor_id THEN RETURN jsonb_build_object('ok',false,'error','SELLER_ONLY'); END IF;
+   IF r.status<>'fulfilling' THEN RETURN jsonb_build_object('ok',false,'error','INVALID_STATE'); END IF;
+   UPDATE public.gh_marketplace_orders SET delivery_status='delivered',delivered_at=now(),seller_confirmed_at=now(),seller_note=NULLIF(v_note,''),updated_at=now(),audit=coalesce(audit,'[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',(extract(epoch from now())*1000)::bigint,'action','SELLER_DELIVERED','detail',v_note)) WHERE id=r.id;
+ ELSIF v_action='buyer_confirm' THEN
+   IF r.buyer_id<>p_actor_id THEN RETURN jsonb_build_object('ok',false,'error','BUYER_ONLY'); END IF;
+   IF r.payment_status<>'verified' OR r.status NOT IN ('fulfilling','confirmed') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_STATE'); END IF;
+   UPDATE public.gh_marketplace_orders SET status='completed',delivery_status='completed',buyer_confirmed_at=now(),completed_at=now(),buyer_note=NULLIF(v_note,''),updated_at=now(),audit=coalesce(audit,'[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',(extract(epoch from now())*1000)::bigint,'action','BUYER_CONFIRMED','detail',v_note)) WHERE id=r.id;
+ ELSIF v_action='dispute' THEN
+   IF r.payment_status<>'verified' OR r.status NOT IN ('confirmed','fulfilling') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_STATE'); END IF;
+   UPDATE public.gh_marketplace_orders SET status='disputed',dispute_reason=NULLIF(v_note,''),updated_at=now(),audit=coalesce(audit,'[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',(extract(epoch from now())*1000)::bigint,'action','DISPUTE_OPENED','detail',v_note)) WHERE id=r.id;
+ ELSIF v_action='cancel_unpaid' THEN
+   IF r.payment_status IN ('verified','refunded') OR r.status NOT IN ('created','payment_pending') THEN RETURN jsonb_build_object('ok',false,'error','PAID_OR_STARTED'); END IF;
+   UPDATE public.gh_marketplace_orders SET status='cancelled',cancellation_reason=NULLIF(v_note,''),cancelled_at=now(),updated_at=now(),audit=coalesce(audit,'[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',(extract(epoch from now())*1000)::bigint,'action','CANCEL_UNPAID','detail',v_note)) WHERE id=r.id;
+ ELSE RETURN jsonb_build_object('ok',false,'error','INVALID_ACTION'); END IF;
+ SELECT * INTO r FROM public.gh_marketplace_orders WHERE id=p_order_id;
+ RETURN jsonb_build_object('ok',true,'order',jsonb_build_object('id',r.id,'listingId',r.listing_id,'listingTitle',r.listing_title,'buyerId',r.buyer_id,'sellerId',r.seller_id,'quantity',r.quantity,'unitPrice',r.unit_price,'currency',r.currency,'totalAmount',r.total_amount,'status',r.status,'paymentMethod',r.payment_method,'paymentStatus',r.payment_status,'escrowStatus',r.escrow_status,'deliveryStatus',r.delivery_status,'disputeReason',r.dispute_reason,'cancellationReason',r.cancellation_reason,'buyerNote',r.buyer_note,'sellerNote',r.seller_note,'createdAt',extract(epoch from r.created_at)*1000,'updatedAt',extract(epoch from r.updated_at)*1000,'confirmedAt',CASE WHEN r.confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.confirmed_at)*1000 END,'fulfilledAt',CASE WHEN r.fulfilled_at IS NULL THEN NULL ELSE extract(epoch from r.fulfilled_at)*1000 END,'deliveredAt',CASE WHEN r.delivered_at IS NULL THEN NULL ELSE extract(epoch from r.delivered_at)*1000 END,'buyerConfirmedAt',CASE WHEN r.buyer_confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.buyer_confirmed_at)*1000 END,'sellerConfirmedAt',CASE WHEN r.seller_confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.seller_confirmed_at)*1000 END,'completedAt',CASE WHEN r.completed_at IS NULL THEN NULL ELSE extract(epoch from r.completed_at)*1000 END,'cancelledAt',CASE WHEN r.cancelled_at IS NULL THEN NULL ELSE extract(epoch from r.cancelled_at)*1000 END));
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_marketplace_order_commerce_update(text,text,text,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_order_commerce_update(text,text,text,text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.gh_marketplace_order_get(p_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r public.gh_marketplace_orders%ROWTYPE;
+BEGIN SELECT * INTO r FROM public.gh_marketplace_orders WHERE id=p_id; IF NOT FOUND THEN RETURN NULL; END IF;
+RETURN jsonb_build_object('id',r.id,'listingId',r.listing_id,'listingTitle',r.listing_title,'buyerId',r.buyer_id,'sellerId',r.seller_id,'quantity',r.quantity,'unitPrice',r.unit_price,'currency',r.currency,'totalAmount',r.total_amount,'status',r.status,'paymentMethod',r.payment_method,'paymentStatus',r.payment_status,'paymentIntentId',r.payment_intent_id,'paymentId',r.payment_id,'txid',r.txid,'ghcSpendRef',r.ghc_spend_ref,'audit',r.audit,'escrowStatus',r.escrow_status,'deliveryStatus',r.delivery_status,'disputeReason',r.dispute_reason,'cancellationReason',r.cancellation_reason,'buyerNote',r.buyer_note,'sellerNote',r.seller_note,'createdAt',extract(epoch from r.created_at)*1000,'updatedAt',extract(epoch from r.updated_at)*1000,'confirmedAt',CASE WHEN r.confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.confirmed_at)*1000 END,'fulfilledAt',CASE WHEN r.fulfilled_at IS NULL THEN NULL ELSE extract(epoch from r.fulfilled_at)*1000 END,'deliveredAt',CASE WHEN r.delivered_at IS NULL THEN NULL ELSE extract(epoch from r.delivered_at)*1000 END,'buyerConfirmedAt',CASE WHEN r.buyer_confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.buyer_confirmed_at)*1000 END,'sellerConfirmedAt',CASE WHEN r.seller_confirmed_at IS NULL THEN NULL ELSE extract(epoch from r.seller_confirmed_at)*1000 END,'completedAt',CASE WHEN r.completed_at IS NULL THEN NULL ELSE extract(epoch from r.completed_at)*1000 END,'cancelledAt',CASE WHEN r.cancelled_at IS NULL THEN NULL ELSE extract(epoch from r.cancelled_at)*1000 END); END; $$;
+CREATE OR REPLACE FUNCTION public.gh_marketplace_orders_list_for_user(p_user_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN RETURN COALESCE((SELECT jsonb_agg(row_to_json(x)::jsonb ORDER BY x.created_at DESC) FROM (SELECT id,listing_id AS "listingId",listing_title AS "listingTitle",buyer_id AS "buyerId",seller_id AS "sellerId",quantity,unit_price AS "unitPrice",currency,total_amount AS "totalAmount",status,payment_method AS "paymentMethod",payment_status AS "paymentStatus",payment_intent_id AS "paymentIntentId",payment_id AS "paymentId",txid,ghc_spend_ref AS "ghcSpendRef",audit,escrow_status AS "escrowStatus",delivery_status AS "deliveryStatus",dispute_reason AS "disputeReason",cancellation_reason AS "cancellationReason",buyer_note AS "buyerNote",seller_note AS "sellerNote",extract(epoch from created_at)*1000 AS "createdAt",extract(epoch from updated_at)*1000 AS "updatedAt",CASE WHEN confirmed_at IS NULL THEN NULL ELSE extract(epoch from confirmed_at)*1000 END AS "confirmedAt",CASE WHEN fulfilled_at IS NULL THEN NULL ELSE extract(epoch from fulfilled_at)*1000 END AS "fulfilledAt",CASE WHEN delivered_at IS NULL THEN NULL ELSE extract(epoch from delivered_at)*1000 END AS "deliveredAt",CASE WHEN completed_at IS NULL THEN NULL ELSE extract(epoch from completed_at)*1000 END AS "completedAt",CASE WHEN cancelled_at IS NULL THEN NULL ELSE extract(epoch from cancelled_at)*1000 END AS "cancelledAt" FROM public.gh_marketplace_orders WHERE buyer_id=p_user_id OR seller_id=p_user_id ORDER BY created_at DESC LIMIT 200) x),'[]'::jsonb); END; $$;
+REVOKE ALL ON FUNCTION public.gh_marketplace_order_get(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.gh_marketplace_orders_list_for_user(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_order_get(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_marketplace_orders_list_for_user(text) TO service_role;
+COMMENT ON TABLE public.gh_marketplace_orders IS 'GreenHaven durable marketplace commerce authority: reservation, payment, fulfillment, delivery, disputes and buyer/seller lifecycle.';
+
+-- ============================================================================
+-- SOURCE 122: 20261023000001_membership_payment_reconciliation_v2.sql
+-- SHA256: b1eb580a34a6b5d4a4ab111de5f7cdcad6a0b7be5a65d4f0cac1e2ce6aec9bcc
+-- ============================================================================
+-- Phase 29: Membership + Pi Payment Convergence V2
+-- Durable payment->entitlement reconciliation contract.
+-- No client table access is introduced. Existing entitlement/payment authorities remain canonical.
+
+CREATE INDEX IF NOT EXISTS idx_ghc_membership_entitlements_user_purchase
+  ON public.ghc_membership_entitlements (user_id, purchase_ref);
+
+CREATE INDEX IF NOT EXISTS idx_ghc_payment_intents_membership_completed
+  ON public.ghc_payment_intents (user_id, status, completed_at DESC)
+  WHERE purpose = 'membership' AND status IN ('COMPLETED', 'FULFILLED');
+
+COMMENT ON INDEX public.idx_ghc_payment_intents_membership_completed IS
+  'Phase 29: accelerates server-side recovery of completed membership payments whose entitlement write was interrupted.';
+
+-- ============================================================================
+-- SOURCE 123: 20261023010001_ghc_transaction_correlation_envelope.sql
+-- SHA256: fa04f094c81274df07ffeaebf2992c985d89c996503d99b79465d38495e40775
+-- ============================================================================
+-- GreenHaven Phase 23 — canonical cross-surface transaction correlation.
+-- Metadata is navigational/audit context only; amount/status/source remain authoritative.
+CREATE OR REPLACE FUNCTION public.ghc_attach_transaction_correlation(
+  p_user_id text,
+  p_reference_id text,
+  p_correlation jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE v_count integer;
+BEGIN
+  IF coalesce(trim(p_user_id), '') = '' OR coalesce(trim(p_reference_id), '') = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_REFERENCE');
+  END IF;
+  IF jsonb_typeof(coalesce(p_correlation, '{}'::jsonb)) <> 'object' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CORRELATION');
+  END IF;
+  IF coalesce(p_correlation->>'version', '') <> '1' OR coalesce(trim(p_correlation->>'kind'), '') = '' OR coalesce(trim(p_correlation->>'event'), '') = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CORRELATION');
+  END IF;
+
+  UPDATE public.ghc_transactions
+     SET metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('correlation', p_correlation)
+   WHERE user_id = p_user_id
+     AND reference_id = p_reference_id
+     AND status = 'posted';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN jsonb_build_object('ok', true, 'updated', v_count);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.ghc_attach_transaction_correlation(text, text, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.ghc_attach_transaction_correlation(text, text, jsonb) TO service_role;
+COMMENT ON FUNCTION public.ghc_attach_transaction_correlation(text, text, jsonb) IS
+  'Service-role-only post-commit correlation metadata enrichment. Does not alter financial fields.';
+
+-- ============================================================================
+-- SOURCE 124: 20261023010002_ghc_wallet_v2_authoritative_snapshot.sql
+-- SHA256: 7f1fc432df05e26ceeea87c27e0a9c87cff0a5613e188e7914b888a17d7e94e9
+-- ============================================================================
+-- GreenHaven Phase 28 — GHC Wallet V2 authoritative read model.
+-- One ledger, one balance authority, explicit available/pending/locked/escrow states.
+-- No issuance. No client writes. Escrow is intentionally 0 until a durable escrow
+-- reservation rail exists; withdrawal reservations remain classified as locked.
+
+CREATE OR REPLACE FUNCTION public.ghc_wallet_v2_snapshot(p_user_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id, ''));
+  v_ledger numeric := 0;
+  v_available numeric := 0;
+  v_pending numeric := 0;
+  v_locked numeric := 0;
+  v_escrow numeric := 0;
+  v_earned numeric := 0;
+  v_spent numeric := 0;
+  v_purchased numeric := 0;
+  v_transfers_in numeric := 0;
+  v_transfers_out numeric := 0;
+  v_rewards numeric := 0;
+  v_creator numeric := 0;
+  v_curation numeric := 0;
+  v_marketplace numeric := 0;
+  v_membership numeric := 0;
+  v_withdrawals numeric := 0;
+  v_adjustments numeric := 0;
+  v_unknown numeric := 0;
+  v_pending_count integer := 0;
+BEGIN
+  IF v_user = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'USER_REQUIRED');
+  END IF;
+
+  SELECT
+    coalesce(sum(CASE WHEN status = 'posted' AND kind <> 'transfer_request' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'pending' AND amount > 0 AND kind <> 'transfer_request' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND amount > 0 AND kind IN ('earned','transfer_in') THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND amount < 0 AND kind IN ('spent','transfer_out') THEN abs(amount) ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND amount > 0 AND kind = 'purchased' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND kind = 'transfer_in' AND amount > 0 THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND kind = 'transfer_out' AND amount < 0 THEN abs(amount) ELSE 0 END), 0),
+    count(*) FILTER (WHERE status = 'pending' AND amount > 0 AND kind <> 'transfer_request')
+  INTO v_ledger, v_pending, v_earned, v_spent, v_purchased, v_transfers_in, v_transfers_out, v_pending_count
+  FROM public.ghc_transactions
+  WHERE user_id = v_user;
+
+  v_ledger := greatest(0, v_ledger);
+  v_available := greatest(0, public.ghc_spendable_balance(v_user));
+  v_locked := greatest(0, v_ledger - v_available);
+  v_escrow := 0;
+
+  SELECT
+    coalesce(sum(CASE WHEN status = 'posted' AND amount > 0 AND (
+      upper(source_event) LIKE '%REWARD%' OR upper(source_event) LIKE '%CLAIM%'
+    ) THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND amount > 0 AND (
+      upper(source_event) LIKE '%CREATOR%'
+    ) THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND amount > 0 AND (
+      upper(source_event) LIKE '%CURATION%'
+    ) THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND (
+      upper(source_event) LIKE '%MARKETPLACE%' OR upper(source_event) LIKE '%ORDER%'
+    ) THEN abs(amount) ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND (
+      upper(source_event) LIKE '%MEMBERSHIP%' OR upper(source_event) LIKE '%PREMIUM%'
+    ) THEN abs(amount) ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND (
+      upper(source_event) LIKE '%WITHDRAW%'
+    ) THEN abs(amount) ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND kind = 'adjusted' THEN abs(amount) ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN status = 'posted' AND kind NOT IN ('earned','spent','purchased','reversed','expired','adjusted','transfer_out','transfer_in','transfer_request') THEN abs(amount) ELSE 0 END), 0)
+  INTO v_rewards, v_creator, v_curation, v_marketplace, v_membership, v_withdrawals, v_adjustments, v_unknown
+  FROM public.ghc_transactions
+  WHERE user_id = v_user;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'userId', v_user,
+    'currency', 'GHC',
+    'available', v_available,
+    'pending', greatest(0, v_pending),
+    'locked', v_locked,
+    'escrowLocked', v_escrow,
+    'ledgerBalance', v_ledger,
+    'lifetimeEarned', greatest(0, v_earned),
+    'lifetimeSpent', greatest(0, v_spent),
+    'lifetimePurchased', greatest(0, v_purchased),
+    'pendingCount', v_pending_count,
+    'categories', jsonb_build_object(
+      'rewards', greatest(0, v_rewards),
+      'creator', greatest(0, v_creator),
+      'curation', greatest(0, v_curation),
+      'transfersIn', greatest(0, v_transfers_in),
+      'transfersOut', greatest(0, v_transfers_out),
+      'marketplace', greatest(0, v_marketplace),
+      'membership', greatest(0, v_membership),
+      'withdrawals', greatest(0, v_withdrawals),
+      'adjustments', greatest(0, v_adjustments),
+      'unclassified', greatest(0, v_unknown)
+    ),
+    'holds', jsonb_build_object(
+      'withdrawalLocked', greatest(0, v_locked),
+      'escrowLocked', v_escrow,
+      'escrowRail', 'not_configured'
+    ),
+    'reconciliation', jsonb_build_object(
+      'availablePlusLockedEqualsLedger', abs((v_available + v_locked) - v_ledger) < 0.0001,
+      'availableNonNegative', v_available >= 0,
+      'pendingNonNegative', v_pending >= 0,
+      'ledgerNonNegative', v_ledger >= 0,
+      'unclassifiedAmount', greatest(0, v_unknown)
+    ),
+    'updatedAt', (extract(epoch from now()) * 1000)::bigint
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ghc_wallet_v2_snapshot(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ghc_wallet_v2_snapshot(text) TO service_role;
+
+COMMENT ON FUNCTION public.ghc_wallet_v2_snapshot(text) IS
+  'Phase 28 wallet authority. Available/pending/locked/escrow are derived from the canonical GHC ledger. No minting and no client writes.';
+
+-- ============================================================================
+-- SOURCE 125: 20261023010003_gh_messaging_v2.sql
+-- SHA256: e04270f40d7e077a755cee99a263568ecdf5d5b5146f1bcc2e0345bccc20f64a
+-- ============================================================================
+-- GreenHaven Messaging V2: durable context, stable cursors, and transaction/community links.
+-- Service-role writes only. Authz remains server-side membership/ownership based.
+
+ALTER TABLE public.gh_conversations
+  ADD COLUMN IF NOT EXISTS context_type text,
+  ADD COLUMN IF NOT EXISTS context_id text,
+  ADD COLUMN IF NOT EXISTS avatar_url text,
+  ADD COLUMN IF NOT EXISTS member_count integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_message_id text;
+
+ALTER TABLE public.gh_conversations
+  DROP CONSTRAINT IF EXISTS gh_conversations_context_type_check;
+ALTER TABLE public.gh_conversations
+  ADD CONSTRAINT gh_conversations_context_type_check
+  CHECK (context_type IS NULL OR context_type IN ('marketplace_order','community','post','system'));
+
+CREATE INDEX IF NOT EXISTS idx_gh_conversations_context
+  ON public.gh_conversations (context_type, context_id)
+  WHERE context_type IS NOT NULL AND context_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_conversations_updated_id
+  ON public.gh_conversations (updated_at DESC, id DESC);
+
+ALTER TABLE public.gh_conversation_members
+  ADD COLUMN IF NOT EXISTS is_pinned boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_gh_conversation_members_user_updated
+  ON public.gh_conversation_members (gh_user_id, is_archived, is_pinned, conversation_id)
+  WHERE left_at IS NULL;
+
+ALTER TABLE public.gh_messages
+  ADD COLUMN IF NOT EXISTS reply_to_message_id text,
+  ADD COLUMN IF NOT EXISTS shared_type text,
+  ADD COLUMN IF NOT EXISTS shared_id text;
+
+ALTER TABLE public.gh_messages
+  DROP CONSTRAINT IF EXISTS gh_messages_shared_type_check;
+ALTER TABLE public.gh_messages
+  ADD CONSTRAINT gh_messages_shared_type_check
+  CHECK (shared_type IS NULL OR shared_type IN ('post','marketplace_listing','marketplace_order','profile','community'));
+
+CREATE INDEX IF NOT EXISTS idx_gh_messages_conversation_created_id
+  ON public.gh_messages (conversation_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_messages_reply_to
+  ON public.gh_messages (conversation_id, reply_to_message_id)
+  WHERE reply_to_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_messages_shared
+  ON public.gh_messages (shared_type, shared_id)
+  WHERE shared_type IS NOT NULL AND shared_id IS NOT NULL;
+
+-- First-class context projection used by marketplace transaction chat and community chat.
+CREATE OR REPLACE FUNCTION public.gh_messaging_set_conversation_context(
+  p_conversation_id text,
+  p_actor_id text,
+  p_context_type text,
+  p_context_id text,
+  p_title text DEFAULT NULL,
+  p_avatar_url text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_type text := NULLIF(trim(COALESCE(p_context_type,'')), '');
+  v_id text := NULLIF(trim(COALESCE(p_context_id,'')), '');
+BEGIN
+  IF p_conversation_id IS NULL OR p_actor_id IS NULL OR v_type IS NULL OR v_id IS NULL THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_INPUT');
+  END IF;
+  IF v_type NOT IN ('marketplace_order','community','post','system') THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_CONTEXT');
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.gh_conversation_members
+    WHERE conversation_id=p_conversation_id AND gh_user_id=p_actor_id AND left_at IS NULL
+  ) THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+
+  UPDATE public.gh_conversations
+  SET context_type=v_type,
+      context_id=v_id,
+      title=COALESCE(NULLIF(left(trim(COALESCE(p_title,'')),120),''), title),
+      avatar_url=COALESCE(NULLIF(left(trim(COALESCE(p_avatar_url,'')),2048),''), avatar_url),
+      updated_at=now()
+  WHERE id=p_conversation_id;
+
+  RETURN jsonb_build_object('ok',true,'conversationId',p_conversation_id,'contextType',v_type,'contextId',v_id);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.gh_messaging_set_conversation_context(text,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_messaging_set_conversation_context(text,text,text,text,text,text) TO service_role;
+
+-- Server-authoritative delivery acknowledgement. It never marks a message read.
+CREATE OR REPLACE FUNCTION public.gh_messaging_mark_delivered(
+  p_user_id text,
+  p_conversation_id text,
+  p_message_ids text[]
+)
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_now timestamptz := now(); v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.gh_conversation_members WHERE conversation_id=p_conversation_id AND gh_user_id=p_user_id AND left_at IS NULL) THEN
+    RETURN 0;
+  END IF;
+  INSERT INTO public.gh_message_receipts(message_id,conversation_id,sender_id,recipient_id,delivered_at)
+  SELECT m.id,m.conversation_id,m.sender_id,p_user_id,v_now
+  FROM public.gh_messages m
+  WHERE m.conversation_id=p_conversation_id
+    AND m.sender_id<>p_user_id
+    AND m.deleted_at IS NULL
+    AND m.id=ANY(COALESCE(p_message_ids,ARRAY[]::text[]))
+  ON CONFLICT(message_id,recipient_id) DO UPDATE
+    SET delivered_at=COALESCE(public.gh_message_receipts.delivered_at,EXCLUDED.delivered_at);
+  GET DIAGNOSTICS v_count=ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.gh_messaging_mark_delivered(text,text,text[]) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_messaging_mark_delivered(text,text,text[]) TO service_role;
+
+COMMENT ON COLUMN public.gh_conversations.context_type IS 'Durable product context for exact cross-surface navigation.';
+COMMENT ON COLUMN public.gh_messages.shared_type IS 'Server-validated shared entity type.';
+COMMENT ON COLUMN public.gh_messages.shared_id IS 'Server-validated shared entity identifier.';
+
+-- ============================================================================
+-- SOURCE 126: 20261023020001_gh_notification_realtime_event_platform.sql
+-- SHA256: 130e62f553b98891545999c8b5fc1a05694a222a8120b9eba2e384fc13833179
+-- ============================================================================
+-- GreenHaven Phase 32: unified notification + realtime event platform.
+-- Append-only event journal + per-recipient notification projection.
+-- Financial state remains authoritative in wallet/payment APIs; realtime is a
+-- synchronization signal, never proof of a financial outcome.
+
+CREATE TABLE IF NOT EXISTS public.gh_realtime_events (
+  id                bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  event_id          text NOT NULL UNIQUE,
+  recipient_user_id text,
+  actor_user_id     text,
+  event_type        text NOT NULL,
+  aggregate_type    text NOT NULL DEFAULT 'system',
+  aggregate_id      text,
+  correlation_id    text,
+  request_id        text,
+  payload           jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  expires_at        timestamptz,
+  CONSTRAINT gh_realtime_event_id_nonempty CHECK (length(trim(event_id)) > 0),
+  CONSTRAINT gh_realtime_event_type_nonempty CHECK (length(trim(event_type)) > 0),
+  CONSTRAINT gh_realtime_event_payload_object CHECK (jsonb_typeof(payload) = 'object')
+);
+
+CREATE INDEX IF NOT EXISTS idx_gh_realtime_events_recipient_cursor
+  ON public.gh_realtime_events (recipient_user_id, created_at DESC, id DESC)
+  WHERE recipient_user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_realtime_events_correlation
+  ON public.gh_realtime_events (correlation_id, created_at DESC)
+  WHERE correlation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_realtime_events_aggregate
+  ON public.gh_realtime_events (aggregate_type, aggregate_id, created_at DESC)
+  WHERE aggregate_id IS NOT NULL;
+
+ALTER TABLE public.gh_realtime_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_realtime_events_no_client ON public.gh_realtime_events;
+CREATE POLICY gh_realtime_events_no_client ON public.gh_realtime_events
+  FOR ALL USING (false) WITH CHECK (false);
+REVOKE ALL ON TABLE public.gh_realtime_events FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.gh_realtime_events TO service_role;
+
+CREATE TABLE IF NOT EXISTS public.gh_notification_inbox (
+  id                text PRIMARY KEY,
+  recipient_user_id text NOT NULL,
+  actor_user_id     text,
+  source_type       text NOT NULL,
+  source_id         text,
+  notification_type text NOT NULL,
+  title             text NOT NULL DEFAULT '',
+  body              text NOT NULL DEFAULT '',
+  metadata          jsonb NOT NULL DEFAULT '{}'::jsonb,
+  correlation_id    text,
+  request_id        text,
+  dedupe_key        text NOT NULL,
+  read_at           timestamptz,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  expires_at        timestamptz,
+  CONSTRAINT gh_notification_inbox_recipient_nonempty CHECK (length(trim(recipient_user_id)) > 0),
+  CONSTRAINT gh_notification_inbox_dedupe_nonempty CHECK (length(trim(dedupe_key)) > 0),
+  CONSTRAINT gh_notification_inbox_metadata_object CHECK (jsonb_typeof(metadata) = 'object')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gh_notification_inbox_recipient_dedupe
+  ON public.gh_notification_inbox (recipient_user_id, dedupe_key);
+CREATE INDEX IF NOT EXISTS idx_gh_notification_inbox_recipient_cursor
+  ON public.gh_notification_inbox (recipient_user_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_notification_inbox_unread
+  ON public.gh_notification_inbox (recipient_user_id, created_at DESC, id DESC)
+  WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_notification_inbox_correlation
+  ON public.gh_notification_inbox (correlation_id, created_at DESC)
+  WHERE correlation_id IS NOT NULL;
+
+ALTER TABLE public.gh_notification_inbox ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_notification_inbox_no_client ON public.gh_notification_inbox;
+CREATE POLICY gh_notification_inbox_no_client ON public.gh_notification_inbox
+  FOR ALL USING (false) WITH CHECK (false);
+REVOKE ALL ON TABLE public.gh_notification_inbox FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.gh_notification_inbox TO service_role;
+
+CREATE OR REPLACE FUNCTION public.gh_notification_event_append(
+  p_event_id text,
+  p_recipient_user_id text,
+  p_actor_user_id text,
+  p_event_type text,
+  p_aggregate_type text DEFAULT 'system',
+  p_aggregate_id text DEFAULT NULL,
+  p_correlation_id text DEFAULT NULL,
+  p_request_id text DEFAULT NULL,
+  p_payload jsonb DEFAULT '{}'::jsonb,
+  p_expires_at timestamptz DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_id bigint;
+BEGIN
+  IF NULLIF(trim(COALESCE(p_event_id,'')),'') IS NULL
+     OR NULLIF(trim(COALESCE(p_recipient_user_id,'')),'') IS NULL
+     OR NULLIF(trim(COALESCE(p_event_type,'')),'') IS NULL THEN
+    RETURN jsonb_build_object('ok',false,'error','REQUIRED');
+  END IF;
+
+  INSERT INTO public.gh_realtime_events(
+    event_id,recipient_user_id,actor_user_id,event_type,aggregate_type,
+    aggregate_id,correlation_id,request_id,payload,expires_at
+  ) VALUES (
+    trim(p_event_id),trim(p_recipient_user_id),NULLIF(trim(COALESCE(p_actor_user_id,'')),''),
+    trim(p_event_type),COALESCE(NULLIF(trim(COALESCE(p_aggregate_type,'')),''),'system'),
+    NULLIF(trim(COALESCE(p_aggregate_id,'')),''),NULLIF(trim(COALESCE(p_correlation_id,'')),''),
+    NULLIF(trim(COALESCE(p_request_id,'')),''),COALESCE(p_payload,'{}'::jsonb),p_expires_at
+  ) ON CONFLICT(event_id) DO NOTHING
+  RETURNING id INTO v_id;
+
+  IF v_id IS NULL THEN
+    SELECT id INTO v_id FROM public.gh_realtime_events WHERE event_id=trim(p_event_id);
+    RETURN jsonb_build_object('ok',true,'idempotent',true,'eventId',trim(p_event_id),'sequence',v_id);
+  END IF;
+  RETURN jsonb_build_object('ok',true,'idempotent',false,'eventId',trim(p_event_id),'sequence',v_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_notification_inbox_create(
+  p_id text,
+  p_recipient_user_id text,
+  p_actor_user_id text,
+  p_source_type text,
+  p_source_id text,
+  p_notification_type text,
+  p_title text,
+  p_body text,
+  p_metadata jsonb DEFAULT '{}'::jsonb,
+  p_correlation_id text DEFAULT NULL,
+  p_request_id text DEFAULT NULL,
+  p_dedupe_key text DEFAULT NULL,
+  p_expires_at timestamptz DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_id text := trim(COALESCE(p_id,'')); v_dedupe text := trim(COALESCE(p_dedupe_key,'')); v_existing text;
+BEGIN
+  IF NULLIF(trim(COALESCE(p_recipient_user_id,'')),'') IS NULL OR v_dedupe='' OR v_id='' THEN
+    RETURN jsonb_build_object('ok',false,'error','REQUIRED');
+  END IF;
+  IF p_actor_user_id IS NOT NULL AND trim(p_actor_user_id)=trim(p_recipient_user_id) THEN
+    RETURN jsonb_build_object('ok',true,'skipped',true,'reason','SELF');
+  END IF;
+  IF p_actor_user_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.ghc_user_blocks b
+    WHERE (b.blocker_id=trim(p_recipient_user_id) AND b.blocked_id=trim(p_actor_user_id))
+       OR (b.blocker_id=trim(p_actor_user_id) AND b.blocked_id=trim(p_recipient_user_id))
+  ) THEN
+    RETURN jsonb_build_object('ok',true,'skipped',true,'reason','BLOCKED');
+  END IF;
+
+  INSERT INTO public.gh_notification_inbox(
+    id,recipient_user_id,actor_user_id,source_type,source_id,notification_type,
+    title,body,metadata,correlation_id,request_id,dedupe_key,expires_at
+  ) VALUES (
+    v_id,trim(p_recipient_user_id),NULLIF(trim(COALESCE(p_actor_user_id,'')),''),
+    COALESCE(NULLIF(trim(COALESCE(p_source_type,'')),''),'system'),NULLIF(trim(COALESCE(p_source_id,'')),''),
+    trim(p_notification_type),left(COALESCE(p_title,''),200),left(COALESCE(p_body,''),500),
+    COALESCE(p_metadata,'{}'::jsonb),NULLIF(trim(COALESCE(p_correlation_id,'')),''),
+    NULLIF(trim(COALESCE(p_request_id,'')),''),v_dedupe,p_expires_at
+  ) ON CONFLICT(recipient_user_id,dedupe_key) DO NOTHING
+  RETURNING id INTO v_existing;
+
+  IF v_existing IS NULL THEN
+    SELECT id INTO v_existing FROM public.gh_notification_inbox
+    WHERE recipient_user_id=trim(p_recipient_user_id) AND dedupe_key=v_dedupe LIMIT 1;
+    RETURN jsonb_build_object('ok',true,'idempotent',true,'id',v_existing);
+  END IF;
+  RETURN jsonb_build_object('ok',true,'idempotent',false,'id',v_existing);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_notification_inbox_list(
+  p_recipient_user_id text,
+  p_limit integer DEFAULT 60,
+  p_before_created_at timestamptz DEFAULT NULL,
+  p_before_id text DEFAULT NULL,
+  p_unread_only boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_rows jsonb; v_limit integer:=LEAST(GREATEST(COALESCE(p_limit,60),1),100); v_has_more boolean;
+BEGIN
+  SELECT COALESCE(jsonb_agg(row_to_json(q)::jsonb ORDER BY q.created_at DESC,q.id DESC),'[]'::jsonb)
+  INTO v_rows
+  FROM (
+    SELECT n.id,n.recipient_user_id AS "recipientUserId",n.actor_user_id AS "actorUserId",
+      n.source_type AS "sourceType",n.source_id AS "sourceId",n.notification_type AS "type",
+      n.title,n.body,n.metadata,n.correlation_id AS "correlationId",n.request_id AS "requestId",
+      n.read_at AS "readAt",n.created_at AS "createdAt",n.expires_at AS "expiresAt"
+    FROM public.gh_notification_inbox n
+    WHERE n.recipient_user_id=trim(p_recipient_user_id)
+      AND (NOT p_unread_only OR n.read_at IS NULL)
+      AND (p_before_created_at IS NULL OR n.created_at < p_before_created_at
+           OR (n.created_at=p_before_created_at AND p_before_id IS NOT NULL AND n.id < p_before_id))
+      AND (n.expires_at IS NULL OR n.expires_at > now())
+    ORDER BY n.created_at DESC,n.id DESC LIMIT v_limit + 1
+  ) q;
+  v_has_more:=jsonb_array_length(v_rows)>v_limit;
+  IF v_has_more THEN
+    SELECT COALESCE(jsonb_agg(value ORDER BY ord),'[]'::jsonb) INTO v_rows
+    FROM jsonb_array_elements(v_rows) WITH ORDINALITY AS x(value,ord)
+    WHERE ord <= v_limit;
+  END IF;
+  RETURN jsonb_build_object('ok',true,'notifications',v_rows,'hasMore',v_has_more);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_notification_inbox_unread_count(p_recipient_user_id text)
+RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
+  SELECT count(*)::integer FROM public.gh_notification_inbox
+  WHERE recipient_user_id=trim(p_recipient_user_id) AND read_at IS NULL
+    AND (expires_at IS NULL OR expires_at>now());
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_notification_inbox_mark_read(
+  p_recipient_user_id text,p_ids text[] DEFAULT NULL,p_all boolean DEFAULT false
+)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_count integer:=0;
+BEGIN
+  IF p_all THEN
+    UPDATE public.gh_notification_inbox SET read_at=COALESCE(read_at,now())
+    WHERE recipient_user_id=trim(p_recipient_user_id) AND read_at IS NULL;
+  ELSIF p_ids IS NOT NULL AND array_length(p_ids,1)>0 THEN
+    UPDATE public.gh_notification_inbox SET read_at=COALESCE(read_at,now())
+    WHERE recipient_user_id=trim(p_recipient_user_id) AND read_at IS NULL AND id=ANY(p_ids);
+  END IF;
+  GET DIAGNOSTICS v_count=ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
+-- Backfill existing durable notifications into the unified projection.
+INSERT INTO public.gh_notification_inbox(
+  id,recipient_user_id,actor_user_id,source_type,source_id,notification_type,title,body,metadata,
+  correlation_id,request_id,dedupe_key,read_at,created_at
+)
+SELECT 'social_'||n.id,n.recipient_user_id,n.actor_user_id,'social',n.entity_id,n.notification_type,
+       n.title,n.body,n.metadata,
+       CASE WHEN jsonb_typeof(n.metadata->'correlation')='object' THEN n.metadata->'correlation'->>'correlationId' END,
+       NULL,n.dedupe_key,n.read_at,n.created_at
+FROM public.gh_social_notifications n
+ON CONFLICT(recipient_user_id,dedupe_key) DO NOTHING;
+
+INSERT INTO public.gh_notification_inbox(
+  id,recipient_user_id,actor_user_id,source_type,source_id,notification_type,title,body,metadata,
+  correlation_id,request_id,dedupe_key,read_at,created_at,expires_at
+)
+SELECT 'economy_'||e.id,e.user_id,NULL,'economy',e.reference_id,e.event_type,
+       COALESCE(e.title,e.event_type),COALESCE(e.body,''),COALESCE(e.payload,'{}'::jsonb),
+       CASE WHEN jsonb_typeof(e.payload->'correlation')='object' THEN e.payload->'correlation'->>'correlationId' END,
+       e.request_id,e.dedupe_key,e.read_at,e.created_at,e.expires_at
+FROM public.ghc_economy_events e
+WHERE e.dedupe_key IS NOT NULL
+ON CONFLICT(recipient_user_id,dedupe_key) DO NOTHING;
+
+REVOKE ALL ON FUNCTION public.gh_notification_event_append(text,text,text,text,text,text,text,text,jsonb,timestamptz) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_notification_event_append(text,text,text,text,text,text,text,text,jsonb,timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_notification_inbox_create(text,text,text,text,text,text,text,text,jsonb,text,text,text,timestamptz) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_notification_inbox_create(text,text,text,text,text,text,text,text,jsonb,text,text,text,timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_notification_inbox_list(text,integer,timestamptz,text,boolean) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_notification_inbox_list(text,integer,timestamptz,text,boolean) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_notification_inbox_unread_count(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_notification_inbox_unread_count(text) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_notification_inbox_mark_read(text,text[],boolean) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_notification_inbox_mark_read(text,text[],boolean) TO service_role;
+
+COMMENT ON TABLE public.gh_realtime_events IS 'Durable user-scoped synchronization journal. Never authoritative for financial state.';
+COMMENT ON TABLE public.gh_notification_inbox IS 'Unified server-authoritative notification projection across social, economy, marketplace, messaging, community and system domains.';
+
+-- Automatic convergence: every legacy durable notification source is projected
+-- into the unified inbox + realtime journal without requiring every caller to
+-- be rewritten in the same release.
+CREATE OR REPLACE FUNCTION public.gh_project_social_notification_v2()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_corr text;
+BEGIN
+  v_corr := CASE WHEN jsonb_typeof(NEW.metadata->'correlation')='object'
+                 THEN NEW.metadata->'correlation'->>'correlationId' END;
+  PERFORM public.gh_notification_inbox_create(
+    'social_'||NEW.id,NEW.recipient_user_id,NEW.actor_user_id,'social',NEW.entity_id,
+    NEW.notification_type,NEW.title,NEW.body,NEW.metadata,v_corr,NULL,NEW.dedupe_key,NULL
+  );
+  PERFORM public.gh_notification_event_append(
+    'social_'||NEW.id,NEW.recipient_user_id,NEW.actor_user_id,'NOTIFICATION_CREATED',
+    NEW.entity_type,NEW.entity_id,v_corr,NULL,
+    jsonb_build_object('notificationId',NEW.id,'source','social','type',NEW.notification_type),NULL
+  );
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_gh_social_notification_v2_projection ON public.gh_social_notifications;
+CREATE TRIGGER trg_gh_social_notification_v2_projection
+AFTER INSERT ON public.gh_social_notifications FOR EACH ROW
+EXECUTE FUNCTION public.gh_project_social_notification_v2();
+
+CREATE OR REPLACE FUNCTION public.gh_project_economy_notification_v2()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_corr text;
+BEGIN
+  v_corr := CASE WHEN jsonb_typeof(NEW.payload->'correlation')='object'
+                 THEN NEW.payload->'correlation'->>'correlationId' END;
+  IF NEW.dedupe_key IS NOT NULL THEN
+    PERFORM public.gh_notification_inbox_create(
+      'economy_'||NEW.id,NEW.user_id,NULL,'economy',NEW.reference_id,NEW.event_type,
+      COALESCE(NEW.title,NEW.event_type),COALESCE(NEW.body,''),COALESCE(NEW.payload,'{}'::jsonb),
+      v_corr,NEW.request_id,NEW.dedupe_key,NEW.expires_at
+    );
+    PERFORM public.gh_notification_event_append(
+      'economy_'||NEW.id,NEW.user_id,NULL,'NOTIFICATION_CREATED','economy',NEW.reference_id,v_corr,NEW.request_id,
+      jsonb_build_object('notificationId',NEW.id,'source','economy','type',NEW.event_type),NEW.expires_at
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_gh_economy_notification_v2_projection ON public.ghc_economy_events;
+CREATE TRIGGER trg_gh_economy_notification_v2_projection
+AFTER INSERT ON public.ghc_economy_events FOR EACH ROW
+EXECUTE FUNCTION public.gh_project_economy_notification_v2();
+
+REVOKE ALL ON FUNCTION public.gh_project_social_notification_v2() FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_project_economy_notification_v2() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_project_social_notification_v2() TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_project_economy_notification_v2() TO service_role;
+
+-- ============================================================================
+-- SOURCE 127: 20261023030001_gh_community_platform_v2.sql
+-- SHA256: 99d24d608af4a7c24119f6a4a56f6a2ec9b68e80f5821a556f59829ef20e6f07
+-- ============================================================================
+-- GREENHAVEN PHASE 33 — Community Platform V2
+-- Durable community governance, announcements, events, RSVPs, resources and reports.
+-- Server-authoritative; no GHC/Pi/ledger mutation.
+
+CREATE TABLE IF NOT EXISTS public.gh_community_moderation_log (
+  id text PRIMARY KEY,
+  community_id text NOT NULL REFERENCES public.gh_communities(id) ON DELETE CASCADE,
+  actor_id text NOT NULL,
+  action text NOT NULL CHECK (action IN ('pin','unpin','hide','unhide','report','lifecycle','role_change','remove_member','ban_member','unban_member','announcement','event','resource')),
+  target_type text NOT NULL CHECK (target_type IN ('post','member','community','report','announcement','event','resource')),
+  target_id text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_modlog_community_created ON public.gh_community_moderation_log(community_id, created_at DESC);
+ALTER TABLE public.gh_community_moderation_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_moderation_log_no_client ON public.gh_community_moderation_log;
+CREATE POLICY gh_community_moderation_log_no_client ON public.gh_community_moderation_log FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_community_reports (
+  id text PRIMARY KEY,
+  community_id text NOT NULL REFERENCES public.gh_communities(id) ON DELETE CASCADE,
+  reporter_id text NOT NULL,
+  target_type text NOT NULL CHECK (target_type IN ('community','post','member','event','resource')),
+  target_id text NOT NULL,
+  reason text NOT NULL CHECK (reason IN ('spam','harassment','hate','misinformation','impersonation','safety','other')),
+  note text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','reviewing','resolved','dismissed')),
+  resolution_note text NOT NULL DEFAULT '',
+  resolved_by text,
+  resolved_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_reports_queue ON public.gh_community_reports(community_id,status,created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gh_community_report_dedupe ON public.gh_community_reports(community_id,reporter_id,target_type,target_id,reason) WHERE status IN ('open','reviewing');
+ALTER TABLE public.gh_community_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_reports_no_client ON public.gh_community_reports;
+CREATE POLICY gh_community_reports_no_client ON public.gh_community_reports FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_community_announcements (
+  id text PRIMARY KEY,
+  community_id text NOT NULL REFERENCES public.gh_communities(id) ON DELETE CASCADE,
+  author_id text NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  announcement_type text NOT NULL DEFAULT 'info' CHECK (announcement_type IN ('info','important','celebration','maintenance')),
+  pinned boolean NOT NULL DEFAULT false,
+  expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_announcements_feed ON public.gh_community_announcements(community_id,pinned DESC,created_at DESC);
+ALTER TABLE public.gh_community_announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_announcements_no_client ON public.gh_community_announcements;
+CREATE POLICY gh_community_announcements_no_client ON public.gh_community_announcements FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_community_events (
+  id text PRIMARY KEY,
+  community_id text NOT NULL REFERENCES public.gh_communities(id) ON DELETE CASCADE,
+  creator_id text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  starts_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL,
+  status text NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','ongoing','ended','cancelled')),
+  location text,
+  virtual_link text,
+  category text NOT NULL DEFAULT 'meeting' CHECK (category IN ('meeting','social','workshop','discussion','celebration')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (ends_at > starts_at)
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_events_upcoming ON public.gh_community_events(community_id,starts_at ASC);
+ALTER TABLE public.gh_community_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_events_no_client ON public.gh_community_events;
+CREATE POLICY gh_community_events_no_client ON public.gh_community_events FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_community_event_rsvps (
+  event_id text NOT NULL REFERENCES public.gh_community_events(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
+  status text NOT NULL DEFAULT 'going' CHECK (status IN ('going','maybe','declined')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(event_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_event_rsvps_user ON public.gh_community_event_rsvps(user_id,event_id);
+ALTER TABLE public.gh_community_event_rsvps ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_event_rsvps_no_client ON public.gh_community_event_rsvps;
+CREATE POLICY gh_community_event_rsvps_no_client ON public.gh_community_event_rsvps FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_community_resources (
+  id text PRIMARY KEY,
+  community_id text NOT NULL REFERENCES public.gh_communities(id) ON DELETE CASCADE,
+  uploaded_by text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  resource_type text NOT NULL DEFAULT 'link' CHECK (resource_type IN ('document','link','guide','template','media')),
+  url text,
+  content text,
+  sort_order integer NOT NULL DEFAULT 0,
+  pinned boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (url IS NOT NULL OR content IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_gh_community_resources_order ON public.gh_community_resources(community_id,pinned DESC,sort_order ASC,created_at DESC);
+ALTER TABLE public.gh_community_resources ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_community_resources_no_client ON public.gh_community_resources;
+CREATE POLICY gh_community_resources_no_client ON public.gh_community_resources FOR ALL USING(false) WITH CHECK(false);
+
+CREATE OR REPLACE FUNCTION public.gh_community_platform_role(p_community_id text,p_user_id text)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r text; s text;
+BEGIN
+  SELECT role,status INTO r,s FROM public.gh_community_members WHERE community_id=p_community_id AND gh_user_id=p_user_id;
+  IF NOT FOUND OR s <> 'active' THEN RETURN NULL; END IF;
+  RETURN r;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_platform_get(p_community_id text,p_viewer_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE c public.gh_communities%ROWTYPE; v_role text; v_status text; v_json jsonb;
+BEGIN
+  SELECT * INTO c FROM public.gh_communities WHERE id=trim(p_community_id) AND deleted_at IS NULL;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+  SELECT role,status INTO v_role,v_status FROM public.gh_community_members WHERE community_id=c.id AND gh_user_id=trim(p_viewer_id);
+  IF c.privacy <> 'public' AND (v_status IS DISTINCT FROM 'active') AND c.created_by <> trim(p_viewer_id) THEN
+    RETURN jsonb_build_object('ok',false,'error','FORBIDDEN');
+  END IF;
+  SELECT jsonb_build_object(
+    'id',c.id,'name',c.name,'purpose',c.purpose,'description',c.description,'category',c.category,'privacy',c.privacy,
+    'createdBy',c.created_by,'coverImage',c.cover_image,'rules',c.rules,'tags',c.tags,'welcomeMessage',c.welcome_message,
+    'memberCount',c.member_count,'role',v_role,'membershipStatus',v_status,
+    'announcements',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'communityId',a.community_id,'authorId',a.author_id,'title',a.title,'content',a.content,'type',a.announcement_type,'pinned',a.pinned,'expiresAt',extract(epoch FROM a.expires_at)*1000,'createdAt',extract(epoch FROM a.created_at)*1000,'updatedAt',extract(epoch FROM a.updated_at)*1000) ORDER BY a.pinned DESC,a.created_at DESC) FROM public.gh_community_announcements a WHERE a.community_id=c.id AND (a.expires_at IS NULL OR a.expires_at>now())), '[]'::jsonb),
+    'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.id,'groupId',e.community_id,'creatorId',e.creator_id,'title',e.title,'description',e.description,'startsAt',extract(epoch FROM e.starts_at)*1000,'endsAt',extract(epoch FROM e.ends_at)*1000,'status',e.status,'location',e.location,'virtualLink',e.virtual_link,'category',e.category,'attendees',COALESCE((SELECT jsonb_agg(r.user_id) FROM public.gh_community_event_rsvps r WHERE r.event_id=e.id AND r.status='going'),'[]'::jsonb),'rsvpStatus',(SELECT r2.status FROM public.gh_community_event_rsvps r2 WHERE r2.event_id=e.id AND r2.user_id=trim(p_viewer_id))) ORDER BY e.starts_at ASC) FROM public.gh_community_events e WHERE e.community_id=c.id AND e.status<>'cancelled'), '[]'::jsonb),
+    'resources',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',r.id,'groupId',r.community_id,'title',r.title,'description',r.description,'resourceType',r.resource_type,'url',r.url,'content',r.content,'uploadedBy',r.uploaded_by,'uploadedAt',extract(epoch FROM r.created_at)*1000,'order',r.sort_order,'pinned',r.pinned) ORDER BY r.pinned DESC,r.sort_order ASC,r.created_at DESC) FROM public.gh_community_resources r WHERE r.community_id=c.id),'[]'::jsonb),
+    'pendingJoinRequests',CASE WHEN v_role IN ('owner','admin','moderator') THEN COALESCE((SELECT jsonb_agg(m.gh_user_id ORDER BY m.joined_at ASC) FROM public.gh_community_members m WHERE m.community_id=c.id AND m.status='pending'),'[]'::jsonb) ELSE '[]'::jsonb END,
+    'members',COALESCE((SELECT jsonb_agg(m.gh_user_id ORDER BY m.joined_at ASC) FROM public.gh_community_members m WHERE m.community_id=c.id AND m.status='active'),'[]'::jsonb),
+    'moderation',CASE WHEN v_role IN ('owner','admin','moderator') THEN jsonb_build_object('openReports',(SELECT count(*) FROM public.gh_community_reports r WHERE r.community_id=c.id AND r.status IN ('open','reviewing')),'recentActions',(SELECT count(*) FROM public.gh_community_moderation_log l WHERE l.community_id=c.id AND l.created_at>now()-interval '7 days')) ELSE '{}'::jsonb END
+  ) INTO v_json;
+  RETURN jsonb_build_object('ok',true,'community',v_json);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_announcement_create(p_community_id text,p_actor_id text,p_title text,p_content text,p_type text DEFAULT 'info',p_pinned boolean DEFAULT false)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE role text; v_id text := 'ann_'||replace(gen_random_uuid()::text,'-',''); rec public.gh_community_announcements%ROWTYPE;
+BEGIN
+  role:=public.gh_community_platform_role(p_community_id,p_actor_id);
+  IF role NOT IN ('owner','admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF length(trim(p_title))=0 OR length(trim(p_title))>160 OR length(trim(p_content))=0 OR length(p_content)>10000 THEN RETURN jsonb_build_object('ok',false,'error','INVALID'); END IF;
+  IF p_type NOT IN ('info','important','celebration','maintenance') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_TYPE'); END IF;
+  INSERT INTO public.gh_community_announcements(id,community_id,author_id,title,content,announcement_type,pinned) VALUES(v_id,p_community_id,p_actor_id,trim(p_title),trim(p_content),p_type,p_pinned) RETURNING * INTO rec;
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,'announcement','announcement',rec.id,jsonb_build_object('title',rec.title));
+  PERFORM public.gh_notification_event_append('community_announcement:'||rec.id||':'||m.gh_user_id,m.gh_user_id,p_actor_id,'community.announcement.created','community',p_community_id,NULL,NULL,jsonb_build_object('announcementId',rec.id,'title',rec.title)) FROM public.gh_community_members m WHERE m.community_id=p_community_id AND m.status='active' AND m.gh_user_id<>p_actor_id;
+  RETURN jsonb_build_object('ok',true,'announcement',jsonb_build_object('id',rec.id,'communityId',rec.community_id,'authorId',rec.author_id,'title',rec.title,'content',rec.content,'type',rec.announcement_type,'pinned',rec.pinned,'createdAt',extract(epoch FROM rec.created_at)*1000));
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_event_create(p_community_id text,p_actor_id text,p_title text,p_description text,p_starts_at timestamptz,p_ends_at timestamptz,p_location text DEFAULT NULL,p_virtual_link text DEFAULT NULL,p_category text DEFAULT 'meeting')
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE role text; v_id text := 'evt_'||replace(gen_random_uuid()::text,'-',''); rec public.gh_community_events%ROWTYPE;
+BEGIN
+  role:=public.gh_community_platform_role(p_community_id,p_actor_id);
+  IF role NOT IN ('owner','admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF length(trim(p_title))=0 OR length(trim(p_title))>160 OR p_ends_at<=p_starts_at THEN RETURN jsonb_build_object('ok',false,'error','INVALID'); END IF;
+  IF p_category NOT IN ('meeting','social','workshop','discussion','celebration') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_CATEGORY'); END IF;
+  INSERT INTO public.gh_community_events(id,community_id,creator_id,title,description,starts_at,ends_at,location,virtual_link,category) VALUES(v_id,p_community_id,p_actor_id,trim(p_title),left(coalesce(p_description,''),10000),p_starts_at,p_ends_at,NULLIF(left(coalesce(p_location,''),500),''),NULLIF(left(coalesce(p_virtual_link,''),2000),''),p_category) RETURNING * INTO rec;
+  INSERT INTO public.gh_community_event_rsvps(event_id,user_id,status) VALUES(rec.id,p_actor_id,'going');
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,'event','event',rec.id,'{}'::jsonb);
+  PERFORM public.gh_notification_event_append('community_event:'||rec.id||':'||m.gh_user_id,m.gh_user_id,p_actor_id,'community.event.created','community',p_community_id,NULL,NULL,jsonb_build_object('eventId',rec.id,'title',rec.title)) FROM public.gh_community_members m WHERE m.community_id=p_community_id AND m.status='active' AND m.gh_user_id<>p_actor_id;
+  RETURN jsonb_build_object('ok',true,'event',jsonb_build_object('id',rec.id,'groupId',rec.community_id,'creatorId',rec.creator_id,'title',rec.title,'description',rec.description,'startsAt',extract(epoch FROM rec.starts_at)*1000,'endsAt',extract(epoch FROM rec.ends_at)*1000,'status',rec.status,'location',rec.location,'virtualLink',rec.virtual_link,'category',rec.category,'attendees',jsonb_build_array(p_actor_id),'rsvpStatus','going'));
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_event_rsvp(p_event_id text,p_actor_id text,p_status text DEFAULT 'going')
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE e public.gh_community_events%ROWTYPE; member_status text; count_going integer;
+BEGIN
+  SELECT * INTO e FROM public.gh_community_events WHERE id=p_event_id;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+  SELECT status INTO member_status FROM public.gh_community_members WHERE community_id=e.community_id AND gh_user_id=p_actor_id;
+  IF member_status <> 'active' THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF p_status NOT IN ('going','maybe','declined') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_STATUS'); END IF;
+  INSERT INTO public.gh_community_event_rsvps(event_id,user_id,status) VALUES(p_event_id,p_actor_id,p_status) ON CONFLICT(event_id,user_id) DO UPDATE SET status=EXCLUDED.status,updated_at=now();
+  SELECT count(*) INTO count_going FROM public.gh_community_event_rsvps WHERE event_id=p_event_id AND status='going';
+  RETURN jsonb_build_object('ok',true,'status',p_status,'rsvpCount',count_going);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_resource_upsert(p_community_id text,p_actor_id text,p_id text,p_title text,p_description text,p_type text,p_url text DEFAULT NULL,p_content text DEFAULT NULL,p_sort_order integer DEFAULT 0)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE role text; v_id text:=coalesce(nullif(trim(p_id),''),'res_'||replace(gen_random_uuid()::text,'-','')); rec public.gh_community_resources%ROWTYPE;
+BEGIN
+  role:=public.gh_community_platform_role(p_community_id,p_actor_id);
+  IF role NOT IN ('owner','admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF length(trim(p_title))=0 OR length(trim(p_title))>180 OR p_type NOT IN ('document','link','guide','template','media') OR (nullif(trim(coalesce(p_url,'')),'') IS NULL AND nullif(trim(coalesce(p_content,'')),'') IS NULL) THEN RETURN jsonb_build_object('ok',false,'error','INVALID'); END IF;
+  INSERT INTO public.gh_community_resources(id,community_id,uploaded_by,title,description,resource_type,url,content,sort_order) VALUES(v_id,p_community_id,p_actor_id,trim(p_title),left(coalesce(p_description,''),2000),p_type,NULLIF(trim(p_url),''),NULLIF(trim(p_content),''),greatest(0,p_sort_order)) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,resource_type=EXCLUDED.resource_type,url=EXCLUDED.url,content=EXCLUDED.content,sort_order=EXCLUDED.sort_order,updated_at=now() WHERE gh_community_resources.community_id=p_community_id;
+  SELECT * INTO rec FROM public.gh_community_resources WHERE id=v_id;
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,'resource','resource',v_id,jsonb_build_object('title',rec.title));
+  RETURN jsonb_build_object('ok',true,'resource',jsonb_build_object('id',rec.id,'groupId',rec.community_id,'title',rec.title,'description',rec.description,'resourceType',rec.resource_type,'url',rec.url,'content',rec.content,'uploadedBy',rec.uploaded_by,'uploadedAt',extract(epoch FROM rec.created_at)*1000,'order',rec.sort_order,'pinned',rec.pinned));
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_report_create(p_community_id text,p_actor_id text,p_target_type text,p_target_id text,p_reason text,p_note text DEFAULT '')
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE role text; v_id text:='crep_'||replace(gen_random_uuid()::text,'-','');
+BEGIN
+  SELECT public.gh_community_platform_role(p_community_id,p_actor_id) INTO role;
+  IF role IS NULL AND NOT EXISTS(SELECT 1 FROM public.gh_communities WHERE id=p_community_id AND privacy='public' AND deleted_at IS NULL) THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF p_target_type NOT IN ('community','post','member','event','resource') OR p_reason NOT IN ('spam','harassment','hate','misinformation','impersonation','safety','other') OR trim(p_target_id)='' THEN RETURN jsonb_build_object('ok',false,'error','INVALID'); END IF;
+  INSERT INTO public.gh_community_reports(id,community_id,reporter_id,target_type,target_id,reason,note) VALUES(v_id,p_community_id,p_actor_id,p_target_type,p_target_id,p_reason,left(coalesce(p_note,''),2000)) ON CONFLICT(community_id,reporter_id,target_type,target_id,reason) WHERE status IN ('open','reviewing') DO NOTHING;
+  IF NOT EXISTS(SELECT 1 FROM public.gh_community_reports WHERE id=v_id) THEN RETURN jsonb_build_object('ok',true,'duplicate',true); END IF;
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,'report','report',v_id,jsonb_build_object('targetType',p_target_type,'targetId',p_target_id,'reason',p_reason));
+  RETURN jsonb_build_object('ok',true,'reportId',v_id);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_report_resolve(p_community_id text,p_actor_id text,p_report_id text,p_status text,p_resolution_note text DEFAULT '')
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE role text; reporter text;
+BEGIN
+  role:=public.gh_community_platform_role(p_community_id,p_actor_id);
+  IF role NOT IN ('owner','admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  IF p_status NOT IN ('reviewing','resolved','dismissed') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_STATUS'); END IF;
+  UPDATE public.gh_community_reports SET status=p_status,resolution_note=left(coalesce(p_resolution_note,''),2000),resolved_by=p_actor_id,resolved_at=CASE WHEN p_status IN ('resolved','dismissed') THEN now() ELSE NULL END WHERE id=p_report_id AND community_id=p_community_id RETURNING reporter_id INTO reporter;
+  IF reporter IS NULL THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,'report','report',p_report_id,jsonb_build_object('status',p_status));
+  RETURN jsonb_build_object('ok',true,'status',p_status);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_community_member_remove(p_community_id text,p_actor_id text,p_target_id text,p_ban boolean DEFAULT false)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE ar text; tr text;
+BEGIN
+  ar:=public.gh_community_platform_role(p_community_id,p_actor_id);
+  IF ar NOT IN ('owner','admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  SELECT role INTO tr FROM public.gh_community_members WHERE community_id=p_community_id AND gh_user_id=p_target_id;
+  IF tr IS NULL THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+  IF tr='owner' OR p_target_id=p_actor_id THEN RETURN jsonb_build_object('ok',false,'error','CANNOT_REMOVE'); END IF;
+  IF ar='moderator' AND tr IN ('admin','moderator') THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  UPDATE public.gh_community_members SET status=CASE WHEN p_ban THEN 'banned' ELSE 'left' END WHERE community_id=p_community_id AND gh_user_id=p_target_id;
+  UPDATE public.gh_communities SET member_count=(SELECT count(*) FROM public.gh_community_members WHERE community_id=p_community_id AND status='active'),updated_at=now() WHERE id=p_community_id;
+  INSERT INTO public.gh_community_moderation_log(id,community_id,actor_id,action,target_type,target_id,metadata) VALUES('mlog_'||replace(gen_random_uuid()::text,'-',''),p_community_id,p_actor_id,CASE WHEN p_ban THEN 'ban_member' ELSE 'remove_member' END,'member',p_target_id,'{}'::jsonb);
+  RETURN jsonb_build_object('ok',true,'status',CASE WHEN p_ban THEN 'banned' ELSE 'left' END);
+END; $$;
+
+REVOKE ALL ON FUNCTION public.gh_community_platform_role(text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_platform_get(text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_announcement_create(text,text,text,text,text,boolean) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_event_create(text,text,text,text,timestamptz,timestamptz,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_event_rsvp(text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_resource_upsert(text,text,text,text,text,text,text,text,integer) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_report_create(text,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_report_resolve(text,text,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_community_member_remove(text,text,text,boolean) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_community_platform_role(text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_platform_get(text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_announcement_create(text,text,text,text,text,boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_event_create(text,text,text,text,timestamptz,timestamptz,text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_event_rsvp(text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_resource_upsert(text,text,text,text,text,text,text,text,integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_report_create(text,text,text,text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_report_resolve(text,text,text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_community_member_remove(text,text,text,boolean) TO service_role;
+
+-- ============================================================================
+-- SOURCE 128: 20261023030002_gh_reputation_curation_intelligence_v2.sql
+-- SHA256: 88191465741a1288b4f39b960a80eabdc8c63c78d7753e105ebbf4c3f69de5b7
+-- ============================================================================
+-- =============================================================================
+-- GreenHaven Phase 34 — Reputation + Curation Intelligence V2
+-- Server-authoritative trust dimensions, curation guardrails, and quality snapshots.
+-- NO GHC minting. NO wallet-balance voting power. Service-role RPCs only.
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.gh_reputation_intelligence (
+  user_id text PRIMARY KEY,
+  creator_quality numeric(8,4) NOT NULL DEFAULT 0 CHECK (creator_quality >= 0 AND creator_quality <= 100),
+  judgment_calibration numeric(8,4) NOT NULL DEFAULT 50 CHECK (judgment_calibration >= 0 AND judgment_calibration <= 100),
+  community_integrity numeric(8,4) NOT NULL DEFAULT 70 CHECK (community_integrity >= 0 AND community_integrity <= 100),
+  economic_value numeric(8,4) NOT NULL DEFAULT 0 CHECK (economic_value >= 0 AND economic_value <= 100),
+  growth_xp numeric(12,4) NOT NULL DEFAULT 0 CHECK (growth_xp >= 0),
+  curation_power numeric(12,6) NOT NULL DEFAULT 0.25 CHECK (curation_power >= 0 AND curation_power <= 25),
+  risk_score numeric(8,4) NOT NULL DEFAULT 0 CHECK (risk_score >= 0 AND risk_score <= 100),
+  curation_eligible boolean NOT NULL DEFAULT true,
+  model_version text NOT NULL DEFAULT 'rep-curation-v2',
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gh_reputation_intelligence ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_reputation_intelligence_no_client ON public.gh_reputation_intelligence;
+CREATE POLICY gh_reputation_intelligence_no_client ON public.gh_reputation_intelligence FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_curator_activity_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+  post_id text NOT NULL,
+  author_id text NOT NULL,
+  action text NOT NULL CHECK (action IN ('upvote','downvote','neutral')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT gh_curator_activity_user_nonempty CHECK(length(trim(user_id)) > 0),
+  CONSTRAINT gh_curator_activity_post_nonempty CHECK(length(trim(post_id)) > 0),
+  CONSTRAINT gh_curator_activity_author_nonempty CHECK(length(trim(author_id)) > 0)
+);
+CREATE INDEX IF NOT EXISTS idx_gh_curator_activity_user_time ON public.gh_curator_activity_events(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_curator_activity_user_day_post ON public.gh_curator_activity_events(user_id,created_at,post_id);
+ALTER TABLE public.gh_curator_activity_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_curator_activity_no_client ON public.gh_curator_activity_events;
+CREATE POLICY gh_curator_activity_no_client ON public.gh_curator_activity_events FOR ALL USING(false) WITH CHECK(false);
+
+CREATE TABLE IF NOT EXISTS public.gh_reputation_intelligence_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+  creator_quality numeric(8,4) NOT NULL,
+  judgment_calibration numeric(8,4) NOT NULL,
+  community_integrity numeric(8,4) NOT NULL,
+  economic_value numeric(8,4) NOT NULL,
+  growth_xp numeric(12,4) NOT NULL,
+  curation_power numeric(12,6) NOT NULL,
+  risk_score numeric(8,4) NOT NULL,
+  model_version text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gh_rep_int_history_user_time ON public.gh_reputation_intelligence_history(user_id,created_at DESC);
+ALTER TABLE public.gh_reputation_intelligence_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_reputation_intelligence_history_no_client ON public.gh_reputation_intelligence_history;
+CREATE POLICY gh_reputation_intelligence_history_no_client ON public.gh_reputation_intelligence_history FOR ALL USING(false) WITH CHECK(false);
+
+-- Server calculation. This is a trust/ranking signal, never a financial balance.
+CREATE OR REPLACE FUNCTION public.gh_reputation_intelligence_refresh(p_user_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE
+  v_user text := trim(coalesce(p_user_id,''));
+  v_total integer := 0; v_level integer := 1;
+  v_jcs numeric := 50; v_integrity numeric := 70;
+  v_cqs numeric := 0; v_cis numeric := 70; v_evs numeric := 0; v_xp numeric := 0;
+  v_cp numeric := 0.25; v_risk numeric := 0;
+  v_votes integer := 0; v_distinct integer := 0; v_same_author integer := 0; v_rapid integer := 0;
+  v_tip_count integer := 0; v_order_count integer := 0;
+  v_diversity numeric := 1; v_author_concentration numeric := 0; v_rapid_ratio numeric := 0;
+  v_id uuid;
+BEGIN
+  IF v_user='' THEN RETURN jsonb_build_object('ok',false,'error','USER_REQUIRED'); END IF;
+  SELECT coalesce(total_points,0),coalesce(level,1) INTO v_total,v_level FROM public.gh_reputation_state WHERE user_id=v_user;
+  SELECT coalesce(jcs,50),coalesce(integrity_score,70) INTO v_jcs,v_integrity FROM public.gh_curator_calibration WHERE user_id=v_user;
+
+  SELECT coalesce(avg(greatest(0,least(100,q.quality_score))),0)
+    INTO v_cqs
+  FROM public.gh_content_quality_signals q
+  JOIN public.gh_posts p ON p.id=q.content_id
+  WHERE p.author_id=v_user AND p.deleted_at IS NULL;
+
+  SELECT count(*),count(distinct post_id)
+    INTO v_votes,v_distinct
+  FROM public.gh_curator_activity_events
+  WHERE user_id=v_user AND created_at >= current_date;
+  SELECT count(*) INTO v_same_author
+  FROM public.gh_curator_activity_events a
+  WHERE a.user_id=v_user AND a.created_at >= current_date
+    AND a.author_id IN (SELECT author_id FROM public.gh_curator_activity_events WHERE user_id=v_user AND created_at >= current_date GROUP BY author_id ORDER BY count(*) DESC LIMIT 1);
+  SELECT count(*) INTO v_rapid
+  FROM public.gh_curator_activity_events
+  WHERE user_id=v_user AND created_at >= now() - interval '10 minutes';
+  IF v_votes > 0 THEN
+    v_diversity := greatest(0,least(1,v_distinct::numeric/v_votes::numeric));
+    v_author_concentration := greatest(0,least(1,v_same_author::numeric/v_votes::numeric));
+    v_rapid_ratio := greatest(0,least(1,v_rapid::numeric/20));
+  END IF;
+  -- CIS rewards independent, diversified participation; it is not a popularity score.
+  v_cis := greatest(0,least(100,50 + 50*v_diversity - 25*v_author_concentration));
+
+  BEGIN
+    SELECT count(*) INTO v_tip_count FROM public.gh_tip_settlements WHERE creator_id=v_user AND status IN ('payable','paid');
+  EXCEPTION WHEN undefined_table THEN v_tip_count := 0; END;
+  BEGIN
+    SELECT count(*) INTO v_order_count FROM public.gh_marketplace_orders WHERE seller_id=v_user AND status='completed' AND payment_status='verified';
+  EXCEPTION WHEN undefined_table THEN v_order_count := 0; END;
+  v_evs := least(100, ln(1 + v_tip_count + v_order_count) * 20);
+  v_xp := v_total;
+
+  v_risk := least(100, v_author_concentration*60 + v_rapid_ratio*40);
+  v_cp := greatest(0.25, least(25,
+    (0.35 + (least(15,greatest(1,v_level)) / 15.0) * 0.65) *
+    (0.4 + (greatest(0,least(100,v_jcs))/100.0) * 0.6) *
+    (0.5 + (greatest(0,least(100,v_integrity))/100.0) * 0.5) *
+    (0.5 + v_diversity*0.5) *
+    (1 - v_risk/100.0) * 8
+  ));
+
+  INSERT INTO public.gh_reputation_intelligence(user_id,creator_quality,judgment_calibration,community_integrity,economic_value,growth_xp,curation_power,risk_score,curation_eligible,model_version,calculated_at,updated_at)
+  VALUES(v_user,v_cqs,v_jcs,v_cis,v_evs,v_xp,v_cp,v_risk,v_risk < 70,'rep-curation-v2',now(),now())
+  ON CONFLICT(user_id) DO UPDATE SET
+    creator_quality=EXCLUDED.creator_quality, judgment_calibration=EXCLUDED.judgment_calibration,
+    community_integrity=EXCLUDED.community_integrity, economic_value=EXCLUDED.economic_value,
+    growth_xp=EXCLUDED.growth_xp, curation_power=EXCLUDED.curation_power,
+    risk_score=EXCLUDED.risk_score, curation_eligible=EXCLUDED.curation_eligible,
+    model_version=EXCLUDED.model_version, calculated_at=now(), updated_at=now()
+  RETURNING id INTO v_id;
+
+  INSERT INTO public.gh_reputation_intelligence_history(user_id,creator_quality,judgment_calibration,community_integrity,economic_value,growth_xp,curation_power,risk_score,model_version)
+  VALUES(v_user,v_cqs,v_jcs,v_cis,v_evs,v_xp,v_cp,v_risk,'rep-curation-v2');
+
+  RETURN jsonb_build_object('ok',true,'userId',v_user,'totalPoints',v_total,'level',v_level,
+    'creatorQuality',round(v_cqs,4),'judgmentCalibration',round(v_jcs,4),'communityIntegrity',round(v_cis,4),
+    'economicValue',round(v_evs,4),'growthXp',v_xp,'curationPower',round(v_cp,6),'riskScore',round(v_risk,4),
+    'curationEligible',v_risk < 70,'dailyVotes',v_votes,'dailyDistinctPosts',v_distinct);
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_reputation_intelligence_refresh(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_reputation_intelligence_refresh(text) TO service_role;
+
+-- Atomic curation guard. It validates visibility/blocks, self-curation, daily mutation volume,
+-- and rapid/concentrated activity before a vote is committed.
+CREATE OR REPLACE FUNCTION public.gh_curation_preflight(p_post_id text,p_user_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE
+  v_post public.gh_posts%ROWTYPE; v_info jsonb; v_votes integer; v_distinct integer; v_rapid integer;
+  v_risk numeric := 0; v_author_count integer := 0; v_remaining integer;
+BEGIN
+  SELECT * INTO v_post FROM public.gh_posts WHERE id=trim(coalesce(p_post_id,'')) AND deleted_at IS NULL;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','NOT_FOUND'); END IF;
+  IF trim(coalesce(p_user_id,''))='' THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','ACTOR_REQUIRED'); END IF;
+  IF v_post.author_id=trim(p_user_id) THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','SELF_CURATION_FORBIDDEN'); END IF;
+  IF EXISTS(SELECT 1 FROM public.ghc_user_blocks b WHERE (b.blocker_id=trim(p_user_id) AND b.blocked_id=v_post.author_id) OR (b.blocker_id=v_post.author_id AND b.blocked_id=trim(p_user_id))) THEN
+    RETURN jsonb_build_object('ok',false,'eligible',false,'error','FORBIDDEN');
+  END IF;
+  IF v_post.visibility='followers' AND NOT EXISTS(SELECT 1 FROM public.gh_follows f WHERE f.follower_id=trim(p_user_id) AND f.following_id=v_post.author_id) THEN
+    RETURN jsonb_build_object('ok',false,'eligible',false,'error','FORBIDDEN');
+  END IF;
+  IF v_post.visibility NOT IN ('public','followers') THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','FORBIDDEN'); END IF;
+
+  SELECT count(*),count(distinct post_id) INTO v_votes,v_distinct FROM public.gh_curator_activity_events WHERE user_id=trim(p_user_id) AND created_at>=current_date;
+  SELECT count(*) INTO v_rapid FROM public.gh_curator_activity_events WHERE user_id=trim(p_user_id) AND created_at>=now()-interval '10 minutes';
+  SELECT count(*) INTO v_author_count FROM public.gh_curator_activity_events WHERE user_id=trim(p_user_id) AND author_id=v_post.author_id AND created_at>=current_date;
+  IF v_votes>0 THEN v_risk:=least(100,(v_author_count::numeric/v_votes::numeric)*60 + least(1,v_rapid::numeric/20)*40); END IF;
+  v_remaining:=greatest(0,120-v_votes);
+  IF v_votes>=120 THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','DAILY_CURATION_LIMIT','riskScore',v_risk,'remaining',0); END IF;
+  IF v_risk>=70 THEN RETURN jsonb_build_object('ok',false,'eligible',false,'error','CURATION_REVIEW_REQUIRED','riskScore',v_risk,'remaining',v_remaining); END IF;
+  RETURN jsonb_build_object('ok',true,'eligible',true,'riskScore',v_risk,'remaining',v_remaining,'dailyVotes',v_votes,'dailyDistinctPosts',v_distinct);
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_curation_preflight(text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_curation_preflight(text,text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.gh_curation_activity_record(p_post_id text,p_user_id text,p_action text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_author text; v_count integer;
+BEGIN
+  SELECT author_id INTO v_author FROM public.gh_posts WHERE id=trim(p_post_id) AND deleted_at IS NULL;
+  IF v_author IS NULL THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+  INSERT INTO public.gh_curator_activity_events(user_id,post_id,author_id,action) VALUES(trim(p_user_id),trim(p_post_id),v_author,lower(trim(p_action)));
+  SELECT count(*) INTO v_count FROM public.gh_curator_activity_events WHERE user_id=trim(p_user_id) AND created_at>=current_date;
+  RETURN jsonb_build_object('ok',true,'dailyVotes',v_count,'remaining',greatest(0,120-v_count));
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_curation_activity_record(text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_curation_activity_record(text,text,text) TO service_role;
+
+-- Public-safe intelligence projection. It intentionally omits risk internals and wallet/economy balances.
+CREATE OR REPLACE FUNCTION public.gh_reputation_intelligence_get(p_user_id text)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
+DECLARE r public.gh_reputation_intelligence%ROWTYPE; rep public.gh_reputation_state%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM public.gh_reputation_intelligence WHERE user_id=trim(coalesce(p_user_id,''));
+  SELECT * INTO rep FROM public.gh_reputation_state WHERE user_id=trim(coalesce(p_user_id,''));
+  IF NOT FOUND AND r.user_id IS NULL THEN RETURN jsonb_build_object('ok',true,'userId',trim(p_user_id),'available',false); END IF;
+  RETURN jsonb_build_object('ok',true,'available',true,'userId',trim(p_user_id),'level',coalesce(rep.level,1),
+    'totalPoints',coalesce(rep.total_points,0),'creatorQuality',coalesce(r.creator_quality,0),
+    'judgmentCalibration',coalesce(r.judgment_calibration,50),'communityIntegrity',coalesce(r.community_integrity,70),
+    'economicValue',coalesce(r.economic_value,0),'growthXp',coalesce(r.growth_xp,0),
+    'curationPower',coalesce(r.curation_power,0.25),'calculatedAt',r.calculated_at,'modelVersion',coalesce(r.model_version,'rep-curation-v2'));
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_reputation_intelligence_get(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_reputation_intelligence_get(text) TO service_role;
+
+COMMENT ON TABLE public.gh_reputation_intelligence IS 'Server-derived multi-dimensional reputation intelligence. Not currency and not client-writable.';
+COMMENT ON TABLE public.gh_curator_activity_events IS 'Auditable curation activity used for daily limits and abuse-resistant integrity signals.';
+COMMENT ON FUNCTION public.gh_curation_preflight(text,text) IS 'Atomic-path curation guard: visibility, self-vote, block, daily volume, concentration and rapid-activity checks.';
+
+
+-- Replace the atomic curation pipeline so V2 guardrails are inside the same transaction.
+CREATE OR REPLACE FUNCTION public.gh_post_curation_set_with_reward(
+  p_post_id text,
+  p_user_id text,
+  p_choice text,
+  p_percentage numeric DEFAULT 100,
+  p_curation_weight numeric DEFAULT 0,
+  p_judgment_mode text DEFAULT 'useful'
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_guard jsonb;
+  v_vote jsonb;
+  v_choice text;
+  v_reward jsonb := jsonb_build_object('ok', true, 'credited', false, 'amount', 0, 'reason', 'NO_REWARD_FOR_NON_UPVOTE');
+  v_weighted jsonb;
+  v_weight numeric(18,6) := greatest(0, least(coalesce(p_curation_weight,0),1000000));
+  v_percentage numeric(5,2) := round(coalesce(p_percentage,100),2);
+BEGIN
+  IF v_percentage < 0 OR v_percentage > 100 THEN RETURN jsonb_build_object('ok',false,'error','INVALID_PERCENTAGE'); END IF;
+  v_guard := public.gh_curation_preflight(p_post_id,p_user_id);
+  IF coalesce((v_guard->>'ok')::boolean,false) IS NOT TRUE OR coalesce((v_guard->>'eligible')::boolean,false) IS NOT TRUE THEN
+    RETURN v_guard;
+  END IF;
+
+  v_vote := public.gh_post_curation_set(p_post_id,p_user_id,p_choice);
+  IF coalesce((v_vote->>'ok')::boolean,false) IS NOT TRUE THEN RETURN v_vote; END IF;
+  v_choice := coalesce(v_vote->>'choice','neutral');
+
+  IF v_choice IN ('upvote','downvote') THEN
+    UPDATE public.gh_post_curations SET reward_percentage=v_percentage,updated_at=now()
+      WHERE post_id=trim(p_post_id) AND user_id=trim(p_user_id);
+  END IF;
+  IF v_choice='upvote' THEN
+    v_reward := public.ghc_curation_reward_credit(p_user_id,p_post_id,v_choice,v_percentage);
+    IF coalesce((v_reward->>'ok')::boolean,false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'Curation reward evaluation failed: %',coalesce(v_reward->>'error','REWARD_EVALUATION_FAILED');
+    END IF;
+  END IF;
+
+  v_weighted := public.gh_ghpv_record_curation_weight(
+    p_post_id,p_user_id,v_choice,
+    CASE WHEN v_choice='neutral' THEN 0 ELSE v_weight*(v_percentage/100) END,
+    p_judgment_mode
+  );
+  IF coalesce((v_weighted->>'ok')::boolean,false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'GHPV curation weight update failed: %',coalesce(v_weighted->>'error','GHPV_WEIGHT_UPDATE_FAILED');
+  END IF;
+
+  PERFORM public.gh_curation_activity_record(p_post_id,p_user_id,v_choice);
+  RETURN v_vote || jsonb_build_object('reward',v_reward,'ghpv',v_weighted,'rewardPercentage',v_percentage,'guard',v_guard);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.gh_post_curation_set_with_reward(text,text,text,numeric,numeric,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_post_curation_set_with_reward(text,text,text,numeric,numeric,text) TO service_role;
+COMMENT ON FUNCTION public.gh_post_curation_set_with_reward(text,text,text,numeric,numeric,text) IS 'Phase 34 atomic curation: V2 guardrails + vote + reward decision + active GHPV weight + activity audit. No GHC minting.';
+
+-- ============================================================================
+-- SOURCE 129: 20261023040001_gh_pulse_media_platform_v2.sql
+-- SHA256: fde8dd223f790a6a8b6582b7ce42e70d90feec91d9597c6378e68d6f6b4ab0f1
+-- ============================================================================
+-- Phase 35: GH Pulse + Media Platform V2.
+-- Durable upload lifecycle, short-video discovery, and richer attention milestones.
+-- No client-created economy value. All media ownership and visibility remain server-authoritative.
+
+CREATE TABLE IF NOT EXISTS public.gh_media_upload_sessions (
+  upload_id text PRIMARY KEY,
+  owner_id text NOT NULL,
+  bucket text NOT NULL,
+  storage_path text NOT NULL,
+  category text NOT NULL CHECK (category IN ('avatars','images','videos','audio','documents')),
+  mime_type text NOT NULL,
+  media_kind text NOT NULL CHECK (media_kind IN ('image','video','file')),
+  expected_bytes bigint NOT NULL CHECK (expected_bytes > 0),
+  status text NOT NULL DEFAULT 'issued' CHECK (status IN ('issued','uploaded','finalized','failed','expired')),
+  media_id text,
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 20),
+  last_error text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '20 minutes'),
+  finalized_at timestamptz,
+  CONSTRAINT gh_media_upload_owner_nonempty CHECK (length(trim(owner_id)) > 0),
+  CONSTRAINT gh_media_upload_path_owned CHECK (storage_path LIKE owner_id || '/%')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gh_media_upload_path ON public.gh_media_upload_sessions(bucket, storage_path);
+CREATE INDEX IF NOT EXISTS idx_gh_media_upload_owner_status ON public.gh_media_upload_sessions(owner_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_media_upload_expiry ON public.gh_media_upload_sessions(expires_at) WHERE status IN ('issued','uploaded');
+ALTER TABLE public.gh_media_upload_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS gh_media_upload_sessions_no_client ON public.gh_media_upload_sessions;
+CREATE POLICY gh_media_upload_sessions_no_client ON public.gh_media_upload_sessions FOR ALL USING (false) WITH CHECK (false);
+
+CREATE OR REPLACE FUNCTION public.gh_media_upload_session_create(
+  p_upload_id text, p_owner_id text, p_bucket text, p_storage_path text,
+  p_category text, p_mime_type text, p_media_kind text, p_expected_bytes bigint,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NULLIF(trim(p_upload_id),'') IS NULL OR NULLIF(trim(p_owner_id),'') IS NULL OR NULLIF(trim(p_storage_path),'') IS NULL THEN
+    RETURN jsonb_build_object('ok',false,'error','REQUIRED_FIELDS');
+  END IF;
+  IF p_expected_bytes IS NULL OR p_expected_bytes <= 0 THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_SIZE');
+  END IF;
+  INSERT INTO public.gh_media_upload_sessions(upload_id,owner_id,bucket,storage_path,category,mime_type,media_kind,expected_bytes,metadata)
+  VALUES(trim(p_upload_id),trim(p_owner_id),trim(p_bucket),trim(p_storage_path),trim(p_category),lower(trim(p_mime_type)),trim(p_media_kind),p_expected_bytes,COALESCE(p_metadata,'{}'::jsonb))
+  ON CONFLICT(upload_id) DO UPDATE SET
+    owner_id=EXCLUDED.owner_id, bucket=EXCLUDED.bucket, storage_path=EXCLUDED.storage_path,
+    category=EXCLUDED.category, mime_type=EXCLUDED.mime_type, media_kind=EXCLUDED.media_kind,
+    expected_bytes=EXCLUDED.expected_bytes, metadata=EXCLUDED.metadata,
+    status=CASE WHEN public.gh_media_upload_sessions.status='finalized' THEN 'finalized' ELSE 'issued' END,
+    expires_at=CASE WHEN public.gh_media_upload_sessions.status='finalized' THEN public.gh_media_upload_sessions.expires_at ELSE now()+interval '20 minutes' END;
+  RETURN jsonb_build_object('ok',true,'uploadId',trim(p_upload_id),'expiresAt',(SELECT expires_at FROM public.gh_media_upload_sessions WHERE upload_id=trim(p_upload_id)));
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_media_upload_session_get(p_upload_id text,p_owner_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r public.gh_media_upload_sessions%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM public.gh_media_upload_sessions WHERE upload_id=trim(COALESCE(p_upload_id,'')) AND owner_id=trim(COALESCE(p_owner_id,''));
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','UPLOAD_SESSION_NOT_FOUND'); END IF;
+  IF r.expires_at < now() AND r.status IN ('issued','uploaded') THEN
+    UPDATE public.gh_media_upload_sessions SET status='expired',last_error='EXPIRED' WHERE upload_id=r.upload_id;
+    RETURN jsonb_build_object('ok',false,'error','UPLOAD_SESSION_EXPIRED');
+  END IF;
+  RETURN jsonb_build_object('ok',true,'uploadId',r.upload_id,'ownerId',r.owner_id,'bucket',r.bucket,'storagePath',r.storage_path,
+    'category',r.category,'mimeType',r.mime_type,'mediaKind',r.media_kind,'expectedBytes',r.expected_bytes,'status',r.status,
+    'mediaId',r.media_id,'attempts',r.attempts,'expiresAt',r.expires_at);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.gh_media_upload_session_finalize(p_upload_id text,p_owner_id text,p_media_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r public.gh_media_upload_sessions%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM public.gh_media_upload_sessions WHERE upload_id=trim(COALESCE(p_upload_id,'')) AND owner_id=trim(COALESCE(p_owner_id,'')) FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','UPLOAD_SESSION_NOT_FOUND'); END IF;
+  IF r.status='finalized' AND r.media_id IS NOT NULL THEN RETURN jsonb_build_object('ok',true,'mediaId',r.media_id,'status','finalized','idempotent',true); END IF;
+  IF r.expires_at < now() THEN UPDATE public.gh_media_upload_sessions SET status='expired',last_error='EXPIRED' WHERE upload_id=r.upload_id; RETURN jsonb_build_object('ok',false,'error','UPLOAD_SESSION_EXPIRED'); END IF;
+  UPDATE public.gh_media_upload_sessions SET status='finalized',media_id=trim(p_media_id),finalized_at=now(),attempts=attempts+1,last_error=NULL WHERE upload_id=r.upload_id;
+  RETURN jsonb_build_object('ok',true,'mediaId',trim(p_media_id),'status','finalized','idempotent',false);
+END; $$;
+
+REVOKE ALL ON FUNCTION public.gh_media_upload_session_create(text,text,text,text,text,text,text,bigint,jsonb) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_media_upload_session_create(text,text,text,text,text,text,text,bigint,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_media_upload_session_get(text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_media_upload_session_get(text,text) TO service_role;
+REVOKE ALL ON FUNCTION public.gh_media_upload_session_finalize(text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_media_upload_session_finalize(text,text,text) TO service_role;
+
+-- Short-video feed: canonical visibility, stable keyset pagination, and explicit discovery modes.
+CREATE OR REPLACE FUNCTION public.gh_short_video_list(
+  p_viewer_id text,
+  p_limit integer DEFAULT 12,
+  p_before_ms bigint DEFAULT NULL,
+  p_before_id text DEFAULT NULL,
+  p_mode text DEFAULT 'latest'
+) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE v_limit integer:=LEAST(GREATEST(COALESCE(p_limit,12),1),40); v_rows jsonb; v_mode text:=lower(trim(COALESCE(p_mode,'latest')));
+BEGIN
+  IF NULLIF(trim(p_viewer_id),'') IS NULL THEN RETURN jsonb_build_object('ok',false,'error','VIEWER_REQUIRED'); END IF;
+  IF (p_before_ms IS NULL) <> (p_before_id IS NULL) THEN RETURN jsonb_build_object('ok',false,'error','INVALID_PULSE_CURSOR'); END IF;
+  IF v_mode NOT IN ('latest','following','trending') THEN v_mode:='latest'; END IF;
+  SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY CASE WHEN v_mode='trending' THEN q."discoveryScore" ELSE 0 END DESC,q.created_ms DESC,q.id DESC),'[]'::jsonb) INTO v_rows
+  FROM (
+    SELECT p.id,p.author_id AS "authorId",p.author_name AS "authorName",p.author_photo AS "authorPhoto",p.content,p.video,
+      p.community_id AS "communityId",p.community_name AS "communityName",p.content_type AS "contentType",
+      COALESCE(p.comment_count,0) AS "commentCount",COALESCE(p.share_count,0) AS shares,
+      COALESCE(p.qualified_view_count,0) AS "qualifiedViews",COALESCE(p.view_count,0) AS views,
+      (extract(epoch FROM p.created_at)*1000)::bigint AS created_ms,
+      ((extract(epoch FROM p.created_at)*1000)::bigint) AS "createdAt",
+      CASE WHEN v_mode='trending' THEN
+        (COALESCE(p.qualified_view_count,0)*3 + COALESCE(p.share_count,0)*5 + COALESCE(p.comment_count,0)*4 + (SELECT COUNT(*) FROM public.gh_saves s WHERE s.post_id=p.id)*4)
+        / GREATEST(1,EXTRACT(EPOCH FROM (now()-p.created_at))/3600.0 + 1)
+      ELSE 0 END AS "discoveryScore"
+    FROM public.gh_posts p
+    WHERE p.deleted_at IS NULL AND p.archived_at IS NULL
+      AND p.video IS NOT NULL AND trim(p.video)<>''
+      AND lower(COALESCE(p.content_type,'')) IN ('short_video','reel')
+      AND public.gh_post_viewer_can_read(trim(p_viewer_id),p.id)
+      AND (v_mode<>'following' OR p.author_id=trim(p_viewer_id) OR EXISTS(SELECT 1 FROM public.gh_follows f WHERE f.follower_id=trim(p_viewer_id) AND f.following_id=p.author_id))
+      AND (v_mode='trending' OR p_before_ms IS NULL OR (extract(epoch FROM p.created_at)*1000)::bigint<p_before_ms OR ((extract(epoch FROM p.created_at)*1000)::bigint=p_before_ms AND p.id<p_before_id))
+    ORDER BY CASE WHEN v_mode='trending' THEN "discoveryScore" ELSE 0 END DESC,p.created_at DESC,p.id DESC
+    LIMIT v_limit
+  ) q;
+  RETURN jsonb_build_object('ok',true,'posts',v_rows,'mode',v_mode,'stableCursor',v_mode<>'trending');
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_short_video_list(text,integer,bigint,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_short_video_list(text,integer,bigint,text,text) TO service_role;
+
+CREATE INDEX IF NOT EXISTS idx_gh_posts_short_video_feed ON public.gh_posts(created_at DESC,id DESC)
+  WHERE deleted_at IS NULL AND archived_at IS NULL AND video IS NOT NULL AND content_type IN ('short_video','reel');
+
+-- Attention milestones remain analytics only; they do not mint or transfer GHC.
+-- Extend the canonical event allowlist while preserving the existing access guard.
+CREATE OR REPLACE FUNCTION public.gh_content_event_record(
+  p_content_id text,p_actor_id text,p_event_type text,p_window_key text,p_content_kind text DEFAULT 'post',p_metadata jsonb DEFAULT '{}'::jsonb
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_type text:=lower(trim(COALESCE(p_event_type,''))); v_kind text:=lower(trim(COALESCE(p_content_kind,'post'))); v_window text:=trim(COALESCE(p_window_key,'')); v_id text; v_inserted boolean:=false; v_author text; v_visibility text;
+BEGIN
+  IF NULLIF(trim(p_content_id),'') IS NULL THEN RETURN jsonb_build_object('ok',false,'error','CONTENT_REQUIRED'); END IF;
+  IF NULLIF(trim(p_actor_id),'') IS NULL THEN RETURN jsonb_build_object('ok',false,'error','ACTOR_REQUIRED'); END IF;
+  IF v_type NOT IN ('view','qualified_view','complete','save','share','progress_25','progress_50','progress_75') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_EVENT_TYPE'); END IF;
+  IF v_kind NOT IN ('post','story','other') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_CONTENT_KIND'); END IF;
+  IF length(v_window)=0 OR length(v_window)>64 THEN RETURN jsonb_build_object('ok',false,'error','INVALID_WINDOW'); END IF;
+  IF v_kind='post' THEN
+    SELECT author_id,visibility INTO v_author,v_visibility FROM public.gh_posts WHERE id=trim(p_content_id) AND deleted_at IS NULL;
+    IF v_author IS NULL THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
+    IF EXISTS(SELECT 1 FROM public.ghc_user_blocks b WHERE (b.blocker_id=trim(p_actor_id) AND b.blocked_id=v_author) OR (b.blocker_id=v_author AND b.blocked_id=trim(p_actor_id))) THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+    IF v_visibility='public' OR v_author=trim(p_actor_id) THEN NULL;
+    ELSIF v_visibility='followers' THEN
+      IF NOT EXISTS(SELECT 1 FROM public.gh_follows WHERE follower_id=trim(p_actor_id) AND following_id=v_author) THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+    ELSE RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
+  END IF;
+  v_id:='ce_'||replace(gen_random_uuid()::text,'-','');
+  INSERT INTO public.gh_content_events(id,content_id,content_kind,actor_id,event_type,window_key,metadata)
+  VALUES(v_id,trim(p_content_id),v_kind,trim(p_actor_id),v_type,v_window,COALESCE(p_metadata,'{}'::jsonb))
+  ON CONFLICT(content_id,actor_id,event_type,window_key) DO UPDATE SET updated_at=now(),metadata=COALESCE(EXCLUDED.metadata,public.gh_content_events.metadata)
+  RETURNING (xmax=0) INTO v_inserted;
+  IF v_inserted AND v_kind='post' THEN
+    IF v_type='view' THEN UPDATE public.gh_posts SET view_count=view_count+1,updated_at=now() WHERE id=trim(p_content_id);
+    ELSIF v_type='qualified_view' THEN UPDATE public.gh_posts SET qualified_view_count=qualified_view_count+1,updated_at=now() WHERE id=trim(p_content_id);
+    END IF;
+  END IF;
+  RETURN jsonb_build_object('ok',true,'recorded',v_inserted,'eventType',v_type,'contentId',trim(p_content_id),'windowKey',v_window);
+END; $$;
+REVOKE ALL ON FUNCTION public.gh_content_event_record(text,text,text,text,text,jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.gh_content_event_record(text,text,text,text,text,jsonb) TO service_role;
+
+-- ============================================================================
+-- SOURCE 130: 20261023040002_gh_security_control_plane_v2.sql
+-- SHA256: b3a8761f455e245f0f9b7c064c396cce854ae7a8f3eaeb3326555f997b844e74
+-- ============================================================================
+-- GreenHaven Phase 36: durable security control plane.
+-- Fail-closed RLS; only service_role may mutate security state.
+
+CREATE TABLE IF NOT EXISTS public.gh_security_rate_limit_buckets (
+  bucket_key text PRIMARY KEY,
+  window_started_at timestamptz NOT NULL,
+  window_ms bigint NOT NULL CHECK (window_ms > 0 AND window_ms <= 86400000),
+  hit_count integer NOT NULL DEFAULT 0 CHECK (hit_count >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.gh_security_events (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  event_type text NOT NULL,
+  actor_user_id text NULL,
+  target_user_id text NULL,
+  resource_type text NULL,
+  resource_id text NULL,
+  outcome text NOT NULL CHECK (outcome IN ('allowed','blocked','challenged','error')),
+  reason_code text NULL,
+  request_id text NULL,
+  correlation_id text NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_gh_security_events_actor_time
+  ON public.gh_security_events(actor_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_security_events_target_time
+  ON public.gh_security_events(target_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_security_events_type_time
+  ON public.gh_security_events(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gh_security_events_request
+  ON public.gh_security_events(request_id)
+  WHERE request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_gh_security_events_expiry
+  ON public.gh_security_events(expires_at)
+  WHERE expires_at IS NOT NULL;
+
+ALTER TABLE public.gh_security_rate_limit_buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gh_security_events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.gh_security_rate_limit_buckets FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.gh_security_events FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.gh_security_rate_limit_consume(
+  p_bucket_key text,
+  p_limit integer,
+  p_window_ms bigint
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_key text := left(trim(coalesce(p_bucket_key,'')), 200);
+  v_limit integer := greatest(1, least(coalesce(p_limit,1), 100000));
+  v_window bigint := greatest(1000, least(coalesce(p_window_ms,60000), 86400000));
+  v_now timestamptz := clock_timestamp();
+  v_row public.gh_security_rate_limit_buckets%ROWTYPE;
+  v_elapsed bigint;
+  v_count integer;
+BEGIN
+  IF v_key = '' THEN RETURN jsonb_build_object('ok',false,'error','INVALID_BUCKET'); END IF;
+  INSERT INTO public.gh_security_rate_limit_buckets(bucket_key,window_started_at,window_ms,hit_count,updated_at)
+  VALUES(v_key,v_now,v_window,1,v_now)
+  ON CONFLICT(bucket_key) DO UPDATE SET
+    window_started_at = CASE
+      WHEN extract(epoch FROM (v_now - gh_security_rate_limit_buckets.window_started_at))*1000 >= gh_security_rate_limit_buckets.window_ms
+      THEN v_now ELSE gh_security_rate_limit_buckets.window_started_at END,
+    window_ms = v_window,
+    hit_count = CASE
+      WHEN extract(epoch FROM (v_now - gh_security_rate_limit_buckets.window_started_at))*1000 >= gh_security_rate_limit_buckets.window_ms
+      THEN 1 ELSE gh_security_rate_limit_buckets.hit_count + 1 END,
+    updated_at = v_now
+  RETURNING * INTO v_row;
+
+  v_count := v_row.hit_count;
+  v_elapsed := greatest(0, v_row.window_ms - floor(extract(epoch FROM (v_now - v_row.window_started_at))*1000)::bigint);
+  RETURN jsonb_build_object(
+    'ok', v_count <= v_limit,
+    'remaining', greatest(0,v_limit-v_count),
+    'retryAfterSec', greatest(1,ceil(v_elapsed/1000.0)),
+    'count',v_count
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.gh_security_event_append(
+  p_event_type text,
+  p_outcome text,
+  p_reason_code text DEFAULT NULL,
+  p_actor_user_id text DEFAULT NULL,
+  p_target_user_id text DEFAULT NULL,
+  p_resource_type text DEFAULT NULL,
+  p_resource_id text DEFAULT NULL,
+  p_request_id text DEFAULT NULL,
+  p_correlation_id text DEFAULT NULL,
+  p_metadata jsonb DEFAULT '{}'::jsonb,
+  p_expires_at timestamptz DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE v_id bigint;
+BEGIN
+  IF nullif(trim(coalesce(p_event_type,'')),'') IS NULL THEN RETURN jsonb_build_object('ok',false,'error','EVENT_TYPE_REQUIRED'); END IF;
+  IF p_outcome NOT IN ('allowed','blocked','challenged','error') THEN RETURN jsonb_build_object('ok',false,'error','INVALID_OUTCOME'); END IF;
+  INSERT INTO public.gh_security_events(
+    event_type,outcome,reason_code,actor_user_id,target_user_id,resource_type,resource_id,
+    request_id,correlation_id,metadata,expires_at
+  ) VALUES (
+    left(trim(p_event_type),100),p_outcome,left(nullif(trim(coalesce(p_reason_code,'')),''),100),
+    left(nullif(trim(coalesce(p_actor_user_id,'')),''),160),left(nullif(trim(coalesce(p_target_user_id,'')),''),160),
+    left(nullif(trim(coalesce(p_resource_type,'')),''),80),left(nullif(trim(coalesce(p_resource_id,'')),''),160),
+    left(nullif(trim(coalesce(p_request_id,'')),''),160),left(nullif(trim(coalesce(p_correlation_id,'')),''),160),
+    CASE WHEN jsonb_typeof(coalesce(p_metadata,'{}'::jsonb))='object' THEN p_metadata ELSE '{}'::jsonb END,
+    p_expires_at
+  ) RETURNING id INTO v_id;
+  RETURN jsonb_build_object('ok',true,'id',v_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_security_rate_limit_consume(text,integer,bigint) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_security_event_append(text,text,text,text,text,text,text,text,text,jsonb,timestamptz) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_security_rate_limit_consume(text,integer,bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_security_event_append(text,text,text,text,text,text,text,text,text,jsonb,timestamptz) TO service_role;
+
+COMMENT ON TABLE public.gh_security_rate_limit_buckets IS 'Phase 36 durable multi-instance abuse/rate-limit state; never client writable.';
+COMMENT ON TABLE public.gh_security_events IS 'Phase 36 security audit events; metadata must never contain secrets, tokens, wallet balances, or payment credentials.';
+
+-- ============================================================================
+-- SOURCE 131: 20261023040003_gh_feed_engagement_batch_v2.sql
+-- SHA256: f4b3e28b59cb3c372e5a8dd344afde97ad5fc2c1d2142711cc354ef49f3b42e6
+-- ============================================================================
+-- =============================================================================
+-- GREENHAVEN — Feed engagement batch V2
+-- Phase 37: collapse feed engagement hydration into one service-role RPC.
+-- No new client authority; viewer identity is supplied by the authenticated API.
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.gh_post_feed_engagement_batch(
+  p_post_ids text[],
+  p_viewer_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ids text[] := ARRAY(
+    SELECT DISTINCT trim(x)
+    FROM unnest(COALESCE(p_post_ids, ARRAY[]::text[])) x
+    WHERE trim(x) <> ''
+    LIMIT 50
+  );
+  v_viewer text := trim(COALESCE(p_viewer_id, ''));
+  v_result jsonb := '[]'::jsonb;
+BEGIN
+  IF cardinality(v_ids) = 0 THEN
+    RETURN '[]'::jsonb;
+  END IF;
+
+  IF v_viewer = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ACTOR_REQUIRED');
+  END IF;
+
+  WITH ranked_comments AS (
+    SELECT
+      c.id, c.post_id, c.author_id, c.author_name, c.author_photo, c.text,
+      c.parent_id, c.created_at, c.media, c.is_edited, c.edited_at,
+      c.is_pinned, c.pinned_at,
+      row_number() OVER (PARTITION BY c.post_id ORDER BY c.created_at DESC, c.id DESC) AS rn
+    FROM public.gh_post_comments c
+    WHERE c.post_id = ANY(v_ids)
+      AND c.deleted_at IS NULL
+  ),
+  preview_comments AS (
+    SELECT * FROM ranked_comments WHERE rn <= 3
+  ),
+  comment_reactions AS (
+    SELECT
+      r.comment_id,
+      jsonb_object_agg(r.emoji, r.cnt) AS counts,
+      COALESCE(
+        jsonb_agg(r.emoji) FILTER (WHERE r.viewer_has),
+        '[]'::jsonb
+      ) AS viewer_reactions
+    FROM (
+      SELECT
+        cr.comment_id,
+        cr.emoji,
+        count(*)::int AS cnt,
+        bool_or(cr.user_id = v_viewer) AS viewer_has
+      FROM public.gh_comment_reactions cr
+      WHERE cr.comment_id IN (SELECT id FROM preview_comments)
+      GROUP BY cr.comment_id, cr.emoji
+    ) r
+    GROUP BY r.comment_id
+  ),
+  comments_by_post AS (
+    SELECT
+      pc.post_id,
+      jsonb_agg(
+        jsonb_strip_nulls(jsonb_build_object(
+          'id', pc.id,
+          'authorId', pc.author_id,
+          'authorName', pc.author_name,
+          'authorPhoto', pc.author_photo,
+          'text', pc.text,
+          'createdAt', extract(epoch FROM pc.created_at) * 1000,
+          'replyTo', pc.parent_id,
+          'mediaAttachments', COALESCE(pc.media, '[]'::jsonb),
+          'isEdited', pc.is_edited,
+          'editedAt', CASE WHEN pc.edited_at IS NULL THEN NULL ELSE extract(epoch FROM pc.edited_at) * 1000 END,
+          'isPinned', pc.is_pinned,
+          'pinnedAt', CASE WHEN pc.pinned_at IS NULL THEN NULL ELSE extract(epoch FROM pc.pinned_at) * 1000 END,
+          'reactionCounts', COALESCE(cr.counts, '{}'::jsonb),
+          'viewerReactions', COALESCE(cr.viewer_reactions, '[]'::jsonb)
+        )) ORDER BY pc.created_at DESC, pc.id DESC
+      ) AS comments
+    FROM preview_comments pc
+    LEFT JOIN comment_reactions cr ON cr.comment_id = pc.id
+    GROUP BY pc.post_id
+  ),
+  reaction_rows AS (
+    SELECT
+      pr.post_id,
+      pr.reaction,
+      count(*)::int AS cnt,
+      bool_or(pr.user_id = v_viewer) AS viewer_has
+    FROM public.gh_post_reactions pr
+    WHERE pr.post_id = ANY(v_ids)
+    GROUP BY pr.post_id, pr.reaction
+  ),
+  reactions_by_post AS (
+    SELECT
+      post_id,
+      jsonb_object_agg(reaction, cnt) AS reaction_counts,
+      COALESCE(jsonb_agg(reaction) FILTER (WHERE viewer_has), '[]'::jsonb) AS viewer_reactions
+    FROM reaction_rows
+    GROUP BY post_id
+  ),
+  curation_rows AS (
+    SELECT
+      pc.post_id,
+      count(*) FILTER (WHERE pc.choice = 'upvote')::int AS upvotes,
+      count(*) FILTER (WHERE pc.choice = 'downvote')::int AS downvotes,
+      max(pc.choice) FILTER (WHERE pc.user_id = v_viewer) AS viewer_choice
+    FROM public.gh_post_curations pc
+    WHERE pc.post_id = ANY(v_ids)
+    GROUP BY pc.post_id
+  )
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'postId', i.post_id,
+      'comments', COALESCE(cb.comments, '[]'::jsonb),
+      'reactionCounts', COALESCE(rb.reaction_counts, '{}'::jsonb),
+      'viewerReactions', COALESCE(rb.viewer_reactions, '[]'::jsonb),
+      'upvoteCount', COALESCE(cr.upvotes, 0),
+      'downvoteCount', COALESCE(cr.downvotes, 0),
+      'viewerCurationChoice', CASE
+        WHEN cr.viewer_choice IN ('upvote', 'downvote') THEN cr.viewer_choice
+        ELSE NULL
+      END
+    )
+  ), '[]'::jsonb)
+  INTO v_result
+  FROM unnest(v_ids) AS i(post_id)
+  LEFT JOIN comments_by_post cb ON cb.post_id = i.post_id
+  LEFT JOIN reactions_by_post rb ON rb.post_id = i.post_id
+  LEFT JOIN curation_rows cr ON cr.post_id = i.post_id;
+
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.gh_post_feed_engagement_batch(text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_post_feed_engagement_batch(text[], text) TO service_role;
+
+COMMENT ON FUNCTION public.gh_post_feed_engagement_batch(text[], text) IS
+  'Phase 37: one server-side engagement hydration query for up to 50 feed posts; no client authority or financial data.';
+

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { optimizedImageUrl, preferReducedData } from "@/lib/mobile-performance"
 import { RefreshCw } from "lucide-react"
 
 /** Image that shows a retry control when load fails (no blank gray plate). */
@@ -15,6 +16,7 @@ export function MediaWithRetry({
 }) {
   const [failed, setFailed] = useState(false)
   const [nonce, setNonce] = useState(0)
+  const reducedData = preferReducedData()
   if (!src || src.startsWith("blob:")) {
     return (
       <div
@@ -43,11 +45,13 @@ export function MediaWithRetry({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       key={nonce}
-      src={src}
+      src={optimizedImageUrl(src, reducedData ? 480 : 720)}
       alt={alt}
       className={className}
       onError={() => setFailed(true)}
       loading="lazy"
+      decoding="async"
+      fetchPriority="low"
     />
   )
 }

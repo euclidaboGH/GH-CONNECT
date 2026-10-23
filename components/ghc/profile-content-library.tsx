@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CalendarDays, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Search, X } from "lucide-react"
+import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
 
 type LibraryKind = "all" | "posts" | "photos" | "videos" | "documents" | "history"
 type HistoryEntry = { url: string; changedAt: number; caption?: string }
@@ -136,6 +137,26 @@ export function ProfileContentLibrary({
       previousFocusRef.current?.focus?.()
     }
   }, [open])
+
+  // Keep an open profile timeline coherent with Feed/Community/Creator mutations
+  // without issuing another network request for every local interaction.
+  useEffect(() => {
+    if (!open || !profileId || kind === "history") return
+    const onPostSync = (event: Event) => {
+      const detail = readPostSyncDetail(event)
+      if (!detail) return
+      setPosts((current) => {
+        const index = current.findIndex((post) => post.id === detail.postId)
+        if (detail.operation === "delete" || detail.operation === "archive") {
+          return index >= 0 ? current.filter((post) => post.id !== detail.postId) : current
+        }
+        if (index < 0) return current
+        return current.map((post) => post.id === detail.postId ? { ...post, ...(detail.patch || {}) } : post)
+      })
+    }
+    window.addEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+    return () => window.removeEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+  }, [open, profileId, kind])
 
   useEffect(() => () => loadMoreAbortRef.current?.abort(), [])
   useEffect(() => {

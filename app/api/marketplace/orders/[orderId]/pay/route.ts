@@ -24,6 +24,7 @@ import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/ht
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
 import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -230,6 +231,14 @@ export async function POST(
         },
         { status: 503 }
       )
+    }
+
+    if (spendOk && isDatabaseConfigured()) {
+      await attachLedgerCorrelation({
+        userId: auth.userId,
+        referenceId,
+        envelope: buildCorrelationEnvelope({ kind: "marketplace", event: "MARKETPLACE_PURCHASE", orderId: order.id, listingId: order.listingId }),
+      })
     }
 
     if (!spendOk) {

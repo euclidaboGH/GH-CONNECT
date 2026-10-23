@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   getCreatorProfile,
   listCreatorPosts,
+  getCreatorEconomySummary,
   upsertCreatorProfile,
 } from "@/lib/server/creator/store"
 import { getReputationState } from "@/lib/server/reputation/store"
@@ -25,6 +26,13 @@ export async function GET(request: Request) {
   const profile = await getCreatorProfile(auth.userId)
   const posts = await listCreatorPosts(auth.userId)
   const rep = await getReputationState(auth.userId)
+  const postRows = posts.ok ? posts.posts : []
+  const postIds = postRows.flatMap((row) => {
+    if (!row || typeof row !== "object") return []
+    const id = (row as { id?: unknown }).id
+    return typeof id === "string" && id ? [id] : []
+  })
+  const economy = await getCreatorEconomySummary(auth.userId, postIds)
 
   return NextResponse.json({
     ok: true,
@@ -40,7 +48,8 @@ export async function GET(request: Request) {
           tipsEnabled: profile.tipsEnabled ?? false,
         }
       : { exists: false, userId: auth.userId },
-    posts: posts.ok ? posts.posts : [],
+    posts: postRows,
+    creatorEconomy: economy,
     reputation:
       rep.ok
         ? {
@@ -49,7 +58,7 @@ export async function GET(request: Request) {
             totalPoints: rep.totalPoints,
           }
         : null,
-    settlement: "tips_deferred",
+    settlement: "server_authoritative",
   })
 }
 

@@ -37,11 +37,12 @@ export async function apiCreateDirectConversation(otherUserId: string) {
 
 export async function apiListMessages(
   conversationId: string,
-  opts?: { limit?: number; before?: string | number }
+  opts?: { limit?: number; before?: string | number; beforeId?: string }
 ) {
   const q = new URLSearchParams()
   if (opts?.limit) q.set("limit", String(opts.limit))
   if (opts?.before != null) q.set("before", String(opts.before))
+  if (opts?.beforeId) q.set("beforeId", opts.beforeId)
   const res = await fetch(
     `/api/messaging/conversations/${encodeURIComponent(conversationId)}/messages?${q}`,
     { credentials: "include", cache: "no-store", headers: authHeaders() }
