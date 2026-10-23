@@ -25,7 +25,7 @@ const row = (name, ok, detail = "") => {
 row("service-role only (no browser grant path)", /service_role|supabaseServiceRoleKey/.test(rpc) && !/GRANT EXECUTE.*authenticated/.test(rpc))
 row("Content-Profile public on RPC", /Content-Profile["']?\s*:\s*["']public["']/.test(rpc))
 row("PGRST202/203 treated as signature miss", /PGRST202/.test(rpc) && /PGRST203/.test(rpc))
-row("curation fallback includes vote-only set", /gh_post_curation_set/.test(rpc) && /p_percentage/.test(rpc))
+row("Phase39 no silent RPC overload fallback", /production no longer probes historical/.test(rpc) || !/RPC_FALLBACKS/.test(rpc))
 row("never logs service key", !/console\.(log|warn|error).*serviceRole|SERVICE_ROLE/.test(rpc))
 
 // Curation
@@ -34,7 +34,7 @@ row("strip client authority", /stripClientAuthority/.test(curation))
 row("calls with_reward primary", /gh_post_curation_set_with_reward/.test(curation))
 row("sends six named args", /p_post_id/.test(curation) && /p_user_id/.test(curation) && /p_choice/.test(curation) && /p_percentage/.test(curation) && /p_curation_weight/.test(curation) && /p_judgment_mode/.test(curation))
 row("self-curation rejected path", /SELF_CURATION_FORBIDDEN/.test(curation))
-row("vote-only fallback does not claim reward", /REWARD_RPC_UNAVAILABLE|vote_only_fallback/.test(curation))
+row("curation surfaces SOCIAL_RPC_UNAVAILABLE on signature miss", /SOCIAL_RPC_UNAVAILABLE/.test(curation))
 row("session user as actor not body", /auth\.userId/.test(curation))
 
 // Comments

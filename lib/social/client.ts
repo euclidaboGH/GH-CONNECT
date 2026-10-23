@@ -4,6 +4,8 @@
  */
 import { IdentityService } from "@/lib/identity/identity-service"
 import type { Post, PostComment, StoryItem } from "@/lib/ghc-types"
+import { broadcastPostSync } from "@/lib/social/post-sync"
+import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 
 function headers(): HeadersInit {
   return {
@@ -88,7 +90,7 @@ export async function socialFetchFeed(opts?: {
   }
 }
 
-export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { commentCount?: number; contentReward?: unknown }; error?: string }> {
+export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { contentReward?: unknown }; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(String(postId || "").trim())}`)
 }
 
@@ -544,10 +546,34 @@ export async function socialSetCuration(
   const id = String(postId || "").trim()
   if (!id) return { ok: false, error: "INVALID_ID" }
   try {
-    return await json(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
+    const result = await json(`/api/social/posts/${encodeURIComponent(id)}/curation`, {
       method: "POST",
       body: JSON.stringify({ choice, rewardPercentage }),
     })
+    if (result?.ok && result.durable !== false) {
+      try {
+        broadcastPostSync({
+          postId: id,
+          operation: "engagement",
+          source: "social-curation",
+          patch: {
+            choice: result.choice,
+            upvoteCount: result.upvoteCount,
+            downvoteCount: result.downvoteCount,
+          },
+        })
+        broadcastPostEngagement({
+          postId: id,
+          kind: "curation",
+          choice: result.choice === "upvote" || result.choice === "downvote" || result.choice === "neutral" ? result.choice : undefined,
+          upvoteCount: typeof result.upvoteCount === "number" ? result.upvoteCount : undefined,
+          downvoteCount: typeof result.downvoteCount === "number" ? result.downvoteCount : undefined,
+        })
+      } catch {
+        /* fail-soft */
+      }
+    }
+    return result
   } catch {
     // Phase 1: do not invent success or vote totals offline
     return { ok: false, durable: false, error: "NETWORK", reason: "NETWORK" }

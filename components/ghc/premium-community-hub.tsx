@@ -7,6 +7,7 @@
  */
 
 import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
+import { socialSetCuration } from "@/lib/social/client"
 import { useMemo, useState, useEffect } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import {

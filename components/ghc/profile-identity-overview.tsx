@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Award, RefreshCw, ShieldCheck, Users } from "lucide-react"
 
 type Snapshot = {
@@ -13,12 +13,8 @@ export function ProfileIdentityOverview({ onCounts }: { onCounts?: (counts: { fo
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const refreshInFlight = useRef(false)
-  const onCountsRef = useRef(onCounts)
-  useEffect(() => { onCountsRef.current = onCounts }, [onCounts])
   const refresh = useCallback(async () => {
-    if (refreshInFlight.current) return
-    refreshInFlight.current = true
+    if (loading) return
     setLoading(true); setError(null)
     try {
       const [followRes, repRes, achRes] = await Promise.all([
@@ -34,12 +30,12 @@ export function ProfileIdentityOverview({ onCounts }: { onCounts?: (counts: { fo
         progress: Math.max(0, Math.min(1, Number(r.progressRatio) || 0)), achievements: Array.isArray(a.achievements) ? a.achievements.length : 0,
         durable: Boolean(f.durable && r.durable !== false && a.durable !== false),
       }
-      setSnapshot(next); onCountsRef.current?.({ followers: next.followers, following: next.following })
+      setSnapshot(next); onCounts?.({ followers: next.followers, following: next.following })
     } catch (e) { setError(e instanceof Error ? e.message : "Identity snapshot unavailable") }
-    finally { refreshInFlight.current = false; setLoading(false) }
-  }, [])
+    finally { setLoading(false) }
+  }, [loading, onCounts])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh() }, []) // eslint-disable-line react-hooks/exhaustive-deps -- intentional one-shot server snapshot on mount
   useEffect(() => {
     const sync = () => { void refresh() }
     window.addEventListener("ghc:social-mutation", sync)

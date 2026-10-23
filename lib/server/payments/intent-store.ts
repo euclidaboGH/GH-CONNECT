@@ -10,6 +10,8 @@ import type {
   CreatePaymentIntentInput,
   PaymentIntentAuditEvent,
 } from "./intent-types"
+
+export type { PaymentIntent, PaymentIntentStatus, CreatePaymentIntentInput } from "./intent-types"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 function isPaymentProd(): boolean {

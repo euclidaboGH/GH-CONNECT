@@ -113,15 +113,24 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       membershipTier = null
     }
 
+    const locked = numOrNull(w?.locked) ?? 0
+    const ledger =
+      typeof (w as { ledgerBalance?: unknown } | null)?.ledgerBalance === "number"
+        ? Number((w as { ledgerBalance?: number }).ledgerBalance)
+        : available + locked
     return {
       status: "ready",
       availableGhc: available,
       pendingGhc: pending,
-      lockedGhc: numOrNull(w?.locked) ?? 0,
+      lockedGhc: locked,
       currency: "GHC",
       membershipTier,
       source: "session",
       updatedAt: now,
+      categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+      ledgerBalance: Number.isFinite(ledger) ? ledger : available + locked,
+      escrowLocked: 0,
+      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
     }
   } catch (e) {
     return {

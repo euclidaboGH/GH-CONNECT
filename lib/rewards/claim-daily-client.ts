@@ -24,6 +24,8 @@ export type DailyClaimClientResult = {
   error?: string
   serverAmount?: number
   alreadyClaimed?: boolean
+  /** Server treated this as an idempotent replay of an existing claim */
+  idempotent?: boolean
   cycleDay?: number
   pending?: boolean
   redeemableAt?: string
@@ -98,6 +100,7 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
       ok: true,
       serverAmount: Number(data.userAmount ?? data.amount) || undefined,
       alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
+      idempotent: Boolean(data.idempotent),
       pending: data.pending !== false,
       redeemableAt: data.redeemableAt != null ? String(data.redeemableAt) : undefined,
       cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,

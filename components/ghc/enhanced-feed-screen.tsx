@@ -1,5 +1,7 @@
 "use client"
 
+import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
+
 import { closeAllActionSheets } from "./action-sheet"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
@@ -483,7 +485,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           addToast(result.error === "POST_NOT_FOUND" ? "This post is no longer available." : "Could not open this post. Please try again.", "error")
           return
         }
-        const raw = result.post
+        const raw = result.post as Partial<Post>
         const hydrated: Post = {
           ...(raw as Post),
           id: postId,
@@ -493,7 +495,18 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           content: String(raw.content || ""),
           images: Array.isArray(raw.images) ? raw.images : [],
           comments: Array.isArray(raw.comments) ? raw.comments : [],
-          engagement: raw.engagement || { likes: Number(raw.likes || 0), comments: Number(raw.commentCount || 0), shares: Number(raw.shares || 0), views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
+          engagement: raw.engagement || {
+            likes: Number((raw as { likes?: number }).likes || 0),
+            comments: Number(
+              (raw as { commentCount?: number }).commentCount ??
+                (Array.isArray(raw.comments) ? raw.comments.length : 0)
+            ),
+            shares: Number((raw as { shares?: number }).shares || 0),
+            views: 0,
+            saves: 0,
+            clicks: 0,
+            avgEngagementTime: 0,
+          },
         }
         setRoutedPost(hydrated)
         openLoadedPost(hydrated)

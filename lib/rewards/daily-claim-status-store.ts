@@ -152,5 +152,5 @@ export function getDailyClaimStatusRevision(userId: string): number {
 export function refreshDailyClaimStatus(userId: string): Promise<void> {
   const key = userId.trim()
   if (!key) return Promise.resolve()
-  return refreshEntry(key, ensure(key))
+  return Promise.resolve(refreshEntry(key, ensure(key))).then(() => undefined)
 }

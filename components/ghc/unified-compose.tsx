@@ -353,10 +353,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       setUploadProgress(MEDIA_PROGRESS.uploading)
       const up = await uploadDurableMedia(file, {
         fileName: file.name,
-        width: videoMeta.width,
-        height: videoMeta.height,
-        durationMs: videoMeta.durationMs,
-        category: "videos",
+        category: "documents",
         onProgress: (label) => setUploadProgress(label),
       })
       if (up.ok && up.url && isDurableMediaUrl(up.url)) {
