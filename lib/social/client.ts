@@ -88,7 +88,7 @@ export async function socialFetchFeed(opts?: {
   }
 }
 
-export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { contentReward?: unknown }; error?: string }> {
+export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { commentCount?: number; contentReward?: unknown }; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(String(postId || "").trim())}`)
 }
 

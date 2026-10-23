@@ -483,7 +483,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           addToast(result.error === "POST_NOT_FOUND" ? "This post is no longer available." : "Could not open this post. Please try again.", "error")
           return
         }
-        const raw = result.post as Partial<Post>
+        const raw = result.post
         const hydrated: Post = {
           ...(raw as Post),
           id: postId,

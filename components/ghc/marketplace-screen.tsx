@@ -1250,7 +1250,7 @@ export function MarketplaceScreen({
             </div>
             {savedLoading ? <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">Loading saved listings…</div>
               : savedListings.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{savedListings.map((listing) => <ListingCard key={listing.id} listing={listing} onOpen={(id) => setSelectedId(id)} />)}</div>
-              : <EmptyState title="Nothing saved yet" description="Save a listing from its detail page and it will appear here." actionLabel="Browse marketplace" onAction={() => setBucket("browse")} />}
+              : <EmptyState title="Nothing saved yet" description="Save a listing from its detail page and it will appear here." action={{ label: "Browse marketplace", onClick: () => setBucket("browse") }} />}
           </div>
         </div>
       ) : null}

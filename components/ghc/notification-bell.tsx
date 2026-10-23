@@ -207,7 +207,7 @@ export function NotificationBell({
           economyCountRes?.json().catch(() => ({})) || {},
           announcementsRes?.json().catch(() => ({})) || {},
         ]) as [
-          { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null }> },
+          { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null; requestId?: string | null }> },
           { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
           { ok?: boolean; unreadCount?: number },
           { ok?: boolean; count?: number },
@@ -254,68 +254,9 @@ export function NotificationBell({
           }
         })
 
-        const mappedSocial: Notification[] = unifiedData?.durable ? [] : unifiedRows.map((n) => {
-          const socialType = String(n.type || "")
-          const type = (
-            socialType === "follow" ? "follow"
-            : socialType === "friend_request" || socialType === "connection_request" || socialType === "connection" || socialType === "connection_accept" ? "friend_request"
-            : socialType === "post_created" ? "system"
-            : socialType === "post_like" || socialType === "like" || socialType === "upvote" || socialType === "post_upvote" || socialType === "downvote" || socialType === "post_downvote" || socialType === "curation" || socialType === "post_curation" ? "like"
-            : socialType === "post_comment" || socialType === "comment_reply" || socialType === "reply" || socialType === "comment" || socialType === "mention" ? "comment"
-            : socialType === "share" ? "share"
-            : socialType === "match" ? "match"
-            : socialType === "message" || socialType === "new_message" || socialType === "dm" || socialType === "chat" ? "message"
-            : "system"
-          ) as NotificationType
-          const meta = (n.metadata || {}) as Record<string, unknown>
-          const postId =
-            (typeof meta.postId === "string" && meta.postId) ||
-            (n.entityType === "post" && n.entityId ? String(n.entityId) : undefined) ||
-            (socialType === "post_created" && n.entityId ? String(n.entityId) : undefined) ||
-            undefined
-          const conversationId =
-            (typeof meta.conversationId === "string" && meta.conversationId) ||
-            (n.entityType === "conversation" || n.entityType === "message"
-              ? (n.entityId ? String(n.entityId) : undefined)
-              : undefined) ||
-            (typeof meta.threadId === "string" ? meta.threadId : undefined)
-          return {
-            id: String(n.id || ""),
-            type,
-            title: String(n.title || "Activity"),
-            message: String(n.body || ""),
-            icon:
-              type === "message" ? "✉️"
-              : socialType.includes("like") ? "❤️"
-              : socialType.includes("upvote") || socialType.includes("downvote") ? "▲"
-              : socialType.includes("comment") ? "💬"
-              : socialType.includes("connection") || socialType.includes("friend") ? "🤝"
-              : "🔔",
-            timestamp: Number(n.createdAt) || Date.now(),
-            read: Boolean(n.readAt),
-            data: {
-              ...meta,
-              durable: true,
-              actorUserId: n.actorUserId,
-              entityId: n.entityId,
-              entityType: n.entityType,
-              postId,
-              conversationId,
-              fromUserId: n.actorUserId,
-              userId: meta.userId || n.actorUserId,
-              open: type === "message" ? "messages"
-                : socialType === "connection_accept" ? "matches"
-                : socialType === "connection" || socialType === "connection_request" || socialType === "friend_request" ? "matches"
-                : meta.open,
-              section: socialType === "connection" || socialType === "connection_request" || socialType === "friend_request"
-                ? "connection_requests"
-                : socialType === "connection_accept"
-                  ? "matches"
-                  : meta.section,
-              socialType,
-            },
-          }
-        })
+        // The unified inbox is canonical. The retired social projection used
+        // entityId/entityType fields that are not part of the current contract.
+        // Mapping those rows twice also risked duplicate notifications.
 
         const mappedEconomy: Notification[] = economyRows.map((n) => {
           const eventType = String(n.eventType || "")
@@ -339,10 +280,6 @@ export function NotificationBell({
         })
 
         const suppress = new Set([...blockedUsers, ...mutedUsers].map(String))
-        const durableSocialVisible = mappedSocial.filter((n) => {
-          const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
-          return !actor || !suppress.has(actor)
-        })
         const mappedAnnouncements: Notification[] = announcementsRes?.ok && announcementsData.ok && Array.isArray(announcementsData.announcements)
           ? announcementsData.announcements.map((n) => ({
               id: `announcement:${String(n.id || "")}`,
