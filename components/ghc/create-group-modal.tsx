@@ -152,32 +152,26 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           })
         }
         const uploaded = await uploadDurableMedia(uploadFile, { category: "images" })
-        if (uploaded.ok && uploaded.durable) {
+        if (uploaded?.url) {
           const facade = toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url
           setFormData((prev) => ({ ...prev, coverImage: facade }))
-          setValidationErrors((prev) => {
-            const { coverImage: _c, ...rest } = prev
-            return rest
-          })
-        } else {
-          // Do not persist an inline data URL as a group cover when durable
-          // storage failed; the preview must not masquerade as a saved asset.
-          setFormData((prev) => ({ ...prev, coverImage: "" }))
+        } else if (isMediaStorageUnavailable()) {
           setValidationErrors((prev) => ({
             ...prev,
-            coverImage: isMediaStorageUnavailable(uploaded.error)
-              ? "Media storage unavailable — try again shortly"
-              : (uploaded.userMessage || "Cover upload failed — please try again"),
+            coverImage: "Media storage unavailable — try again shortly",
           }))
         }
       } catch (upErr) {
-        setFormData((prev) => ({ ...prev, coverImage: "" }))
         setValidationErrors((prev) => ({
           ...prev,
           coverImage:
             upErr instanceof Error ? upErr.message : "Cover upload failed — check connection",
         }))
       }
+      setValidationErrors((prev) => {
+        const { coverImage: _c, ...rest } = prev
+        return rest
+      })
     } catch (err) {
       setValidationErrors((prev) => ({
         ...prev,

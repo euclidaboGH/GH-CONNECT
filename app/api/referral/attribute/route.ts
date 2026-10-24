@@ -10,25 +10,42 @@ export const dynamic = "force-dynamic"
 async function resolveUserIdFromGreenHavenId(ghId: string): Promise<string | null> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  // IDs are case-insensitive for lookup, but never guess a user from a profile row ID.
   const normalized = ghId.trim().toUpperCase().replace(/\s+/g, "")
   if (!normalized) return null
-  try {
-    // Profiles may store green_haven_id in several shapes
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_profiles?or=(green_haven_id.eq.${encodeURIComponent(normalized)},greenhaven_id.eq.${encodeURIComponent(normalized)},gh_id.eq.${encodeURIComponent(normalized)})&select=user_id,id&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
-    const rows = (await res.json().catch(() => [])) as Array<{ user_id?: string; id?: string }>
-    if (Array.isArray(rows) && rows[0]) {
-      return String(rows[0].user_id || rows[0].id || "") || null
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  const headers = {
+    apikey: env.supabaseServiceRoleKey,
+    Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+    Accept: "application/json",
+  }
+
+  // Query candidate legacy columns independently. A PostgREST `or` that references
+  // one absent column fails as a whole, making valid IDs look nonexistent.
+  const candidates = [
+    { table: "gh_profiles", column: "green_haven_id" },
+    { table: "gh_profiles", column: "greenhaven_id" },
+    { table: "gh_profiles", column: "gh_id" },
+    { table: "gh_profiles", column: "public_id" },
+  ]
+  for (const candidate of candidates) {
+    try {
+      const query = new URLSearchParams({
+        [candidate.column]: `eq.${normalized}`,
+        select: "user_id",
+        limit: "1",
+      })
+      const res = await fetch(`${base}/rest/v1/${candidate.table}?${query.toString()}`, {
+        headers,
+        cache: "no-store",
+      })
+      if (!res.ok) continue
+      const rows = (await res.json().catch(() => [])) as Array<{ user_id?: string | null }>
+      const userId = Array.isArray(rows) ? String(rows[0]?.user_id || "").trim() : ""
+      if (userId) return userId
+    } catch {
+      // A missing/legacy column or transient query failure must not stop other candidates.
     }
-  } catch {
-    /* */
   }
   return null
 }

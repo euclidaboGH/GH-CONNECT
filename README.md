@@ -1,17 +1,17 @@
 # GH-CONNECT / GreenHaven
 
-**Current source version:** `0.70.3` (see `package.json` and `lib/app-release.ts`).
+**Current source version:** `0.89.1` (must match `package.json`, `package-lock.json`, and `lib/app-release.ts`).
 
 GH-CONNECT is a Pi-integrated social, identity, marketplace and GHC utility platform. This repository contains application source, Supabase migrations, automated checks, and operator documentation. A feature present in source is not proof that its database migration is applied or that the feature is enabled in a live environment.
 
 ## Start here
 
 1. [`docs/PROJECT_TRUTH.md`](docs/PROJECT_TRUTH.md) — current source/build status and release authority.
-2. [`docs/README.md`](docs/README.md) — curated documentation index.
-3. [`docs/TESTNET_VERIFICATION_GATE.md`](docs/TESTNET_VERIFICATION_GATE.md) — operator verification required before release.
+2. [`docs/`](docs/) — architecture, domain hardening, operations, and historical audit notes.
+3. [`docs/ops/TESTNET_EVIDENCE_OPERATOR_CHECKLIST.md`](docs/ops/TESTNET_EVIDENCE_OPERATOR_CHECKLIST.md) — operator evidence collection before release.
 4. [`docs/MIGRATION_CHECKLIST.md`](docs/MIGRATION_CHECKLIST.md) — generated inventory of migration files, not remote application status.
-5. [`docs/DEFERRED_AND_GATED.md`](docs/DEFERRED_AND_GATED.md) — intentionally disabled or gated functionality.
-6. [`VERCEL_DEPLOY.txt`](VERCEL_DEPLOY.txt) — deployment procedure and safety gates.
+5. [`docs/OPERATOR_ENV_AND_STATUS.md`](docs/OPERATOR_ENV_AND_STATUS.md) — operator-managed environment and feature status.
+6. [`docs/OPERATOR_DEPLOYMENT_ENV_AND_MIGRATIONS_2026-10-21.md`](docs/OPERATOR_DEPLOYMENT_ENV_AND_MIGRATIONS_2026-10-21.md) — deployment and migration procedure.
 
 ## Local development
 
@@ -23,7 +23,7 @@ GH-CONNECT is a Pi-integrated social, identity, marketplace and GHC utility plat
 
 ## Deployment status
 
-The source is **not approved for production release**. The latest supplied Vercel log for branch `testnet`, commit `a04ebff`, shows successful compilation followed by a TypeScript failure in `contexts/ghc-context.tsx` because `domains` is used before declaration. Resolve the failure in the exact branch source and rerun the full CI/build before release.
+The source is **not approved for production release** until the supported-runtime CI build, database reconciliation, and live Testnet verification gates pass. Historical Vercel logs are evidence about the source revision they built; do not assume an old reported TypeScript error still exists in this archive without rerunning the checks.
 
 A successful static test or local source check does not establish that Supabase migrations, Pi payments, payout providers, media privacy, multi-user authorization, or production configuration have been verified. Keep Testnet and Mainnet credentials and data stores separate. Never bypass type checks, lint, migration review, or release gates to force a deployment.
 
@@ -44,7 +44,3 @@ A successful static test or local source check does not establish that Supabase 
 
 Private / proprietary unless otherwise stated by the repository owner.
 
-
-## Latest engineering milestone
-
-Phase 37 — Performance, Mobile & Pi Browser V2 is complete. See `PHASE37-PERFORMANCE-MOBILE-PI-BROWSER-V2-REPORT.md`.

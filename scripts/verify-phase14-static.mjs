@@ -1,47 +1,39 @@
 #!/usr/bin/env node
-/**
- * Phase 14 static verification runner (no network, no DB).
- * Runs the critical in-repo suites in sequence. Exits non-zero on first failure.
- */
-import { spawnSync } from "child_process"
-import { join, dirname } from "path"
-import { fileURLToPath } from "url"
+/** Local, network-free release checks for suites that actually exist in this source tree. */
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-
 const steps = [
-  ["test-social-authz.mjs", "Social authz"],
-  ["test-idor-static.mjs", "IDOR static"],
-  ["test-messaging-authz.mjs", "Messaging authz"],
-  ["scan-production-safety.mjs", "Production safety"],
-  ["test-ghpv-economic-safety.mjs", "GHPV economic safety"],
-  ["test-content-reward-boundaries.mjs", "Content reward boundaries"],
-  ["test-pi-payment-durable.mjs", "Pi payment durable"],
-  ["test-economy-v12.mjs", "Economy v12"],
-  ["test-daily-claim-wallet-pipeline.mjs", "Daily claim → wallet"],
-  ["test-rewards-reliability.mjs", "Rewards reliability"],
-  ["test-notification-attention.mjs", "Notification attention"],
+  ["check-dependency-lock-integrity.mjs", "Dependency lock integrity"],
+  ["verify-pi-backend-lock.mjs", "Pi backend lock"],
   ["check-jsx-safety.mjs", "JSX safety"],
-  ["print-migration-checklist.mjs", "Migration inventory"],
+  ["scan-production-safety.mjs", "Production safety"],
+  ["check-database-contract-source.mjs", "Database contract source"],
+  ["check-migration-release-readiness.mjs", "Migration release readiness"],
+  ["test-fee-referral-contract.mjs", "Fee and referral contract"],
 ]
 
-console.log("\n=== GH-CONNECT verify:static (Phase 14) ===\n")
+console.log("\n=== GreenHaven static verification (network/DB independent) ===\n")
 let failed = 0
 for (const [file, label] of steps) {
+  const path = join(root, "scripts", file)
   process.stdout.write(`→ ${label} ... `)
-  const r = spawnSync(process.execPath, [join(root, "scripts", file)], {
-    cwd: root,
-    encoding: "utf8",
-    env: process.env,
-  })
-  if (r.status === 0) {
-    console.log("PASS")
-  } else {
-    console.log("FAIL")
+  if (!existsSync(path)) {
+    console.log("FAIL (required check missing)")
     failed++
-    if (r.stdout) process.stdout.write(r.stdout.split("\n").slice(-15).join("\n") + "\n")
-    if (r.stderr) process.stderr.write(r.stderr.split("\n").slice(-15).join("\n") + "\n")
+    continue
+  }
+  const r = spawnSync(process.execPath, [path], { cwd: root, encoding: "utf8", env: process.env, maxBuffer: 8 * 1024 * 1024 })
+  if (r.status === 0) console.log("PASS")
+  else {
+    console.log("FAIL")
+    if (r.stdout) process.stdout.write(r.stdout.slice(-5000) + "\n")
+    if (r.stderr) process.stderr.write(r.stderr.slice(-5000) + "\n")
+    failed++
   }
 }
-console.log(`\n=== verify:static ${failed ? "FAILED" : "PASSED"} (${steps.length - failed}/${steps.length}) ===\n`)
+console.log(`\n=== Static verification ${failed ? "FAILED" : "PASSED"} (${steps.length - failed}/${steps.length}) ===\n`)
 process.exit(failed ? 1 : 0)

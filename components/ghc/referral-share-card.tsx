@@ -203,7 +203,7 @@ export function ReferralShareCard({
           "Referral locked in",
           "Your inviter was recorded. Qualifying rewards post when settlement is enabled.",
           "🤝",
-          { category: "rewards", open: "rewards", kind: "referral_attributed" },
+          { category: "system", open: "profile", kind: "referral_attributed" },
         )
       } catch {
         /* */

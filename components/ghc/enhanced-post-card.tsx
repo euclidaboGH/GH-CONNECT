@@ -299,6 +299,8 @@ function EnhancedPostCardInner({
           upvoteCount: nextUp,
           downvoteCount: nextDown,
         })
+        // Keep curation analytics synchronized even when this vote produces no GHC movement.
+        try { window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id, source: "curation-vote" } })) } catch { /* fail-soft */ }
       }
     } finally {
       setCurationBusy(false)
@@ -1041,6 +1043,7 @@ function EnhancedPostCardInner({
         postId={post.id}
         upvoteCount={upvoteCount}
         downvoteCount={downvoteCount}
+        views={post.engagement?.views ?? 0}
       />
 
       <EngagementRosterSheet

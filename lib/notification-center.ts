@@ -57,7 +57,6 @@ export type NotificationDeepLink = {
     | "matches"
     | "profile"
     | "settings"
-    | "marketplace"
   tab?:
     | "home"
     | "discover"
