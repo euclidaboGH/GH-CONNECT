@@ -1632,12 +1632,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               })
             } else if (
               (!existing.userName || existing.userName === "Match") &&
-              Boolean(cand?.name)
+              Boolean(cand && cand.name)
             ) {
               matchMap.set(m.userId, {
                 ...existing,
-                userName: String(cand.name),
-                userPhoto: existing.userPhoto || cand.photo || cand.photos?.[0] || "",
+                userName: String(cand?.name || "Match"),
+                userPhoto: existing.userPhoto || cand?.photo || cand?.photos?.[0] || "",
               })
             }
           }
@@ -4965,7 +4965,9 @@ const dismissMatchCelebration = useCallback(() => {
                 sharedPostId: m.sharedPostId,
                 replyTo: m.replyTo,
                 replyToPreview: m.replyToPreview,
-                mediaAttachments: (m as { mediaAttachments?: unknown }).mediaAttachments as any,
+                mediaAttachments: Array.isArray((m as { mediaAttachments?: unknown }).mediaAttachments)
+                  ? ((m as { mediaAttachments: Message["mediaAttachments"] }).mediaAttachments)
+                  : undefined,
               })
             }
             const nextMsgs = Array.from(byId.values()).sort(

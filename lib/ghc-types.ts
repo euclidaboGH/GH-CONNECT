@@ -439,8 +439,6 @@ export interface Message {
   id: string
   senderId: string
   sharedPostId?: string
-  /** Optional durable attachments for image/video/file messages. */
-  mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>
   text: string
   createdAt: number
   // Enhanced message features
@@ -473,7 +471,7 @@ export interface Message {
   // Media & attachments
   mediaAttachments?: Array<{
     id: string
-    type: "image" | "file" | "voice" | "video"
+    type: "image" | "gif" | "file" | "voice" | "video"
     url: string
     duration?: number // seconds for voice/video
     size?: number // bytes
