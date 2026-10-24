@@ -1,4 +1,4 @@
 /** Keep in sync with package.json; the regression test enforces the match. */
-export const APP_RELEASE_VERSION = "0.89.0"
+export const APP_RELEASE_VERSION = "0.89.1"
 export const APP_RELEASE_SUMMARY =
-  "System audit 0.89: release metadata sync, settings deep-link parity, event catalog, section wiring harden."
+  "Lean package: removed historical reports, bulk phase docs, and non-runtime test scripts. App + migrations intact."

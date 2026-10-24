@@ -15,7 +15,7 @@ const check = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), de
 
 check('package and lockfile versions agree', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version, `${pkg.version} / ${lock.version}`)
 check('release notice uses package version', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`), `expected ${pkg.version}`)
-check('Node engine supports documented runtime', /\^22\.22\.2/.test(pkg.engines?.node ?? '') && /\^24\.15\.0/.test(pkg.engines?.node ?? ''), pkg.engines?.node ?? 'missing')
+check('Node engine matches enforced Node 24 runtime', /\^24\.15\.0/.test(pkg.engines?.node ?? '') && !/\^22\./.test(pkg.engines?.node ?? ''), pkg.engines?.node ?? 'missing')
 check('.nvmrc selects supported Node 24', readFileSync(join(root, '.nvmrc'), 'utf8').trim().startsWith('24'), readFileSync(join(root, '.nvmrc'), 'utf8').trim())
 check('migration directory exists and has SQL', existsSync(migrationsDir) && migrations.length > 0, `${migrations.length} SQL files`)
 const duplicateNames = migrations.filter((name, i) => i > 0 && migrations[i - 1] === name)

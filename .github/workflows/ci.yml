@@ -1,0 +1,42 @@
+name: GreenHaven CI
+
+on:
+  push:
+    branches: [main, testnet]
+  pull_request:
+    branches: [main, testnet]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greenhaven-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up supported Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - name: Verify lockfile completeness
+        run: node scripts/check-dependency-lock-integrity.mjs
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps --no-audit
+      - name: JSX safety scan
+        run: npm run check:jsx
+      - name: Release hygiene
+        run: npm run check:release-hygiene
+      - name: Production safety scan
+        run: npm run test:safety
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build

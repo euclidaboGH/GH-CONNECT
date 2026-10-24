@@ -1,6 +1,0 @@
-components/ghc/app.tsx
-components/ghc/enhanced-feed-screen.tsx
-app/api/social/posts/[id]/route.ts
-lib/social/client.ts
-scripts/test-phase13-profile-social-routing.mjs
-docs/PHASE13-MASSIVE-SOCIAL-INTEGRATION.md

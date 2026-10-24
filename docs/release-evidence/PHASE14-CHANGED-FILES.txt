@@ -1,9 +1,0 @@
-supabase/migrations/20261022120003_gh_social_economy_settlement_projection.sql
-supabase/GREENHAVEN-CANONICAL-SUPABASE-INSTALL.sql
-components/ghc/post-reward/post-reward-panel.tsx
-components/ghc/enhanced-post-card.tsx
-scripts/check-clean-migrations.mjs
-scripts/check-database-contract-source.mjs
-scripts/test-phase5-database-tools.mjs
-scripts/test-phase14-social-economy-integration.mjs
-app/api/social/posts/[id]/curation/route.ts

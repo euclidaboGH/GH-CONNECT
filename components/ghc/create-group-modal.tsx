@@ -152,7 +152,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           })
         }
         const uploaded = await uploadDurableMedia(uploadFile, { category: "images" })
-        if (uploaded?.url) {
+        if (uploaded?.ok && uploaded.durable) {
           const facade = toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url
           setFormData((prev) => ({ ...prev, coverImage: facade }))
         } else if (isMediaStorageUnavailable()) {

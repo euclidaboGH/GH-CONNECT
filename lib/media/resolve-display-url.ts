@@ -98,3 +98,6 @@ export function clearDisplayMediaCache(mediaId?: string) {
   if (mediaId) SIGNED_CACHE.delete(mediaId)
   else SIGNED_CACHE.clear()
 }
+
+/** Backward-compatible name used by community cover components. */
+export const resolveDisplayUrl = resolveDisplayMediaUrl

@@ -1,9 +1,0 @@
-supabase/VALIDATE-GREENHAVEN-DATABASE.sql
-scripts/check-database-contract-source.mjs
-scripts/test-phase5-database-tools.mjs
-scripts/test-phase7-product-experience.mjs
-components/ghc/enhanced-feed-screen.tsx
-package.json
-docs/PHASE6-DATABASE-CONTRACT-HARDENING.md
-docs/PHASE6-MASSIVE-UPGRADE-REPORT.md
-supabase/GREENHAVEN-CANONICAL-SUPABASE-INSTALL.sql

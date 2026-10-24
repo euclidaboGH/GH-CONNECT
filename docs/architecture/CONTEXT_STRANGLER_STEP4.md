@@ -1,17 +1,11 @@
-# GHCContext strangler Step 4
+# Step 4 — bounded context migration notes
 
-## Added
+GreenHaven retains the existing App Router and domain contexts while separating feed, messaging, notifications, discovery, connections and wallet-read concerns under `contexts/domains/`. The shared application context remains a compatibility boundary during incremental migration.
 
-- `session-bootstrap.ts` — production empty collections; Studio may seed
-- `ConnectionsProvider` — read-only graph summary seam
-- `DiscoveryProvider` — read-only discovery search seam
+Rules for future work:
 
-## Explicit empty policy
-
-Production load paths call `bootstrapPosts/Stories/Candidates/Likes` which return `[]` when demo is disallowed. UI should show domain empty states, not “seed that happens to be empty.”
-
-## Not migrated
-
-- Connection/discovery **mutations** (still unified adapters / GHC)
-- Messaging, communities, notifications
-- Financial writes
+1. Do not create a second identity, membership or GHC ledger authority.
+2. Migrate one domain at a time; preserve public contracts until callers are migrated.
+3. Keep privileged credentials and durable writes server-side.
+4. Add tests and update the authority map when a boundary changes.
+5. Treat this source-level architecture note as guidance, not proof that every runtime path is already fully isolated.
