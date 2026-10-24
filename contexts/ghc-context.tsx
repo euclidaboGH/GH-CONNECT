@@ -4902,14 +4902,23 @@ const dismissMatchCelebration = useCallback(() => {
               mediaAttachments: Array.isArray(raw.mediaAttachments)
                 ? (raw.mediaAttachments as Array<Record<string, unknown>>)
                     .slice(0, 4)
-                    .map((a) => ({
-                      id: String(a.id || ""),
-                      type: (["image", "video", "file"].includes(String(a.type))
-                        ? String(a.type)
-                        : "file") as "image" | "video" | "file",
-                      url: String(a.url || ""),
-                      fileName: a.fileName != null ? String(a.fileName) : undefined,
-                    }))
+                    .map((a) => {
+                      const attachmentType = String(a.type || "file")
+                      const type = (["image", "gif", "video", "file", "voice"].includes(attachmentType)
+                        ? attachmentType
+                        : "file") as NonNullable<Message["mediaAttachments"]>[number]["type"]
+                      return {
+                        id: String(a.id || ""),
+                        type,
+                        url: String(a.url || ""),
+                        fileName: a.fileName != null ? String(a.fileName) : undefined,
+                        duration: typeof a.duration === "number" && Number.isFinite(a.duration) ? a.duration : undefined,
+                        size: typeof a.size === "number" && Number.isFinite(a.size) ? a.size : undefined,
+                        mimeType: typeof a.mimeType === "string" ? a.mimeType : undefined,
+                        waveform: Array.isArray(a.waveform) ? a.waveform.filter((v): v is number => typeof v === "number" && Number.isFinite(v)).slice(0, 128) : undefined,
+                        thumbnail: typeof a.thumbnail === "string" ? a.thumbnail : undefined,
+                      }
+                    })
                     .filter((a) => a.url && !a.url.startsWith("blob:") && !a.url.startsWith("data:"))
                 : undefined,
             }
@@ -4927,6 +4936,7 @@ const dismissMatchCelebration = useCallback(() => {
           sharedPostId?: string
           replyTo?: string
           replyToPreview?: { senderName: string; text: string }
+          mediaAttachments?: Message["mediaAttachments"]
         }>
         setState((s) => ({
           ...s,
