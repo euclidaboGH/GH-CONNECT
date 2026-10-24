@@ -52,7 +52,7 @@ export function MatchScreen() {
     blockedUsers = [],
     rejectMatch,
   } = useGHC() as any
-  const [activeTab, setActiveTab] = useState<"new" | "all">("new")
+  const [activeTab, setActiveTab] = useState<"new" | "all" | "likes_you">("new")
   const [intentionFilter, setIntentionFilter] = useState<MatchIntention | "all">("all")
   const [removedMatches, setRemovedMatches] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -157,6 +157,27 @@ export function MatchScreen() {
     )
     return iLiked && theyLiked
   })
+
+  // Incoming likes are shown separately until the viewer likes back. Exclude
+  // blocked users and existing mutual matches; never infer a like from a match.
+  const matchedUserIds = new Set(mutualMatches.map((match) => String(match.userId)))
+  const likesYouRows = Array.from(
+    new Map(
+      safeLikes
+        .filter((like) => viewerIds.has(String(like.toUserId)) && !viewerIds.has(String(like.fromUserId)))
+        .filter((like) => !blockedSet.has(String(like.fromUserId)) && !matchedUserIds.has(String(like.fromUserId)))
+        .map((like) => {
+          const userId = String(like.fromUserId)
+          const candidate = safeCandidates.find((item) => String(item.id) === userId)
+          return [userId, {
+            userId,
+            userName: candidate?.name || "GreenHaven member",
+            userPhoto: candidate?.photo || candidate?.photos?.[0] || "",
+            createdAt: Number(like.createdAt) || 0,
+          }] as const
+        }),
+    ).values(),
+  ).sort((a, b) => b.createdAt - a.createdAt)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 350)

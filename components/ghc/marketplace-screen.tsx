@@ -879,7 +879,9 @@ function SellListingForm({
           fileName: `listing-${Date.now()}-${file.name}`.slice(0, 120),
           category: "images",
         })
-        const url = uploaded?.url ? toRelativeMediaFacadeUrl(String(uploaded.url)) : null
+        const url = uploaded.ok && uploaded.durable
+          ? (toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url)
+          : null
         if (url) next.push(url)
       }
       setMediaUrls(next.slice(0, 6))
