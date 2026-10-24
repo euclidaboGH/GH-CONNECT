@@ -1625,18 +1625,18 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               matchMap.set(m.userId, {
                 id: `match_${m.userId}`,
                 userId: m.userId,
-                userName: cand?.name || cand?.displayName || "Match",
+                userName: cand?.name || "Match",
                 userPhoto: cand?.photo || cand?.photos?.[0] || "",
                 matchedAt: m.createdAt || Date.now(),
                 online: Boolean(cand?.online),
               })
             } else if (
               (!existing.userName || existing.userName === "Match") &&
-              (cand?.name || cand?.displayName)
+              Boolean(cand?.name)
             ) {
               matchMap.set(m.userId, {
                 ...existing,
-                userName: String(cand.name || cand.displayName),
+                userName: String(cand.name),
                 userPhoto: existing.userPhoto || cand.photo || cand.photos?.[0] || "",
               })
             }
