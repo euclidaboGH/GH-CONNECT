@@ -33,6 +33,7 @@ import {
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { EconomyProgramStatus } from "./economy-program-status"
+import { ReferralShareCard } from "./referral-share-card"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
 import { navigateGhcActivityTarget, resolveRewardActivityTarget } from "@/lib/domains/ghc-activity-attribution"
 
@@ -316,6 +317,18 @@ export function RewardsCentreScreen({
   }, [])
 
   useEffect(() => {
+    const onLive = () => refresh()
+    window.addEventListener("ghc:daily-reward-claimed", onLive)
+    window.addEventListener("ghc:wallet-synced", onLive)
+    window.addEventListener("ghc:wallet-refresh", onLive)
+    return () => {
+      window.removeEventListener("ghc:daily-reward-claimed", onLive)
+      window.removeEventListener("ghc:wallet-synced", onLive)
+      window.removeEventListener("ghc:wallet-refresh", onLive)
+    }
+  }, [refresh])
+
+  useEffect(() => {
     const tabHandler = (e: Event) => {
       const next = (e as CustomEvent<{ tab?: Tab }>).detail?.tab
       if (next === "opportunities" || next === "challenges" || next === "history" || next === "achievements") {
@@ -456,6 +469,10 @@ export function RewardsCentreScreen({
 
         <div className="mx-3 mt-3">
           <EconomyProgramStatus />
+        </div>
+
+        <div className="mx-3 mt-3">
+          <ReferralShareCard compact />
         </div>
 
         {/* Weekly quality streak — real qualityDays only (not likes) */}
@@ -726,6 +743,15 @@ export function RewardsCentreScreen({
               <p className="px-1 text-[11px] font-semibold text-muted-foreground">
                 Progress, status and next step — GHC still validates on the ledger
               </p>
+              <div
+                className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                role="status"
+              >
+                Mission GHC is fail-closed until the server can verify each action (post, join,
+                profile, connection) and claim it once. Completing a mission in the UI tracks
+                progress only — it does not mint GHC on the device. Daily claim remains the
+                primary server-backed reward path.
+              </div>
               {snapshot.challenges.map((card) => (
                 <ChallengeCardView key={card.challenge.id} card={card} />
               ))}

@@ -1201,7 +1201,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold text-foreground">GHC (GreenHaven Coin)</p>
-                <p className="text-[11px] text-muted-foreground">Available balance</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Available
+                  {pending > 0 ? ` · ${formatGhc(pending)} pending` : ""}
+                  {locked > 0 ? ` · ${formatGhc(locked)} reserved` : ""}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[15px] font-bold tabular-nums text-foreground">
@@ -1959,7 +1963,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-bold text-white">π</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-foreground">Pi (GH Pay)</p>
-                  <p className="text-[11px] text-muted-foreground">Membership and catalog purchases in Pi Browser</p>
+                  <p className="text-[11px] text-muted-foreground">External π rail · membership & packs · not mixed with GHC</p>
                   <span className="mt-1 inline-block rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-800 dark:text-violet-200">Available</span>
                 </div>
               </li>

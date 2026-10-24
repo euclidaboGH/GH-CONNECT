@@ -3,9 +3,12 @@
 import { onCloseTransientUI } from "@/lib/transient-ui"
 
 import { useState, useRef, useEffect } from "react"
-import { X, Upload, Users, AlertCircle, Loader } from "lucide-react"
+import { X, Upload, Users, AlertCircle, Loader, Loader2 } from "lucide-react"
 import { sanitizeText, sanitizeDisplayName } from "@/lib/sanitizer"
 import { compressImageFile } from "@/lib/media/compress-image"
+import { uploadDurableMedia, isMediaStorageUnavailable } from "@/lib/media/upload-client"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+import { quoteCommunityCreateFeeClient, type CommunityFeeRail } from "@/lib/community/create-fee-client"
 import { RULE_TEMPLATES } from "@/lib/domains/community-registry"
 
 export interface CreateGroupFormData {
@@ -17,6 +20,8 @@ export interface CreateGroupFormData {
   welcomeMessage: string
   rules: string[]
   invitedMembers: string[]
+  /** Dual-rail create fee preference — server settles */
+  feeCurrency?: "GHC" | "PI"
 }
 
 interface CreateGroupModalProps {
@@ -28,7 +33,7 @@ interface CreateGroupModalProps {
   error?: string | null
 }
 
-const CATEGORIES = ["General", "Sports", "Tech", "Music", "Art", "Business", "Education", "Gaming", "Other"]
+const CATEGORIES = ["General", "Agriculture", "Sports", "Tech", "Music", "Art", "Business", "Education", "Faith", "Health", "Local", "Gaming", "Climate", "Other"]
 const PRIVACY_OPTIONS = [
   { value: "public", label: "Public", desc: "Anyone can find & join" },
   { value: "private", label: "Private", desc: "Only invited members" },
@@ -46,7 +51,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     welcomeMessage: "",
     rules: [],
     invitedMembers: [],
+    feeCurrency: "GHC",
   })
+  const [feeRail, setFeeRail] = useState<CommunityFeeRail>("GHC")
+  const [coverUploading, setCoverUploading] = useState(false)
+  const feeQuote = quoteCommunityCreateFeeClient(feeRail)
   const [currentRule, setCurrentRule] = useState("")
   const [currentMember, setCurrentMember] = useState("")
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
@@ -122,6 +131,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file) return
+    setCoverUploading(true)
     try {
       // Prefer JPEG for Pi WebView compatibility (avoids dark/blank WebP decode issues)
       const compressedBase64 = await compressImageFile(file, {
@@ -129,7 +139,35 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         preferWebp: false,
         quality: 0.85,
       })
+      // Optimistic local preview while durable upload runs
       setFormData((prev) => ({ ...prev, coverImage: compressedBase64 }))
+      try {
+        // Rebuild a File for durable upload from compressed data when possible
+        let uploadFile = file
+        if (typeof compressedBase64 === "string" && compressedBase64.startsWith("data:")) {
+          const res = await fetch(compressedBase64)
+          const blob = await res.blob()
+          uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg") || "cover.jpg", {
+            type: blob.type || "image/jpeg",
+          })
+        }
+        const uploaded = await uploadDurableMedia(uploadFile, { category: "images" })
+        if (uploaded?.url) {
+          const facade = toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url
+          setFormData((prev) => ({ ...prev, coverImage: facade }))
+        } else if (isMediaStorageUnavailable()) {
+          setValidationErrors((prev) => ({
+            ...prev,
+            coverImage: "Media storage unavailable — try again shortly",
+          }))
+        }
+      } catch (upErr) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          coverImage:
+            upErr instanceof Error ? upErr.message : "Cover upload failed — check connection",
+        }))
+      }
       setValidationErrors((prev) => {
         const { coverImage: _c, ...rest } = prev
         return rest
@@ -139,6 +177,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         ...prev,
         coverImage: err instanceof Error ? err.message : "Failed to process image",
       }))
+    } finally {
+      setCoverUploading(false)
     }
   }
 
@@ -223,7 +263,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           welcomeMessage: "",
           rules: [],
           invitedMembers: [],
+          feeCurrency: "GHC",
         })
+        setFeeRail("GHC")
       } catch (err) {
         // Error is handled by parent component
         console.error("[Create Group Error]", err)
@@ -386,7 +428,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 <label className="block text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
                   Cover Image <span className="text-xs text-muted-foreground">(optional)</span>
                 </label>
-                {formData.coverImage ? (
+                {coverUploading ? (
+                  <div className="flex h-28 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Uploading cover…</div>
+                ) : formData.coverImage ? (
                   <div className="relative overflow-hidden rounded-lg bg-zinc-100">
                     <img
                       src={formData.coverImage}
@@ -610,9 +654,35 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 <p className="text-xs text-blue-800">
                   <span className="font-semibold">✓ Ready to create!</span> Review all details and click "Create community" below.
                 </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                  When testnet fees are active, creation debits a small <span className="font-semibold text-foreground">GHC</span> fee from your available wallet balance (or verified π if you choose Pi). Free messaging and browsing never require GHC or Pi.
+                <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <p className="text-[12px] font-bold text-foreground">Creation fee (non-refundable)</p>
+                <div className="flex gap-2">
+                  {(["GHC", "PI"] as const).map((rail) => {
+                    const q = quoteCommunityCreateFeeClient(rail)
+                    return (
+                      <button
+                        key={rail}
+                        type="button"
+                        onClick={() => {
+                          setFeeRail(rail)
+                          setFormData((prev) => ({ ...prev, feeCurrency: rail }))
+                        }}
+                        className={`min-h-10 flex-1 rounded-xl border px-3 text-sm font-bold transition ${
+                          feeRail === rail
+                            ? "border-emerald-500 bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
+                            : "border-border/70 bg-card text-muted-foreground"
+                        }`}
+                      >
+                        {rail === "GHC" ? `₲ ${q.amount}` : `${q.amount} π`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Debits available {feeRail === "GHC" ? "GHC" : "Pi"} when rates are active on testnet/mainnet.
+                  Browsing and messaging stay free. Cover photos use durable private storage.
                 </p>
+              </div>
               </div>
             </div>
           )}
@@ -665,7 +735,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   aria-label="Create group"
                 >
                   {isLoading && <Loader size={16} className="animate-spin" />}
-                  {isLoading ? "Creating…" : "Create community"}
+                  {isLoading || coverUploading ? "Creating…" : `Create · ${feeQuote.label}`}
                 </button>
               )}
             </div>

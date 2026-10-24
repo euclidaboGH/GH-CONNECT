@@ -303,6 +303,12 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.tab = "discover"
     return link
   }
+  if (open === "marketplace" || open === "market" || open === "orders") {
+    link.open = "marketplace"
+    link.tab = "home"
+    if (data.listingId) link.listingId = String(data.listingId)
+    return link
+  }
   if (open === "security" || open === "verification") {
     link.open = "settings"
     link.tab = "settings"
@@ -403,10 +409,11 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     n.type === "marketplace_comment" ||
     n.type === "marketplace_reaction"
   ) {
-    link.open = "feed"
+    link.open = "marketplace"
     link.tab = "home"
-    const lid = (n.data as { listingId?: string } | undefined)?.listingId
-    if (lid) link.listingId = String(lid)
+    const d = (n.data || {}) as { listingId?: string; orderId?: string }
+    if (d.listingId) link.listingId = String(d.listingId)
+    if (d.orderId) (link as { orderId?: string }).orderId = String(d.orderId)
   } else if (n.type === "ghc_received" || n.type === "ghc_sent" || n.type === "payment") {
     link.open = "wallet"
     link.tab = "wallet"
@@ -469,6 +476,19 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
     // Primary surface via canonical navigation map
     if (surface === "wallet" || link.tab === "wallet") {
       openWallet()
+    } else if (surface === "marketplace" || link.listingId) {
+      navigateTo("marketplace", {
+        listingId: link.listingId || undefined,
+      })
+      try {
+        if ((link as { orderId?: string }).orderId) {
+          window.dispatchEvent(
+            new CustomEvent("ghc:open-marketplace", {
+              detail: { bucket: "orders", orderId: (link as { orderId?: string }).orderId },
+            }),
+          )
+        }
+      } catch { /* */ }
     } else if (surface === "rewards" || link.tab === "rewards") {
       navigateTo("rewards")
     } else if (surface === "membership" || link.tab === "membership") {

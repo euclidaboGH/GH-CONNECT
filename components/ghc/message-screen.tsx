@@ -82,6 +82,7 @@ export function MessageScreen() {
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [replyPreview, setReplyPreview] = useState<string | null>(null)
   const [peerPresence, setPeerPresence] = useState<PeerPresence | null>(null)
+  const [threadContext, setThreadContext] = useState<{ type?: string; orderId?: string; listingId?: string } | null>(null)
   const [presenceSynced, setPresenceSynced] = useState(false)
   const typingActiveRef = useRef(false)
   const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -169,6 +170,7 @@ export function MessageScreen() {
       if (typeof tab === "string" && tab !== "messages") {
         setSelectedId(null)
         setDraft("")
+        setThreadContext(null)
         setWindowSize(MESSAGE_WINDOW)
       }
     }
@@ -190,6 +192,9 @@ export function MessageScreen() {
       let id = String(detail.conversationId || "").trim()
       const peer = String(detail.peerUserId || detail.userId || "").trim()
       const kind = String(detail.kind || "").toLowerCase()
+      const contextType = String(detail.contextType || detail.context || "").toLowerCase()
+      const orderId = String(detail.orderId || "").trim() || undefined
+      const listingId = String(detail.listingId || "").trim() || undefined
       if (!id && peer) id = resolvePeer(peer)
       if (!id) {
         // Conversations may not be loaded yet — retry when list updates
@@ -200,6 +205,11 @@ export function MessageScreen() {
       startTransition(() => {
         if (kind === "community" || kind === "group") {
           setFilter("communities")
+        }
+        if (contextType || orderId || listingId) {
+          setThreadContext({ type: contextType || undefined, orderId, listingId })
+        } else {
+          setThreadContext(null)
         }
         setSelectedId(id)
         setDraft("")
@@ -553,6 +563,16 @@ export function MessageScreen() {
             }
           }}
         />
+              {threadContext?.type === "marketplace_order" || threadContext?.orderId ? (
+                <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-950 dark:text-amber-100">
+                  <p className="font-bold">Marketplace order chat</p>
+                  <p className="opacity-90">
+                    Coordinate delivery here. Payments stay in Orders / wallet — this thread is messaging only.
+                    {threadContext.orderId ? ` · Order ${threadContext.orderId.slice(0, 10)}…` : ""}
+                  </p>
+                </div>
+              ) : null}
+
 
         <div className="sr-only" role="status" aria-live="polite">
           {statusMsg || (sending ? "Sending message" : "")}

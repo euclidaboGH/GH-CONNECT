@@ -1,5 +1,5 @@
 /**
- * @deprecated LEGACY — not mounted by production App shell.
+ * @deprecated LEGACY — not mounted by production App shell (audit 0.89).
  * Active home surface: EnhancedFeedScreen via components/ghc/app.tsx.
  * Do not wire new features here. Kept only for module-graph compatibility.
  */

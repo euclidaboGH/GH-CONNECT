@@ -160,10 +160,23 @@ export function RewardsJourneyHero({
           : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
         "success"
       )
+      if (!(data.alreadyClaimed || data.idempotent) && amt) {
+        try {
+          notifyRewardClaimed({
+            title: "Daily reward claimed",
+            message: `+${amt} GHC${day ? ` · Day ${day}/7` : ""} posted to your wallet path`,
+            amountLabel: `${amt} GHC`,
+          })
+        } catch {
+          /* */
+        }
+      }
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:daily-reward-claimed", { detail: { ...data, server: true } })
         )
+        window.dispatchEvent(new CustomEvent("ghc:wallet-synced"))
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
       } catch {
         /* */
       }

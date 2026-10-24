@@ -7,6 +7,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { ensureCommunityMember } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -58,9 +59,17 @@ export async function POST(request: Request, ctx: Ctx) {
           : 503
     return NextResponse.json({ ok: false, error: code }, { status })
   }
+  const status = data?.status || (approve ? "active" : "rejected")
+  if (approve && status === "active") {
+    await ensureCommunityMember({
+      communityId,
+      userId: applicantId,
+      role: "member",
+    })
+  }
   return NextResponse.json({
     ok: true,
     durable: true,
-    status: data?.status || (approve ? "active" : "rejected"),
+    status,
   })
 }

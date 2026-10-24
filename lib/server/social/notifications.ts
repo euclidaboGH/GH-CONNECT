@@ -19,6 +19,11 @@ export type SocialNotificationType =
   | "mention"
   | "share"
   | "reputation_level_up"
+  | "marketplace_listing"
+  | "marketplace_order"
+  | "marketplace_comment"
+  | "community_join"
+  | "community_invite"
   | "system"
 
 async function rpc(name: string, body: Record<string, unknown>): Promise<{

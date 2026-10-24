@@ -421,21 +421,26 @@ export function MatchTabs({
   onTabChange,
   newCount,
   totalCount,
+  likesYouCount = 0,
 }: {
-  activeTab: "new" | "all"
-  onTabChange: (tab: "new" | "all") => void
+  activeTab: "new" | "all" | "likes_you"
+  onTabChange: (tab: "new" | "all" | "likes_you") => void
   newCount: number
   totalCount: number
+  likesYouCount?: number
 }) {
+  const order: Array<"new" | "all" | "likes_you"> = ["new", "all", "likes_you"]
   return (
     <div
-      className="flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+      className="flex gap-1 overflow-x-auto rounded-2xl border border-border/50 bg-muted/50 p-1 scrollbar-none"
       role="tablist"
-      aria-label="Match recency"
+      aria-label="Match views"
       onKeyDown={(e) => {
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
           e.preventDefault()
-          onTabChange(activeTab === "new" ? "all" : "new")
+          const i = order.indexOf(activeTab)
+          const next = e.key === "ArrowRight" ? order[(i + 1) % order.length] : order[(i + order.length - 1) % order.length]
+          onTabChange(next)
         }
       }}
     >
@@ -445,7 +450,7 @@ export function MatchTabs({
         aria-selected={activeTab === "new"}
         tabIndex={activeTab === "new" ? 0 : -1}
         onClick={() => onTabChange("new")}
-        className={`flex min-h-10 flex-1 items-center justify-center rounded-xl px-3 py-2 text-[13px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           activeTab === "new"
             ? "bg-[var(--gh-green)] text-white shadow-sm"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -459,13 +464,27 @@ export function MatchTabs({
         aria-selected={activeTab === "all"}
         tabIndex={activeTab === "all" ? 0 : -1}
         onClick={() => onTabChange("all")}
-        className={`flex min-h-10 flex-1 items-center justify-center rounded-xl px-3 py-2 text-[13px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           activeTab === "all"
             ? "bg-[var(--gh-green)] text-white shadow-sm"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
         All ({totalCount})
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "likes_you"}
+        tabIndex={activeTab === "likes_you" ? 0 : -1}
+        onClick={() => onTabChange("likes_you")}
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+          activeTab === "likes_you"
+            ? "bg-[var(--gh-green)] text-white shadow-sm"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+      >
+        Likes you{likesYouCount > 0 ? ` (${likesYouCount > 99 ? "99+" : likesYouCount})` : ""}
       </button>
     </div>
   )

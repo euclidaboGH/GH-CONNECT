@@ -33,8 +33,17 @@ import {
 import { messageListingSeller, openPayForListing } from "@/lib/marketplace/commerce-actions"
 import { openCommunity } from "@/lib/navigation/navigate"
 import { EmptyState } from "./empty-state"
+import { LazyImage } from "./lazy-image"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+import {
+  formatListingFeeCta,
+  quoteListingCreateFee,
+  quoteListingEditFee,
+  type ListingFeeRail,
+} from "@/lib/marketplace/listing-fee-client"
 
 function formatPrice(listing: MarketplaceListing): string {
   const amount = Number(listing.price)
@@ -189,12 +198,10 @@ function ListingCard({
     >
       <div className="relative aspect-[4/3] w-full bg-muted/50">
         {media ? (
-          <img
+          <LazyImage
             src={media}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-            decoding="async"
+            alt={listing.title}
+            className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
           <div className="flex h-full min-w-0 max-w-full w-full items-center justify-center">
@@ -242,39 +249,47 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const currency = (listing.currency || "GHC").toUpperCase()
-  const method = currency === "GHC" ? "ghc" : "pi"
+  const listingCur = (listing.currency || "GHC").toUpperCase()
+  const [payRail, setPayRail] = useState<"ghc" | "pi">(listingCur === "PI" ? "pi" : "ghc")
+  const viewerId = IdentityService.getCurrentUserId() || ""
+  const isOwn = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
 
   const runCheckout = async () => {
-    if (busy) return
+    if (busy || isOwn) return
     setBusy(true)
     setErr(null)
     setMsg(null)
     try {
-      const domain = getMarketplaceDomain()
-      if (!domain?.createOrder || !domain?.payOrder) {
-        setErr("Marketplace domain unavailable")
+      const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import(
+        "@/lib/social/client"
+      )
+      const created = await socialCreateMarketplaceOrder({
+        listingId: listing.id,
+        quantity: 1,
+        idempotencyKey: `buy_${listing.id}_${viewerId || "anon"}_${Math.floor(Date.now() / 60_000)}`,
+      })
+      if (!created.ok || !created.order) {
+        setErr(
+          created.error === "CANNOT_BUY_OWN"
+            ? "Cannot buy your own listing"
+            : created.error || "Could not create order",
+        )
         return
       }
-      const created = await domain.createOrder({ listingId: listing.id, quantity: 1 })
-      if (!created.ok) {
-        setErr(created.error || "Could not create order")
+      const orderId = String((created.order as { id?: string }).id || "")
+      if (!orderId) {
+        setErr("Order created without id")
         return
       }
-      if (!created.data.order) {
-        setErr("Could not create order")
-        return
-      }
-      const order = created.data.order
-      if (method === "pi") {
-        // Pi path: open pay panel; order stays payment_pending until intent completes
-        setMsg("Order created. Complete Pi payment to confirm.")
+
+      if (payRail === "pi") {
+        setMsg("Order reserved. Complete Pi payment to confirm.")
         openPayForListing(
           {
             listingId: listing.id,
             sellerId: listing.sellerId,
             title: listing.title,
-            orderId: order.id,
+            orderId,
           },
           "pi",
         )
@@ -284,29 +299,37 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
               detail: { message: "Order ready — complete Pi payment", type: "info" },
             }),
           )
-        } catch { /* */ }
+        } catch {
+          /* */
+        }
         return
       }
-      const paid = await domain.payOrder(order.id, "ghc")
+
+      const paid = await socialPayMarketplaceOrder(orderId, "ghc")
       if (!paid.ok) {
-        setErr(paid.error || "GHC payment failed — check available balance")
+        setErr(paid.message || paid.error || "GHC payment failed — check available balance")
         try {
           window.dispatchEvent(
             new CustomEvent("ghc:toast", {
               detail: { message: paid.error || "Payment failed", type: "error" },
             }),
           )
-        } catch { /* */ }
+        } catch {
+          /* */
+        }
         return
       }
-      setMsg("Paid with GHC. Order confirmed.")
+      setMsg("Paid with GHC. Order confirmed — track it under Orders.")
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:toast", {
             detail: { message: "Order paid with GHC", type: "success" },
           }),
         )
-      } catch { /* */ }
+        window.dispatchEvent(new CustomEvent("ghc:marketplace-order-changed"))
+      } catch {
+        /* */
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Checkout failed")
     } finally {
@@ -314,8 +337,32 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
     }
   }
 
+  if (isOwn) {
+    return (
+      <p className="mt-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+        Cannot buy your own listing
+      </p>
+    )
+  }
+
   return (
     <div className="mt-3 space-y-2">
+      <div className="flex gap-2">
+        {(["ghc", "pi"] as const).map((rail) => (
+          <button
+            key={rail}
+            type="button"
+            onClick={() => setPayRail(rail)}
+            className={`min-h-10 flex-1 rounded-xl border px-3 text-sm font-bold transition ${
+              payRail === rail
+                ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                : "border-border/70 bg-card text-muted-foreground"
+            }`}
+          >
+            {rail === "ghc" ? "Pay with ₲ GHC" : "Pay with π Pi"}
+          </button>
+        ))}
+      </div>
       <button
         type="button"
         disabled={busy}
@@ -325,14 +372,14 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         {busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : null}
         {busy
           ? "Processing…"
-          : method === "ghc"
+          : payRail === "ghc"
             ? `Buy now · ${formatPrice(listing)}`
-            : `Continue · pay with π`}
+            : `Continue · pay with π · ${formatPrice(listing)}`}
       </button>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {method === "ghc"
-          ? "Debits available GHC balance on the ledger. Seller receives settlement after fulfillment."
-          : "Creates the order then opens Pi payment. Balance is never invented client-side."}
+        {payRail === "ghc"
+          ? "Debits available GHC on the durable ledger. Seller settles after fulfillment."
+          : "Reserves inventory then opens Pi payment. Amount is server-authoritative."}
       </p>
       {msg ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{msg}</p> : null}
       {err ? <p className="text-xs font-medium text-red-600 dark:text-red-400">{err}</p> : null}
@@ -345,11 +392,17 @@ function ListingDetail({
   onBack,
   onOpenListing,
   onSearchBrowse,
+  onEditListing,
+  onDelist,
+  onRemoveListing,
 }: {
   listing: MarketplaceListing
   onBack: () => void
   onOpenListing?: (id: string) => void
   onSearchBrowse?: (q: string) => void
+  onEditListing?: (listing: MarketplaceListing) => void
+  onDelist?: (listing: MarketplaceListing) => void
+  onRemoveListing?: (listing: MarketplaceListing) => void
 }) {
   const chip = statusChip(listing.status)
   const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
@@ -358,6 +411,8 @@ function ListingDetail({
   const [saveBusy, setSaveBusy] = useState(false)
   const media = mediaItems[mediaIndex] || mediaItems[0]
   const canBuy = listing.status === "active"
+  const viewerId = IdentityService.getCurrentUserId() || ""
+  const isOwner = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
   const relatedItems = useMemo(() => relatedListingsFor(listing, 6), [listing])
   const communitySuggestions = useMemo(() => suggestedCommunitiesFor(listing, 5), [listing])
@@ -451,7 +506,7 @@ function ListingDetail({
         {/* Hero media */}
         <div className="relative aspect-[4/3] w-full bg-muted/40">
           {media ? (
-            <img src={media} alt="" className="h-full w-full object-cover" />
+            <LazyImage src={media} alt={listing.title} className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <Package size={40} className="text-muted-foreground/50" aria-hidden />
@@ -470,7 +525,7 @@ function ListingDetail({
                 onClick={() => setMediaIndex(i)}
                 className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 ${i === mediaIndex ? "border-emerald-600" : "border-transparent"}`}
               >
-                <img src={src} alt="" className="h-full w-full object-cover" />
+                <LazyImage src={src} alt="" className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
@@ -552,6 +607,45 @@ function ListingDetail({
           ))}
         </div>
 
+        {isOwner ? (
+          <div className="mx-4 mt-3 space-y-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <p className="text-[12px] font-bold text-foreground">Your listing</p>
+            <p className="text-[11px] text-muted-foreground">
+              Listing fees are non-refundable. Editing charges half the create fee.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="min-h-10 flex-1 rounded-full bg-[var(--gh-green)] px-3 text-sm font-bold text-white"
+                onClick={() => onEditListing?.(listing)}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className="min-h-10 flex-1 rounded-full border border-border bg-card px-3 text-sm font-bold"
+                onClick={() => void shareListing()}
+              >
+                Share
+              </button>
+              <button
+                type="button"
+                className="min-h-10 flex-1 rounded-full border border-border bg-card px-3 text-sm font-bold"
+                onClick={() => onDelist?.(listing)}
+              >
+                Delist
+              </button>
+              <button
+                type="button"
+                className="min-h-10 flex-1 rounded-full border border-red-500/40 bg-red-500/10 px-3 text-sm font-bold text-red-700 dark:text-red-300"
+                onClick={() => onRemoveListing?.(listing)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* Description */}
         <section className="border-b border-border/50 px-4 py-4">
           <h3 className="text-[15px] font-bold text-foreground">Description</h3>
@@ -628,7 +722,7 @@ function ListingDetail({
                 >
                   <div className="aspect-[4/3] bg-muted/40">
                     {rl.media?.[0] ? (
-                      <img src={rl.media[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      <LazyImage src={rl.media[0]} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full items-center justify-center">
                         <Package size={20} className="text-muted-foreground/40" aria-hidden />
@@ -725,6 +819,7 @@ function ListingDetail({
 
 
 function SellListingForm({
+  mode = "create",
   title,
   setTitle,
   price,
@@ -737,11 +832,16 @@ function SellListingForm({
   setCategory,
   location,
   setLocation,
+  mediaUrls,
+  setMediaUrls,
+  feeRail,
+  setFeeRail,
   busy,
   error,
   onCancel,
   onSubmit,
 }: {
+  mode?: "create" | "edit"
   title: string
   setTitle: (v: string) => void
   price: string
@@ -754,19 +854,94 @@ function SellListingForm({
   setCategory: (v: string) => void
   location: string
   setLocation: (v: string) => void
+  mediaUrls: string[]
+  setMediaUrls: (v: string[]) => void
+  feeRail: ListingFeeRail
+  setFeeRail: (v: ListingFeeRail) => void
   busy: boolean
   error: string | null
   onCancel: () => void
   onSubmit: () => void
 }) {
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const feeQuote = mode === "edit" ? quoteListingEditFee(feeRail) : quoteListingCreateFee(feeRail)
+  const cta = formatListingFeeCta(mode, feeRail)
+
+  const onPickPhotos = async (files: FileList | null) => {
+    if (!files?.length) return
+    setPhotoBusy(true)
+    try {
+      const next = [...mediaUrls]
+      for (const file of Array.from(files).slice(0, 6 - next.length)) {
+        if (!file.type.startsWith("image/")) continue
+        const uploaded = await uploadDurableMedia(file, {
+          fileName: `listing-${Date.now()}-${file.name}`.slice(0, 120),
+          category: "images",
+        })
+        const url = uploaded?.url ? toRelativeMediaFacadeUrl(String(uploaded.url)) : null
+        if (url) next.push(url)
+      }
+      setMediaUrls(next.slice(0, 6))
+    } catch {
+      /* toast via parent error path if needed */
+    } finally {
+      setPhotoBusy(false)
+      if (fileRef.current) fileRef.current.value = ""
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg space-y-3">
       <div>
-        <h2 className="text-[17px] font-bold text-foreground">Sell on Marketplace</h2>
+        <h2 className="text-[17px] font-bold text-foreground">
+          {mode === "edit" ? "Edit listing" : "Sell on Marketplace"}
+        </h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Create a real listing priced in ₲ GHC or π Pi. Photos can be added when media upload is available on this device.
+          {mode === "edit"
+            ? "Updates cost half the listing fee. Listing fees are non-refundable platform charges."
+            : "Priced in ₲ GHC or π Pi. A non-refundable listing fee is charged when you publish."}
         </p>
       </div>
+
+      <div>
+        <span className="text-[12px] font-bold text-muted-foreground">Photos</span>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {mediaUrls.map((src) => (
+            <div key={src} className="relative h-20 w-20 overflow-hidden rounded-xl border border-border/60">
+              <LazyImage src={src} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+                aria-label="Remove photo"
+                onClick={() => setMediaUrls(mediaUrls.filter((u) => u !== src))}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          {mediaUrls.length < 6 ? (
+            <button
+              type="button"
+              disabled={photoBusy || busy}
+              onClick={() => fileRef.current?.click()}
+              className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border/80 bg-muted/40 text-[11px] font-semibold text-muted-foreground disabled:opacity-50"
+            >
+              {photoBusy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={18} />}
+              Add
+            </button>
+          ) : null}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => void onPickPhotos(e.target.files)}
+        />
+      </div>
+
       <label className="block">
         <span className="text-[12px] font-bold text-muted-foreground">Title</span>
         <input
@@ -787,14 +962,14 @@ function SellListingForm({
         />
       </label>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Currency</span>
+        <span className="text-[12px] font-bold text-muted-foreground">Listing currency</span>
         <div className="mt-1 flex gap-2">
           {(["GHC", "PI"] as const).map((c) => (
             <button
               key={c}
               type="button"
               onClick={() => setCurrency(c)}
-              className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+              className={`min-h-11 flex-1 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
                 currency === c
                   ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
                   : "border-border/70 bg-card text-muted-foreground"
@@ -838,6 +1013,33 @@ function SellListingForm({
           placeholder="Condition, pickup, contact notes…"
         />
       </label>
+
+      <div className="rounded-2xl border border-border/60 bg-muted/30 p-3">
+        <p className="text-[12px] font-bold text-foreground">Listing fee (non-refundable)</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Platform service charge. {mode === "edit" ? "Edit fee is half of the create fee." : "Charged when you publish."}
+        </p>
+        <div className="mt-2 flex gap-2">
+          {(["GHC", "PI"] as const).map((rail) => (
+            <button
+              key={rail}
+              type="button"
+              onClick={() => setFeeRail(rail)}
+              className={`min-h-10 flex-1 rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                feeRail === rail
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                  : "border-border/70 bg-card text-muted-foreground"
+              }`}
+            >
+              Pay with {rail === "GHC" ? "₲ GHC" : "π Pi"}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[13px] font-semibold text-foreground">
+          Due now: {feeQuote.label}
+        </p>
+      </div>
+
       {error ? <p className="text-[13px] font-medium text-red-600">{error}</p> : null}
       <div className="flex gap-2 pt-1">
         <button
@@ -849,11 +1051,11 @@ function SellListingForm({
         </button>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || photoBusy}
           onClick={onSubmit}
-          className="min-h-11 flex-1 rounded-full bg-[var(--gh-green)] text-sm font-bold text-white disabled:opacity-50"
+          className="min-h-11 flex-1 rounded-full bg-[var(--gh-green)] px-3 text-sm font-bold text-white disabled:opacity-50"
         >
-          {busy ? "Publishing…" : "Publish listing"}
+          {busy ? (mode === "edit" ? "Saving…" : "Publishing…") : cta}
         </button>
       </div>
     </div>
@@ -870,7 +1072,9 @@ export function MarketplaceScreen({
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
-  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell">("browse")
+  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine">("browse")
+  const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
+  const [mineLoading, setMineLoading] = useState(false)
   const [showCategories, setShowCategories] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -882,6 +1086,9 @@ export function MarketplaceScreen({
   const [sellDesc, setSellDesc] = useState("")
   const [sellCategory, setSellCategory] = useState<string>(MARKETPLACE_CATEGORIES[0] || "Goods")
   const [sellLocation, setSellLocation] = useState("")
+  const [sellMedia, setSellMedia] = useState<string[]>([])
+  const [sellFeeRail, setSellFeeRail] = useState<ListingFeeRail>("GHC")
+  const [sellEditId, setSellEditId] = useState<string | null>(null)
   const [sellBusy, setSellBusy] = useState(false)
   const [sellError, setSellError] = useState<string | null>(null)
   const [savedListings, setSavedListings] = useState<MarketplaceListing[]>([])
@@ -923,6 +1130,46 @@ export function MarketplaceScreen({
     window.addEventListener("ghc:marketplace-saves-changed", handler)
     return () => window.removeEventListener("ghc:marketplace-saves-changed", handler)
   }, [bucket, loadSavedListings])
+
+  const loadMineListings = useCallback(async () => {
+    setMineLoading(true)
+    try {
+      const { socialFetchMarketplaceListings } = await import("@/lib/social/client")
+      const remote = await socialFetchMarketplaceListings({ scope: "mine", limit: 100 })
+      if (!remote.ok) {
+        setMineListings([])
+        return
+      }
+      const mapped = remote.listings
+        .map((row): MarketplaceListing => ({
+          id: String(row.id || ""),
+          kind: (String(row.kind || "product") as MarketplaceListing["kind"]) || "product",
+          title: String(row.title || "Listing"),
+          description: String(row.description || ""),
+          media: Array.isArray(row.media) ? row.media.map(String) : [],
+          category: String(row.category || "Goods"),
+          tags: Array.isArray(row.tags) ? row.tags.map(String) : undefined,
+          price: Number(row.price) || 0,
+          currency: String(row.currency || "GHC"),
+          condition: (String(row.condition || "new") as MarketplaceListing["condition"]) || "new",
+          location: row.location ? String(row.location) : undefined,
+          sellerId: String(row.sellerId || row.seller_id || ""),
+          availability: Number(row.availability) || 1,
+          status: (String(row.status || "active") as MarketplaceListing["status"]) || "active",
+          createdAt: Number(row.createdAt || row.created_at || Date.now()) || Date.now(),
+          updatedAt: Number(row.updatedAt || row.updated_at || Date.now()) || Date.now(),
+        }))
+        .filter((l) => l.id)
+      setMineListings(mapped)
+    } finally {
+      setMineLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (bucket !== "mine") return
+    void loadMineListings()
+  }, [bucket, loadMineListings])
 
   useEffect(() => {
     const onListing = (e: Event) => {
@@ -1074,11 +1321,80 @@ export function MarketplaceScreen({
     try { return domain.getOrders?.() || [] } catch { return [] }
   }, [domain, tick, durableOrders])
 
+  const [remoteSelected, setRemoteSelected] = useState<MarketplaceListing | null>(null)
+
+  useEffect(() => {
+    if (!selectedId) {
+      setRemoteSelected(null)
+      return
+    }
+    const local =
+      (domain?.getListing ? domain.getListing(selectedId) : null) ||
+      listings.find((l) => l.id === selectedId) ||
+      null
+    if (local) {
+      setRemoteSelected(local)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialFetchMarketplaceListing } = await import("@/lib/social/client")
+        const remote = await socialFetchMarketplaceListing(selectedId)
+        if (cancelled || !remote.ok || !remote.listing) return
+        const row = remote.listing
+        const mapped: MarketplaceListing = {
+          id: String(row.id || selectedId),
+          kind: (String(row.kind || "product") as MarketplaceListing["kind"]) || "product",
+          title: String(row.title || "Listing"),
+          description: String(row.description || ""),
+          media: Array.isArray(row.media) ? row.media.map(String) : [],
+          category: String(row.category || "Goods"),
+          tags: Array.isArray(row.tags) ? row.tags.map(String) : undefined,
+          price: Number(row.price) || 0,
+          currency: String(row.currency || "GHC"),
+          condition: (String(row.condition || "new") as MarketplaceListing["condition"]) || "new",
+          location: row.location ? String(row.location) : undefined,
+          sellerId: String(row.sellerId || row.seller_id || ""),
+          availability: Number(row.availability) || 1,
+          status: (String(row.status || "active") as MarketplaceListing["status"]) || "active",
+          createdAt: Number(row.createdAt || Date.now()) || Date.now(),
+          updatedAt: Number(row.updatedAt || Date.now()) || Date.now(),
+        }
+        setRemoteSelected(mapped)
+      } catch {
+        /* */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, domain, listings])
+
   const selected = useMemo(() => {
     if (!selectedId) return null
-    if (domain?.getListing) return domain.getListing(selectedId) || null
+    if (remoteSelected && remoteSelected.id === selectedId) return remoteSelected
+    if (domain?.getListing) {
+      const d = domain.getListing(selectedId)
+      if (d) return d
+    }
     return listings.find((l) => l.id === selectedId) || null
-  }, [selectedId, domain, listings])
+  }, [selectedId, domain, listings, remoteSelected])
+
+  useEffect(() => {
+    const onOpenMarket = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (!detail || typeof detail !== "object") return
+      const bucketNext = String((detail as { bucket?: string }).bucket || "").toLowerCase()
+      if (bucketNext === "sell" || bucketNext === "mine" || bucketNext === "orders" || bucketNext === "saved" || bucketNext === "browse") {
+        setBucket(bucketNext as typeof bucket)
+      }
+      const lid = String((detail as { listingId?: string }).listingId || "").trim()
+      if (lid) setSelectedId(lid)
+    }
+    window.addEventListener("ghc:open-marketplace", onOpenMarket)
+    return () => window.removeEventListener("ghc:open-marketplace", onOpenMarket)
+  }, [])
 
   if (selected) {
     return (
@@ -1092,6 +1408,110 @@ export function MarketplaceScreen({
           setQuery(q)
           setShowCategories(true)
           requestAnimationFrame(() => searchRef.current?.focus())
+        }}
+        onEditListing={(listing) => {
+          setSellEditId(listing.id)
+          setSellTitle(listing.title || "")
+          setSellPrice(String(listing.price ?? ""))
+          setSellCurrency((listing.currency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC")
+          setSellDesc(listing.description || "")
+          setSellCategory(listing.category || MARKETPLACE_CATEGORIES[0] || "Goods")
+          setSellLocation(listing.location || "")
+          setSellMedia(Array.isArray(listing.media) ? listing.media.filter(Boolean).map(String) : [])
+          setSelectedId(null)
+          setBucket("sell")
+        }}
+        onDelist={async (listing) => {
+          try {
+            const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
+            const remote = await socialCreateMarketplaceListing({
+              id: listing.id,
+              title: listing.title,
+              description: listing.description,
+              price: listing.price,
+              currency: listing.currency,
+              status: "paused",
+              kind: listing.kind || "product",
+              availability: listing.availability,
+              media: listing.media,
+              location: listing.location,
+              category: listing.category,
+            })
+            if (domain?.updateListing) {
+              await domain.updateListing(listing.id, { status: "paused" })
+            }
+            if (!remote.ok) {
+              window.dispatchEvent(
+                new CustomEvent("ghc:toast", {
+                  detail: { message: remote.error || "Could not delist", type: "error" },
+                }),
+              )
+              return
+            }
+            window.dispatchEvent(
+              new CustomEvent("ghc:toast", {
+                detail: { message: "Listing delisted (paused). Fees are non-refundable.", type: "info" },
+              }),
+            )
+            setSelectedId(null)
+            refresh()
+            void loadMineListings()
+          } catch (e) {
+            window.dispatchEvent(
+              new CustomEvent("ghc:toast", {
+                detail: {
+                  message: e instanceof Error ? e.message : "Could not delist",
+                  type: "error",
+                },
+              }),
+            )
+          }
+        }}
+        onRemoveListing={async (listing) => {
+          try {
+            const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
+            const remote = await socialCreateMarketplaceListing({
+              id: listing.id,
+              title: listing.title,
+              description: listing.description,
+              price: listing.price,
+              currency: listing.currency,
+              status: "removed",
+              kind: listing.kind || "product",
+              availability: listing.availability,
+              media: listing.media,
+              location: listing.location,
+              category: listing.category,
+            })
+            if (domain?.updateListing) {
+              await domain.updateListing(listing.id, { status: "removed" })
+            }
+            if (!remote.ok) {
+              window.dispatchEvent(
+                new CustomEvent("ghc:toast", {
+                  detail: { message: remote.error || "Could not delete listing", type: "error" },
+                }),
+              )
+              return
+            }
+            window.dispatchEvent(
+              new CustomEvent("ghc:toast", {
+                detail: { message: "Listing removed. Listing fees are non-refundable.", type: "info" },
+              }),
+            )
+            setSelectedId(null)
+            refresh()
+            void loadMineListings()
+          } catch (e) {
+            window.dispatchEvent(
+              new CustomEvent("ghc:toast", {
+                detail: {
+                  message: e instanceof Error ? e.message : "Could not delete listing",
+                  type: "error",
+                },
+              }),
+            )
+          }
         }}
       />
     )
@@ -1125,6 +1545,7 @@ export function MarketplaceScreen({
           {[
             { id: "browse" as const, label: "Browse", icon: Store },
             { id: "sell" as const, label: "Sell", icon: Plus },
+            { id: "mine" as const, label: "My listings", icon: TagIcon },
             { id: "orders" as const, label: "Orders", icon: Package },
             { id: "saved" as const, label: "Saved", icon: Bookmark },
           ].map((chip) => (
@@ -1241,6 +1662,50 @@ export function MarketplaceScreen({
       </header>
 
       <div className="gh-marketplace-content min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
+        {bucket === "mine" ? (
+          <div className="p-1">
+            <div className="mx-auto w-full max-w-[var(--gh-content-max,42rem)]">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold">My listings</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Server-authoritative seller catalog. Edit, delist, or delete from a listing page.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSellEditId(null)
+                    setSellMedia([])
+                    setBucket("sell")
+                  }}
+                  className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white"
+                >
+                  <Plus size={14} aria-hidden />
+                  New
+                </button>
+              </div>
+              {mineLoading ? (
+                <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">
+                  Loading your listings…
+                </div>
+              ) : mineListings.length ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {mineListings.map((listing) => (
+                    <ListingCard key={listing.id} listing={listing} onOpen={(id) => setSelectedId(id)} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No listings yet"
+                  description="Publish a product or service priced in ₲ or π. Listing fees are non-refundable."
+                  action={{ label: "Sell something", onClick: () => setBucket("sell") }}
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
+
         {bucket === "saved" ? (
         <div className="p-1">
           <div className="mx-auto w-full max-w-[var(--gh-content-max,42rem)]">
@@ -1257,6 +1722,7 @@ export function MarketplaceScreen({
 
       {bucket === "sell" ? (
           <SellListingForm
+            mode={sellEditId ? "edit" : "create"}
             title={sellTitle}
             setTitle={setSellTitle}
             price={sellPrice}
@@ -1269,9 +1735,17 @@ export function MarketplaceScreen({
             setCategory={setSellCategory}
             location={sellLocation}
             setLocation={setSellLocation}
+            mediaUrls={sellMedia}
+            setMediaUrls={setSellMedia}
+            feeRail={sellFeeRail}
+            setFeeRail={setSellFeeRail}
             busy={sellBusy}
             error={sellError}
-            onCancel={() => setBucket("browse")}
+            onCancel={() => {
+              setSellEditId(null)
+              setSellMedia([])
+              setBucket("browse")
+            }}
             onSubmit={async () => {
               setSellError(null)
               const priceNum = Number(sellPrice)
@@ -1283,12 +1757,66 @@ export function MarketplaceScreen({
                 setSellError("Enter a valid price")
                 return
               }
-              if (!domain?.createListing) {
-                setSellError("Listing create is not available right now")
-                return
-              }
               setSellBusy(true)
               try {
+                if (sellEditId) {
+                  const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
+                  const remote = await socialCreateMarketplaceListing({
+                    id: sellEditId,
+                    title: sellTitle.trim(),
+                    description: sellDesc.trim() || sellTitle.trim(),
+                    price: priceNum,
+                    currency: sellCurrency,
+                    status: "active",
+                    kind: "product",
+                    availability: 1,
+                    media: sellMedia.slice(0, 6),
+                    location: sellLocation.trim() || undefined,
+                    category: sellCategory,
+                  })
+                  if (!remote.ok) {
+                    setSellError(remote.message || remote.error || "Could not update listing")
+                    return
+                  }
+                  if (domain?.updateListing) {
+                    await domain.updateListing(sellEditId, {
+                      title: sellTitle.trim(),
+                      description: sellDesc.trim() || sellTitle.trim(),
+                      category: sellCategory,
+                      price: priceNum,
+                      currency: sellCurrency,
+                      location: sellLocation.trim() || undefined,
+                      media: sellMedia.slice(0, 6),
+                      status: "active",
+                    })
+                  }
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:toast", {
+                        detail: {
+                          message: `Listing updated · edit fee ${quoteListingEditFee(sellFeeRail).label} (non-refundable)`,
+                          type: "success",
+                        },
+                      }),
+                    )
+                  } catch { /* */ }
+                  const editedId = sellEditId
+                  setSellEditId(null)
+                  setSellTitle("")
+                  setSellPrice("")
+                  setSellDesc("")
+                  setSellLocation("")
+                  setSellMedia([])
+                  setBucket("browse")
+                  setSelectedId(editedId)
+                  refresh()
+                  void loadMineListings()
+                  return
+                }
+                if (!domain?.createListing) {
+                  setSellError("Listing create is not available right now")
+                  return
+                }
                 const res = await domain.createListing({
                   kind: "product",
                   title: sellTitle.trim(),
@@ -1297,6 +1825,7 @@ export function MarketplaceScreen({
                   price: priceNum,
                   currency: sellCurrency,
                   location: sellLocation.trim() || undefined,
+                  media: sellMedia.slice(0, 6),
                 })
                 if (!res.ok) {
                   setSellError(res.error || "Could not create listing")
@@ -1321,6 +1850,7 @@ export function MarketplaceScreen({
                         availability: 1,
                         location: sellLocation.trim() || undefined,
                         category: sellCategory,
+                        media: sellMedia.slice(0, 6),
                       },
                       maxRetries: 3,
                     })
@@ -1329,6 +1859,7 @@ export function MarketplaceScreen({
                     setSellPrice("")
                     setSellDesc("")
                     setSellLocation("")
+                    setSellMedia([])
                     setBucket("browse")
                     refresh()
                     setSellError(null)
@@ -1363,10 +1894,14 @@ export function MarketplaceScreen({
                       status: "active",
                       kind: "product",
                       availability: 1,
+                      media: sellMedia.slice(0, 6),
+                      location: sellLocation.trim() || undefined,
+                      category: sellCategory,
                     })
                     if (!remote.ok || remote.durable === false) {
                       setSellError(
-                        remote.error ||
+                        remote.message ||
+                          remote.error ||
                           "Could not publish listing to the server. Try again when online."
                       )
                       return
@@ -1406,9 +1941,21 @@ export function MarketplaceScreen({
                 setSellPrice("")
                 setSellDesc("")
                 setSellLocation("")
+                setSellMedia([])
+                setSellEditId(null)
                 setBucket("browse")
                 refresh()
                 if (id) setSelectedId(id)
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("ghc:toast", {
+                      detail: {
+                        message: `Listing published · fee ${quoteListingCreateFee(sellFeeRail).label} (non-refundable)`,
+                        type: "success",
+                      },
+                    }),
+                  )
+                } catch { /* */ }
               } catch {
                 setSellError("Could not create listing")
               } finally {
@@ -1438,6 +1985,47 @@ export function MarketplaceScreen({
                       <button type="button" disabled={busy} onClick={() => void openOrderConversation(o.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-bold">
                         <MessageCircle className="h-3.5 w-3.5" /> Chat
                       </button>
+                      {!isSeller && ["created","payment_pending"].includes(status) ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                const { socialPayMarketplaceOrder } = await import("@/lib/social/client")
+                                const cur = String(o.currency || "GHC").toUpperCase()
+                                if (cur === "PI") {
+                                  openPayForListing(
+                                    { listingId: o.listingId, orderId: o.id, title: o.listingId },
+                                    "pi",
+                                  )
+                                  return
+                                }
+                                const paid = await socialPayMarketplaceOrder(o.id, "ghc")
+                                if (!paid.ok) throw new Error(paid.error || "Payment failed")
+                                await loadDurableOrders()
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:toast", {
+                                    detail: { message: "Order paid with GHC", type: "success" },
+                                  }),
+                                )
+                              } catch (e) {
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:toast", {
+                                    detail: {
+                                      message: e instanceof Error ? e.message : "Pay failed",
+                                      type: "error",
+                                    },
+                                  }),
+                                )
+                              }
+                            })()
+                          }}
+                          className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white"
+                        >
+                          Pay now
+                        </button>
+                      ) : null}
                       {!isSeller && ["created","payment_pending"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"cancel_unpaid")} className="min-h-9 rounded-full border border-border px-3 text-xs font-bold">Cancel</button> : null}
                       {isSeller && status === "confirmed" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_fulfill")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Start fulfillment</button> : null}
                       {isSeller && status === "fulfilling" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark delivered</button> : null}

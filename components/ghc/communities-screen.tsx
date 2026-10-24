@@ -87,6 +87,7 @@ type CommunityRow = {
     pinned?: boolean
   }>
   pendingJoinRequests?: string[]
+  memberCount?: number
   /** User ids invited but not yet members */
   invitedMembers?: string[]
   groupRoles?: Record<string, string>
@@ -376,25 +377,38 @@ export function CommunitiesScreen() {
           const name = String(r.name || "").trim()
           if (!id || !name) continue
           const createdBy = String(r.createdBy || r.created_by || "").trim()
+          const cover = String(r.coverImage || r.cover_image || r.photo || "").trim()
+          const memberCount = Number(r.memberCount || r.member_count || 0) || 0
+          const membersFromRemote = Array.isArray(r.members)
+            ? (r.members as unknown[]).map(String).filter(Boolean)
+            : createdBy
+              ? [createdBy]
+              : []
           rows.push({
             id,
             conversationType: "group",
             groupName: name,
             participantName: name,
             participantId: createdBy,
+            participantPhoto: cover || undefined,
+            groupPhoto: cover || undefined,
+            photo: cover || undefined,
             lastMessage: String(r.purpose || r.description || "").slice(0, 120),
             lastMessageTime:
               typeof r.createdAt === "number"
                 ? r.createdAt
                 : typeof r.created_at === "number"
                   ? r.created_at
-                  : 0,
-            // Do not fabricate member ids — only known creator if present
-            members: createdBy ? [createdBy] : [],
+                  : Date.parse(String(r.createdAt || r.created_at || "")) || 0,
+            members: membersFromRemote,
+            memberCount: memberCount || membersFromRemote.length || undefined,
             createdBy,
             description: r.description != null ? String(r.description) : undefined,
             privacy: r.privacy != null ? String(r.privacy) : "public",
             category: r.category != null ? String(r.category) : undefined,
+            tags: Array.isArray(r.tags) ? r.tags.map(String) : undefined,
+            rules: Array.isArray(r.rules) ? r.rules.map(String) : r.rules != null ? String(r.rules) : undefined,
+            welcomeMessage: r.welcomeMessage != null ? String(r.welcomeMessage) : r.welcome_message != null ? String(r.welcome_message) : undefined,
             kind: "community",
             communityId: id,
           })
@@ -811,7 +825,7 @@ export function CommunitiesScreen() {
             id: selected.id,
             name: selected.groupName || selected.participantName,
             description: selected.description,
-            memberCount: selected.members?.length || 1,
+            memberCount: selected.memberCount || selected.members?.length || 1,
             privacy:
               selected.privacy === "private" || selected.privacy === "invite-only"
                 ? "private"
@@ -1367,7 +1381,7 @@ export function CommunitiesScreen() {
                     "Open for posts, events and member chat"
                   }
                   lastMessageTime={community.lastMessageTime || Date.now()}
-                  memberCount={community.members?.length || 0}
+                  memberCount={community.memberCount || community.members?.length || 0}
                   onlineCount={0}
                   unreadCount={community.unreadCount || 0}
                   boardUnread={community.boardUnread || 0}

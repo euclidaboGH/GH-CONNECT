@@ -160,6 +160,16 @@ export function DiscoveryGridScreen() {
       rawAll,
     )
     let list = result.ok ? result.data : []
+    const exclude = new Set<string>([
+      String(meId || ""),
+      ...(graphSnap.friends || []).map(String),
+      ...(graphSnap.blockedUsers || []).map(String),
+      ...(graphSnap.matchIds || []).map(String),
+    ].filter(Boolean))
+    list = list.filter((c) => {
+      const id = String((c as { id?: string; userId?: string }).id || (c as { userId?: string }).userId || "")
+      return id && !exclude.has(id)
+    })
     const q = query.trim().toLowerCase()
     if (q) {
       list = list.filter((c) => {
@@ -182,6 +192,9 @@ export function DiscoveryGridScreen() {
     meId,
     ghc.profile?.city,
     ghc.profile?.country,
+    graphSnap.friends,
+    graphSnap.blockedUsers,
+    graphSnap.matchIds,
   ])
 
   const connectionStateFor = useCallback(

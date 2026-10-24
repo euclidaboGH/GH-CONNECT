@@ -479,6 +479,10 @@ export async function socialCreateCommunity(input: {
   description?: string
   privacy?: string
   category?: string
+  coverImage?: string
+  welcomeMessage?: string
+  rules?: string[]
+  tags?: string[]
   feeCurrency?: "GHC" | "PI"
   feePaymentId?: string
   feeIntentId?: string
@@ -523,6 +527,34 @@ export async function socialDecideJoinRequest(
   return json(`/api/communities/${encodeURIComponent(communityId)}/requests`, {
     method: "POST",
     body: JSON.stringify({ applicantId, approve }),
+  })
+}
+
+export async function socialCommunityPlatformGet(
+  communityId: string
+): Promise<{ ok: boolean; durable: boolean; community?: unknown; error?: string }> {
+  return json(`/api/communities/${encodeURIComponent(communityId)}/platform`)
+}
+
+export async function socialCommunityPlatformAction(
+  communityId: string,
+  action: string,
+  payload: Record<string, unknown> = {}
+): Promise<{ ok: boolean; durable?: boolean; error?: string; result?: unknown }> {
+  return json(`/api/communities/${encodeURIComponent(communityId)}/platform`, {
+    method: "POST",
+    body: JSON.stringify({ action, ...payload }),
+  })
+}
+
+export async function socialSetCommunityRole(
+  communityId: string,
+  targetUserId: string,
+  role: "admin" | "moderator" | "member"
+): Promise<{ ok: boolean; durable?: boolean; role?: string; error?: string }> {
+  return json(`/api/communities/${encodeURIComponent(communityId)}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ targetUserId, role }),
   })
 }
 
@@ -843,11 +875,107 @@ export async function socialCreateMarketplaceListing(input: {
   availability?: number
   status?: string
   kind?: string
-}): Promise<{ ok: boolean; durable?: boolean; listing?: Record<string, unknown>; error?: string }> {
+  media?: string[]
+  location?: string
+  category?: string
+  condition?: string
+  tags?: string[]
+  listingFeePaymentId?: string
+  feePaymentId?: string
+}): Promise<{
+  ok: boolean
+  durable?: boolean
+  listing?: Record<string, unknown>
+  listingFee?: Record<string, unknown>
+  error?: string
+  message?: string
+}> {
   return json("/api/marketplace/listings", {
     method: "POST",
     body: JSON.stringify(input),
   })
+}
+
+export async function socialFetchMarketplaceListing(
+  id: string
+): Promise<{
+  ok: boolean
+  durable: boolean
+  listing?: Record<string, unknown>
+  error?: string
+}> {
+  const data = await json<{ listing?: Record<string, unknown>; durable?: boolean; error?: string }>(
+    `/api/marketplace/listings?id=${encodeURIComponent(id)}`
+  )
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    listing: data.listing,
+    error: data.error,
+  }
+}
+
+/** Server-first marketplace order create (idempotent). */
+export async function socialCreateMarketplaceOrder(input: {
+  listingId: string
+  quantity?: number
+  idempotencyKey?: string
+}): Promise<{
+  ok: boolean
+  order?: Record<string, unknown>
+  idempotent?: boolean
+  error?: string
+  available?: number
+}> {
+  const key =
+    input.idempotencyKey ||
+    `ord_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  return json("/api/marketplace/orders", {
+    method: "POST",
+    headers: { "Idempotency-Key": key },
+    body: JSON.stringify({
+      listingId: input.listingId,
+      quantity: input.quantity ?? 1,
+      idempotencyKey: key,
+    }),
+  })
+}
+
+/** Pay durable order with GHC or complete Pi path. */
+export async function socialPayMarketplaceOrder(
+  orderId: string,
+  method: "ghc" | "pi",
+  extra?: { intentId?: string; paymentId?: string; txid?: string }
+): Promise<{ ok: boolean; order?: Record<string, unknown>; error?: string; message?: string }> {
+  return json(`/api/marketplace/orders/${encodeURIComponent(orderId)}/pay`, {
+    method: "POST",
+    body: JSON.stringify({ method, ...(extra || {}) }),
+  })
+}
+
+/** Fetch server listing-fee quote for sell/edit CTA. */
+export async function socialFetchListingFeeQuote(opts?: {
+  mode?: "create" | "edit"
+  price?: number
+  currency?: string
+  kind?: string
+}): Promise<{
+  ok: boolean
+  fee?: {
+    amount: number
+    currency: string
+    ratesApproved?: boolean
+    nonRefundable?: boolean
+    requiresSettlement?: boolean
+  }
+  error?: string
+}> {
+  const q = new URLSearchParams()
+  q.set("mode", opts?.mode || "create")
+  if (opts?.price != null) q.set("price", String(opts.price))
+  if (opts?.currency) q.set("currency", opts.currency)
+  if (opts?.kind) q.set("kind", opts.kind)
+  return json(`/api/marketplace/listing-fee?${q.toString()}`)
 }
 
 

@@ -91,3 +91,91 @@ export async function settleReferralReward(rewardId: string) {
 export function isReferralSettlementEnabled() {
   return settlementEnabled()
 }
+
+/** Service-role read of referral programme status for a user (never invents rewards). */
+export async function getReferralStatus(userId: string): Promise<{
+  ok: boolean
+  code?: string
+  attributed?: boolean
+  referrerUserId?: string | null
+  invitedCount?: number
+  pendingRewardCount?: number
+  postedRewardCount?: number
+  pendingRewardGhc?: number
+  postedRewardGhc?: number
+  settlementEnabled?: boolean
+  error?: string
+}> {
+  const e = env()
+  if (!e.supabaseUrl || !e.supabaseServiceRoleKey) {
+    return { ok: false, error: "DB_UNAVAILABLE" }
+  }
+  const base = e.supabaseUrl.replace(/\/$/, "")
+  const headers = {
+    apikey: e.supabaseServiceRoleKey,
+    Authorization: `Bearer ${e.supabaseServiceRoleKey}`,
+    Accept: "application/json",
+  }
+  try {
+    const codeRes = await ensureReferralCode(userId)
+    const code = codeRes.ok ? codeRes.code : undefined
+
+    const [attrAsReferred, attrAsReferrer, rewards] = await Promise.all([
+      fetch(
+        `${base}/rest/v1/ghc_referral_attributions?referred_user_id=eq.${encodeURIComponent(userId)}&select=referrer_user_id,created_at&limit=1`,
+        { headers, cache: "no-store" },
+      ),
+      fetch(
+        `${base}/rest/v1/ghc_referral_attributions?referrer_user_id=eq.${encodeURIComponent(userId)}&select=referred_user_id&limit=200`,
+        { headers, cache: "no-store" },
+      ),
+      fetch(
+        `${base}/rest/v1/ghc_referral_rewards?referrer_user_id=eq.${encodeURIComponent(userId)}&select=status,reward_ghc&limit=100`,
+        { headers, cache: "no-store" },
+      ),
+    ])
+
+    const asReferred = attrAsReferred.ok
+      ? ((await attrAsReferred.json().catch(() => [])) as Array<{ referrer_user_id?: string }>)
+      : []
+    const asReferrer = attrAsReferrer.ok
+      ? ((await attrAsReferrer.json().catch(() => [])) as unknown[])
+      : []
+    const rewardRows = rewards.ok
+      ? ((await rewards.json().catch(() => [])) as Array<{ status?: string; reward_ghc?: number }>)
+      : []
+
+    let pendingRewardCount = 0
+    let postedRewardCount = 0
+    let pendingRewardGhc = 0
+    let postedRewardGhc = 0
+    for (const r of rewardRows) {
+      const ghc = Number(r.reward_ghc) || 0
+      if (r.status === "pending") {
+        pendingRewardCount += 1
+        pendingRewardGhc += ghc
+      } else if (r.status === "posted") {
+        postedRewardCount += 1
+        postedRewardGhc += ghc
+      }
+    }
+
+    return {
+      ok: true,
+      code,
+      attributed: Array.isArray(asReferred) && asReferred.length > 0,
+      referrerUserId:
+        Array.isArray(asReferred) && asReferred[0]?.referrer_user_id
+          ? String(asReferred[0].referrer_user_id)
+          : null,
+      invitedCount: Array.isArray(asReferrer) ? asReferrer.length : 0,
+      pendingRewardCount,
+      postedRewardCount,
+      pendingRewardGhc,
+      postedRewardGhc,
+      settlementEnabled: settlementEnabled(),
+    }
+  } catch {
+    return { ok: false, error: "STATUS_FAILED" }
+  }
+}

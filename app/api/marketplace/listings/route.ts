@@ -15,6 +15,7 @@ import {
   getListing,
   listActiveListings,
   listSellerListings,
+  serverListingToClient,
 } from "@/lib/server/marketplace/listing-store"
 import {
   calculateMarketplaceListingFee,
@@ -71,6 +72,15 @@ export async function POST(request: Request) {
   const availability = Math.max(0, Math.min(9999, Math.floor(Number(body.availability) || 1)))
   let status = String(body.status || "draft")
   const kind = String(body.kind || "product").slice(0, 64)
+  const location = String(body.location || "").trim().slice(0, 120)
+  const category = String(body.category || body.cat || "Goods").trim().slice(0, 64)
+  const condition = String(body.condition || "not_applicable").trim().slice(0, 32)
+  const media = Array.isArray(body.media)
+    ? body.media.map((m: unknown) => String(m || "").trim()).filter(Boolean).slice(0, 12)
+    : []
+  const tags = Array.isArray(body.tags)
+    ? body.tags.map((x: unknown) => String(x || "").trim()).filter(Boolean).slice(0, 12)
+    : []
   const id =
     String(body.id || "").trim() ||
     `lst_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -205,6 +215,11 @@ export async function POST(request: Request) {
     availability,
     status: status as "draft" | "active" | "paused" | "sold_out" | "removed",
     kind,
+    media,
+    location: location || undefined,
+    category: category || undefined,
+    condition: condition || undefined,
+    tags,
   })
   if (!saved.ok) {
     const durable =
@@ -224,15 +239,22 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    durable: true,
     listing: {
       id,
       sellerId: auth.userId,
       title,
+      description: String(body.description || "").slice(0, 4000),
       price,
       currency,
       availability,
       status,
       kind,
+      media,
+      location,
+      category,
+      condition,
+      tags,
     },
     /** Platform service charge — distinct from seller product price */
     listingFee: {
@@ -272,7 +294,7 @@ export async function GET(request: Request) {
       }
     }
     return NextResponse.json(
-      { ok: true, durable: listingsDurable(), listing },
+      { ok: true, durable: listingsDurable(), listing: serverListingToClient(listing) },
       { headers: { "Cache-Control": "no-store" } }
     )
   }
@@ -287,14 +309,22 @@ export async function GET(request: Request) {
     }
     const listings = await listSellerListings(auth.userId, limit)
     return NextResponse.json(
-      { ok: true, durable: listingsDurable(), listings },
+      {
+        ok: true,
+        durable: listingsDurable(),
+        listings: listings.map(serverListingToClient),
+      },
       { headers: { "Cache-Control": "no-store" } }
     )
   }
 
   const listings = await listActiveListings(limit)
   return NextResponse.json(
-    { ok: true, durable: listingsDurable(), listings },
+    {
+      ok: true,
+      durable: listingsDurable(),
+      listings: listings.map(serverListingToClient),
+    },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

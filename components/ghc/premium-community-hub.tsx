@@ -35,6 +35,8 @@ import {
   Loader2,
 } from "lucide-react"
 import { shareText } from "@/lib/pi-native"
+import { LazyImage } from "./lazy-image"
+import { resolveDisplayUrl } from "@/lib/media/resolve-display-url"
 import {
   AnnouncementCard,
   PollCard,
@@ -443,6 +445,22 @@ export function PremiumCommunityHub({
     setTab("board")
   }
 
+  const rawCover = community.cover || community.photo || ""
+  const [coverSrc, setCoverSrc] = useState(rawCover)
+  useEffect(() => {
+    let cancelled = false
+    setCoverSrc(rawCover)
+    if (!rawCover || rawCover.startsWith("data:") || rawCover.startsWith("blob:")) return
+    void resolveDisplayUrl(rawCover)
+      .then((u) => {
+        if (!cancelled && u) setCoverSrc(u)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [rawCover])
+
   // When membership flips to joined (parent update), open Board not Chat
   useEffect(() => {
     if (community.isJoined) {
@@ -454,18 +472,17 @@ export function PremiumCommunityHub({
     <div className="gh-world-community flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Cover + identity kit */}
       <header className="shrink-0 border-b border-border/50 bg-card">
-        <div
-          className="relative h-36 bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-40"
-          style={
-            community.cover || community.photo
-              ? {
-                  backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.15)), url(${community.cover || community.photo})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : undefined
-          }
-        >
+        <div className="relative h-28 overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-32">
+          {coverSrc ? (
+            <>
+              <LazyImage
+                src={coverSrc}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-black/10" aria-hidden />
+            </>
+          ) : null}
           <div className="absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
             <button
               type="button"
@@ -1488,7 +1505,7 @@ export function PremiumCommunityHub({
                   <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
                     {m.photo ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.photo} alt="" className="h-full w-full object-cover" />
+                      <LazyImage src={m.photo} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-xs font-bold text-muted-foreground">
                         {(m.name || "?").slice(0, 1).toUpperCase()}

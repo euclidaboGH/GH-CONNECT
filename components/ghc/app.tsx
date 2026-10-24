@@ -456,7 +456,15 @@ export function GHConnectApp() {
   }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
-    "main" | "wallet" | "rewards" | "membership" | "help"
+    | "main"
+    | "wallet"
+    | "rewards"
+    | "membership"
+    | "help"
+    | "privacy"
+    | "notifications"
+    | "appearance"
+    | "device-lock"
   >("main")
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
@@ -545,7 +553,7 @@ export function GHConnectApp() {
     const onMembership = () => openSettings("membership")
     const onSettings = (e: Event) => {
       const section = (e as CustomEvent).detail?.section
-      const allowed = ["main", "wallet", "rewards", "membership", "help"] as const
+      const allowed = ["main", "wallet", "rewards", "membership", "help", "privacy", "notifications", "appearance", "device-lock"] as const
       const s = allowed.includes(section) ? section : "main"
       openSettings(s)
     }

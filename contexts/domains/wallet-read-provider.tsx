@@ -86,6 +86,11 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     try {
       window.addEventListener("ghc:daily-reward-claimed", onClaimed)
       window.addEventListener("ghc:wallet-synced", onSynced)
+      window.addEventListener("ghc:wallet-refresh", onSynced)
+      window.addEventListener("ghc:marketplace-order-changed", onSynced)
+      window.addEventListener("ghc:ghc-pack-intent", onSynced)
+      window.addEventListener("ghc:utility-spent", onSynced)
+      window.addEventListener("ghc:referral-settled", onSynced)
     } catch {
       /* */
     }
@@ -96,6 +101,11 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
       try {
         window.removeEventListener("ghc:daily-reward-claimed", onClaimed)
         window.removeEventListener("ghc:wallet-synced", onSynced)
+        window.removeEventListener("ghc:wallet-refresh", onSynced)
+        window.removeEventListener("ghc:marketplace-order-changed", onSynced)
+        window.removeEventListener("ghc:ghc-pack-intent", onSynced)
+        window.removeEventListener("ghc:utility-spent", onSynced)
+        window.removeEventListener("ghc:referral-settled", onSynced)
       } catch {
         /* */
       }

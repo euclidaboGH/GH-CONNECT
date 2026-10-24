@@ -17,6 +17,7 @@ import {
   VolumeX,
   Ban,
   X,
+  Crown,
   ImagePlus,
 } from "lucide-react"
 import type { Candidate } from "@/lib/ghc-types"
@@ -232,6 +233,11 @@ export function ProfilePreviewPage({
                 <ShieldCheck size={12} /> Verified
               </span>
             )}
+            {String((candidate as { membershipTier?: string; tier?: string }).membershipTier || (candidate as { tier?: string }).tier || "").toLowerCase().match(/^(vip|vvip)$/) ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/95 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                <Crown size={12} /> {String((candidate as { membershipTier?: string; tier?: string }).membershipTier || (candidate as { tier?: string }).tier).toUpperCase()}
+              </span>
+            ) : null}
           </div>
           <h1 className="text-3xl font-bold tracking-tight drop-shadow-md">
             {name}

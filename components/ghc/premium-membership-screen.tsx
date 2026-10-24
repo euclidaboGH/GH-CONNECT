@@ -30,6 +30,28 @@ import {
 import { useGHC } from "@/contexts/ghc-context"
 import { isPiPaymentsAvailable } from "@/lib/gh-pay"
 import { runGhPayMembership } from "@/components/ghc/gh-pay-panel"
+import { notificationSystem } from "@/lib/notifications"
+
+function emitMembershipActivated(tier: string, method: "pi" | "ghc") {
+  try {
+    notificationSystem.addNotification(
+      "system",
+      `${tier.toUpperCase()} membership active`,
+      method === "pi"
+        ? "Your Pi payment was confirmed and Premium is active on this account."
+        : "GHC membership is active. Utility balance was charged on the ledger.",
+      "👑",
+      { category: "system", open: "membership", tier, method },
+    )
+  } catch { /* */ }
+  try {
+    window.dispatchEvent(new CustomEvent("ghc:wallet-synced"))
+    window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+    window.dispatchEvent(
+      new CustomEvent("ghc:membership-activated", { detail: { tier, method } }),
+    )
+  } catch { /* */ }
+}
 
 /** Human labels + optional product deep-link (tab or settings section) */
 const ENTITLEMENT_META: Partial<
@@ -265,6 +287,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const [view, setView] = useState<"cards" | "compare">("cards")
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [recoverHint, setRecoverHint] = useState(false)
+  const [recoverBusy, setRecoverBusy] = useState(false)
 
   const status = useMemo(() => {
     void tick
@@ -390,6 +414,43 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const recoverMembershipPurchase = async () => {
+    if (recoverBusy) return
+    setRecoverBusy(true)
+    setStatusMsg("Recovering paid membership…")
+    try {
+      const headers: Record<string, string> = { Accept: "application/json" }
+      try {
+        const { IdentityService } = await import("@/lib/identity/identity-service")
+        Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+      } catch { /* */ }
+      const res = await fetch("/api/membership/reconcile", {
+        method: "POST",
+        credentials: "include",
+        headers,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.ok === false) {
+        addToast(String(data?.error || "Could not recover membership right now"), "error")
+        return
+      }
+      setRecoverHint(false)
+      await refreshMembershipFromServer()
+      setTick((x) => x + 1)
+      if (data.recovered) {
+        addToast("Membership recovered from your paid purchase", "success")
+        emitMembershipActivated(String(data.entitlement?.tier || "vip"), "pi")
+      } else {
+        addToast("No orphaned purchase found — status is already authoritative", "info")
+      }
+    } catch {
+      addToast("Recovery failed — try again shortly", "error")
+    } finally {
+      setRecoverBusy(false)
+      setStatusMsg(null)
+    }
+  }
+
   const purchaseWithPiCoin = async (tier: MembershipTierId) => {
     if (!membershipAuthorityReady) {
       addToast("Confirm membership status before purchasing to prevent a duplicate charge.", "info")
@@ -420,10 +481,12 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         if (next && (next.tier === "vip" || next.tier === "vvip")) {
           setSuccessStatus(next)
           addToast(`${MEMBERSHIP_PLANS[next.tier].label} is active`, "success")
+          emitMembershipActivated(next.tier, "pi")
         } else {
           setTick((x) => x + 1)
+          setRecoverHint(true)
           addToast(
-            "Payment received. Membership activation is finishing — tap Refresh if Premium is not shown yet. You will not be charged again.",
+            "Payment received. Membership activation is finishing — tap Refresh or Recover purchase if Premium is not shown yet. You will not be charged again.",
             "info"
           )
         }
@@ -471,6 +534,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             : `${MEMBERSHIP_PLANS[tier].label} activated`,
           "success"
         )
+        if (!already && next && (next.tier === "vip" || next.tier === "vvip")) {
+          emitMembershipActivated(next.tier, "ghc")
+        } else if (!already) {
+          emitMembershipActivated(tier, "ghc")
+        }
       } else {
         const err = result.error || "Purchase failed"
         addToast(err, "error")
@@ -597,6 +665,23 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={{ paddingBottom: "var(--gh-screen-bottom-inset)" }}
       >
+      {(recoverHint || (membershipAuthorityReady && currentTier === "free")) ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-2.5 shadow-sm">
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Paid with Pi but still on Free? Recovery reads server payment history and restores
+            entitlement without a second charge.
+          </p>
+          <button
+            type="button"
+            disabled={recoverBusy}
+            onClick={() => void recoverMembershipPurchase()}
+            className="mt-2 min-h-10 w-full rounded-xl border border-emerald-500/40 bg-emerald-50 px-3 text-xs font-bold text-emerald-900 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-100"
+          >
+            {recoverBusy ? "Recovering…" : "Recover purchase"}
+          </button>
+        </div>
+      ) : null}
+
         {/* STATUS zone — presentation of existing status only */}
         <div className="mb-3 gh-card px-3 py-3">
           <p className="gh-type-meta font-bold uppercase tracking-wide text-muted-foreground">Status</p>

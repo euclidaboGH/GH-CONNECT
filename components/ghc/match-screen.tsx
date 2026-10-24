@@ -31,6 +31,7 @@ import {
   resolveMatchIntention,
 } from "./matches-components"
 import { EmptyState } from "./empty-state"
+import { LazyImage } from "./lazy-image"
 import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
@@ -191,7 +192,7 @@ export function MatchScreen() {
 
   const newMatches = filterByIntention(baseNew)
   const allMatches = filterByIntention(baseAll)
-  const displayMatches = activeTab === "new" ? newMatches : allMatches
+  const displayMatches = activeTab === "likes_you" ? [] : activeTab === "new" ? newMatches : allMatches
 
   const intentionCounts = useMemo(() => {
     const counts: Partial<Record<MatchIntention | "all", number>> = { all: baseAll.length }
@@ -314,6 +315,7 @@ export function MatchScreen() {
               onTabChange={setActiveTab}
               newCount={baseNew.length}
               totalCount={baseAll.length}
+              likesYouCount={likesYouRows.length}
             />
             <MatchIntentionFilters
               active={intentionFilter}
@@ -359,6 +361,67 @@ export function MatchScreen() {
             <MatchCardSkeleton />
             <MatchCardSkeleton />
           </div>
+        ) : activeTab === "likes_you" ? (
+          likesYouRows.length === 0 ? (
+            <EmptyState
+              variant="matches"
+              title="No likes yet"
+              description="When someone likes you on Discover, they appear here until you match. Liking is interest only — Connect is a separate request."
+              action={{ label: "Open Discover", onClick: handleStartSwiping }}
+            />
+          ) : (
+            <div className="flex flex-col gap-3 px-4 pb-6 pt-4" role="list" aria-label="People who liked you">
+              <p className="text-[11px] font-medium text-muted-foreground">
+                {likesYouRows.length} people liked you · like back to Match
+              </p>
+              {likesYouRows.map((row) => (
+                <div
+                  key={row.userId}
+                  role="listitem"
+                  className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm"
+                >
+                  <button
+                    type="button"
+                    className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-muted"
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:open-profile", {
+                          detail: { userId: row.userId, name: row.userName },
+                        }),
+                      )
+                    }}
+                  >
+                    {/* photo via css if empty */}
+                    {row.userPhoto ? (
+                      <LazyImage src={row.userPhoto} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm font-bold text-muted-foreground">
+                        {(row.userName || "?").slice(0, 1)}
+                      </div>
+                    )}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-foreground">{row.userName}</p>
+                    <p className="text-[11px] text-muted-foreground">Liked you · not a Match until mutual</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="min-h-10 shrink-0 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent("ghc:navigate-tab", { detail: "discover" }),
+                        )
+                      } catch { /* */ }
+                      setTab?.("discover")
+                    }}
+                  >
+                    View on Discover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
         ) : displayMatches.length === 0 ? (
           <EmptyState
             variant="matches"

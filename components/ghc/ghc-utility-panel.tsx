@@ -114,6 +114,7 @@ export function GhcUtilityPanel({
       )
       try {
         window.dispatchEvent(new CustomEvent("ghc:wallet-synced"))
+        try { window.dispatchEvent(new CustomEvent("ghc:utility-spent", { detail: { purpose } })) } catch { /* */ }
       } catch {
         /* */
       }

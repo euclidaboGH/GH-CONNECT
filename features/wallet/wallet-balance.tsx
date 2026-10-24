@@ -155,7 +155,15 @@ export function WalletBalanceCard({
         </div>
       </div>
 
-      <p className="sr-only">{ASSET_POLICY.ghcRailsCopy}</p>
+      <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5">
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          <span className="font-semibold text-foreground">GHC</span> is spendable in-app utility
+          {pending > 0 ? " · pending may wait up to ~48h before claim" : ""}
+          {locked > 0 ? " · reserved is not spendable" : ""}.{" "}
+          <span className="font-semibold text-foreground">π</span> stays on the Pi payment rail — not mixed into this balance.
+        </p>
+        <p className="sr-only">{ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}</p>
+      </div>
     </section>
   )
 }

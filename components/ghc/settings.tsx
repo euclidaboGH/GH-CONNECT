@@ -26,6 +26,7 @@ import {
   User,
   Ban,
   Lock,
+  Users,
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
@@ -52,6 +53,18 @@ const RewardsCentreScreen = lazy(() =>
     default: m.RewardsCentreScreen,
   }))
 )
+
+async function ensureBrowserNotificationPermission(): Promise<boolean> {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return false
+    if (Notification.permission === "granted") return true
+    if (Notification.permission === "denied") return false
+    const result = await Notification.requestPermission()
+    return result === "granted"
+  } catch {
+    return false
+  }
+}
 
 function SectionFallback({ label }: { label: string }) {
   return (
@@ -139,9 +152,23 @@ export function SettingsScreen({
         next === "wallet" ||
         next === "rewards" ||
         next === "membership" ||
-        next === "help"
+        next === "help" ||
+        next === "privacy" ||
+        next === "notifications" ||
+        next === "appearance" ||
+        next === "device-lock"
       ) {
-        goToSection(next as "wallet" | "rewards" | "membership" | "help")
+        goToSection(
+          next as
+            | "wallet"
+            | "rewards"
+            | "membership"
+            | "help"
+            | "privacy"
+            | "notifications"
+            | "appearance"
+            | "device-lock",
+        )
       }
     }
     window.addEventListener("ghc:open-settings-section", handler)
@@ -179,9 +206,10 @@ export function SettingsScreen({
   const [themeBusy, setThemeBusy] = useState(false)
   const themeFileRef = useRef<HTMLInputElement>(null)
 
-  /** Keep Membership row in sync with domain status (trial / VIP / VVIP / Free) */
+  /** Keep Membership row in sync with server status (trial / VIP / VVIP / Free) */
   useEffect(() => {
-    const refreshMembershipLabel = () => {
+    let cancelled = false
+    const applyLocalFallback = () => {
       try {
         const { getBoundDomainServices } = require("@/lib/domains/compat")
         const st = getBoundDomainServices()?.membership?.getStatus?.() as
@@ -211,13 +239,49 @@ export function SettingsScreen({
         setMembershipSubtitle("Free plan")
       }
     }
-    refreshMembershipLabel()
-    // Domain services may hydrate slightly after mount
-    const t1 = window.setTimeout(refreshMembershipLabel, 400)
-    const t2 = window.setTimeout(refreshMembershipLabel, 1500)
+    const refreshMembershipLabel = async () => {
+      try {
+        const headers: Record<string, string> = { Accept: "application/json" }
+        try {
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/status", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok && data?.ok) {
+          const ent = data.entitlement || data
+          const tierRaw = String(ent.tier || data.tier || "free").toLowerCase()
+          const tierLabel =
+            tierRaw === "vvip" ? "VVIP" : tierRaw === "vip" ? "VIP" : tierRaw === "free" ? "Free" : tierRaw.toUpperCase()
+          const isTrial = ent.source === "trial" || ent.lifecycle === "trial" || data.source === "trial"
+          const expiresAt = Number(ent.expiresAt || data.expiresAt) || 0
+          if (isTrial && expiresAt > Date.now()) {
+            const h = Math.max(1, Math.round((expiresAt - Date.now()) / 3600000))
+            setMembershipSubtitle(h < 48 ? `${tierLabel} trial · ${h}h left` : `${tierLabel} trial · active`)
+          } else {
+            setMembershipSubtitle(tierLabel === "Free" ? "Free plan" : `${tierLabel} · active`)
+          }
+          return
+        }
+      } catch {
+        /* fall through */
+      }
+      if (!cancelled) applyLocalFallback()
+    }
+    void refreshMembershipLabel()
+    const t1 = window.setTimeout(() => void refreshMembershipLabel(), 400)
+    const t2 = window.setTimeout(() => void refreshMembershipLabel(), 1500)
+    const onActivated = () => void refreshMembershipLabel()
+    window.addEventListener("ghc:membership-activated", onActivated)
     return () => {
+      cancelled = true
       window.clearTimeout(t1)
       window.clearTimeout(t2)
+      window.removeEventListener("ghc:membership-activated", onActivated)
     }
   }, [section, initialSection])
 
@@ -868,6 +932,28 @@ export function SettingsScreen({
             <p className="text-[12px] leading-relaxed text-muted-foreground">
               These control in-app and push categories. Your device must still allow notifications for GreenHaven. Delivery is best-effort when offline.
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                void ensureBrowserNotificationPermission().then((ok) => {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:toast", {
+                        detail: {
+                          message: ok
+                            ? "Browser notifications enabled"
+                            : "Browser notifications were not enabled",
+                          type: ok ? "success" : "info",
+                        },
+                      }),
+                    )
+                  } catch { /* */ }
+                })
+              }}
+              className="mt-3 min-h-10 w-full rounded-xl border border-emerald-500/40 bg-white/80 text-xs font-bold text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+            >
+              Enable browser alerts
+            </button>
           </section>
           <section className="rounded-[1.25rem] border border-border/50 bg-card divide-y divide-border/50 overflow-hidden shadow-[var(--gh-card-shadow)]">
             {toggles.map((t) => {
@@ -1106,6 +1192,13 @@ export function SettingsScreen({
           icon: <Gift size={20} strokeWidth={1.75} />,
           action: () => goToSection("rewards"),
           keywords: "rewards challenges earn pending claim",
+        },
+        {
+          title: "Invite friends",
+          subtitle: "Referral code · rewards when settlement is enabled",
+          icon: <Users size={20} strokeWidth={1.75} />,
+          action: () => goToSection("rewards"),
+          keywords: "referral invite friends share code",
         },
         {
           title: "Membership",

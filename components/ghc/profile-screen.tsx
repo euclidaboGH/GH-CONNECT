@@ -21,6 +21,7 @@ import {
   ImagePlus,
   Trash2,
   BadgeCheck,
+  Crown,
 } from "lucide-react"
 import { LazyImage } from "./lazy-image"
 import type { Post, Profile } from "@/lib/ghc-types"
@@ -273,6 +274,47 @@ export function ProfileScreen({
 
   const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
   const [profileSectionTab, setProfileSectionTab] = useState<ProfileSectionTab>("posts")
+  const [profileListings, setProfileListings] = useState<
+    Array<{ id: string; title: string; price: number; currency: string; media?: string[]; status?: string; location?: string }>
+  >([])
+  const [profileListingsLoading, setProfileListingsLoading] = useState(false)
+
+  useEffect(() => {
+    if (profileSectionTab !== "listings") return
+    let cancelled = false
+    setProfileListingsLoading(true)
+    ;(async () => {
+      try {
+        const { socialFetchMarketplaceListings } = await import("@/lib/social/client")
+        const remote = await socialFetchMarketplaceListings({ scope: "mine", limit: 24 })
+        if (cancelled) return
+        if (!remote.ok) {
+          setProfileListings([])
+          return
+        }
+        setProfileListings(
+          remote.listings
+            .map((row) => ({
+              id: String(row.id || ""),
+              title: String(row.title || "Listing"),
+              price: Number(row.price) || 0,
+              currency: String(row.currency || "GHC"),
+              media: Array.isArray(row.media) ? row.media.map(String) : [],
+              status: String(row.status || "active"),
+              location: row.location ? String(row.location) : undefined,
+            }))
+            .filter((l) => l.id)
+        )
+      } catch {
+        if (!cancelled) setProfileListings([])
+      } finally {
+        if (!cancelled) setProfileListingsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [profileSectionTab])
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
 
   useEffect(() => {
@@ -289,6 +331,50 @@ export function ProfileScreen({
 
   const [editOpen, setEditOpen] = useState(false)
   const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
+  const [membershipTierLabel, setMembershipTierLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const headers: Record<string, string> = { Accept: "application/json" }
+        try {
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/status", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled || !res.ok || !data?.ok) return
+        const tier = String(data.entitlement?.tier || data.tier || "free").toLowerCase()
+        if (tier === "vip" || tier === "vvip") {
+          setMembershipTierLabel(tier.toUpperCase())
+        } else {
+          setMembershipTierLabel(null)
+        }
+      } catch {
+        /* */
+      }
+    })()
+    const onMembership = () => {
+      // Soft re-check after activate
+      void fetch("/api/membership/status", { credentials: "include", cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          const tier = String(data?.entitlement?.tier || data?.tier || "free").toLowerCase()
+          setMembershipTierLabel(tier === "vip" || tier === "vvip" ? tier.toUpperCase() : null)
+        })
+        .catch(() => {})
+    }
+    window.addEventListener("ghc:membership-activated", onMembership)
+    return () => {
+      cancelled = true
+      window.removeEventListener("ghc:membership-activated", onMembership)
+    }
+  }, [])
+
 
   useEffect(() => {
     if (!photoSheet && !editOpen) return
@@ -444,6 +530,11 @@ export function ProfileScreen({
               setStatusMsg("Profile photo updated")
               window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Profile photo updated", "success")
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:profile-media-updated", { detail: { kind: "photo" } }),
+                )
+              } catch { /* */ }
             } else {
               const previous = cover
               const oldHistory = Array.isArray(p.coverPhotoHistory) ? p.coverPhotoHistory : []
@@ -458,6 +549,11 @@ export function ProfileScreen({
               setStatusMsg("Cover photo updated")
               window.setTimeout(() => setStatusMsg(null), 2000)
               ghc.addToast?.("Cover photo updated", "success")
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:profile-media-updated", { detail: { kind: "cover" } }),
+                )
+              } catch { /* */ }
             }
           })().catch((error) => {
             ghc.addToast?.(error instanceof Error ? error.message : "Could not update this image", "error")
@@ -554,7 +650,7 @@ export function ProfileScreen({
         <button
           type="button"
           onClick={() => setPhotoSheet("cover")}
-          className="gh-world-profile-cover relative block h-40 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-52"
+          className="gh-world-profile-cover relative block h-28 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-36"
           aria-label="Change cover photo"
         >
           {cover ? (
@@ -568,7 +664,7 @@ export function ProfileScreen({
 
         {/* AVATAR row — overlaps cover; content is full width below */}
         <div className="gh-world-profile-identity relative z-[1] w-full px-4">
-          <div className="-mt-12 flex items-end justify-between">
+          <div className="-mt-10 flex items-end justify-between">
             <button
               type="button"
               onClick={() => setPhotoSheet("photo")}
@@ -579,11 +675,11 @@ export function ProfileScreen({
                 <LazyImage
                   src={photo}
                   alt={`${name} photo`}
-                  className="h-[5.5rem] w-[5.5rem] rounded-full object-cover ring-4 ring-background sm:h-24 sm:w-24"
+                  className="h-[4.75rem] w-[4.75rem] rounded-full object-cover ring-4 ring-background sm:h-20 sm:w-20"
                 />
               ) : (
                 <div
-                  className="flex h-[5.5rem] w-[5.5rem] items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 text-xl font-black text-white ring-4 ring-background sm:h-24 sm:w-24"
+                  className="flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 text-lg font-black text-white ring-4 ring-background sm:h-20 sm:w-20"
                   aria-hidden
                 >
                   {initials}
@@ -691,6 +787,12 @@ export function ProfileScreen({
                 </button>
               ))}
             </div>
+            {membershipTierLabel ? (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                <Crown size={12} aria-hidden />
+                {membershipTierLabel} member
+              </div>
+            ) : null}
             <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
@@ -770,19 +872,75 @@ export function ProfileScreen({
 
         {profileSectionTab === "listings" ? (
           <section id="gh-profile-listings" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your listings">
-            <div className="rounded-[1.25rem] border border-border/60 bg-card p-4 text-center shadow-sm">
-              <p className="text-[13px] font-bold text-foreground">Your listings</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">Sell with Pi or GHC on GreenHaven Marketplace.</p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[13px] font-bold text-foreground">Your listings</p>
+                <p className="text-[11px] text-muted-foreground">Durable marketplace catalog · Pi or GHC</p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  try { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" })) } catch { /* */ }
+                  try {
+                    window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
+                    window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { bucket: "sell" } }))
+                  } catch { /* */ }
                 }}
-                className="mt-3 min-h-10 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                className="min-h-9 shrink-0 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white"
               >
-                Open Marketplace
+                Sell
               </button>
             </div>
+            {profileListingsLoading ? (
+              <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">
+                Loading listings…
+              </div>
+            ) : profileListings.length ? (
+              <div className="grid grid-cols-2 gap-2">
+                {profileListings.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    className="overflow-hidden rounded-2xl border border-border/50 bg-card text-left shadow-sm"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:open-listing", { detail: { listingId: l.id } }))
+                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
+                      } catch { /* */ }
+                    }}
+                  >
+                    <div className="relative aspect-[4/3] bg-muted/50">
+                      {l.media?.[0] ? (
+                        <LazyImage src={l.media[0]} alt={l.title} className="absolute inset-0 h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[11px] font-bold text-muted-foreground">
+                          {l.status || "Listing"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="truncate text-[12px] font-bold text-foreground">{l.title}</p>
+                      <p className="text-[11px] font-semibold text-muted-foreground">
+                        {(l.currency || "").toUpperCase() === "PI" ? `${l.price} π` : `₲ ${l.price}`}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[1.25rem] border border-border/60 bg-card p-4 text-center shadow-sm">
+                <p className="text-[13px] font-bold text-foreground">No listings yet</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Sell goods or services with Pi or GHC.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" })) } catch { /* */ }
+                  }}
+                  className="mt-3 min-h-10 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                >
+                  Open Marketplace
+                </button>
+              </div>
+            )}
           </section>
         ) : null}
 

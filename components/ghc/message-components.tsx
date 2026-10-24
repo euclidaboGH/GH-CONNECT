@@ -308,17 +308,25 @@ export function MessageInput({
     setShowEmojiPicker(false)
   }, [messageText, onMessageChange])
 
+  const lastSentRef = useRef<{ text: string; at: number }>({ text: "", at: 0 })
   const fireSend = useCallback(() => {
     if (disabled || sendLockRef.current) return
-    if (!messageText.trim()) return
+    const trimmed = messageText.trim()
+    if (!trimmed) return
+    // Block identical double-submit within 1.2s (Enter + button or double-tap)
+    const now = Date.now()
+    if (lastSentRef.current.text === trimmed && now - lastSentRef.current.at < 1200) {
+      return
+    }
     sendLockRef.current = true
+    lastSentRef.current = { text: trimmed, at: now }
     try {
       onSendMessage()
     } finally {
-      // Parent sets `disabled` while sending; release lock shortly so retries work after failure.
+      // Parent sets `disabled` while sending; release lock after UI settles.
       window.setTimeout(() => {
         sendLockRef.current = false
-      }, 600)
+      }, 900)
     }
   }, [disabled, messageText, onSendMessage])
 
@@ -518,7 +526,7 @@ function MessageBubbleBase({
                 <div key={media.id} className="overflow-hidden rounded-xl bg-black/5">
                   {media.type === "image" || media.type === "video" ? (
                     <div className="relative">
-                      <img src={media.thumbnail || media.url} alt={media.fileName || "Message attachment"} loading="lazy" decoding="async" className="max-h-56 w-full rounded-xl object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} />
+                      <LazyImage src={media.thumbnail || media.url} alt={media.fileName || "Message attachment"} className="max-h-56 w-full rounded-xl object-cover" />
                       {media.type === "video" && <span className="absolute inset-0 flex items-center justify-center"><span className="rounded-full bg-black/55 p-2 text-white"><Play size={16} fill="currentColor" /></span></span>}
                     </div>
                   ) : media.type === "file" ? (
@@ -799,15 +807,10 @@ export function ChatHeader({
           className="flex min-w-0 items-center gap-3 text-left transition active:scale-[0.98]"
         >
           <div className="relative shrink-0">
-            <img
+            <LazyImage
               src={participantPhoto || "/placeholder.svg?width=80&height=80"}
               alt=""
-              loading="eager"
-              decoding="async"
               className="h-12 w-12 rounded-full object-cover shadow-sm ring-1 ring-black/5"
-              onError={(event) => {
-                event.currentTarget.src = "/placeholder.svg?width=80&height=80"
-              }}
             />
             {isOnline && (
               <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500" />

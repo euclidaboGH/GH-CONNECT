@@ -7,7 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { ensureCommunityConversation, ensureCommunityMember } from "@/lib/server/messaging/message-store"
+import { ensureCommunityMember } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -44,13 +44,10 @@ export async function POST(_request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: code }, { status })
   }
   const status = data?.status || "active"
-  // Active members get chat membership so group messaging is not FORBIDDEN
+  // Active members get chat membership so group messaging is not FORBIDDEN.
+  // Do NOT call ensureCommunityConversation with the joiner as ownerId — that
+  // would incorrectly stamp created_by / owner role onto the joining user.
   if (status === "active") {
-    // Conversation shell first (idempotent), then membership — avoids FORBIDDEN on first message
-    await ensureCommunityConversation({
-      communityId,
-      ownerId: auth.userId,
-    })
     await ensureCommunityMember({
       communityId,
       userId: auth.userId,

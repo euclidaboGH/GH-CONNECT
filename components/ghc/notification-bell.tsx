@@ -316,7 +316,10 @@ export function NotificationBell({
               open: type === "message" ? "messages"
                 : socialType === "connection_accept" ? "matches"
                 : socialType === "connection" || socialType === "connection_request" || socialType === "friend_request" ? "matches"
-                : meta.open,
+                : socialType.includes("curation") || socialType.includes("like") || socialType.includes("comment") || socialType === "post_created" || socialType === "share"
+                  ? "feed"
+                : socialType.includes("marketplace") ? "marketplace"
+                : meta.open || "feed",
               section: socialType === "connection" || socialType === "connection_request" || socialType === "friend_request"
                 ? "connection_requests"
                 : socialType === "connection_accept"
@@ -550,9 +553,16 @@ export function NotificationBell({
       durableEconomy?: boolean
       durableAnnouncement?: boolean
       announcementId?: string
+      socialType?: string
+      source?: string
     }
-    if (notificationData.durable && n.id) {
-      void fetch("/api/notifications", {
+    const looksSocial =
+      Boolean(notificationData.durable) ||
+      Boolean(notificationData.socialType) ||
+      notificationData.source === "social"
+    if (looksSocial && n.id) {
+      // Social durable inbox (recipient session-bound)
+      void fetch("/api/social/notifications", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -560,6 +570,13 @@ export function NotificationBell({
       })
         .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
         .catch(() => null)
+      // Unified inbox path when present
+      void fetch("/api/notifications", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+      }).catch(() => null)
     } else if (notificationData.durableAnnouncement && notificationData.announcementId) {
       void fetch("/api/system/announcements", {
         method: "POST",
@@ -611,7 +628,14 @@ export function NotificationBell({
     } catch {
       /* */
     }
+    // Soft-dismiss durable rows: mark read so they do not revive unread on refresh
+    try {
+      markOneRead(n)
+    } catch {
+      /* */
+    }
     setItems((prev) => prev.filter((x) => x.id !== n.id))
+    setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
     if (expandedId === n.id) {
       setExpandedId(null)
       setThreadKey(null)

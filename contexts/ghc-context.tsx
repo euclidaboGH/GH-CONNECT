@@ -1617,15 +1617,27 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             })
           }
           const matchMap = new Map(s.matches.map((m) => [m.userId, m]))
+          const candById = new Map((s.candidates || []).map((c) => [c.id, c]))
           for (const m of inbox.matches) {
-            if (!matchMap.has(m.userId)) {
+            const cand = candById.get(m.userId)
+            const existing = matchMap.get(m.userId)
+            if (!existing) {
               matchMap.set(m.userId, {
                 id: `match_${m.userId}`,
                 userId: m.userId,
-                userName: "Match",
-                userPhoto: "",
+                userName: cand?.name || cand?.displayName || "Match",
+                userPhoto: cand?.photo || cand?.photos?.[0] || "",
                 matchedAt: m.createdAt || Date.now(),
-                online: false,
+                online: Boolean(cand?.online),
+              })
+            } else if (
+              (!existing.userName || existing.userName === "Match") &&
+              (cand?.name || cand?.displayName)
+            ) {
+              matchMap.set(m.userId, {
+                ...existing,
+                userName: String(cand.name || cand.displayName),
+                userPhoto: existing.userPhoto || cand.photo || cand.photos?.[0] || "",
               })
             }
           }
@@ -4922,23 +4934,39 @@ const dismissMatchCelebration = useCallback(() => {
             if (c.id !== id) return c
             const byId = new Map<string, (typeof mapped)[0]>()
             for (const m of mapped) byId.set(m.id, m)
+            // Drop optimistic "sending" rows that already arrived from server
+            // (same sender + text within 2 minutes) to prevent visible duplicates.
+            const serverFingerprints = new Set(
+              mapped.map(
+                (m) =>
+                  `${String(m.senderId)}|${String(m.text).trim()}|${Math.floor((m.createdAt || 0) / 120_000)}`,
+              ),
+            )
             for (const m of c.messages || []) {
-              if (!byId.has(m.id)) {
-                byId.set(m.id, {
-                  id: m.id,
-                  senderId: String(m.senderId || ""),
-                  text: String(m.text || ""),
-                  createdAt: Number(m.createdAt) || Date.now(),
-                  status: m.status || "sent",
-                  deliveredAt: m.deliveredAt,
-                  readAt: m.readAt,
-                  isDeleted: m.isDeleted,
-                  deletedAt: m.deletedAt,
-                  sharedPostId: m.sharedPostId,
-                  replyTo: m.replyTo,
-                  replyToPreview: m.replyToPreview,
-                })
+              if (byId.has(m.id)) continue
+              const localStatus = String(m.status || "")
+              const fp = `${String(m.senderId || "")}|${String(m.text || "").trim()}|${Math.floor((Number(m.createdAt) || 0) / 120_000)}`
+              if (
+                (localStatus === "sending" || localStatus === "sent") &&
+                serverFingerprints.has(fp)
+              ) {
+                continue
               }
+              byId.set(m.id, {
+                id: m.id,
+                senderId: String(m.senderId || ""),
+                text: String(m.text || ""),
+                createdAt: Number(m.createdAt) || Date.now(),
+                status: m.status || "sent",
+                deliveredAt: m.deliveredAt,
+                readAt: m.readAt,
+                isDeleted: m.isDeleted,
+                deletedAt: m.deletedAt,
+                sharedPostId: m.sharedPostId,
+                replyTo: m.replyTo,
+                replyToPreview: m.replyToPreview,
+                mediaAttachments: (m as { mediaAttachments?: unknown }).mediaAttachments as any,
+              })
             }
             const nextMsgs = Array.from(byId.values()).sort(
               (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
@@ -6196,7 +6224,16 @@ const dismissMatchCelebration = useCallback(() => {
               description: formData.description || "",
               privacy: formData.privacy,
               category: formData.category,
-              feeCurrency: "GHC",
+              coverImage:
+                formData.coverImage &&
+                !String(formData.coverImage).startsWith("data:") &&
+                !String(formData.coverImage).startsWith("blob:")
+                  ? String(formData.coverImage)
+                  : undefined,
+              welcomeMessage: formData.welcomeMessage || undefined,
+              rules: Array.isArray(formData.rules) ? formData.rules : undefined,
+              feeCurrency:
+                String(formData.feeCurrency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC",
             })
             const ok =
               durable &&

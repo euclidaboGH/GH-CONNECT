@@ -8,6 +8,7 @@
 import { listMyCommunitiesForHome } from "@/lib/domains/adapters/my-communities-home"
 import type { CommunitySummary } from "@/lib/domains/contracts/communities"
 import { membershipStateLabel } from "@/lib/domains/contracts/communities"
+import { LazyImage } from "./lazy-image"
 
 export function ProfileMyCommunities({
   conversations,
@@ -71,7 +72,7 @@ export function ProfileMyCommunities({
               >
                 <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-muted">
                   {c.coverImage ? (
-                    <img
+                    <LazyImage
                       src={c.coverImage}
                       alt=""
                       className="h-full w-full object-cover"
