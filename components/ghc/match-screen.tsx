@@ -52,7 +52,7 @@ export function MatchScreen() {
     blockedUsers = [],
     rejectMatch,
   } = useGHC() as any
-  const [activeTab, setActiveTab] = useState<"new" | "all">("new")
+  const [activeTab, setActiveTab] = useState<"new" | "all" | "likes_you">("new")
   const [intentionFilter, setIntentionFilter] = useState<MatchIntention | "all">("all")
   const [removedMatches, setRemovedMatches] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -158,6 +158,28 @@ export function MatchScreen() {
     return iLiked && theyLiked
   })
 
+  const matchedUserIds = new Set(mutualMatches.map((match) => String(match.userId)))
+  const likesYouRows = useMemo(() => {
+    const seen = new Set<string>()
+    return safeLikes
+      .filter((like) => String(like.toUserId) === String(meId) && String(like.fromUserId) !== String(meId))
+      .filter((like) => !blockedSet.has(String(like.fromUserId)))
+      .filter((like) => !matchedUserIds.has(String(like.fromUserId)))
+      .filter((like) => {
+        const id = String(like.fromUserId)
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+      .map((like) => {
+        const candidate = safeCandidates.find((item) => String(item.id) === String(like.fromUserId))
+        return {
+          userId: String(like.fromUserId),
+          userName: (candidate as any)?.name || (candidate as any)?.displayName || "GreenHaven member",
+          userPhoto: (candidate as any)?.photo || (candidate as any)?.avatar || "",
+        }
+      })
+  }, [safeLikes, meId, safeCandidates, blockedUsers, safeMatches])
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 350)
     return () => window.clearTimeout(timer)

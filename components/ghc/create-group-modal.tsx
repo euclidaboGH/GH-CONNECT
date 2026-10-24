@@ -152,14 +152,17 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           })
         }
         const uploaded = await uploadDurableMedia(uploadFile, { category: "images" })
-        if (uploaded?.url) {
+        if (uploaded.ok) {
           const facade = toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url
           setFormData((prev) => ({ ...prev, coverImage: facade }))
-        } else if (isMediaStorageUnavailable()) {
-          setValidationErrors((prev) => ({
-            ...prev,
-            coverImage: "Media storage unavailable — try again shortly",
-          }))
+          setValidationErrors((prev) => {
+            const { coverImage: _c, ...rest } = prev
+            return rest
+          })
+        } else if (isMediaStorageUnavailable(uploaded.error)) {
+          setValidationErrors((prev) => ({ ...prev, coverImage: uploaded.userMessage || "Media storage unavailable — try again shortly" }))
+        } else {
+          setValidationErrors((prev) => ({ ...prev, coverImage: uploaded.userMessage || "Cover upload failed — try again" }))
         }
       } catch (upErr) {
         setValidationErrors((prev) => ({
@@ -168,10 +171,6 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             upErr instanceof Error ? upErr.message : "Cover upload failed — check connection",
         }))
       }
-      setValidationErrors((prev) => {
-        const { coverImage: _c, ...rest } = prev
-        return rest
-      })
     } catch (err) {
       setValidationErrors((prev) => ({
         ...prev,
