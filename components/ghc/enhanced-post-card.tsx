@@ -25,6 +25,7 @@ import { absoluteTimeLabel, formatRelativeTime } from "@/lib/product/essentials"
 import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
+import { DurableVideo } from "./durable-video"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { isDurableMediaUrl } from "@/lib/media/durable-url"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
@@ -832,7 +833,7 @@ function EnhancedPostCardInner({
           </div>
         )}
 
-        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={(event) => { event.stopPropagation(); onOpenPost?.(post.id) }} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Open video post in full view"><video src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video · View post</span></button> : null}
+        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={(event) => { event.stopPropagation(); onOpenPost?.(post.id) }} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Open video post in full view"><DurableVideo src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video · View post</span></button> : null}
 
         {/* Quote repost */}
         {post.quoteOf && (

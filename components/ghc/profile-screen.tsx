@@ -4,7 +4,7 @@
  * Profile — owner identity and owner posts, with non-essential account tools grouped
  * inside a collapsed Dashboard. Profile post actions reuse the canonical feed card.
  */
-import { useMemo, useState, useCallback, useEffect } from "react"
+import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react"
 import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
@@ -35,8 +35,10 @@ import { PiSupporterBadge } from "./pi-supporter-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
 import { uploadDurableMedia, isMediaStorageUnavailable } from "@/lib/media/upload-client"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
 import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
+import { ProfileSectionTabs, type ProfileSectionTab } from "./profile-section-tabs"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 import ProfileStorySection from "./profile-story-section"
 import { UnifiedActivityCenter } from "./unified-activity-center"
@@ -270,6 +272,7 @@ export function ProfileScreen({
   }, [ghc])
 
   const [socialList, setSocialList] = useState<"Posts" | "Friends" | "Following" | "Followers" | null>(null)
+  const [profileSectionTab, setProfileSectionTab] = useState<ProfileSectionTab>("posts")
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
 
   useEffect(() => {
@@ -397,7 +400,7 @@ export function ProfileScreen({
             const compressedBlob = await fetch(compressedDataUrl).then((r) => r.blob())
             const uploaded = offline ? null : await uploadDurableMedia(compressedBlob, { fileName: `${kind}-${Date.now()}.${compressedBlob.type === "image/webp" ? "webp" : "jpg"}`, category: "avatars" })
             if (uploaded?.ok && uploaded.kind === "image") {
-              imageUrl = uploaded.url
+              imageUrl = toRelativeMediaFacadeUrl(uploaded.url)
             } else if (offline || (uploaded && !uploaded.ok && isMediaStorageUnavailable(uploaded.error))) {
               // Offline/local fallback — not visible on other devices until durable upload succeeds.
               ghc.addToast?.(
@@ -555,7 +558,7 @@ export function ProfileScreen({
           aria-label="Change cover photo"
         >
           {cover ? (
-            <img src={cover} alt="" className="h-full w-full object-cover" onError={(e) => { try { (e.target as HTMLImageElement).style.display = "none" } catch { /* */ } }} />
+            <LazyImage src={cover} alt={`${name} cover`} className="absolute inset-0 h-full w-full object-cover" />
           ) : null}
           <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
             <Camera size={12} aria-hidden />
@@ -707,35 +710,122 @@ export function ProfileScreen({
           </div>
         </div>
 
-        <nav className="gh-profile-nav sticky top-0 z-[2] mt-4 flex w-full gap-1 overflow-x-auto border-y border-border/50 bg-background/95 px-4 py-2 backdrop-blur-md" aria-label="Profile sections">
-          {[
-            ["Posts", "gh-profile-posts"],
-            ["Moments", "gh-profile-moments"],
-            ["About", "gh-profile-about"],
-          ].map(([label, target]) => (
-            <button key={target} type="button" onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="shrink-0 rounded-full px-4 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</button>
-          ))}
-        </nav>
+        <ProfileSectionTabs
+          active={profileSectionTab}
+          onChange={setProfileSectionTab}
+          counts={{
+            posts: posts.length,
+            media: posts.filter((post) => (Array.isArray((post as any).images) && (post as any).images.length > 0) || Boolean((post as any).video) || Boolean((post as any).pdf)).length,
+          }}
+        />
 
-        <section id="gh-profile-about" className="sr-only" aria-label="Profile about">{p.bio || p.profession || locationLine || "Profile details"}</section>
-
-        <section id="gh-profile-tools" className="mt-3 w-full px-4" aria-label="Profile dashboard">
+        {/* Compact tools — Dashboard only (wallet/rewards live here, not on public-looking chrome) */}
+        <section id="gh-profile-tools" className="mt-2 w-full px-4" aria-label="Profile dashboard">
           <button
             type="button"
             aria-expanded={dashboardPageOpen}
             onClick={() => setDashboardPageOpen(true)}
-            className="flex min-h-12 w-full items-center justify-between rounded-[1.1rem] border border-border/60 bg-card px-4 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex min-h-11 w-full items-center justify-between rounded-[1.1rem] border border-border/50 bg-card/80 px-3.5 py-2.5 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="min-w-0">
-              <span className="block text-[13px] font-bold text-foreground">Dashboard</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">Wallet, rewards, communities, creator tools and account settings</span>
+              <span className="block text-[12px] font-bold text-foreground">Dashboard</span>
+              <span className="mt-0.5 block text-[10px] text-muted-foreground">Wallet · rewards · creator · settings</span>
             </span>
             <span className="ml-3 shrink-0 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Open</span>
           </button>
-
         </section>
 
-        {/* Profile sequence: Dashboard → Moments → shared composer → owner timeline. */}
+        {profileSectionTab === "about" ? (
+          <section id="gh-profile-about" className="mt-3 w-full space-y-3 px-4 scroll-mt-14" aria-label="About">
+            <div className="rounded-[1.25rem] border border-border/60 bg-card p-4 shadow-sm">
+              <h3 className="text-[13px] font-bold text-foreground">About</h3>
+              {p.bio ? <p className="mt-2 text-[13px] leading-relaxed text-foreground/90">{p.bio}</p> : (
+                <button type="button" onClick={openEdit} className="mt-2 text-left text-[13px] text-muted-foreground underline-offset-2 hover:underline">Add a short bio</button>
+              )}
+              <dl className="mt-3 space-y-1.5 text-[12px] text-muted-foreground">
+                {locationLine ? <div><dt className="inline font-semibold text-foreground">Location · </dt><dd className="inline">{locationLine}</dd></div> : null}
+                {p.hometown ? <div><dt className="inline font-semibold text-foreground">Hometown · </dt><dd className="inline">{p.hometown}</dd></div> : null}
+                {p.education ? <div><dt className="inline font-semibold text-foreground">Education · </dt><dd className="inline">{p.education}</dd></div> : null}
+                {p.profession ? <div><dt className="inline font-semibold text-foreground">Profession · </dt><dd className="inline">{p.profession}{p.primaryMode ? ` · ${p.primaryMode}` : ""}</dd></div> : null}
+              </dl>
+              <button type="button" onClick={openEdit} className="mt-3 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">Edit profile</button>
+            </div>
+          </section>
+        ) : null}
+
+        {profileSectionTab === "communities" ? (
+          <div className="mt-2 scroll-mt-14" id="gh-profile-communities">
+            <ProfileMyCommunities
+              conversations={(ghc as { conversations?: unknown[] }).conversations}
+              viewerId={meId}
+              onOpenCommunity={(id) => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
+                  window.dispatchEvent(new CustomEvent("ghc:open-community", { detail: { communityId: id } }))
+                } catch { /* */ }
+              }}
+            />
+          </div>
+        ) : null}
+
+        {profileSectionTab === "listings" ? (
+          <section id="gh-profile-listings" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your listings">
+            <div className="rounded-[1.25rem] border border-border/60 bg-card p-4 text-center shadow-sm">
+              <p className="text-[13px] font-bold text-foreground">Your listings</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Sell with Pi or GHC on GreenHaven Marketplace.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  try { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" })) } catch { /* */ }
+                }}
+                className="mt-3 min-h-10 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+              >
+                Open Marketplace
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {profileSectionTab === "media" ? (
+          <section id="gh-profile-media" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Media">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[13px] font-bold text-foreground">Media</h3>
+              <button type="button" onClick={() => setLibraryOpen(true)} className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Content library</button>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {posts.flatMap((post) => {
+                const imgs = Array.isArray((post as any).images) ? (post as any).images as string[] : []
+                const vid = (post as any).video as string | null | undefined
+                const cells: ReactNode[] = []
+                imgs.forEach((src, i) => {
+                  if (!src) return
+                  cells.push(
+                    <button key={`${post.id}-img-${i}`} type="button" className="aspect-square overflow-hidden rounded-xl bg-muted" onClick={() => setLibraryOpen(true)}>
+                      <LazyImage src={src} alt="" className="h-full w-full object-cover" />
+                    </button>
+                  )
+                })
+                if (vid) {
+                  cells.push(
+                    <button key={`${post.id}-vid`} type="button" className="flex aspect-square items-center justify-center rounded-xl bg-muted text-[11px] font-bold text-muted-foreground" onClick={() => setLibraryOpen(true)}>
+                      Video
+                    </button>
+                  )
+                }
+                return cells
+              }).slice(0, 18)}
+            </div>
+            {posts.every((post) => !(Array.isArray((post as any).images) && (post as any).images.length) && !(post as any).video) ? (
+              <p className="mt-3 text-center text-[12px] text-muted-foreground">Photos and videos from your posts appear here.</p>
+            ) : null}
+            <section className="mt-4" aria-label="Moments">
+              <ProfileStorySection scope="profile" />
+            </section>
+          </section>
+        ) : null}
+
+        {profileSectionTab === "posts" ? (
+          <>
         <section id="gh-profile-moments" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your stories and moments">
           <ProfileStorySection scope="profile" />
         </section>
@@ -753,7 +843,10 @@ export function ProfileScreen({
             <span className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Create</span>
           </button>
         </section>
+          </>
+        ) : null}
 
+        {profileSectionTab === "posts" ? (
         <section id="gh-profile-posts" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your posts timeline">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
@@ -821,10 +914,11 @@ export function ProfileScreen({
             ) : null}
           </div>
         </section>
+        ) : null}
       </div>
 
       {dashboardPageOpen ? (
-        <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
+      <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
           <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <button type="button" onClick={() => setDashboardPageOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close dashboard"><X size={20} /></button>
             <div className="min-w-0"><h2 className="text-base font-bold">Dashboard</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>

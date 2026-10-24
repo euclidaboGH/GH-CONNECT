@@ -307,6 +307,30 @@ export function ProfilePreviewPage({
         </div>
       </div>
 
+      {/* X-style dual primary CTAs — Message | Follow/Connect */}
+      <div className="shrink-0 border-t border-border bg-card px-4 pt-3">
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={onMessage}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-emerald-600 px-3 text-[13px] font-bold text-white shadow-sm transition active:scale-[0.98]"
+            aria-label={canMessage ? "Message" : "Message request"}
+          >
+            <MessageCircle size={17} />
+            {canMessage ? "Message" : "Message"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onFollow?.()}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground shadow-sm transition hover:bg-muted active:scale-[0.98]"
+            aria-label={isFollowing ? "Following" : "Follow"}
+          >
+            <UserPlus size={17} />
+            {isFollowing ? "Following" : "Follow"}
+          </button>
+        </div>
+      </div>
+
       {/* Scrollable details under hero (optional depth) */}
       <div className="max-h-[32dvh] shrink-0 overflow-y-auto border-t border-border bg-card px-5 py-4">
         <button type="button" onClick={() => setShowContentLibrary(true)} className="mb-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 px-4 text-sm font-bold text-foreground transition hover:bg-muted" aria-label={`Browse ${name}'s posts and media`}>

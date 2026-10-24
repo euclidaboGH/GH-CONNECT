@@ -11,6 +11,8 @@ export function isDurableMediaUrl(url: unknown): boolean {
   // data: allowed only as emergency tiny offline image; callers decide size policy
   if (u.startsWith("data:")) return false
   if (u.includes("placeholder")) return false
+  // Private-bucket facade paths are durable application URLs.
+  if (u.includes("/api/media/") && u.includes("/content")) return true
   return true
 }
 

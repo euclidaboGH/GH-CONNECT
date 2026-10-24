@@ -6,6 +6,7 @@
 
 import { mediaUserMessage } from "@/lib/media/user-messages"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
 
 const MAX_PROXY_UPLOAD_BYTES = 4 * 1024 * 1024
 const SAFE_PROXY_UPLOAD_BYTES = 3.75 * 1024 * 1024
@@ -173,7 +174,7 @@ async function uploadViaProxy(
         ok: true,
         durable: true,
         mediaId: String(data.mediaId || data.path || data.url),
-        url: String(data.url),
+        url: toRelativeMediaFacadeUrl(String(data.url)),
         kind: data.kind === "video" ? "video" : data.kind === "file" ? "file" : "image",
       }
     }

@@ -44,6 +44,7 @@ import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
+import { FeedInterstitial, interstitialKindAt } from "./feed-interstitial"
 
 const FEED_FILTERS: {
   value: FeedFilter
@@ -840,7 +841,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               }
             />
           ) : (
-            displayPosts.map((rankedPost) => (
+            displayPosts.map((rankedPost, postIndex) => (
             <div key={rankedPost.post.id} className="cv-auto min-w-0 max-w-full">
               <PostErrorBoundary postId={rankedPost.post.id}>
                 <EnhancedPostCard
@@ -925,6 +926,35 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   }
                 />
               </PostErrorBoundary>
+              {(() => {
+                const kind = interstitialKindAt(postIndex + 1)
+                if (!kind) return null
+                return (
+                  <FeedInterstitial
+                    kind={kind}
+                    onFindPeople={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
+                      } catch { /* */ }
+                    }}
+                    onOpenMarketplace={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
+                      } catch { /* */ }
+                    }}
+                    onOpenCommunities={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
+                      } catch { /* */ }
+                    }}
+                    onCreate={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                      } catch { /* */ }
+                    }}
+                  />
+                )
+              })()}
             </div>
             ))
           )}
