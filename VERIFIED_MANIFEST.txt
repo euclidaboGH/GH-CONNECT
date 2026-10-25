@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.90.7
+project_version=0.90.8
 manifest_format_version=1
-canonical_migrations=131
+canonical_migrations=132
 classification_required=97
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=31
+classification_review_required=32
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -153,3 +153,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=13345 path=supabase/migrations/20261023040001_gh_pulse_media_platform_v2.sql
 [REQUIRED] size=6209 path=supabase/migrations/20261023040002_gh_security_control_plane_v2.sql
 [REQUIRED] size=5149 path=supabase/migrations/20261023040003_gh_feed_engagement_batch_v2.sql
+[REVIEW_REQUIRED] size=2262 path=supabase/migrations/20261025010001_gh_community_create_idempotency_guard.sql

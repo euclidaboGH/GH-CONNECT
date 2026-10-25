@@ -55,10 +55,12 @@ const reviewRequired = new Set([
   '20261022010095_pi_payment_intent_atomic_transitions.sql',
   '20261022010097_gh_social_canonical_visibility.sql',
   '20261022010098_gh_social_engagement_write_integrity.sql',
+  '20261025010001_gh_community_create_idempotency_guard.sql',
 ])
 
 const notes = {
   '20261022010015_connection_request_intents.sql': 'Product/security review; do not auto-apply.',
+  '20261025010001_gh_community_create_idempotency_guard.sql': 'Review community ID-conflict behavior and verify same-owner retries plus cross-owner rejection on disposable PostgreSQL/Testnet before applying; reconcile remote migration history first.',
   '20261022010016_community_join_reasons_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010017_community_governance_log_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010027_gh_messaging_durable.sql': 'Durable messaging; flag remains off until two-user authorization gate passes.',

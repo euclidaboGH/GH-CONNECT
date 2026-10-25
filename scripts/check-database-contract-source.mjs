@@ -66,7 +66,7 @@ const proposalOnly = ['ghc_community_join_reasons', 'ghc_economic_telemetry']
 const missing = expectedRequired.filter(n => !tables.has(n))
 const proposalAccidentallyExecutable = proposalOnly.filter(n => tables.has(n))
 
-if (files.length !== 131) throw new Error(`Expected 131 clean migrations, found ${files.length}`)
+if (files.length !== 132) throw new Error(`Expected 132 clean migrations, found ${files.length}`)
 if (tables.size !== 114) throw new Error(`Expected 114 executable GreenHaven tables, found ${tables.size}`)
 if (missing.length) throw new Error(`Missing required executable GreenHaven tables: ${missing.join(', ')}`)
 if (proposalAccidentallyExecutable.length) throw new Error(`Proposal-only tables became executable: ${proposalAccidentallyExecutable.join(', ')}`)

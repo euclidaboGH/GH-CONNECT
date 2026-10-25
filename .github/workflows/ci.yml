@@ -17,14 +17,14 @@ concurrency:
 jobs:
   verify:
     name: Static checks, typecheck and production build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up pinned Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -47,6 +47,7 @@ jobs:
           node scripts/check-database-contract-source.mjs
           node scripts/generate-migration-inventory.mjs --check
           node scripts/check-migration-release-readiness.mjs
+          node scripts/verify-phase14-static.mjs
 
       - name: TypeScript
         run: npm run typecheck

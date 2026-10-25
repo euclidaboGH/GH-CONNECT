@@ -141,11 +141,14 @@ export function MatchScreen() {
   const safeCandidates = asArray<Candidate>(candidates)
 
   // Prefer mutual likes when present; otherwise show graph matches (intentional matches domain)
-  const viewerIds = new Set(
-    [meId, "current-user"].filter((id): id is string => Boolean(id && String(id).trim()))
+  const viewerIds = useMemo(
+    () => new Set(
+      [meId, "current-user"].filter((id): id is string => Boolean(id && String(id).trim()))
+    ),
+    [meId]
   )
-  const blockedSet = new Set((blockedUsers || []).map(String))
-  const mutualMatches = safeMatches.filter((match) => {
+  const blockedSet = useMemo(() => new Set((blockedUsers || []).map(String)), [blockedUsers])
+  const mutualMatches = useMemo(() => safeMatches.filter((match) => {
     if (blockedSet.has(String(match.userId))) return false
     const hasLikeData = safeLikes.length > 0
     if (!hasLikeData) return true
@@ -156,9 +159,12 @@ export function MatchScreen() {
       (like) => String(like.fromUserId) === String(match.userId) && viewerIds.has(String(like.toUserId))
     )
     return iLiked && theyLiked
-  })
+  }), [safeMatches, safeLikes, blockedSet, viewerIds])
 
-  const matchedUserIds = new Set(mutualMatches.map((match) => String(match.userId)))
+  const matchedUserIds = useMemo(
+    () => new Set(mutualMatches.map((match) => String(match.userId))),
+    [mutualMatches]
+  )
   const likesYouRows = useMemo(() => {
     const seen = new Set<string>()
     return safeLikes
@@ -179,7 +185,7 @@ export function MatchScreen() {
           userPhoto: (candidate as any)?.photo || (candidate as any)?.avatar || "",
         }
       })
-  }, [safeLikes, meId, safeCandidates, blockedUsers, safeMatches])
+  }, [safeLikes, meId, safeCandidates, blockedSet, matchedUserIds])
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 350)
     return () => window.clearTimeout(timer)

@@ -337,7 +337,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       window.removeEventListener("ghc:wallet-focus", onFocus)
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
     }
-  }, [])
+  }, [refreshWalletAuthority])
 
   // Load durable Pi payment intents when user opens π rail
   useEffect(() => {
