@@ -37,6 +37,7 @@ import { RequestGhcFlow } from "@/components/ghc/request-ghc-flow"
 import { ReceiveGhcFlow } from "@/components/ghc/receive-ghc-flow"
 import type { SendRecipient } from "@/components/ghc/send-ghc-flow"
 import { GhcTransactionDetail } from "@/components/ghc/ghc-transaction-detail"
+import { PiPaymentDetail, type PiPaymentDetailRecord } from "@/components/ghc/pi-payment-detail"
 import { GhcRequestsPanel } from "@/components/ghc/ghc-requests-panel"
 import { GhcSocialFuelNote } from "@/components/ghc/ghc-social-fuel-note"
 import { GhPayPanel } from "@/components/ghc/gh-pay-panel"
@@ -59,6 +60,7 @@ import { ASSET_POLICY } from "@/lib/asset-separation"
 import { isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdServer } from "@/lib/domains/greenhaven-id"
 import { socialEconomyStatus } from "@/lib/social/client"
 import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
+import { PaymentRecoveryBanner } from "@/components/ghc/payment-recovery-banner"
 
 const formatGhc = formatGhcShared
 
@@ -257,13 +259,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     id: string
     status?: string
     amountPi?: number
+    currency?: string
     purpose?: string
     productId?: string
+    productLabel?: string
+    referenceId?: string
     createdAt?: number
     paymentId?: string
   }
   const [piIntents, setPiIntents] = useState<PiIntentRow[]>([])
+  const [selectedPiIntent, setSelectedPiIntent] = useState<PiIntentRow | null>(null)
   const [piIntentsLoading, setPiIntentsLoading] = useState(false)
+  const [piIntentsError, setPiIntentsError] = useState<string | null>(null)
+  const [serverReconciliation, setServerReconciliation] = useState<{ generatedAt?: string; counts: { matched: number; attention_required: number; unverified: number; not_applicable: number }; findings: Array<{ intentId: string; purpose: string; reconciliation: string; code: string; message: string }> } | null>(null)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [query, setQuery] = useState("")
   const [showPendingSheet, setShowPendingSheet] = useState(false)
@@ -359,6 +367,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     let cancelled = false
     ;(async () => {
       setPiIntentsLoading(true)
+      setPiIntentsError(null)
       try {
         const headers: Record<string, string> = {}
         try {
@@ -370,8 +379,16 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           cache: "no-store",
           credentials: "include",
         })
-        if (!res.ok || cancelled) return
+        if (cancelled) return
+        if (!res.ok) {
+          setPiIntentsError(res.status === 401 ? "Sign in again to view your π payment history." : "Payment history could not be loaded from the server. Your records have not been changed.")
+          return
+        }
         const data = await res.json().catch(() => ({}))
+        if (data?.ok === false) {
+          setPiIntentsError("Payment history is temporarily unavailable. Please retry shortly.")
+          return
+        }
         const list = Array.isArray(data?.intents)
           ? data.intents
           : Array.isArray(data?.items)
@@ -383,12 +400,13 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               .map((raw: Record<string, unknown>): PiIntentRow => ({
                 id: String(raw.id || raw.intentId || ""),
                 status: String(raw.status || ""),
-                amountPi:
-                  typeof raw.amountPi === "number"
-                    ? raw.amountPi
-                    : typeof raw.amount === "number"
-                      ? raw.amount
-                      : undefined,
+                amountPi: (() => {
+                  const value = raw.amountPi ?? raw.amount
+                  if (value === null || value === undefined || value === "") return undefined
+                  const amount = Number(value)
+                  return Number.isFinite(amount) && amount >= 0 ? amount : undefined
+                })(),
+                currency: String(raw.currency || "PI").toUpperCase(),
                 purpose: String(raw.purpose || raw.category || ""),
                 productId: String(
                   raw.productId ||
@@ -399,19 +417,42 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                       : "") ||
                     ""
                 ),
-                createdAt:
-                  typeof raw.createdAt === "number"
-                    ? raw.createdAt
-                    : typeof raw.created_at === "number"
-                      ? raw.created_at
-                      : Date.now(),
-                paymentId: String(raw.paymentId || raw.piPaymentId || ""),
+                productLabel: String(
+                  raw.productLabel || raw.title ||
+                  (typeof raw.metadata === "object" && raw.metadata && "productLabel" in raw.metadata
+                    ? (raw.metadata as { productLabel?: string }).productLabel : "") || ""
+                ),
+                referenceId: String(raw.referenceId || raw.reference_id || ""),
+                createdAt: (() => {
+                  const value = raw.createdAt ?? raw.created_at
+                  if (typeof value === "number" && Number.isFinite(value)) return value
+                  if (typeof value === "string" && value.trim()) {
+                    const parsed = Date.parse(value)
+                    return Number.isFinite(parsed) ? parsed : undefined
+                  }
+                  return undefined
+                })(),
+                paymentId: String(raw.providerPaymentId || raw.paymentId || raw.piPaymentId || ""),
               }))
               .filter((x: PiIntentRow) => Boolean(x.id))
           )
         }
+        // The server performs user-scoped read-only checks against feature stores.
+        // Keep this separate from the client-side intent-field warnings below.
+        const reconciliationRes = await fetch("/api/payments/reconciliation", {
+          headers,
+          cache: "no-store",
+          credentials: "include",
+        })
+        const reconciliationData = await reconciliationRes.json().catch(() => ({}))
+        if (!cancelled && reconciliationRes.ok && reconciliationData?.ok === true
+          && reconciliationData.counts && Array.isArray(reconciliationData.findings)) {
+          setServerReconciliation({ generatedAt: typeof reconciliationData.generatedAt === "string" ? reconciliationData.generatedAt : undefined, counts: reconciliationData.counts, findings: reconciliationData.findings })
+        } else if (!cancelled) {
+          setServerReconciliation(null)
+        }
       } catch {
-        if (!cancelled) setPiIntents([])
+        if (!cancelled) setPiIntentsError("Could not connect to payment history. Check your connection and retry.")
       } finally {
         if (!cancelled) setPiIntentsLoading(false)
       }
@@ -421,7 +462,32 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     }
   }, [assetRail, tick])
 
+  // Read-only reconciliation signals derived from the durable intent records.
+  // These flags never change provider or fulfilment state and never imply that
+  // a separate marketplace/order/entitlement record has been verified.
+  const piReconciliation = useMemo(() => {
+    const normalize = (status?: string) => String(status || "").trim().toUpperCase()
+    const awaitingFulfilment = piIntents.filter((i) => normalize(i.status) === "COMPLETED")
+    const missingReference = piIntents.filter((i) => !String(i.referenceId || "").trim())
+    const paidMissingProviderId = piIntents.filter((i) =>
+      ["COMPLETED", "FULFILLED"].includes(normalize(i.status)) && !String(i.paymentId || "").trim()
+    )
+    const needsAttention = piIntents.filter((i) => ["INCOMPLETE", "FAILED"].includes(normalize(i.status)))
+    return { awaitingFulfilment, missingReference, paidMissingProviderId, needsAttention }
+  }, [piIntents])
+
   const filteredPiIntents = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const searchable = piIntents.filter((i) => {
+      const hay = `${i.purpose || ""} ${i.productId || ""} ${i.productLabel || ""} ${i.referenceId || ""} ${i.id} ${i.paymentId || ""} ${i.status || ""}`.toLowerCase()
+      if (q && !hay.includes(q)) return false
+      const status = String(i.status || "").toLowerCase()
+      if (txFilter === "pending" && !["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"].includes(status)) return false
+      if (txFilter === "earned" && !["creator_earning", "reward_payout", "refund"].includes(String(i.purpose || "").toLowerCase())) return false
+      if (txFilter === "spent" && ["failed", "cancelled", "refunded"].includes(status)) return false
+      if (txFilter === "sent" || txFilter === "received") return false
+      return true
+    })
     const now = Date.now()
     const startMs =
       txDateRange === "today"
@@ -431,9 +497,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           : txDateRange === "30d"
             ? now - 30 * 86400000
             : 0
-    if (startMs <= 0) return piIntents
-    return piIntents.filter((i) => (i.createdAt || 0) >= startMs)
-  }, [piIntents, txDateRange])
+    if (startMs <= 0) return searchable
+    return searchable.filter((i) => (i.createdAt || 0) >= startMs)
+  }, [piIntents, txDateRange, query, txFilter])
 
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showAddGhc, setShowAddGhc] = useState(false)
@@ -1150,6 +1216,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}
           />
+          <PaymentRecoveryBanner />
           <div className="gh-premium-wallet-metrics mt-3 grid grid-cols-3 gap-2" aria-label="GHC wallet state">
             {[
               ["Available", balance, "Spendable"],
@@ -1666,11 +1733,80 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                       π payment history
                     </p>
                     <p className="mt-0.5 text-[12px] text-muted-foreground">
-                      Membership and GH Pay intents only · not GHC ledger transfers
+                      Pi payment intents across supported features · separate from GHC ledger transfers
                     </p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">Refresh checks the latest stored records; it does not retry or charge a payment.</p>
+                      <button type="button" onClick={() => setTick((n) => n + 1)} disabled={piIntentsLoading} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl border border-violet-200 px-3 text-xs font-bold text-violet-900 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:text-violet-100 dark:hover:bg-violet-950" aria-label="Refresh Pi payment history">
+                        <RefreshCw size={13} className={piIntentsLoading ? "animate-spin" : ""} /> Refresh
+                      </button>
+                    </div>
                   </div>
+                  {!piIntentsLoading && !piIntentsError && serverReconciliation && (
+                    <div className="rounded-2xl border border-border bg-card p-3" aria-label="Server payment reconciliation">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-foreground">Feature reconciliation</p>
+                        <span className="text-right text-[10px] text-muted-foreground">Server · read-only{serverReconciliation.generatedAt && Number.isFinite(Date.parse(serverReconciliation.generatedAt)) ? ` · ${new Date(serverReconciliation.generatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.matched}</p><p className="text-[10px] text-muted-foreground">Matched</p></div>
+                        <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.attention_required}</p><p className="text-[10px] text-muted-foreground">Needs attention</p></div>
+                        <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.unverified}</p><p className="text-[10px] text-muted-foreground">Unverified</p></div>
+                        <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.not_applicable}</p><p className="text-[10px] text-muted-foreground">Not purchase fulfilment</p></div>
+                      </div>
+                      {serverReconciliation.findings.some((f) => f.reconciliation === "attention_required" || f.reconciliation === "unverified") && (
+                        <ul className="mt-2 space-y-1.5" aria-label="Reconciliation findings">
+                          {serverReconciliation.findings.filter((f) => f.reconciliation === "attention_required" || f.reconciliation === "unverified").slice(0, 5).map((f) => (
+                            <li key={`${f.intentId}:${f.code}`} className="rounded-lg bg-amber-50/70 p-2 text-[11px] dark:bg-amber-950/30">
+                              <p className="font-semibold">{f.purpose.replaceAll("_", " ")} · {f.code.replaceAll("_", " ")}</p>
+                              <p className="mt-0.5 text-muted-foreground">{f.message}</p>
+                              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{f.intentId}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Marketplace and membership have explicit record checks. Other feature categories remain unverified until their authoritative record mappings are implemented. No records are changed by these checks.</p>
+                    </div>
+                  )}
+                  {!piIntentsLoading && !piIntentsError && piIntents.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-3" aria-label="Payment intent field checks">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-foreground">Payment checks</p>
+                        <span className="text-[10px] text-muted-foreground">Read-only</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-muted/50 p-2">
+                          <p className="text-lg font-bold tabular-nums">{piReconciliation.awaitingFulfilment.length}</p>
+                          <p className="text-[10px] leading-snug text-muted-foreground">Paid, fulfilment not confirmed</p>
+                        </div>
+                        <div className="rounded-xl bg-muted/50 p-2">
+                          <p className="text-lg font-bold tabular-nums">{piReconciliation.needsAttention.length}</p>
+                          <p className="text-[10px] leading-snug text-muted-foreground">Failed or incomplete intents</p>
+                        </div>
+                        <div className="rounded-xl bg-muted/50 p-2">
+                          <p className="text-lg font-bold tabular-nums">{piReconciliation.missingReference.length}</p>
+                          <p className="text-[10px] leading-snug text-muted-foreground">Missing order/reference</p>
+                        </div>
+                        <div className="rounded-xl bg-muted/50 p-2">
+                          <p className="text-lg font-bold tabular-nums">{piReconciliation.paidMissingProviderId.length}</p>
+                          <p className="text-[10px] leading-snug text-muted-foreground">Paid without Pi payment ID</p>
+                        </div>
+                      </div>
+                      {(piReconciliation.awaitingFulfilment.length > 0 || piReconciliation.missingReference.length > 0 || piReconciliation.paidMissingProviderId.length > 0) && (
+                        <p className="mt-2 text-[11px] leading-relaxed text-amber-800 dark:text-amber-200" role="status">
+                          Review these payment-intent field warnings alongside the server feature reconciliation above. They are diagnostic only and do not change payment or fulfilment state.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {piIntentsLoading ? (
-                    <p className="py-6 text-center text-sm text-muted-foreground">Loading π payments…</p>
+                    <p className="py-6 text-center text-sm text-muted-foreground" role="status">Loading π payments…</p>
+                  ) : piIntentsError ? (
+                    <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">
+                      <p className="font-semibold">Payment history unavailable</p>
+                      <p className="mt-1 text-xs leading-relaxed">{piIntentsError}</p>
+                      <button type="button" onClick={() => setTick((n) => n + 1)} className="mt-3 min-h-9 rounded-xl border border-current/20 px-3 text-xs font-bold">Retry history</button>
+                    </div>
                   ) : filteredPiIntents.length === 0 ? (
                     <EmptyBlock
                       title="No π payments yet"
@@ -1685,13 +1821,29 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground">
-                              {intent.purpose || intent.productId || "π payment"}
+                              {intent.productLabel || intent.productId || ({
+                                membership: "Membership payment",
+                                marketplace: "Marketplace purchase",
+                                boost: "Boost payment",
+                                donation: "Donation",
+                                sponsored_listing: "Sponsored listing",
+                                digital_product: "Digital product purchase",
+                                premium_feature: "Premium feature",
+                                service: "Service payment",
+                                verification: "Verification payment",
+                                seller_payout: "Seller payout",
+                                creator_earning: "Creator earnings",
+                                refund: "Refund",
+                                reward_payout: "Reward payout",
+                                other: "π payment",
+                              } as Record<string, string>)[String(intent.purpose || "other").toLowerCase()] || "π payment"}
                             </p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              {intent.createdAt
+                              {typeof intent.createdAt === "number" && intent.createdAt > 0
                                 ? formatWhen(intent.createdAt)
-                                : ""}
-                              {intent.paymentId ? ` · ${intent.paymentId.slice(0, 12)}…` : ""}
+                                : "Date unavailable"}
+                              {intent.referenceId ? ` · Ref ${intent.referenceId.slice(0, 12)}${intent.referenceId.length > 12 ? "…" : ""}` : ""}
+                              {intent.paymentId ? ` · Pi ID ${intent.paymentId.slice(0, 12)}…` : ""}
                             </p>
                             <p className="mt-0.5 text-[10px] font-mono text-muted-foreground/80">
                               {intent.id}
@@ -1700,7 +1852,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                           <div className="text-right shrink-0">
                             {typeof intent.amountPi === "number" ? (
                               <p className="text-sm font-bold text-violet-700 dark:text-violet-300">
-                                {intent.amountPi} π
+                                {intent.amountPi.toLocaleString(undefined, { maximumFractionDigits: 8 })} {intent.currency === "GHC" ? "GHC" : "π"}
                               </p>
                             ) : null}
                             <span
@@ -1714,9 +1866,32 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                                     : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
                               }`}
                             >
-                              {intent.status || "unknown"}
+                              {{
+                                CREATED: "Awaiting approval",
+                                APPROVAL_PENDING: "Approval pending",
+                                APPROVED: "Approved",
+                                USER_SUBMITTED: "Submitted",
+                                COMPLETION_PENDING: "Confirming payment",
+                                COMPLETED: "Paid · fulfilment pending",
+                                FULFILLED: "Completed",
+                                FAILED: "Failed",
+                                CANCELLED: "Cancelled",
+                                REFUNDED: "Refunded",
+                                INCOMPLETE: "Needs attention",
+                              }[String(intent.status || "").toUpperCase()] || String(intent.status || "Status unavailable").replaceAll("_", " ")}
                             </span>
                           </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+                          <span className="text-[10px] text-muted-foreground">Stored payment record · read-only</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPiIntent(intent)}
+                            aria-label={`View details for payment ${intent.id}`}
+                            className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-border px-3 text-xs font-bold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                          >
+                            View details <ChevronRight size={14} />
+                          </button>
                         </div>
                       </div>
                     ))
@@ -2238,6 +2413,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         }}
       />
 
+      <PiPaymentDetail
+        intent={selectedPiIntent as PiPaymentDetailRecord | null}
+        finding={selectedPiIntent ? serverReconciliation?.findings.find((item) => item.intentId === selectedPiIntent.id) : undefined}
+        onClose={() => setSelectedPiIntent(null)}
+      />
       <GhcTransactionDetail
         open={!!selectedTx}
         tx={selectedTx}

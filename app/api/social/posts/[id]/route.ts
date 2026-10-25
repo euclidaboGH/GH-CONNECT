@@ -7,6 +7,7 @@ import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/r
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 import { getPublicContentReward } from "@/lib/server/content-reward/store"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -69,7 +70,8 @@ export async function GET(
     contentReward: reward.ok ? reward : undefined,
     engagement: { likes: Number(row.like_count || 0), comments: Number(row.comment_count || 0), shares: Number(row.share_count || 0), views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
   }
-  return NextResponse.json({ ok: true, durable: true, post }, { headers: { "Cache-Control": "no-store" } })
+  const [hydratedPost] = await hydratePublicProfileIdentity([post as unknown as Record<string, unknown>])
+  return NextResponse.json({ ok: true, durable: true, post: hydratedPost }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function DELETE(

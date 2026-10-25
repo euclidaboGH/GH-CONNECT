@@ -24,6 +24,12 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import {
+  loadOrder,
+  saveOrder,
+  transitionOrder,
+  claimOrderForPayment,
+} from "@/lib/server/marketplace/order-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -273,6 +279,147 @@ export async function POST(request: Request) {
       }
     }
 
+
+    // Phase 18: feature fulfilment notes + marketplace order attach when durable intent proves payment
+    const meta = (finalIntent.metadata && typeof finalIntent.metadata === "object"
+      ? finalIntent.metadata
+      : {}) as Record<string, unknown>
+    const kind = String(meta.kind || meta.feeKind || "").toLowerCase()
+    const featureFulfilment: Array<{ feature: string; ok: boolean; code: string; message: string; orderId?: string }> = []
+
+    if (kind === "listing_fee") {
+      featureFulfilment.push({
+        feature: "marketplace_listing_fee",
+        ok: true,
+        code: "LISTING_FEE_INTENT_FULFILLED",
+        message:
+          "Listing fee payment is fulfilled on the durable intent. Retry listing publish with this feePaymentId if the listing is not active yet. GreenHaven does not invent a listing row here.",
+      })
+    }
+    if (kind === "community_create_fee" || String(finalIntent.referenceId || "").startsWith("community_create_fee_")) {
+      featureFulfilment.push({
+        feature: "community_create_fee",
+        ok: true,
+        code: "COMMUNITY_FEE_INTENT_FULFILLED",
+        message:
+          "Community create fee payment is fulfilled. Retry community create with feePaymentId if the community is missing. No community row is invented here.",
+      })
+    }
+
+    // Marketplace order purchase: attach verified payment when reference/metadata points at an order
+    let orderFulfilment: { ok: boolean; orderId?: string; error?: string } | null = null
+    try {
+      const orderId = String(
+        meta.orderId || meta.marketplaceOrderId || ""
+      ).trim() || (
+        String(finalIntent.referenceId || "").startsWith("marketplace_order_")
+          ? String(finalIntent.referenceId).replace(/^marketplace_order_/, "").trim()
+          : ""
+      )
+      if (
+        orderId &&
+        (String(finalIntent.purpose || "").toLowerCase() === "marketplace" ||
+          kind === "order_payment" ||
+          kind === "marketplace_order")
+      ) {
+        const order = await loadOrder(orderId)
+        if (!order) {
+          orderFulfilment = { ok: false, orderId, error: "ORDER_NOT_FOUND" }
+          featureFulfilment.push({
+            feature: "marketplace_order",
+            ok: false,
+            code: "ORDER_NOT_FOUND",
+            message: "Payment is fulfilled, but no durable order matches this intent.",
+            orderId,
+          })
+        } else if (order.buyerId !== auth.userId) {
+          orderFulfilment = { ok: false, orderId, error: "FORBIDDEN" }
+          featureFulfilment.push({
+            feature: "marketplace_order",
+            ok: false,
+            code: "ORDER_NOT_OWNED",
+            message: "Order is not owned by the authenticated buyer.",
+            orderId,
+          })
+        } else if (order.paymentStatus === "verified" || order.status === "confirmed" || order.status === "completed") {
+          orderFulfilment = { ok: true, orderId }
+          featureFulfilment.push({
+            feature: "marketplace_order",
+            ok: true,
+            code: "ORDER_ALREADY_VERIFIED",
+            message: "Order payment was already verified.",
+            orderId,
+          })
+        } else {
+          const claim = await claimOrderForPayment(order.id, auth.userId, "pi")
+          if (!claim.ok) {
+            orderFulfilment = { ok: false, orderId, error: claim.error }
+            featureFulfilment.push({
+              feature: "marketplace_order",
+              ok: false,
+              code: String(claim.error || "CLAIM_FAILED"),
+              message: "Could not claim order for payment fulfilment.",
+              orderId,
+            })
+          } else {
+            order.paymentMethod = "pi"
+            order.paymentStatus = "verified"
+            order.paymentIntentId = finalIntent.id
+            order.paymentId = finalIntent.providerPaymentId || paymentId || order.paymentId
+            order.txid = finalIntent.txid || txid || order.txid
+            order.updatedAt = Date.now()
+            order.audit = [
+              ...(order.audit || []),
+              { at: Date.now(), action: "FULFILL_PI", detail: finalIntent.id },
+            ]
+            const saved = await saveOrder(order)
+            if (!saved.ok) {
+              orderFulfilment = { ok: false, orderId, error: saved.error }
+              featureFulfilment.push({
+                feature: "marketplace_order",
+                ok: false,
+                code: "ORDER_PERSIST_FAILED",
+                message: "Order payment attach failed to persist.",
+                orderId,
+              })
+            } else {
+              await transitionOrder(order.id, "payment_verified", auth.userId, "fulfill_route")
+              await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
+              orderFulfilment = { ok: true, orderId }
+              featureFulfilment.push({
+                feature: "marketplace_order",
+                ok: true,
+                code: "ORDER_PAYMENT_VERIFIED",
+                message: "Order payment verified and order confirmed from durable intent.",
+                orderId,
+              })
+            }
+          }
+        }
+      }
+    } catch (e) {
+      orderFulfilment = {
+        ok: false,
+        error: e instanceof Error ? e.message : "ORDER_FULFIL_FAILED",
+      }
+    }
+
+    if (String(finalIntent.purpose || "").toLowerCase() === "membership") {
+      featureFulfilment.push({
+        feature: "membership",
+        ok: Boolean(membershipGrant?.granted || membershipGrant?.skipped),
+        code: membershipGrant?.granted
+          ? "MEMBERSHIP_GRANTED"
+          : membershipGrant?.skipped
+            ? "MEMBERSHIP_SKIPPED"
+            : "MEMBERSHIP_PENDING",
+        message: membershipGrant?.error
+          || (membershipGrant?.granted
+            ? "Membership entitlement granted from fulfilled intent."
+            : "Membership grant was not applied; use membership reconcile if still on Free."),
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       paymentId: intent.providerPaymentId,
@@ -282,6 +429,8 @@ export async function POST(request: Request) {
       referenceId: intent.referenceId,
       membership: membershipGrant,
       ghcPack: ghcPackGrant,
+      featureFulfilment,
+      orderFulfilment,
     })
   } catch (e) {
     return NextResponse.json(

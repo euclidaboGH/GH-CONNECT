@@ -7,6 +7,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -114,15 +115,25 @@ export async function GET(request: Request) {
       ? ((creatorsRes.data as { creators?: unknown[] }).creators || [])
       : empty.creators
 
+  // Search and feed now share the same canonical public identity source.
+  // Hydration only updates public display-name/photo aliases; it never changes ranking,
+  // access checks, authorship, or economy data.
+  const [hydratedPeople, hydratedPosts, hydratedVideos, hydratedCreators] = await Promise.all([
+    hydratePublicProfileIdentity(Array.isArray(people) ? people.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : []),
+    hydratePublicProfileIdentity(Array.isArray(posts) ? posts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : []),
+    hydratePublicProfileIdentity(Array.isArray(videos) ? videos.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : []),
+    hydratePublicProfileIdentity(Array.isArray(creators) ? creators.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : []),
+  ])
+
   return NextResponse.json({
     ok: true,
     durable: true,
     query: q,
     category,
-    people: Array.isArray(people) ? people : [],
-    posts: Array.isArray(posts) ? posts : [],
-    videos: Array.isArray(videos) ? videos : [],
-    creators: Array.isArray(creators) ? creators : [],
+    people: hydratedPeople,
+    posts: hydratedPosts,
+    videos: hydratedVideos,
+    creators: hydratedCreators,
     ranking: "chronological",
-  })
+  }, { headers: { "Cache-Control": "no-store" } })
 }

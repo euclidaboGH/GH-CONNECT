@@ -133,14 +133,11 @@ function EnhancedPostCardInner({
   const editImageInputRef = useRef<HTMLInputElement>(null)
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [contentExpanded, setContentExpanded] = useState(false)
-  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const galleryIdentity = realImages.join("\u001f")
   useEffect(() => {
     setImageIndex(0)
     setShowReactions(false)
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-    pressTimerRef.current = null
   }, [post.id, galleryIdentity])
   const seedChoiceRaw = String(
     (post as { viewerCurationChoice?: string }).viewerCurationChoice || ""
@@ -174,7 +171,6 @@ function EnhancedPostCardInner({
   const curationLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const curationLongPressTriggeredRef = useRef(false)
   useEffect(() => () => {
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
     if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
   }, [])
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
@@ -196,30 +192,16 @@ function EnhancedPostCardInner({
   // Fetching it once per feed card caused an N+1 request storm and the value
   // was not rendered here; keep feed cards lean and defer that request.
 
-  const startCurationLongPress = (kind: "positive" | "negative") => {
+  // Deliberate curation requires a sustained press. A normal tap only opens
+  // the compact reaction picker and can never move GHC.
+  const startCurationLongPress = (choice: "upvote" | "downvote") => {
     if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
     curationLongPressTriggeredRef.current = false
     curationLongPressTimerRef.current = setTimeout(() => {
+      curationLongPressTimerRef.current = null
       curationLongPressTriggeredRef.current = true
-      // Long-press → engagement roster (who upvoted / downvoted), not reaction picker.
-      // Reaction picker stays available via the visible reaction chips when counts exist.
-      openRoster(kind === "positive" ? "upvotes" : "downvotes")
-    }, 480)
-    // Track release outside the button too, so a completed long press cannot
-    // leave a stale suppression flag or accidentally vote on a later tap.
-    const finish = () => {
-      endCurationLongPress()
-      window.removeEventListener("pointerup", finish)
-      window.removeEventListener("pointercancel", cancel)
-      window.setTimeout(() => { curationLongPressTriggeredRef.current = false }, 0)
-    }
-    const cancel = () => {
-      endCurationLongPress(true)
-      window.removeEventListener("pointerup", finish)
-      window.removeEventListener("pointercancel", cancel)
-    }
-    window.addEventListener("pointerup", finish, { once: true })
-    window.addEventListener("pointercancel", cancel, { once: true })
+      void handleCuration(choice)
+    }, 1200)
   }
 
   const endCurationLongPress = (cancelled = false) => {
@@ -358,21 +340,6 @@ function EnhancedPostCardInner({
     if (target?.closest("button, a, [role=button]")) return
     event?.stopPropagation()
     onOpenPost?.(post.id)
-  }
-
-  // Long-press for quick reactions
-  const handleLongPress = (kind: "positive" | "negative" = "positive") => {
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-    pressTimerRef.current = setTimeout(() => {
-      pressTimerRef.current = null
-      setCurationReactionKind(kind)
-      setShowReactions(true)
-    }, 500)
-  }
-
-  const handlePressEnd = () => {
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-    pressTimerRef.current = null
   }
 
   const handleQuickReaction = (reaction: PostReaction) => {
@@ -797,12 +764,6 @@ function EnhancedPostCardInner({
           <div
             className="group relative mb-2 aspect-[4/5] max-h-[24rem] w-full cursor-pointer overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem]"
             onClick={handleImageTap}
-            onMouseDown={() => handleLongPress("positive")}
-            onMouseUp={handlePressEnd}
-            onMouseLeave={handlePressEnd}
-            onTouchStart={() => handleLongPress("positive")}
-            onTouchEnd={handlePressEnd}
-            onTouchCancel={handlePressEnd}
             role="group"
             tabIndex={onOpenPost ? 0 : undefined}
             aria-label={`Post image gallery, image ${imageIndex + 1} of ${realImages.length}`}
@@ -895,7 +856,7 @@ function EnhancedPostCardInner({
         <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>
           <span className="px-1 text-xs font-semibold text-muted-foreground">{curationReactionKind === "positive" ? "Positive reaction" : "Negative reaction"}</span>
           {REACTIONS.filter((reaction) => curationReactionKind === "positive" ? reaction.type !== "sad" && reaction.type !== "like" : reaction.type === "sad").map((reaction) => (
-            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-10 min-w-10 items-center justify-center rounded-full bg-muted px-2 text-xl hover:bg-muted/70" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
+            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-8 min-w-8 items-center justify-center rounded-full bg-muted px-1.5 text-base hover:bg-muted/70" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
           ))}
           <button type="button" onClick={() => setShowReactions(false)} className="ml-auto rounded-full px-2 py-1 text-xs text-muted-foreground">Cancel</button>
         </div>
@@ -932,28 +893,23 @@ function EnhancedPostCardInner({
             <button
               type="button"
               disabled={curationBusy}
-              aria-label="Upvote content — improves quality ranking and reward eligibility. Long-press for positive reactions."
+              aria-label="Hold for 1.2 seconds to vote and curate this post. Tap for reaction options."
               aria-pressed={curationChoice === "upvote"}
               onClick={(e) => {
+                e.preventDefault()
                 if (curationLongPressTriggeredRef.current) {
                   curationLongPressTriggeredRef.current = false
-                  e.preventDefault()
                   return
                 }
-                void handleCuration("upvote")
+                setCurationReactionKind("positive")
+                setShowReactions((visible) => !visible)
               }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openRoster("upvotes")
-              }}
-              onPointerDown={(e) => {
-                if (e.button !== 0) return
-                startCurationLongPress("positive")
-              }}
+              onContextMenu={(e) => { e.preventDefault(); openRoster("upvotes") }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationLongPress("upvote") }}
               onPointerUp={() => endCurationLongPress()}
               onPointerCancel={() => endCurationLongPress(true)}
-              onPointerLeave={() => endCurationLongPress()}
-              title="Upvote content quality. Long-press for positive reactions. Reward calculation is server-authoritative."
+              onPointerLeave={() => endCurationLongPress(true)}
+              title="Hold for 1.2 seconds to vote and curate. Tap to choose a reaction. GHC changes only after server confirmation."
               className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
                 curationChoice === "upvote"
                   ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -966,28 +922,23 @@ function EnhancedPostCardInner({
             <button
               type="button"
               disabled={curationBusy}
-              aria-label="Downvote weak content. Long-press for negative reactions."
+              aria-label="Hold for 1.2 seconds to downvote and curate this post. Tap for reaction options."
               aria-pressed={curationChoice === "downvote"}
               onClick={(e) => {
+                e.preventDefault()
                 if (curationLongPressTriggeredRef.current) {
                   curationLongPressTriggeredRef.current = false
-                  e.preventDefault()
                   return
                 }
-                void handleCuration("downvote")
+                setCurationReactionKind("negative")
+                setShowReactions((visible) => !visible)
               }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openRoster("downvotes")
-              }}
-              onPointerDown={(e) => {
-                if (e.button !== 0) return
-                startCurationLongPress("negative")
-              }}
+              onContextMenu={(e) => { e.preventDefault(); openRoster("downvotes") }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationLongPress("downvote") }}
               onPointerUp={() => endCurationLongPress()}
               onPointerCancel={() => endCurationLongPress(true)}
-              onPointerLeave={() => endCurationLongPress()}
-              title="Downvote weak content. Long-press for negative reactions."
+              onPointerLeave={() => endCurationLongPress(true)}
+              title="Hold for 1.2 seconds to downvote and curate. Tap to choose a reaction."
               className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
                 curationChoice === "downvote"
                   ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"

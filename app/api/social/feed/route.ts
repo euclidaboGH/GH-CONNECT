@@ -9,6 +9,7 @@ import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/r
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
 import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -194,6 +195,32 @@ export async function GET(request: Request) {
     posts = await hydrateFeedEngagement(posts, auth.userId)
   } catch {
     /* engagement previews are an enhancement; never fail the feed for them */
+  }
+
+  // Rehydrate post authors and nested comment previews from the canonical public
+  // profile store. One batched profile read per layer avoids N+1 queries and keeps
+  // persisted historical labels from becoming the permanent identity source.
+  try {
+    posts = await hydratePublicProfileIdentity(posts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")))
+    const withComments = posts.filter((post): post is Record<string, unknown> => Boolean(post && typeof post === "object"))
+    const allComments = withComments.flatMap((post) => Array.isArray(post.comments) ? post.comments.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : [])
+    if (allComments.length) {
+      const hydratedComments = await hydratePublicProfileIdentity(allComments)
+      const byId = new Map(hydratedComments.map((comment, index) => [String(comment.id || `${index}`), comment]))
+      let fallbackIndex = 0
+      posts = withComments.map((post) => ({
+        ...post,
+        comments: Array.isArray(post.comments) ? post.comments.map((item) => {
+          if (!item || typeof item !== "object") return item
+          const comment = item as Record<string, unknown>
+          const key = String(comment.id || `${fallbackIndex}`)
+          fallbackIndex += 1
+          return byId.get(key) || comment
+        }) : post.comments,
+      }))
+    }
+  } catch {
+    // Identity enrichment is best-effort; it never changes post visibility or ownership.
   }
 
   // Advance using the last raw server row, not the last visible/mute-filtered row,

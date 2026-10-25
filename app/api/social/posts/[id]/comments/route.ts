@@ -13,6 +13,7 @@ import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -79,7 +80,8 @@ export async function GET(
     return state ? { ...comment, reactionCounts: state.reactionCounts, viewerReactions: state.viewerReactions } : comment
   })
   const rpcReadSucceeded = Boolean(chosen.ok && Array.isArray(data?.comments) && (data as { ok?: boolean })?.ok !== false)
-  return NextResponse.json({ ok: true, durable: true, comments: hydratedComments, nextCursor, stableCursor: true }, { headers: { "Cache-Control": "no-store" } })
+  const publicComments = await hydratePublicProfileIdentity(hydratedComments.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")))
+  return NextResponse.json({ ok: true, durable: true, comments: publicComments, nextCursor, stableCursor: true }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(

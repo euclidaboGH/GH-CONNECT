@@ -15,6 +15,44 @@ import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/e
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+
+function describeFeatureAttempts(intent: NonNullable<Awaited<ReturnType<typeof loadPaymentIntent>>>) {
+  const meta = (intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {}) as Record<string, unknown>
+  const kind = String(meta.kind || meta.feeKind || "").toLowerCase()
+  const attempts: Array<{ feature: string; ok: boolean; code?: string; message?: string }> = []
+  if (kind === "listing_fee") {
+    attempts.push({
+      feature: "marketplace_listing_fee",
+      ok: intent.status === "COMPLETED" || intent.status === "FULFILLED",
+      code: "LISTING_FEE_PAYMENT_STATE",
+      message:
+        intent.status === "COMPLETED" || intent.status === "FULFILLED"
+          ? "Pi listing fee payment is recorded. Publish/retry listing create with this intent id if the listing is not active yet."
+          : "Listing fee payment is not completed on the durable intent.",
+    })
+  }
+  if (kind === "community_create_fee" || String(intent.referenceId || "").startsWith("community_create_fee_")) {
+    attempts.push({
+      feature: "community_create_fee",
+      ok: intent.status === "COMPLETED" || intent.status === "FULFILLED",
+      code: "COMMUNITY_FEE_PAYMENT_STATE",
+      message:
+        intent.status === "COMPLETED" || intent.status === "FULFILLED"
+          ? "Pi community fee payment is recorded. Retry create with feePaymentId if the community is missing."
+          : "Community fee payment is not completed on the durable intent.",
+    })
+  }
+  if (String(intent.purpose || "").toLowerCase() === "membership") {
+    attempts.push({
+      feature: "membership",
+      ok: intent.status === "FULFILLED" || intent.status === "COMPLETED",
+      code: "MEMBERSHIP_PAYMENT_STATE",
+      message: "Membership grant is attempted only from completed intents via server entitlement rules.",
+    })
+  }
+  return attempts
+}
+
 async function ensureRecoveredMembership(userId: string, intent: NonNullable<Awaited<ReturnType<typeof loadPaymentIntent>>>) {
   try {
     return await tryGrantMembershipFromCompletedIntent({
@@ -52,12 +90,14 @@ export async function POST(
 
   if (intent.status === "COMPLETED" || intent.status === "FULFILLED") {
     const membership = await ensureRecoveredMembership(auth.userId, intent)
+    const featureAttempts = describeFeatureAttempts(intent)
     return NextResponse.json({
       ok: true,
       intent,
       recovered: false,
       message: "Already completed",
       membership,
+      featureAttempts,
     })
   }
 
@@ -123,11 +163,13 @@ export async function POST(
     }
     const recoveredIntent = completedIntent
     const membership = await ensureRecoveredMembership(auth.userId, recoveredIntent)
+    const featureAttempts = describeFeatureAttempts(recoveredIntent)
     return NextResponse.json({
       ok: true,
       intent: recoveredIntent,
       recovered: true,
       membership,
+      featureAttempts,
     })
   }
 

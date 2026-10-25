@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -112,10 +113,11 @@ export async function GET(request: Request) {
       /* Story cards still render their media/text if reaction counts cannot load. */
     }
   }
+  const publicStories = await hydratePublicProfileIdentity(enrichedStories.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")))
   return NextResponse.json({
     ok: true,
     durable: true,
-    stories: enrichedStories,
+    stories: publicStories,
   }, { headers: { "Cache-Control": "no-store" } })
 }
 

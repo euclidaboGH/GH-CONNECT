@@ -87,8 +87,23 @@ export async function POST(
   // transaction. The DB RPC atomically persists the vote, reward decision, and
   // percentage-scaled active GHPV weight; no client authority is accepted.
   // Refresh the server-owned intelligence snapshot before deriving curation power.
-  // If the DB is temporarily unavailable, the existing formula remains the safe fallback.
-  await refreshReputationIntelligence(auth.userId)
+  // A failed refresh is not itself proof that voting must fail: a previously persisted,
+  // valid snapshot may still be usable. However, never silently discard the failure.
+  // Record a sanitized diagnostic so operators can distinguish RPC/schema/dependency
+  // failures from a missing snapshot without exposing database details to the client.
+  const intelligenceRefresh = await refreshReputationIntelligence(auth.userId)
+  if (!intelligenceRefresh.ok) {
+    const refreshReason = String(intelligenceRefresh.error || "REFRESH_FAILED")
+    const refreshDiagnosticCode = /DB_UNAVAILABLE|SUPABASE/i.test(refreshReason)
+      ? "CURATION_DATABASE_CONFIGURATION"
+      : /does not exist|schema cache|PGRST202|PGRST203|POSTGREST_SCHEMA_CACHE_STALE|RPC_OR_DEPENDENCY_NOT_FOUND|SQLSTATE_(?:42883|42P01|42703)|function .* not found|relation .* does not exist/i.test(refreshReason)
+        ? "CURATION_MIGRATION_NOT_READY"
+        : "CURATION_INTELLIGENCE_REFRESH_FAILED"
+    console.error("[curation] reputation intelligence refresh failed", {
+      diagnosticCode: refreshDiagnosticCode,
+      reason: refreshReason.slice(0, 180),
+    })
+  }
 
   let weightedVote: Awaited<ReturnType<typeof resolveWeightedVote>>
   try {
@@ -101,7 +116,33 @@ export async function POST(
     if (reason === "CURATION_REVIEW_REQUIRED") {
       return NextResponse.json({ ok: false, error: reason, durable: true }, { status: 403 })
     }
-    return NextResponse.json({ ok: false, error: "CURATION_INTELLIGENCE_UNAVAILABLE", durable: false }, { status: 503 })
+    // Keep the public error stable, but distinguish deployment/configuration
+    // failures in server logs so an operator can tell a missing migration or
+    // service-role configuration from a genuine review hold. Never return raw
+    // PostgREST messages or secrets to the client, and never fall back to a
+    // client/formula-derived vote weight.
+    const diagnosticCode = /DB_UNAVAILABLE|SUPABASE/i.test(reason)
+      ? "CURATION_DATABASE_CONFIGURATION"
+      : /does not exist|schema cache|PGRST202|function .* not found|relation .* does not exist/i.test(reason)
+        ? "CURATION_MIGRATION_NOT_READY"
+        : reason === "CURATION_INTELLIGENCE_UNAVAILABLE"
+          ? "CURATION_SNAPSHOT_MISSING_OR_UNREADABLE"
+          : "CURATION_WEIGHT_RESOLUTION_FAILED"
+    console.error("[curation] authoritative weight resolution failed", {
+      diagnosticCode,
+      reason: reason.slice(0, 180),
+    })
+    return NextResponse.json({
+      ok: false,
+      error: "CURATION_INTELLIGENCE_UNAVAILABLE",
+      diagnosticCode,
+      message: diagnosticCode === "CURATION_MIGRATION_NOT_READY"
+        ? "Curation services are being prepared. Please try again later."
+        : diagnosticCode === "CURATION_DATABASE_CONFIGURATION"
+          ? "Curation is temporarily unavailable. Please try again later."
+          : "GreenHaven could not verify curation intelligence. Please try again shortly.",
+      durable: false,
+    }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
   const judgmentMode = inferJudgmentMode({})
   const result = await socialRpc("gh_post_curation_set_with_reward", {

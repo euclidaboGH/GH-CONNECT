@@ -20,6 +20,8 @@ export const GHC_APP_EVENTS = {
   utilitySpent: "ghc:utility-spent",
   dailyRewardClaimed: "ghc:daily-reward-claimed",
   membershipActivated: "ghc:membership-activated",
+  paymentRecovered: "ghc:payment-recovered",
+  paymentFulfilled: "ghc:payment-fulfilled",
   profileMediaUpdated: "ghc:profile-media-updated",
   marketplaceOrderChanged: "ghc:marketplace-order-changed",
   ghcPackIntent: "ghc:ghc-pack-intent",

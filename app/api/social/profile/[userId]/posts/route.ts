@@ -11,6 +11,7 @@ import { socialDbConfigured, socialRest, socialRpc } from "@/lib/server/social/r
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
 import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -198,7 +199,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ userId: str
   if (visiblePosts === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   let hydratedPosts: unknown[] = visiblePosts
   try {
-    hydratedPosts = await hydrateProfileEngagement(visiblePosts, auth.userId)
+    const identityPosts = await hydratePublicProfileIdentity(visiblePosts.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")))
+    hydratedPosts = await hydrateProfileEngagement(identityPosts, auth.userId)
   } catch {
     // A preview failure must not hide the timeline; durable comment/vote APIs remain available.
   }

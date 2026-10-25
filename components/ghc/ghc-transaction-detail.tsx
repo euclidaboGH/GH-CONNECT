@@ -5,8 +5,8 @@
  * Does not invent transactions; only presents GhcTransaction fields.
  */
 
-import { ArrowLeft, Copy, ExternalLink, X } from "lucide-react"
-import { useState } from "react"
+import { ArrowLeft, Copy, Download, ExternalLink, Share2, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import type { GhcTransaction } from "@/lib/domains/economy-types"
 import { navigateGhcActivityTarget, resolveGhcActivityAttribution } from "@/lib/domains/ghc-activity-attribution"
@@ -71,6 +71,33 @@ export type GhcTransactionDetailProps = {
 
 export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetailProps) {
   const [copied, setCopied] = useState(false)
+  const [receiptFeedback, setReceiptFeedback] = useState<string | null>(null)
+  const receipt = useMemo(() => {
+    if (!tx) return ""
+    const amount = Number.isFinite(tx.amount)
+      ? `${tx.amount > 0 ? "+" : ""}${tx.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })} GHC`
+      : "Amount unavailable"
+    return [
+      "GreenHaven · GHC Ledger Transaction Record",
+      `Description: ${tx.reason || tx.kind}`,
+      `Amount: ${amount}`,
+      `Type: ${KIND_LABELS[tx.kind] || tx.kind}`,
+      `Status: ${tx.status}`,
+      `Created: ${formatWhen(tx.createdAt)}`,
+      `Posted: ${tx.postedAt ? formatWhen(tx.postedAt) : "Not recorded"}`,
+      `Transaction ID: ${tx.id}`,
+      `Reference ID: ${tx.referenceId || "Not provided"}`,
+      `Source event: ${tx.sourceEvent || "Not provided"}`,
+      "This is a copy of the GHC ledger record, not an external bank or Pi settlement receipt.",
+      "GHC is an in-app utility/reward credit; this record does not authorize or initiate balance changes.",
+    ].join("\n")
+  }, [tx])
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose() }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [open, onClose])
   if (!open || !tx) return null
 
   const positive = tx.amount >= 0
@@ -92,7 +119,40 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      /* */
+      setReceiptFeedback("Reference copy is unavailable in this browser.")
+    }
+  }
+  const copyReceipt = async () => {
+    try {
+      await navigator.clipboard.writeText(receipt)
+      setReceiptFeedback("Transaction record copied.")
+    } catch {
+      setReceiptFeedback("Copy is unavailable. Download the record instead.")
+    }
+  }
+  const shareReceipt = async () => {
+    try {
+      if (!navigator.share) { setReceiptFeedback("Sharing is not supported here. Download or copy the record instead."); return }
+      await navigator.share({ title: "GreenHaven GHC transaction record", text: receipt })
+      setReceiptFeedback("Transaction record shared.")
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setReceiptFeedback("Could not share the record. Try downloading it.")
+    }
+  }
+  const downloadReceipt = () => {
+    try {
+      const blob = new Blob([receipt], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `greenhaven-ghc-ledger-${tx.id.slice(0, 12)}.txt`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setReceiptFeedback("Transaction record downloaded.")
+    } catch {
+      setReceiptFeedback("Download is unavailable in this browser.")
     }
   }
 
@@ -232,11 +292,17 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
 
           <p className="mt-4 text-[10px] leading-relaxed text-muted-foreground">
             Balances are derived from the ledger. This detail view does not authorize credits or
-            debits.
+            debits. The exported record is not an external bank or Pi settlement receipt.
           </p>
+          {receiptFeedback && <p className="mt-2 text-xs text-muted-foreground" role="status">{receiptFeedback}</p>}
         </div>
 
         <div className="border-t border-border p-3">
+          <div className="mb-2 grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => void copyReceipt()} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Copy size={14} /> Copy record</button>
+            <button type="button" onClick={() => void shareReceipt()} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Share2 size={14} /> Share</button>
+            <button type="button" onClick={downloadReceipt} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Download size={14} /> Download</button>
+          </div>
           <button
             type="button"
             onClick={onClose}

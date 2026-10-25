@@ -1,53 +1,22 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { attributeReferral, ensureReferralCode } from "@/lib/server/referral/referral-service"
-import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
+import { normalizeGreenHavenId, isValidGreenHavenIdFormat } from "@/lib/domains/greenhaven-id"
 import { z } from "zod"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 async function resolveUserIdFromGreenHavenId(ghId: string): Promise<string | null> {
-  const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
-  // IDs are case-insensitive for lookup, but never guess a user from a profile row ID.
-  const normalized = ghId.trim().toUpperCase().replace(/\s+/g, "")
-  if (!normalized) return null
-  const base = env.supabaseUrl.replace(/\/$/, "")
-  const headers = {
-    apikey: env.supabaseServiceRoleKey,
-    Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-    Accept: "application/json",
-  }
-
-  // Query candidate legacy columns independently. A PostgREST `or` that references
-  // one absent column fails as a whole, making valid IDs look nonexistent.
-  const candidates = [
-    { table: "gh_profiles", column: "green_haven_id" },
-    { table: "gh_profiles", column: "greenhaven_id" },
-    { table: "gh_profiles", column: "gh_id" },
-    { table: "gh_profiles", column: "public_id" },
-  ]
-  for (const candidate of candidates) {
-    try {
-      const query = new URLSearchParams({
-        [candidate.column]: `eq.${normalized}`,
-        select: "user_id",
-        limit: "1",
-      })
-      const res = await fetch(`${base}/rest/v1/${candidate.table}?${query.toString()}`, {
-        headers,
-        cache: "no-store",
-      })
-      if (!res.ok) continue
-      const rows = (await res.json().catch(() => [])) as Array<{ user_id?: string | null }>
-      const userId = Array.isArray(rows) ? String(rows[0]?.user_id || "").trim() : ""
-      if (userId) return userId
-    } catch {
-      // A missing/legacy column or transient query failure must not stop other candidates.
-    }
-  }
-  return null
+  // Referral attribution must use the same durable public-ID directory as GHC
+  // transfers and the public-ID resolver. Legacy profile-column probing caused
+  // valid IDs to be rejected whenever the current identity lived in
+  // ghc_public_identities rather than legacy profile columns.
+  const normalized = normalizeGreenHavenId(ghId)
+  if (!isValidGreenHavenIdFormat(normalized)) return null
+  const identity = await resolvePublicIdentity(normalized)
+  return identity?.userId || null
 }
 
 /** POST — attribute the authenticated user to a referral code OR GreenHaven ID (once) */

@@ -12,6 +12,7 @@ import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { resolveMediaAssets } from "@/lib/server/media/asset-store"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -57,11 +58,13 @@ export async function GET(request: Request) {
     p_before_ms: null,
   })
   const payload = result.data as { posts?: unknown[] }
+  const rawPosts = Array.isArray(payload?.posts) ? payload.posts : []
+  const posts = await hydratePublicProfileIdentity(rawPosts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")))
   return NextResponse.json({
     ok: true,
     durable: result.ok,
-    posts: Array.isArray(payload?.posts) ? payload.posts : [],
-  })
+    posts,
+  }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {

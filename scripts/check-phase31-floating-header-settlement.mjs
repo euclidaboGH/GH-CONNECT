@@ -29,7 +29,7 @@ const checks = [
   ['mature reconciliation only settles expired-lock daily claims', /DAILY_CLAIM_V12/.test(db) && /48 \* 60 \* 60 \* 1000/.test(route) && /rpcClaimPending\(auth\.userId, tx\.id\)/.test(route) && /created_at: `lt\.\$\{cutoff\.toISOString\(\)\}`/.test(db)],
   ['mature reconciliation does not trust client amount or user ID', !/request\.json\(\)/.test(route) && /rpcClaimPending\(auth\.userId/.test(route)],
   ['legacy metadata backfill touches only pending positive Daily Claim rows', /status = 'pending'/.test(migration) && /amount > 0/.test(migration) && /source_event = 'DAILY_CLAIM_V12'/.test(migration)],
-  ['release version is synchronized', /APP_RELEASE_VERSION = "0\.91\.5"/.test(read('lib/app-release.ts')) && /"version": "0\.91\.5"/.test(read('package.json'))],
+  ['release version is synchronized', new RegExp('APP_RELEASE_VERSION = \"' + JSON.parse(read('package.json')).version.replaceAll('.', '\\.') + '\"').test(read('lib/app-release.ts')) && JSON.parse(read('package.json')).version === JSON.parse(read('package-lock.json')).version],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if (!ok) failed++ }
