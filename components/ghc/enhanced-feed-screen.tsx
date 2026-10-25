@@ -550,7 +550,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-world-feed gh-feed-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven community feed">
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div className="absolute top-0 left-0 right-0 h-20 flex items-center justify-center z-30">
@@ -580,7 +580,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       />
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-border/50 bg-background/95 px-3 py-2 backdrop-blur">
+        <div className="gh-premium-feed-toolbar border-b border-border/50 bg-background/95 px-3 py-2 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Feed filters">
               {FEED_FILTERS.map((filter) => (
@@ -621,7 +621,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
         <div
           ref={containerRef}
-          className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]"
+          className="gh-premium-feed-scroll min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]"
           onScroll={onHeaderScroll}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -637,14 +637,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
             />
           ) : (
-            <div className="space-y-3 px-3 py-3">
+            <div className="gh-premium-feed-list space-y-3 px-3 py-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && interstitialKindAt(index) ? (
                     <FeedInterstitial
                       kind={interstitialKindAt(index)!}
                       onFindPeople={() => setTab("discover")}
-                      onOpenMarketplace={() => setTab("marketplace")}
+                      onOpenMarketplace={() => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))}
                       onOpenCommunities={() => setTab("communities")}
                       onCreate={() => onCompose?.()}
                     />

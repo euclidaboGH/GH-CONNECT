@@ -1,6 +1,6 @@
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.90.5`
+**Current source version:** `0.90.7`
 
 This document describes the checked-in archive only. It does not establish that any remote deployment, database migration, payment provider, Pi Platform integration, or account-security flow is live or verified.
 

@@ -15,6 +15,7 @@ const wallet = read('features/wallet/wallet-screen.tsx')
 const rewards = read('components/ghc/rewards-centre-screen.tsx')
 const marketplace = read('app/api/marketplace/listings/route.ts')
 const community = read('app/api/communities/route.ts')
+const feed = read('components/ghc/enhanced-feed-screen.tsx')
 
 check('daily claim replay requires explicit ALREADY_CLAIMED_TODAY', claimClient.includes('data.code === "ALREADY_CLAIMED_TODAY" && response.ok && data.ok === true'))
 check('daily claim rejects incomplete success payloads', claimClient.includes('!response.ok || data.ok !== true'))
@@ -25,6 +26,7 @@ check('wallet requests authoritative refresh after claim attempts', wallet.inclu
 check('Rewards Centre avoids timestamp-generated retry identity', !rewards.includes('reward-claim-${Date.now()}-${rewardId}') && rewards.includes('body: JSON.stringify({ holdId: rewardId })'))
 check('marketplace listing activation verifies payment intent', marketplace.includes('verifyListingFeePayment') && marketplace.includes('listingFeeRequiresSettlement'))
 check('community creation fails closed without durable storage', community.includes('if (!socialDbConfigured())') && community.includes('nonDurableWriteResponse("Community create"'))
+check('feed marketplace interstitial uses canonical overlay navigation', feed.includes('onOpenMarketplace={() => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))}') && !feed.includes('onOpenMarketplace={() => setTab("marketplace")}'))
 
 let failures = 0
 for (const item of checks) {

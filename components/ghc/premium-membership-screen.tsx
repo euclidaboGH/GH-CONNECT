@@ -662,7 +662,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       ) : null}
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
+        className="gh-premium-membership-content min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={{ paddingBottom: "var(--gh-screen-bottom-inset)" }}
       >
       {(recoverHint || (membershipAuthorityReady && currentTier === "free")) ? (

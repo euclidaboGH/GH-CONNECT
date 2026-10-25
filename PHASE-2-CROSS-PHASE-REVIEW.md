@@ -1,4 +1,4 @@
-# GH-CONNECT v0.90.5 — Phase 2 + Four-Phase Hardening Review
+# GH-CONNECT v0.90.6 — Phase 2 + Four-Phase Hardening Review
 
 ## Scope
 This release is based on the v0.90.4 Phase 4 archive. Phase 2 (daily claims, Rewards Centre, wallet reconciliation) is the primary implementation focus, with a cross-phase source review of wallet settlement, marketplace fee verification, and community creation/payment boundaries.
@@ -10,7 +10,8 @@ This release is based on the v0.90.4 Phase 4 archive. Phase 2 (daily claims, Rew
 - Rewards Centre no longer generates a fresh timestamp-based request ID for every retry. The durable hold ID remains the stable identity passed to the server claim endpoint.
 - Rewards Centre feedback no longer claims GHC is already available before wallet reconciliation; it confirms server redemption and announces refresh.
 - Wallet pending-hold UI now handles grouped/stacked holds safely. Partial settlement no longer displays the full aggregate amount as available, and the UI keeps the remaining items retryable while requesting authoritative wallet refresh.
-- Package version and lockfile root version are synchronized to 0.90.5.
+- Fixed the feed Marketplace interstitial TypeScript error: Marketplace is an overlay destination, not a primary `Tab`; the action now dispatches the canonical `ghc:navigate-tab` event handled by the app shell. A regression guard prevents reintroducing the invalid `setTab("marketplace")` call.
+- Package version and lockfile root version are synchronized to 0.90.6.
 
 ## Four-phase review outcomes
 
@@ -35,7 +36,7 @@ This release is based on the v0.90.4 Phase 4 archive. Phase 2 (daily claims, Rew
 - Known transactional caveat remains: fee settlement and community creation are not yet one database transaction. Operators must test recovery for payment-success/create-failure before production enablement.
 
 ## Verification status
-Static, repository-local checks should be run using the scripts listed below. Full TypeScript/build checks require the project's pinned Node.js 24.15.0 runtime and installed dependencies. Live Pi Browser checkout, GHC settlement, multi-session concurrency, and 48-hour maturity tests require the deployed testnet and must not be marked passed from static source checks alone.
+Static, repository-local checks should be run using the scripts listed below. The new Marketplace navigation regression is included in the Phase 2 reward/payment contract guard. Full TypeScript/build checks require the project's pinned Node.js 24.15.0 runtime and installed dependencies. Live Pi Browser checkout, GHC settlement, multi-session concurrency, and 48-hour maturity tests require the deployed testnet and must not be marked passed from static source checks alone.
 
 Recommended checks under Node.js 24.15.0:
 

@@ -2406,3 +2406,178 @@ body { overflow-x: clip; }
 .gh-app-shell :where([data-gh-sticky-footer], .gh-world-compose) {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
+
+/* Phase 25 — premium product polish for Feed, Profile, Wallet, Membership and Rewards.
+   These are presentation-only layers: no balance, entitlement, claim, or payment authority moves client-side. */
+.gh-world-feed,
+.gh-world-rewards,
+.gh-world-wallet,
+.gh-world-membership,
+.gh-world-profile {
+  background:
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--gh-green) 5%, transparent), transparent 34rem),
+    var(--gh-ref-canvas) !important;
+}
+.dark :is(.gh-world-feed, .gh-world-rewards, .gh-world-wallet, .gh-world-membership, .gh-world-profile) {
+  background:
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--gh-green) 8%, transparent), transparent 34rem),
+    var(--background) !important;
+}
+
+/* Feed: a focused reading column, quieter controls and consistently premium post surfaces. */
+.gh-premium-feed-toolbar {
+  position: relative;
+  z-index: 2;
+  border-bottom-color: var(--gh-ref-line) !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 91%, transparent) !important;
+  box-shadow: 0 6px 20px rgba(13, 48, 37, .035);
+  backdrop-filter: saturate(1.25) blur(20px);
+}
+.gh-premium-feed-toolbar [role="tablist"] { gap: .35rem; padding-block: .12rem; }
+.gh-premium-feed-toolbar [role="tab"] {
+  min-height: 2.55rem;
+  border: 1px solid transparent;
+  letter-spacing: -.01em;
+}
+.gh-premium-feed-toolbar [role="tab"][aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--gh-green) 24%, transparent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--gh-green) 16%, transparent);
+}
+.gh-premium-feed-toolbar > div > button[aria-label="Search feed"],
+.gh-premium-feed-toolbar > div > button[aria-label="Close feed search"],
+.gh-premium-feed-toolbar > div > button[aria-label="Refresh feed"] {
+  border-color: var(--gh-ref-line) !important;
+  background: var(--gh-ref-surface) !important;
+  box-shadow: 0 2px 7px rgba(13, 48, 37, .035);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.gh-premium-feed-toolbar > div > button:active { transform: scale(.96); }
+.gh-premium-feed-scroll { overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.gh-premium-feed-list {
+  width: min(100%, 49rem);
+  margin-inline: auto;
+  padding-inline: clamp(.7rem, 2vw, 1.15rem) !important;
+  padding-top: clamp(.75rem, 2vw, 1.25rem) !important;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
+}
+.gh-premium-feed-list > div > .gh-post-card,
+.gh-premium-feed-list .gh-post-card {
+  border: 1px solid var(--gh-ref-line) !important;
+  border-radius: 1.45rem !important;
+  background: var(--gh-ref-surface) !important;
+  box-shadow: 0 3px 10px rgba(13, 48, 37, .025), 0 12px 30px rgba(13, 48, 37, .035) !important;
+}
+.gh-premium-feed-list .gh-post-card :where(button, [role="button"]) { transition: background 160ms ease, color 160ms ease, transform 160ms ease; }
+@media (min-width: 760px) {
+  .gh-premium-feed-list { padding-inline: 1rem !important; }
+}
+
+/* Profile: deliberate identity hierarchy, stronger cover framing and refined social metrics. */
+.gh-premium-profile-content {
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom)) !important;
+}
+.gh-profile-shell .gh-world-profile-cover {
+  min-height: clamp(10.5rem, 25vw, 15rem);
+  background-image: linear-gradient(115deg, color-mix(in srgb, var(--gh-green) 88%, #0b2c20), color-mix(in srgb, var(--gh-green) 48%, #6d28d9)) !important;
+  isolation: isolate;
+}
+.gh-profile-shell .gh-world-profile-cover::after {
+  content: "";
+  position: absolute;
+  inset: 35% 0 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(3, 20, 14, .34));
+}
+.gh-premium-profile-identity { padding: 0 clamp(1rem, 3vw, 1.65rem) .85rem !important; }
+.gh-premium-profile-identity > div:first-child > button:first-child { filter: drop-shadow(0 5px 12px rgba(7, 35, 24, .16)); }
+.gh-premium-profile-identity h2 { line-height: 1.15; letter-spacing: -.035em; }
+.gh-premium-profile-identity .gh-premium-profile-stats {
+  gap: .25rem !important;
+  border-color: var(--gh-ref-line) !important;
+  border-radius: 1.25rem !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 94%, var(--gh-green) 6%) !important;
+  box-shadow: 0 8px 24px rgba(13, 48, 37, .045) !important;
+}
+.gh-premium-profile-stats button { min-height: 3.7rem; }
+.gh-premium-profile-stats button:hover { background: color-mix(in srgb, var(--gh-green) 7%, transparent) !important; }
+.gh-profile-shell .gh-world-profile-identity + :where(div, section) { border-color: var(--gh-ref-line); }
+.gh-profile-shell .gh-scroll-root :where(.gh-card, [data-surface="card"], .gh-reference-panel) {
+  border-color: var(--gh-ref-line) !important;
+  border-radius: 1.25rem;
+}
+
+/* Wallet: financial hierarchy is calm and legible; asset separation and truthful state labels remain intact. */
+.gh-premium-wallet-content { scrollbar-gutter: stable; overscroll-behavior-y: contain; }
+.gh-world-wallet .gh-premium-wallet-metrics > div {
+  min-width: 0;
+  border-color: var(--gh-ref-line) !important;
+  border-radius: 1.15rem !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 96%, var(--gh-green) 4%) !important;
+  box-shadow: 0 4px 14px rgba(13, 48, 37, .035);
+}
+.gh-world-wallet .gh-premium-wallet-metrics > div p:first-child { letter-spacing: .075em; }
+.gh-world-wallet .gh-premium-wallet-metrics > div p:nth-child(2) { font-size: clamp(.82rem, 2.4vw, .98rem); overflow-wrap: anywhere; }
+.gh-world-wallet .gh-balance-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.65rem !important;
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--gh-green) 16%, transparent), inset 0 1px 0 rgba(255,255,255,.16) !important;
+}
+.gh-world-wallet .gh-balance-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(255,255,255,.075), transparent 45%);
+}
+.gh-world-wallet [data-transaction-row],
+.gh-world-wallet [data-asset-row] { border-color: var(--gh-ref-line); }
+
+/* Membership: premium plan comparison without implying a tier is active until the server says so. */
+.gh-premium-membership-content {
+  width: min(100%, 76rem);
+  margin-inline: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  padding-inline: clamp(.75rem, 2.3vw, 1.5rem) !important;
+}
+.gh-world-membership .gh-card,
+.gh-world-membership [class*="shadow-[var(--gh-card-shadow)"] {
+  border-color: var(--gh-ref-line) !important;
+  border-radius: 1.35rem !important;
+  box-shadow: 0 5px 18px rgba(13, 48, 37, .035), 0 12px 28px rgba(13, 48, 37, .025) !important;
+}
+.gh-world-membership .gh-premium-membership-content > :where(div, section) { min-width: 0; }
+.gh-world-membership .gh-premium-membership-content button { transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease; }
+.gh-world-membership .gh-premium-membership-content button:active { transform: scale(.99); }
+.gh-world-membership .gh-premium-membership-content [aria-pressed="true"],
+.gh-world-membership .gh-premium-membership-content [aria-selected="true"] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gh-green) 32%, transparent), 0 8px 20px rgba(13, 48, 37, .06);
+}
+
+/* Rewards: mission cards read as a coherent product, with safe contrast in both themes. */
+.gh-rewards-shell > :where(header, div) { border-color: var(--gh-ref-line); }
+.gh-rewards-shell > div:not(:first-child) { scrollbar-gutter: stable; }
+.gh-rewards-shell .gh-card,
+.gh-rewards-shell [class*="rounded-[1.25rem]"] {
+  border-color: var(--gh-ref-line);
+}
+.gh-rewards-shell [aria-label="Engagement paths"] li {
+  border-radius: 1rem !important;
+  background: color-mix(in srgb, var(--gh-ref-surface) 94%, var(--gh-green) 6%) !important;
+}
+.gh-rewards-shell button:not(:disabled) { transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease; }
+.gh-rewards-shell button:not(:disabled):active { transform: scale(.99); }
+
+@media (max-width: 639px) {
+  .gh-premium-feed-list { gap: .8rem !important; }
+  .gh-premium-profile-identity { padding-inline: .9rem !important; }
+  .gh-premium-profile-stats button { padding-block: .65rem; }
+  .gh-world-wallet .gh-premium-wallet-metrics { gap: .4rem !important; }
+  .gh-world-wallet .gh-premium-wallet-metrics > div { padding: .65rem .55rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-premium-feed-toolbar *, .gh-premium-feed-list *, .gh-world-membership *, .gh-rewards-shell * { transition-duration: .01ms !important; }
+}

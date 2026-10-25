@@ -15,6 +15,7 @@ const steps = [
   ["check-migration-release-readiness.mjs", "Migration release readiness"],
   ["test-fee-referral-contract.mjs", "Fee and referral contract"],
   ["check-phase2-reward-contract.mjs", "Phase 2 reward/payment contract"],
+  ["check-phase25-premium-ui.mjs", "Phase 25 premium UI contract"],
 ]
 
 console.log("\n=== GreenHaven static verification (network/DB independent) ===\n")

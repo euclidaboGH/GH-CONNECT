@@ -421,7 +421,7 @@ export function RewardsCentreScreen({
   )
 
   return (
-    <div className="flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground">
+    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven Rewards Centre">
       {(serverEconomy.balance !== null || serverEconomy.curationBalance !== null) ? (
         <div className="mx-auto w-full max-w-3xl px-3 pt-3">
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-card p-3 sm:grid-cols-4">

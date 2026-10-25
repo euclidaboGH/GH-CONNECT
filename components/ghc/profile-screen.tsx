@@ -663,7 +663,7 @@ export function ProfileScreen({
         </button>
 
         {/* AVATAR row — overlaps cover; content is full width below */}
-        <div className="gh-world-profile-identity relative z-[1] w-full px-4">
+        <div className="gh-world-profile-identity gh-premium-profile-identity relative z-[1] w-full px-4">
           <div className="-mt-10 flex items-end justify-between">
             <button
               type="button"
@@ -774,7 +774,7 @@ export function ProfileScreen({
             ) : null}
 
             {/* Stats — real counts only */}
-            <div className="mt-4 grid grid-cols-4 gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
+            <div className="gh-premium-profile-stats mt-4 grid grid-cols-4 gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
               {[
                 { label: "Posts" as const, value: posts.length },
                 { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
