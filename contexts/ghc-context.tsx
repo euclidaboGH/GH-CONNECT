@@ -6207,6 +6207,8 @@ const dismissMatchCelebration = useCallback(() => {
     }))
   }, [])
 
+  const communityFeePaymentByDraft = useRef<Map<string, string>>(new Map())
+
   const createGroup = useCallback(
     async (formData: any): Promise<string> => {
       try {
@@ -6218,12 +6220,19 @@ const dismissMatchCelebration = useCallback(() => {
         }
 
         const rail = String(formData.feeCurrency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC"
-        const proposedId = `comm_${crypto.randomUUID()}`
+        const suppliedId = String(formData.id || "").trim()
+        const proposedId = /^comm_[a-zA-Z0-9_-]{8,80}$/.test(suppliedId)
+          ? suppliedId
+          : `comm_${crypto.randomUUID()}`
         let feePaymentId: string | undefined
 
         // Pi fees require a server-owned durable intent and a completed Pi SDK payment.
         // Never pass a client-supplied amount to the payment API.
         if (rail === "PI") {
+          // If payment succeeded but the community write failed, reuse its confirmed
+          // intent on retry rather than launching another Pi payment.
+          feePaymentId = communityFeePaymentByDraft.current.get(proposedId)
+          if (!feePaymentId) {
           const authHeaders = IdentityService.getAuthHeaders()
           const quoteResponse = await fetch(`/api/communities/create-fee?currency=PI`, {
             cache: "no-store",
@@ -6273,6 +6282,13 @@ const dismissMatchCelebration = useCallback(() => {
             return ""
           }
           feePaymentId = intentId
+          communityFeePaymentByDraft.current.set(proposedId, intentId)
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:community-fee-payment-confirmed", {
+              detail: { communityId: proposedId, currency: "PI" },
+            }))
+          } catch { /* payment result remains available in the in-memory draft map */ }
+          }
         }
 
         // Create the durable server record first. Do not mutate local community state
@@ -6305,6 +6321,7 @@ const dismissMatchCelebration = useCallback(() => {
           return ""
         }
 
+        communityFeePaymentByDraft.current.delete(proposedId)
         const serverCommunity = (durable.community || {}) as Record<string, unknown>
         const result = await domains.community.createCommunity({
           name: String(formData.name || "").trim(),

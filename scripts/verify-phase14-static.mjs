@@ -17,6 +17,10 @@ const steps = [
   ["check-phase2-reward-contract.mjs", "Phase 2 reward/payment contract"],
   ["check-phase25-premium-ui.mjs", "Phase 25 premium UI contract"],
   ["check-community-idempotency-contract.mjs", "Community idempotency/security contract"],
+  ["check-payment-retry-ux.mjs", "Payment retry UX contract"],
+  ["check-notification-center-contract.mjs", "Notification center contract"],
+  ["check-daily-reward-ux.mjs", "Daily reward UX contract"],
+  ["check-wallet-utility-reliability.mjs", "Wallet and utility reliability contract"],
 ]
 
 console.log("\n=== GreenHaven static verification (network/DB independent) ===\n")

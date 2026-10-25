@@ -2,9 +2,9 @@
 
 /**
  * Daily GHC claim — Pi/Rubi-style floating action (does NOT push page headers).
- * Details live under Settings → Rewards. Appears only when claimable; vanishes after claim.
+ * Details live under Settings → Rewards. Auto-prompts once per eligible day and keeps a retryable lightning action.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Clock3, Sparkles, X, Zap } from "lucide-react"
 import { useGHCProfile } from "@/contexts/ghc-context"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
@@ -33,9 +33,34 @@ export function DailyClaimPrompt() {
   const [claiming, setClaiming] = useState(false)
   const [done, setDone] = useState<DoneState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const autoPromptedKeyRef = useRef<string | null>(null)
 
-  const claimable = Boolean(userId && status?.claimable)
   const claimedToday = Boolean(status?.claimedToday)
+  // Status can be temporarily unknown while the server request is loading or
+  // the network is recovering. Let the user open/attempt the server-authorized
+  // flow instead of rendering a dead, permanently disabled claim button.
+  const canAttemptClaim = Boolean(userId && !claimedToday && (status === null || status.claimable))
+  const claimable = Boolean(userId && status?.claimable && !claimedToday)
+
+  // Pi-style daily re-engagement: automatically surface the claim once when
+  // the server confirms a new claimable reward day. Dismissal is remembered
+  // for this tab session; the floating lightning action remains available.
+  useEffect(() => {
+    if (!userId || !status?.claimable || status.claimedToday || !status.dayKey) return
+    const promptKey = `${userId}:${status.dayKey}`
+    if (autoPromptedKeyRef.current === promptKey) return
+    autoPromptedKeyRef.current = promptKey
+    try {
+      const storageKey = `ghc:daily-claim-prompted:${promptKey}`
+      if (window.sessionStorage.getItem(storageKey) === "1") return
+      window.sessionStorage.setItem(storageKey, "1")
+    } catch {
+      // Session storage may be unavailable; the in-memory guard still applies.
+    }
+    setOpen(true)
+    setDone(null)
+    setError(null)
+  }, [userId, status?.claimable, status?.claimedToday, status?.dayKey])
 
   useEffect(() => {
     if (claimable) {
@@ -49,7 +74,7 @@ export function DailyClaimPrompt() {
   }, [])
 
   const claim = useCallback(async () => {
-    if (claiming || !claimable) return
+    if (claiming || !canAttemptClaim) return
     setClaiming(true)
     setError(null)
     try {
@@ -114,7 +139,7 @@ export function DailyClaimPrompt() {
     } finally {
       setClaiming(false)
     }
-  }, [claimable, claiming, refresh, userId])
+  }, [canAttemptClaim, claiming, refresh, userId])
 
   useEffect(() => {
     const onOpen = () => {
@@ -126,8 +151,8 @@ export function DailyClaimPrompt() {
     return () => window.removeEventListener("ghc:open-daily-claim", onOpen)
   }, [])
 
-  // Show FAB only when claimable and not dismissed for this session day
-  const showFab = claimable && !claimedToday && !open
+  // Keep the lightning action available while status is unknown so server-side errors are recoverable.
+  const showFab = canAttemptClaim && !open
 
   return (
     <>
@@ -170,7 +195,7 @@ export function DailyClaimPrompt() {
                   <p className="text-[11px] text-muted-foreground">Server-verified · Lagos day</p>
                 </div>
               </div>
-              <button type="button" onClick={close} className="rounded-full p-2 hover:bg-muted" aria-label="Close">
+              <button type="button" onClick={close} disabled={claiming} className="rounded-full p-2 hover:bg-muted disabled:opacity-50" aria-label="Close" aria-disabled={claiming}>
                 <X size={18} />
               </button>
             </div>
@@ -194,7 +219,9 @@ export function DailyClaimPrompt() {
                 <div className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5">
                   <Sparkles className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    Tap once to let the server verify and record today&apos;s claim. Full history is under Rewards in Settings.
+                    {status === null
+                      ? "Checking your daily eligibility with the secure rewards service. Claiming is verified by the server; no balance is added on this device."
+                      : "Tap once to let the server verify and record today&apos;s claim. Full history is under Rewards in Settings."}
                   </p>
                 </div>
               )}
@@ -208,12 +235,12 @@ export function DailyClaimPrompt() {
               {!done ? (
                 <button
                   type="button"
-                  disabled={claiming || !claimable}
+                  disabled={claiming || !canAttemptClaim}
                   onClick={() => void claim()}
                   className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 px-4 text-sm font-extrabold text-amber-950 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Zap className="h-5 w-5" aria-hidden />
-                  {claiming ? "Confirming…" : "Claim Daily GHC"}
+                  {claiming ? "Confirming…" : status === null ? "Check & Claim Daily GHC" : "Claim Daily GHC"}
                 </button>
               ) : (
                 <div className="flex gap-2">

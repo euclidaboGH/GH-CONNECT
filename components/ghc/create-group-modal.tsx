@@ -12,6 +12,8 @@ import { quoteCommunityCreateFeeClient, type CommunityFeeRail } from "@/lib/comm
 import { RULE_TEMPLATES } from "@/lib/domains/community-registry"
 
 export interface CreateGroupFormData {
+  /** Stable client-generated identity reused for payment retries. */
+  id?: string
   name: string
   description: string
   category: string
@@ -28,7 +30,7 @@ interface CreateGroupModalProps {
   /** When false, modal is hidden. Defaults to true for conditional-render parents. */
   isOpen?: boolean
   onClose: () => void
-  onSubmit: (data: CreateGroupFormData) => Promise<void>
+  onSubmit: (data: CreateGroupFormData) => Promise<void | boolean>
   isLoading?: boolean
   error?: string | null
 }
@@ -54,12 +56,15 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     feeCurrency: "GHC",
   })
   const [feeRail, setFeeRail] = useState<CommunityFeeRail>("GHC")
+  const [feePaymentConfirmed, setFeePaymentConfirmed] = useState(false)
   const [coverUploading, setCoverUploading] = useState(false)
   const feeQuote = quoteCommunityCreateFeeClient(feeRail)
   const [currentRule, setCurrentRule] = useState("")
   const [currentMember, setCurrentMember] = useState("")
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submittingRef = useRef(false)
+  const draftIdRef = useRef<string>("")
 
   const validateStep = (stepNum: number): boolean => {
     const errors: Record<string, string> = {}
@@ -248,10 +253,17 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
   }
 
   const handleSubmit = async () => {
+    if (isLoading || coverUploading || submittingRef.current) return
     if (validateStep(4)) {
+      submittingRef.current = true
       try {
-        await onSubmit(formData)
-        // Reset form on success
+        if (!draftIdRef.current) draftIdRef.current = `comm_${crypto.randomUUID()}`
+        const result = await onSubmit({ ...formData, id: formData.id || draftIdRef.current })
+        // A false result means payment/create failed; preserve every field and stay here.
+        if (result === false) return
+        // Reset form only after the parent confirms durable creation.
+        draftIdRef.current = ""
+        setFeePaymentConfirmed(false)
         setStep(1)
         setFormData({
           name: "",
@@ -266,15 +278,36 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         })
         setFeeRail("GHC")
       } catch (err) {
-        // Error is handled by parent component
+        // Parent owns the visible error; preserve the draft for a safe retry.
         console.error("[Create Group Error]", err)
+      } finally {
+        submittingRef.current = false
       }
     }
   }
 
   useEffect(() => {
     if (!isOpen) return
-    return onCloseTransientUI(() => onClose())
+    const onFeePaid = (event: Event) => {
+      const detail = (event as CustomEvent<{ communityId?: string; currency?: string }>).detail
+      if (!detail || detail.communityId !== draftIdRef.current || detail.currency !== "PI") return
+      setFeeRail("PI")
+      setFormData((prev) => ({ ...prev, feeCurrency: "PI" }))
+      setFeePaymentConfirmed(true)
+    }
+    window.addEventListener("ghc:community-fee-payment-confirmed", onFeePaid as EventListener)
+    return () => window.removeEventListener("ghc:community-fee-payment-confirmed", onFeePaid as EventListener)
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    return onCloseTransientUI((detail) => {
+      // Payment SDKs and nested overlays may emit transient events. Do not destroy
+      // the in-flight registration/payment draft; navigation can close it afterward.
+      if (submittingRef.current) return
+      if (detail?.scope && detail.scope !== "community-create") return
+      onClose()
+    })
   }, [isOpen, onClose])
 
   if (!isOpen) return null
@@ -663,9 +696,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                         key={rail}
                         type="button"
                         onClick={() => {
+                          if (feePaymentConfirmed && rail !== "PI") return
                           setFeeRail(rail)
                           setFormData((prev) => ({ ...prev, feeCurrency: rail }))
                         }}
+                        disabled={feePaymentConfirmed && rail !== "PI"}
                         className={`min-h-10 flex-1 rounded-xl border px-3 text-sm font-bold transition ${
                           feeRail === rail
                             ? "border-emerald-500 bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
@@ -678,8 +713,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   })}
                 </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Debits available {feeRail === "GHC" ? "GHC" : "Pi"} when rates are active on testnet/mainnet.
-                  Browsing and messaging stay free. Cover photos use durable private storage.
+                  {feePaymentConfirmed
+                    ? "Pi fee payment confirmed for this draft. Retry creation with Pi to finish without paying again."
+                    : `Debits available ${feeRail === "GHC" ? "GHC" : "Pi"} when rates are active on testnet/mainnet. Browsing and messaging stay free. Cover photos use durable private storage.`}
                 </p>
               </div>
               </div>
@@ -729,7 +765,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={isLoading}
+                  disabled={isLoading || coverUploading}
                   className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                   aria-label="Create group"
                 >

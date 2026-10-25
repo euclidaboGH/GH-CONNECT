@@ -107,7 +107,7 @@ export function ChatScreen() {
   ), [handleJoinGroup, addToast])
 
   // Create group handler
-  const handleCreateGroup = useCallback(async (formData: CreateGroupFormData) => {
+  const handleCreateGroup = useCallback(async (formData: CreateGroupFormData): Promise<boolean> => {
     try {
       setIsCreatingGroup(true)
       setCreateGroupError(null)
@@ -154,10 +154,12 @@ export function ChatScreen() {
       addToast(`"${formData.name}" (${privacyText}) created! ${memberText}`, "success")
 
       setShowCreateGroup(false)
+      return true
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Failed to create group"
       setCreateGroupError(errorMsg)
       addToast(errorMsg, "error")
+      return false
     } finally {
       setIsCreatingGroup(false)
     }

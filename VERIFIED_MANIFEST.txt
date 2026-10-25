@@ -2,7 +2,7 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.90.8
+project_version=0.91.2
 manifest_format_version=1
 canonical_migrations=132
 classification_required=97
@@ -154,3 +154,5 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=6209 path=supabase/migrations/20261023040002_gh_security_control_plane_v2.sql
 [REQUIRED] size=5149 path=supabase/migrations/20261023040003_gh_feed_engagement_batch_v2.sql
 [REVIEW_REQUIRED] size=2262 path=supabase/migrations/20261025010001_gh_community_create_idempotency_guard.sql
+
+wallet_utility_reliability=review-before-spend;stable-idempotency;fail-closed-unconfigured-effects

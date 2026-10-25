@@ -840,6 +840,7 @@ function SellListingForm({
   setMediaUrls,
   feeRail,
   setFeeRail,
+  paymentIntentId,
   busy,
   error,
   onCancel,
@@ -862,6 +863,8 @@ function SellListingForm({
   setMediaUrls: (v: string[]) => void
   feeRail: ListingFeeRail
   setFeeRail: (v: ListingFeeRail) => void
+  /** Non-null only after the Pi fee payment succeeded for this draft. */
+  paymentIntentId?: string | null
   busy: boolean
   error: string | null
   onCancel: () => void
@@ -1028,7 +1031,11 @@ function SellListingForm({
             <button
               key={rail}
               type="button"
-              onClick={() => setFeeRail(rail)}
+              onClick={() => {
+                if (paymentIntentId && rail !== "PI") return
+                setFeeRail(rail)
+              }}
+              disabled={Boolean(paymentIntentId && rail !== "PI")}
               className={`min-h-10 flex-1 rounded-xl border px-3 py-2 text-sm font-bold transition ${
                 feeRail === rail
                   ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
@@ -1042,6 +1049,7 @@ function SellListingForm({
         <p className="mt-2 text-[13px] font-semibold text-foreground">
           Due now: {feeQuote.label}
         </p>
+        {paymentIntentId ? <p className="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300">Pi fee payment confirmed for this draft. Retry publishing with Pi; the existing payment will be reused.</p> : null}
       </div>
 
       {error ? <p className="text-[13px] font-medium text-red-600">{error}</p> : null}
@@ -1747,6 +1755,7 @@ export function MarketplaceScreen({
             setMediaUrls={setSellMedia}
             feeRail={sellFeeRail}
             setFeeRail={setSellFeeRail}
+            paymentIntentId={sellFeeIntentId}
             busy={sellBusy}
             error={sellError}
             onCancel={() => {

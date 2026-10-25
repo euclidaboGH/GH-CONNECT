@@ -1,6 +1,6 @@
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.90.8`
+**Current source version:** `0.91.2`
 
 This document describes the checked-in archive only. It does not establish that any remote deployment, database migration, payment provider, Pi Platform integration, or account-security flow is live or verified.
 
@@ -33,3 +33,22 @@ All version sources must agree. If they do not, stop release work and reconcile 
 6. Complete the Testnet evidence checklist and receive explicit approval before any Mainnet release.
 
 **Release status: NOT APPROVED by this document.** Passing static checks does not replace build, database, integration, security, or operator verification.
+
+
+## v0.90.9 payment retry reliability
+Payment failure handling now preserves community/group drafts and stable IDs, and adds regression coverage for marketplace listing-fee retries. Static verification passed 11/11; live testnet payment behavior is not certified by this source-only check.
+
+
+## v0.91.0 notification center restoration
+
+The global notification bell is mounted in the primary app shell again. Notification source wiring, update refresh, accessible focus, and section attention indicators have been hardened. See `PHASE-28-NOTIFICATION-CENTER-RESTORATION.md`.
+
+
+## v0.91.2 daily rewards reliability
+
+The daily claim experience now opens once when server status confirms a new claimable day. If status is temporarily unavailable, the lightning action remains usable and the server remains the authority for claim acceptance. Claim failures remain retryable; no client-side balance minting or economy bypass was introduced.
+
+
+## v0.91.2 wallet and utility reliability
+
+Wallet action wiring and the Spend GHC path received a surgical reliability pass. The legacy boost chip now opens the utility catalog instead of silently returning when its domain method is absent. Utility purchases require a review step, target-bound purchases require a target, catalog load errors can be retried, and request idempotency keys remain stable across retries. Unconfigured effects stay unavailable and fail closed. Static contract checks do not prove live database settlement or production build readiness; the release remains NOT APPROVED until Node 24 build and authenticated testnet verification complete.

@@ -71,6 +71,15 @@ export async function POST(request: Request) {
   if (["boost_post", "boost_profile", "boost_listing", "feed_spotlight"].includes(purpose) && !targetId) {
     return jsonErr("TARGET_REQUIRED", "A post, profile, or listing target is required for this boost", 400)
   }
+  const rawClientReq = String(body.clientRequestId || body.idempotencyKey || "").trim()
+  if (!rawClientReq || rawClientReq.length < 8 || rawClientReq.length > 160 || /[\u0000-\u001f\u007f]/.test(rawClientReq)) {
+    return jsonErr("INVALID_IDEMPOTENCY_KEY", "A valid request idempotency key is required. Retry the same action with the same key.", 400)
+  }
+  // Client keys are namespaced server-side; never fall back to a time-bucket key.
+  // Time buckets can accidentally merge two legitimate purchases or split a retry.
+  const scopedUser = createHash("sha256").update(auth.userId).digest("hex").slice(0, 24)
+  const referenceId = `utility:${purpose}:${scopedUser}:${createHash("sha256").update(rawClientReq).digest("hex")}`
+
   // This endpoint can debit GHC, but the current release has no durable active-
   // boost record consumed by feed/profile/listing ranking. Never charge users for
   // an effect that cannot be confirmed. Re-enable only with the atomic activation
@@ -88,17 +97,6 @@ export async function POST(request: Request) {
       503,
     )
   }
-  const rawClientReq = String(body.clientRequestId || body.idempotencyKey || "").trim()
-  if (rawClientReq.length > 160 || /[\u0000-\u001f\u007f]/.test(rawClientReq)) {
-    return jsonErr("INVALID_IDEMPOTENCY_KEY", "Invalid request idempotency key", 400)
-  }
-  // Client keys are namespaced server-side; a client must not be able to collide
-  // with another purpose/user or with a different economy operation.
-  const scopedUser = createHash("sha256").update(auth.userId).digest("hex").slice(0, 24)
-  const referenceId = rawClientReq
-    ? `utility:${purpose}:${scopedUser}:${createHash("sha256").update(rawClientReq).digest("hex")}`
-    : `utility:${purpose}:${scopedUser}:${createHash("sha256").update(targetId || "none").digest("hex").slice(0, 24)}:${Math.floor(Date.now() / 60000)}`
-
   const entry = getCatalogEntry(purpose)!
   const reason = entry.description
   const sourceEvent = `UTILITY_${purpose.toUpperCase()}`

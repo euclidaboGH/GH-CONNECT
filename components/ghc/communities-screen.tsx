@@ -306,6 +306,7 @@ export function CommunitiesScreen() {
   const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
+  const [createSubmitError, setCreateSubmitError] = useState<string | null>(null)
   const openCreateCommunity = useCallback(() => setShowCreate(true), [])
   useEffect(() => {
     const onCompose = () => openCreateCommunity()
@@ -1515,9 +1516,15 @@ export function CommunitiesScreen() {
       <CreateGroupModal
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
+        error={createSubmitError}
         onSubmit={async (data: CreateGroupFormData) => {
+          setCreateSubmitError(null)
           const id = await createGroup(data)
-          if (!id) return
+          if (!id) {
+            setCreateSubmitError("Payment or server confirmation did not complete. Your details are preserved; retry or switch the fee method. If a Pi payment may have succeeded, check payment status before trying again.")
+            return false
+          }
+          setCreateSubmitError(null)
           setShowCreate(false)
           // Creator is always a member — mirror join id so My list updates even when
           // identity id drifts between "current-user" and Pi uid before rehydrate.
@@ -1555,6 +1562,7 @@ export function CommunitiesScreen() {
           setSelectedCommunityId(id)
           setHubKey((k) => k + 1)
           // Toast already fired in createGroup — avoid double toast
+          return true
         }}
       />
 

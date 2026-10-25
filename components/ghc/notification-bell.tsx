@@ -7,7 +7,7 @@
  */
 
 import { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useGHC } from "@/contexts/ghc-context"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
 import {
@@ -34,7 +34,6 @@ import {
   type Notification,
   type NotificationType,
   NOTIFICATIONS_CHANGED_EVENT,
-  requestBrowserNotificationPermission,
 } from "@/lib/notifications"
 import {
   NOTIFICATION_CENTER_BUCKETS,
@@ -145,6 +144,7 @@ export function NotificationBell({
   const [durableOk, setDurableOk] = useState<boolean | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [threadKey, setThreadKey] = useState<string | null>(null)
+  const refreshInFlightRef = useRef(false)
   const ghc = useGHC() as { blockedUsers?: string[]; mutedUsers?: string[] }
   const blockedKey = Array.isArray(ghc.blockedUsers) ? ghc.blockedUsers.join("|") : ""
   const mutedKey = Array.isArray(ghc.mutedUsers) ? ghc.mutedUsers.join("|") : ""
@@ -180,14 +180,19 @@ export function NotificationBell({
     // Merge both durable notification stores (social activity + GHC economy).
     // The old implementation replaced the unread count with the social count,
     // hiding local rewards and durable GHC events from the bell.
+    if (refreshInFlightRef.current) return
+    refreshInFlightRef.current = true
     void (async () => {
       setListLoading(true)
       try {
-        const [socialRes, economyRes, socialCountRes, economyCountRes, announcementsRes] = await Promise.all([
+        const [unifiedRes, economyRes, socialRes, socialCountRes, unifiedCountRes, economyCountRes, announcementsRes] = await Promise.all([
           fetch("/api/notifications?limit=80", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
           fetch("/api/economy/notifications?limit=60", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
+          fetch("/api/social/notifications?limit=80", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
           fetch("/api/social/notifications?countOnly=1", {
@@ -196,31 +201,39 @@ export function NotificationBell({
           fetch("/api/notifications?countOnly=1", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
+          fetch("/api/economy/notifications/unread-count", {
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+          }).catch(() => null),
           fetch("/api/system/announcements?limit=25", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
         ])
-        const [unifiedData, economyData, socialCountData, economyCountData, announcementsData] = await Promise.all([
-          socialRes?.json().catch(() => ({})) || {},
+        const [unifiedData, economyData, socialData, socialCountData, unifiedCountData, economyCountData, announcementsData] = await Promise.all([
+          unifiedRes?.json().catch(() => ({})) || {},
           economyRes?.json().catch(() => ({})) || {},
+          socialRes?.json().catch(() => ({})) || {},
           socialCountRes?.json().catch(() => ({})) || {},
+          unifiedCountRes?.json().catch(() => ({})) || {},
           economyCountRes?.json().catch(() => ({})) || {},
           announcementsRes?.json().catch(() => ({})) || {},
         ]) as [
           { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null }> },
           { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
+          { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string | number; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null; entityType?: string; entityId?: string; requestId?: string }> },
           { ok?: boolean; unreadCount?: number },
+          { ok?: boolean; durable?: boolean; unreadCount?: number },
           { ok?: boolean; count?: number },
           { ok?: boolean; announcements?: Array<{ id?: string; title?: string; body?: string; severity?: string; actionPath?: string | null; publishedAt?: number; read?: boolean }>; unreadCount?: number },
         ]
 
-        const socialRows = socialRes?.ok && unifiedData.ok && Array.isArray(unifiedData.notifications)
+        const unifiedRows = unifiedRes?.ok && unifiedData.ok && Array.isArray(unifiedData.notifications)
           ? unifiedData.notifications : []
+        const socialRows = socialRes?.ok && socialData.ok && Array.isArray(socialData.notifications)
+          ? socialData.notifications : []
         const economyRows = economyRes?.ok && economyData.ok && Array.isArray(economyData.items)
           ? economyData.items : []
-        setDurableOk(Boolean(socialRows.length || economyRows.length || (unifiedData.ok && economyData.ok)))
+        setDurableOk(Boolean((unifiedRes?.ok && unifiedData.ok) || (socialRes?.ok && socialData.ok) || (economyRes?.ok && economyData.ok)))
 
-        const unifiedRows = socialRows
         const mappedUnified: Notification[] = unifiedRows.map((n) => {
           const eventType = String(n.type || "system")
           const meta = (n.metadata || {}) as Record<string, unknown>
@@ -254,7 +267,7 @@ export function NotificationBell({
           }
         })
 
-        const mappedSocial: Notification[] = unifiedData?.durable ? [] : unifiedRows.map((n) => {
+        const mappedSocial: Notification[] = socialRows.map((n) => {
           const socialType = String(n.type || "")
           const type = (
             socialType === "follow" ? "follow"
@@ -301,7 +314,9 @@ export function NotificationBell({
               : socialType.includes("comment") ? "💬"
               : socialType.includes("connection") || socialType.includes("friend") ? "🤝"
               : "🔔",
-            timestamp: Number(n.createdAt) || Date.now(),
+            timestamp: typeof n.createdAt === "number"
+              ? (Number.isFinite(n.createdAt) ? n.createdAt : Date.now())
+              : (Number.isFinite(new Date(n.createdAt || "").getTime()) ? new Date(n.createdAt || "").getTime() : Date.now()),
             read: Boolean(n.readAt),
             data: {
               ...meta,
@@ -393,17 +408,20 @@ export function NotificationBell({
         })
 
         const localUnread = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers).filter((n) => !n.read).length
-        const socialUnread = economyCountData.ok && typeof (economyCountData as any).unreadCount === "number"
-          ? Math.max(0, Number((economyCountData as any).unreadCount)) : mappedUnified.filter((n) => !n.read).length
-        const economyUnread = unifiedData?.durable ? 0 : (economyCountData.ok && typeof (economyCountData as any).count === "number"
-          ? Math.max(0, Number((economyCountData as any).count)) : mappedEconomy.filter((n) => !n.read).length)
+        const unifiedUnread = unifiedRes?.ok && unifiedCountData.ok && typeof unifiedCountData.unreadCount === "number"
+          ? Math.max(0, unifiedCountData.unreadCount) : mappedUnified.filter((n) => !n.read).length
+        const socialUnread = socialRes?.ok && socialCountData.ok && typeof socialCountData.unreadCount === "number"
+          ? Math.max(0, socialCountData.unreadCount) : mappedSocial.filter((n) => !n.read).length
+        const economyUnread = economyRes?.ok && economyCountData.ok && typeof economyCountData.count === "number"
+          ? Math.max(0, economyCountData.count) : mappedEconomy.filter((n) => !n.read).length
         const announcementUnread = announcementsRes?.ok && announcementsData.ok && typeof announcementsData.unreadCount === "number"
           ? Math.max(0, announcementsData.unreadCount) : mappedAnnouncements.filter((n) => !n.read).length
-        setUnread(localUnread + socialUnread + economyUnread + announcementUnread)
+        setUnread(localUnread + unifiedUnread + socialUnread + economyUnread + announcementUnread)
       } catch {
         setDurableOk(false)
         /* Local-only notifications remain visible if a server store is unavailable. */
       } finally {
+        refreshInFlightRef.current = false
         setListLoading(false)
       }
     })()
@@ -458,6 +476,11 @@ export function NotificationBell({
     window.addEventListener("ghc:post-engagement", onChange as EventListener)
     window.addEventListener("ghc:new-message", onChange as EventListener)
     window.addEventListener("ghc:connection-updated", onChange as EventListener)
+    window.addEventListener("ghc:notifications-read", onChange as EventListener)
+    window.addEventListener("ghc:community-updated", onChange as EventListener)
+    window.addEventListener("ghc:marketplace-updated", onChange as EventListener)
+    window.addEventListener("ghc:wallet-updated", onChange as EventListener)
+    window.addEventListener("ghc:payment-updated", onChange as EventListener)
     window.addEventListener("ghc:notification", onChange as EventListener)
     return () => {
       window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChange as EventListener)
@@ -465,6 +488,11 @@ export function NotificationBell({
       window.removeEventListener("ghc:post-engagement", onChange as EventListener)
       window.removeEventListener("ghc:new-message", onChange as EventListener)
       window.removeEventListener("ghc:connection-updated", onChange as EventListener)
+      window.removeEventListener("ghc:notifications-read", onChange as EventListener)
+      window.removeEventListener("ghc:community-updated", onChange as EventListener)
+      window.removeEventListener("ghc:marketplace-updated", onChange as EventListener)
+      window.removeEventListener("ghc:wallet-updated", onChange as EventListener)
+      window.removeEventListener("ghc:payment-updated", onChange as EventListener)
       window.removeEventListener("ghc:notification", onChange as EventListener)
     }
   }, [refresh])
@@ -525,11 +553,6 @@ export function NotificationBell({
 
   const openPanel = () => {
     setOpen(true)
-    try {
-      requestBrowserNotificationPermission()
-    } catch {
-      /* */
-    }
     refresh()
   }
 
@@ -656,6 +679,10 @@ export function NotificationBell({
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAll: true }),
       }).catch(() => null),
+      fetch("/api/notifications", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAll: true }),
+      }).catch(() => null),
       fetch("/api/economy/notifications/read-all", {
         method: "POST", credentials: "include", headers: { Accept: "application/json" },
       }).catch(() => null),
@@ -676,14 +703,15 @@ export function NotificationBell({
       <button
         type="button"
         onClick={openPanel}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-card/95 text-foreground shadow-sm backdrop-blur-md transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
+        title="Notifications"
         aria-expanded={open}
         aria-haspopup="dialog"
       >
         <Bell size={20} strokeWidth={2.1} />
         {unread > 0 ? (
-          <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm">
+          <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm">
             {unread > 99 ? "99+" : unread}
           </span>
         ) : null}

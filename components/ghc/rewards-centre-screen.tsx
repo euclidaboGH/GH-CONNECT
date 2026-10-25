@@ -415,6 +415,9 @@ export function RewardsCentreScreen({
         ghc.addToast?.(e instanceof Error ? e.message : "Claim failed", "error")
       } finally {
         setClaimingId(null)
+        // Never leave the Rewards Centre stuck on a stale "Claiming…" label
+        // after an error, timeout, or successful server confirmation.
+        setStatusMsg(null)
       }
     },
     [ghc, claimingId]

@@ -85,6 +85,9 @@ const MatchCelebrationLazy = lazy(() =>
 const ProfilePreviewPageLazy = lazy(() =>
   import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
 )
+const NotificationBellLazy = lazy(() =>
+  import("./notification-bell").then((m) => ({ default: m.NotificationBell }))
+)
 
 function TabScreenFallback({ label }: { label: string }) {
   return (
@@ -262,7 +265,6 @@ export function GHConnectApp() {
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   const [socialAttentionCount, setSocialAttentionCount] = useState(0)
   const [economyAttentionCount, setEconomyAttentionCount] = useState(0)
-  const [localAttentionCount, setLocalAttentionCount] = useState(0)
   const unreadMessageCount = useMemo(() => (Array.isArray(conversations) ? conversations : []).reduce(
     (count, conversation) => count + (typeof (conversation as { unreadCount?: number }).unreadCount === "number"
       ? Math.max(0, Number((conversation as { unreadCount?: number }).unreadCount) || 0)
@@ -274,7 +276,6 @@ export function GHConnectApp() {
   // Section attention indicators use authenticated server counts plus local in-app
   // alerts. Polling and event-driven refresh cover new activity without requiring a tap.
   const refreshSectionAttention = useCallback(async () => {
-    try { setLocalAttentionCount(notificationSystem.getUnreadCount()) } catch { setLocalAttentionCount(0) }
     const [socialResponse, economyResponse] = await Promise.all([
       fetch("/api/social/notifications?countOnly=1", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
       fetch("/api/economy/notifications/unread-count", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
@@ -1053,6 +1054,14 @@ export function GHConnectApp() {
       <DailyClaimPrompt />
       <OfflineBanner />
       <PaymentRecoveryListener />
+      {/* Global notification entry point: keep the bell reachable across primary sections. */}
+      <div className="pointer-events-none absolute right-3 top-3 z-[75]" style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}>
+        <div className="pointer-events-auto">
+          <Suspense fallback={null}>
+            <NotificationBellLazy />
+          </Suspense>
+        </div>
+      </div>
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
         id="ghc-main-content"
@@ -1219,7 +1228,7 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={id === "create" ? "text-white" : undefined}
                     />
-                    {((id === "home" && (socialAttentionCount + localAttentionCount + economyAttentionCount > 0)) ||
+                    {((id === "home" && socialAttentionCount > 0) ||
                       (id === "messages" && unreadMessageCount > 0) ||
                       (id === "discover" && connectionRequestBadge > 0) ||
                       (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0))) ? (

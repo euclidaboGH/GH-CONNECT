@@ -1285,38 +1285,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           />
           <QuickChip
             icon={<Share2 size={14} />}
-            label="Boost 25 GHC"
-            onClick={async () => {
-              try {
-                const eco = getBoundDomainServices()?.economy as {
-                  purchaseBoost?: (i: {
-                    target: "profile" | "post"
-                    amount?: number
-                  }) => Promise<{ ok: boolean; error?: string }>
-                }
-                if (!eco?.purchaseBoost) return
-                if (balance < 25) {
-                  setSendEducate(
-                    pending > 0 || displayPending > 0
-                      ? "Need 25 available GHC — claim pending first"
-                      : "Need 25 available GHC for a profile boost"
-                  )
-                  if (pending > 0 || displayPending > 0) setShowPendingSheet(true)
-                  return
-                }
-                const res = await eco.purchaseBoost({ target: "profile", amount: 25 })
-                setClaimFeedback(
-                  res.ok ? "Profile boost purchased (−25 GHC)" : res.error || "Boost failed"
-                )
-                if (res.ok) {
-                  setClaimReceipt({ amount: -25, ref: "boost_profile" })
-                  setTab("activity")
-                }
-                setTick((x) => x + 1)
-                void refresh()
-              } catch (e) {
-                setClaimFeedback(e instanceof Error ? e.message : "Boost failed")
-              }
+            label="Spend GHC"
+            onClick={() => {
+              setAssetRail("ghc")
+              setShowUtilityPanel(true)
+              setSendEducate(null)
             }}
           />
           <QuickChip
@@ -1773,8 +1746,16 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                 setP2pMode("receive")
               } else if (id === "methods") {
                 setShowPaymentMethods(true)
-              } else if (id === "limits" || id === "security") {
+              } else if (id === "limits") {
                 setTab("about")
+                window.setTimeout(() => {
+                  document.getElementById("ghc-wallet-limits")?.scrollIntoView({ behavior: "smooth", block: "center" })
+                }, 0)
+              } else if (id === "security") {
+                setTab("about")
+                window.setTimeout(() => {
+                  document.getElementById("ghc-wallet-security")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }, 0)
               }
             }}
           />
@@ -1867,7 +1848,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           )}
 
           {tab === "about" && (
-            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div id="ghc-wallet-security" className="space-y-3 rounded-2xl border border-border bg-card p-4 scroll-mt-6">
               <div className="flex gap-2">
                 <Shield size={16} className="text-emerald-600" />
                 <div>
@@ -1885,7 +1866,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
                   </ul>
                 </div>
               </div>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <div id="ghc-wallet-limits" className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 scroll-mt-6 dark:border-emerald-900 dark:bg-emerald-950/30">
                 <div className="flex items-center gap-2">
                   <Info size={15} className="shrink-0 text-emerald-700 dark:text-emerald-300" />
                   <p className="text-xs font-bold text-foreground">Utility policy & current pricing</p>

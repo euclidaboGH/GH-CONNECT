@@ -100,7 +100,14 @@ function resumeEntry(userId: string, entry: Entry) {
 function attachRuntime(userId: string, entry: Entry) {
   if (typeof window === "undefined" || entry.interval !== null) return
   const onResume = () => resumeEntry(userId, entry)
-  const onClaimed = () => void refreshEntry(userId, entry)
+  const onClaimed = () => {
+    // A claim can finish while a pre-claim GET is still in flight. Coalescing
+    // that stale request alone would leave the UI showing claimable until the
+    // next polling tick, so always schedule one fresh read after it settles.
+    const active = entry.inFlight
+    if (active) void active.finally(() => { void refreshEntry(userId, entry) })
+    else void refreshEntry(userId, entry)
+  }
   const onVisibility = () => {
     if (document.visibilityState !== "hidden") onResume()
   }
