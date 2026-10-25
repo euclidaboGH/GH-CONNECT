@@ -1517,8 +1517,8 @@ export function CommunitiesScreen() {
         onClose={() => setShowCreate(false)}
         onSubmit={async (data: CreateGroupFormData) => {
           const id = await createGroup(data)
-          setShowCreate(false)
           if (!id) return
+          setShowCreate(false)
           // Creator is always a member — mirror join id so My list updates even when
           // identity id drifts between "current-user" and Pi uid before rehydrate.
           setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))

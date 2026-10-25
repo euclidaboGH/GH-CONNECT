@@ -70,6 +70,7 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
     const response = await fetch("/api/economy/rewards/daily", {
       method: "POST",
       credentials: "include",
+      cache: "no-store",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({}),
     })
@@ -87,10 +88,12 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
       message?: string
       code?: string
     }
-    if (response.status === 409 || data.code === "ALREADY_CLAIMED_TODAY") {
-      return { ok: true, alreadyClaimed: true, cycleDay: Number(data.cycleDay) || undefined }
+    // Only the explicit server idempotency result is a successful replay.
+    // Other 409 responses (e.g. locked/not-ready state) must remain failures.
+    if (data.code === "ALREADY_CLAIMED_TODAY" && response.ok && data.ok === true) {
+      return { ok: true, alreadyClaimed: true, idempotent: true, cycleDay: Number(data.cycleDay) || undefined }
     }
-    if (!response.ok || data.ok === false) {
+    if (!response.ok || data.ok !== true) {
       return {
         ok: false,
         error: data.message || data.error || "Daily claim failed. Your reward remains available to retry.",
@@ -98,7 +101,7 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
     }
     return {
       ok: true,
-      serverAmount: Number(data.userAmount ?? data.amount) || undefined,
+      serverAmount: Number(data.userAmount ?? data.amount),
       alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
       idempotent: Boolean(data.idempotent),
       pending: data.pending !== false,

@@ -371,22 +371,43 @@ export function RewardsCentreScreen({
       setClaimingId(rewardId)
       setStatusMsg("Claiming…")
       try {
-        const eco = getBoundDomainServices()?.economy
-        if (!eco?.claimReward) {
-          ghc.addToast?.("Claim unavailable right now", "error")
+        let claimed = false
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
+          try {
+            const { IdentityService } = await import("@/lib/identity/identity-service")
+            Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+          } catch { /* */ }
+          const serverRes = await fetch("/api/economy/rewards/claim", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+            headers,
+            // The hold ID is the stable server-side idempotency/ownership key.
+            // Do not mint a different client request ID on every retry.
+            body: JSON.stringify({ holdId: rewardId }),
+          })
+          const body = await serverRes.json().catch(() => ({}))
+          if (serverRes.ok && body?.ok) claimed = true
+          else {
+            ghc.addToast?.(body?.message || body?.error || body?.code || `Claim failed (${serverRes.status}). Your reward remains unchanged; retry later.`, "error")
+            return
+          }
+        } catch {
+          ghc.addToast?.("Could not reach the secure claims service. Your reward was not changed; retry when connected.", "error")
           return
         }
-        const res = await eco.claimReward(rewardId)
-        if (!res.ok) {
-          ghc.addToast?.(res.error || "Could not claim reward", "error")
-        } else {
+        if (claimed) {
           setClaimedFlash(rewardId)
-          ghc.addToast?.("Claimed — GHC is available in Wallet", "success")
+          ghc.addToast?.("Reward redemption confirmed by the server. Refreshing Wallet…", "success")
           try {
-            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-          } catch {
-            /* */
-          }
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "reward-claimed" } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "reward-claimed" } }))
+          } catch { /* */ }
+          try {
+            const { syncWalletAfterServerClaim } = await import("@/lib/domains/adapters/wallet-sync-after-claim")
+            await syncWalletAfterServerClaim({ referenceId: rewardId })
+          } catch { /* a later refresh will retry; never optimistically credit */ }
           window.setTimeout(() => setClaimedFlash(null), 2000)
         }
         setTick((x) => x + 1)
@@ -463,7 +484,6 @@ export function RewardsCentreScreen({
 
         <RewardsJourneyHero
           userId={userId}
-          onClaimed={refresh}
           onOpenWallet={onOpenWallet}
         />
 

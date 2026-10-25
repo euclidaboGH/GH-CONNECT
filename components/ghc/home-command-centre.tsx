@@ -14,7 +14,6 @@ import { listInvitationsForViewer } from "@/lib/domains/adapters/community-invit
 import { buildHomeCommunityPulse } from "@/lib/domains/adapters/home-community-pulse"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
-import { DailyRewardHomeExperience } from "./daily-reward-experience"
 import { CommunityInviteCard } from "@/components/ghc/community-invite-card"
 import {
   createIdentitySeam,
@@ -395,8 +394,6 @@ export function HomeCommandCentre({
           </span>
         </button>
       ) : null}
-
-      <DailyRewardHomeExperience />
 
       {invites.length > 0 ? (
         <div className="space-y-2" aria-label={`${invites.length} community invitations`}>

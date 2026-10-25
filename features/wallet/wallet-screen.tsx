@@ -6,7 +6,7 @@
  * Split further: wallet-header, wallet-balance, wallet-activity (next passes).
  */
 
-import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react"
+import { useMemo, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -324,8 +324,14 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     window.addEventListener("offline", onOffline)
     window.addEventListener("ghc:wallet-focus", onFocus)
     window.addEventListener("ghc:wallet-refresh", onRefresh)
+    // Reconcile the authoritative ledger periodically so matured 48-hour holds
+    // become visible and can be retried without logout or manual navigation.
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) void refreshAuthoritativeWallet()
+    }, 60_000)
     return () => {
       cancelled = true
+      window.clearInterval(refreshInterval)
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
       window.removeEventListener("ghc:wallet-focus", onFocus)
@@ -572,65 +578,72 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     setClaimingHoldId(holdId)
     setClaimFeedback(null)
     try {
-      const eco = getBoundDomainServices()?.economy as
-        | {
-            claimReward?: (id: string) => Promise<{ ok: boolean; error?: string }>
-          }
-        | undefined
-      if (!eco?.claimReward) {
-        setClaimFeedback("Claim unavailable right now")
-        return
-      }
       const hold = pendingHolds.find((h) => h.id === holdId)
       const ids = hold?.stackIds?.length ? hold.stackIds : [holdId]
       let claimed = 0
       let lastErr: string | undefined
       for (const id of ids) {
-        // Prefer server claim when available, then local domain
+        // The durable server ledger is the only authority for claiming matured
+        // funds. Never fall back to a browser/domain-store claim on HTTP failure:
+        // that can show a false success until the next login/hydration.
         try {
-          const claimHeaders: Record<string, string> = { "Content-Type": "application/json" }
-          try {
-            const { IdentityService } = await import("@/lib/identity/identity-service")
-            Object.assign(claimHeaders, IdentityService.getAuthHeaders?.() || {})
-          } catch { /* */ }
+          const claimHeaders: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
+          const { IdentityService } = await import("@/lib/identity/identity-service")
+          Object.assign(claimHeaders, IdentityService.getAuthHeaders?.() || {})
           const serverRes = await fetch("/api/economy/rewards/claim", {
-            method: "POST", credentials: "include", headers: claimHeaders,
-            body: JSON.stringify({ holdId: id, clientRequestId: `claim-${Date.now()}-${id}` }),
+            method: "POST", credentials: "include", cache: "no-store", headers: claimHeaders,
+            body: JSON.stringify({ holdId: id }),
           })
-          if (serverRes.ok) {
-            const body = (await serverRes.json()) as { ok?: boolean; mode?: string }
-            if (body.ok && body.mode !== "local") {
-              claimed += 1
-              continue
-            }
-          }
+          const body = await serverRes.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: string }
+          if (serverRes.ok && body.ok) claimed += 1
+          else lastErr = body.message || body.error || body.code || `Claim failed (${serverRes.status}). Please retry.`
         } catch {
-          /* fall through to local */
+          lastErr = "Could not reach the secure claims service. Your reward was not changed; retry when connected."
         }
-        const res = await eco.claimReward(id)
-        if (res.ok) claimed += 1
-        else lastErr = res.error
       }
       if (claimed === 0) {
         setClaimFeedback(lastErr || "Could not claim pending GHC")
       } else {
+        const allSettled = claimed === ids.length
         const amt = hold?.amount ?? 0
         const ref = hold?.id?.slice(0, 12)
-        setClaimReceipt({ amount: amt, ref })
-        setClaimFeedback(
-          amt > 0
-            ? `+${formatGhc(Number(amt))} available${ref ? ` · ref ${ref}` : ""}`
-            : claimed > 1
-              ? `Claimed ${claimed} items — added to available balance`
-              : "Claimed — added to available balance"
-        )
-        setShowPendingSheet(false)
-        setTab("activity")
+        // A stacked display row can contain multiple ledger holds. Never show
+        // the aggregate amount as available if only some holds settled.
+        if (allSettled) {
+          setClaimReceipt({ amount: amt, ref })
+          setClaimFeedback(
+            amt > 0
+              ? `+${formatGhc(Number(amt))} available${ref ? ` · ref ${ref}` : ""}`
+              : claimed > 1
+                ? `Claimed ${claimed} items — Wallet is refreshing`
+                : "Claim confirmed — Wallet is refreshing"
+          )
+          setShowPendingSheet(false)
+          setTab("activity")
+        } else {
+          setClaimReceipt(null)
+          setClaimFeedback(`Settled ${claimed} of ${ids.length} items. Wallet is refreshing; retry the remaining items. ${lastErr || ""}`.trim())
+        }
         setTick((x) => x + 1)
         try {
           await refresh()
         } catch {
           /* refresh optional */
+        }
+        try {
+          await refreshWalletAuthority()
+        } catch {
+          /* */
+        }
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:wallet-synced", {
+              detail: { reason: "pending-hold-claimed", holdId, partial: !allSettled },
+            }),
+          )
+          window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "pending-hold-claimed", partial: !allSettled } }))
+        } catch {
+          /* */
         }
       }
     } catch (e) {
@@ -640,34 +653,30 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
-  // auto-mature-pending: once per session, claim server-ready pending holds into available
+  // Auto-settle matured credits without a logout. A failed attempt is not
+  // permanently memoized: a later wallet refresh/focus/online event can retry.
+  const autoMatureInFlight = useRef(false)
   useEffect(() => {
-    if (!walletOnline || pendingHolds.length === 0) return
+    if (!walletOnline || pendingHolds.length === 0 || autoMatureInFlight.current) return
+    const ready = pendingHolds.filter((h) => h.claimState === "ready")
+    if (!ready.length) return
     let cancelled = false
     const run = async () => {
+      autoMatureInFlight.current = true
       try {
-        if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ghc.wallet.autoMatured") === "1") return
-        const ready = pendingHolds.filter((h) => h.claimState === "ready")
-        if (!ready.length) return
-        try {
-          sessionStorage.setItem("ghc.wallet.autoMatured", "1")
-        } catch {
-          /* */
-        }
         for (const h of ready.slice(0, 5)) {
           if (cancelled) break
           await claimPendingHold(h.id)
         }
-      } catch {
-        /* */
+      } finally {
+        autoMatureInFlight.current = false
       }
     }
     void run()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
+    // claimPendingHold uses current render state; refreshes change pendingHolds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletOnline, pendingHolds.length])
+  }, [walletOnline, pendingHolds.length, pendingHolds.map((h) => h.id + ":" + h.claimState).join("|"), tick])
 
 
   const displayPending = pending > 0 ? pending : pendingSum

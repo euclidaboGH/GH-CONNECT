@@ -114,10 +114,17 @@ export async function POST(request: Request) {
   }
 
   // Server listing fee (display + gate). Never accept client fee.
+  const preferredFee =
+    String(body.feeCurrency || body.preferredFeeCurrency || "").toUpperCase() === "PI"
+      ? "PI"
+      : String(body.feeCurrency || body.preferredFeeCurrency || "").toUpperCase() === "GHC"
+        ? "GHC"
+        : undefined
   const listingFee = calculateMarketplaceListingFee({
     sellerPrice: price,
     currency,
     kind,
+    preferredFeeCurrency: preferredFee,
   })
 
   // Non-zero approved listing fee: activation requires verified durable payment intent.

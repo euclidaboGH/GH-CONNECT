@@ -1,13 +1,12 @@
 "use client"
 
-import { IdentityService } from "@/lib/identity/identity-service"
 
 /**
  * Rewards as a journey/game surface — not an accounting ledger.
  * XP path + streak + today's opportunities.
  */
 
-import { useMemo, useState, useCallback, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Award, Flame, Sparkles, Check } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import {
@@ -17,14 +16,11 @@ import {
   DAILY_STREAK_GHC,
   msUntilNextLagosMidnight,
   formatCountdown,
-  markDailyClaimedForUi,
   ghcForCycleDay,
 } from "@/lib/domains/reward-level-domain"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
-import { notifyRewardClaimed } from "@/lib/notifications"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
-import { postDailyClaim } from "@/lib/rewards/claim-daily-client"
 
 function formatGhc(n: number): string {
   if (!Number.isFinite(n)) return "₲ 0.00"
@@ -36,19 +32,16 @@ function formatGhc(n: number): string {
 
 export function RewardsJourneyHero({
   userId,
-  onClaimed,
   onOpenWallet,
 }: {
   userId: string
-  onClaimed?: () => void
   onOpenWallet?: () => void
 }) {
   const ghc = useGHC()
   const [tick, setTick] = useState<number>(0)
-  const [claimingDaily, setClaimingDaily] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
   const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
-  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId)
+  const { status: serverStatus, revision: statusRevision } = useDailyClaimStatus(userId)
 
   const membershipTier = useMemo(() => {
     // Re-read membership status when tick advances after claim/refresh
@@ -117,78 +110,13 @@ export function RewardsJourneyHero({
     return () => window.removeEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
   }, [])
 
-  const claimDaily = useCallback(async () => {
-    // Server-authoritative daily claim only — no local GHC mint
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      ghc.addToast?.("You are offline. Daily claim needs a connection so the ledger can confirm.", "info")
-      return
-    }
-    if (claimingDaily) return
-    setClaimingDaily(true)
+  const openDailyClaim = () => {
     try {
-      const data = await postDailyClaim()
-      if (!data.ok) {
-        if (data.alreadyClaimed) {
-          try { markDailyClaimedForUi(userId) } catch { /* */ }
-          ghc.addToast?.("Today's reward has already been claimed.", "info")
-        } else {
-          ghc.addToast?.(data.error || "Claim failed — your reward remains available to retry", "error")
-        }
-        void refreshServerStatus()
-        setTick((t) => t + 1)
-        return
-      }
-      const amt = data.serverAmount ?? 0
-      const day = data.cycleDay ?? ""
-      // Server ledger → client wallet (no optimistic credit)
-      try {
-        const { syncWalletAfterServerClaim } = await import(
-          "@/lib/domains/adapters/wallet-sync-after-claim"
-        )
-        await syncWalletAfterServerClaim({
-          userId,
-          claimedAmount: Number(amt) || null,
-          alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
-          referenceId: data.referenceId != null ? String(data.referenceId) : null,
-        })
-      } catch {
-        /* keep last known balance */
-      }
-      ghc.addToast?.(
-        data.alreadyClaimed || data.idempotent
-          ? `Already claimed${amt ? ` · ${amt} GHC` : ""}`
-          : `+${amt} GHC${day ? ` · Day ${day}/7` : ""}`,
-        "success"
-      )
-      if (!(data.alreadyClaimed || data.idempotent) && amt) {
-        try {
-          notifyRewardClaimed({
-            title: "Daily reward claimed",
-            message: `+${amt} GHC${day ? ` · Day ${day}/7` : ""} posted to your wallet path`,
-            amountLabel: `${amt} GHC`,
-          })
-        } catch {
-          /* */
-        }
-      }
-      try {
-        window.dispatchEvent(
-          new CustomEvent("ghc:daily-reward-claimed", { detail: { ...data, server: true } })
-        )
-        window.dispatchEvent(new CustomEvent("ghc:wallet-synced"))
-        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-      } catch {
-        /* */
-      }
-      setTick((t) => t + 1)
-      onClaimed?.()
+      window.dispatchEvent(new CustomEvent("ghc:open-daily-claim"))
     } catch {
-      ghc.addToast?.("Claim failed", "error")
-      setTick((t) => t + 1)
-    } finally {
-      setClaimingDaily(false)
+      /* The global floating claim control remains available. */
     }
-  }, [userId, ghc, onClaimed, claimingDaily, refreshServerStatus])
+  }
 
   const opportunities = [
     {
@@ -196,8 +124,8 @@ export function RewardsJourneyHero({
       label: "Daily login reward",
       ghc: daily.todayGhc || DAILY_STREAK_GHC[daily.displayCycleDay] || 10,
       done: !daily.canClaimToday,
-      action: daily.canClaimToday ? () => void claimDaily() : undefined,
-      cta: daily.canClaimToday ? "Claim" : "Done",
+      action: daily.canClaimToday ? openDailyClaim : undefined,
+      cta: daily.canClaimToday ? "Open claim" : "Done",
     },
     {
       id: "profile",
@@ -385,16 +313,12 @@ export function RewardsJourneyHero({
           {daily.canClaimToday ? (
             <button
               type="button"
-              onClick={() => void claimDaily()}
-              disabled={claimingDaily || isOffline}
+              onClick={openDailyClaim}
+              disabled={isOffline}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] py-3.5 text-[13px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
             >
               <GhcCoinIcon size={18} />
-              {claimingDaily
-                ? "Claiming…"
-                : isOffline
-                  ? "Offline — reconnect to claim"
-                  : `Claim day ${daily.displayCycleDay} · +${formatGhc(daily.todayGhc)}`}
+              {isOffline ? "Offline — reconnect to claim" : `Open daily claim · +${formatGhc(daily.todayGhc)}`}
             </button>
           ) : (
             <div className="mt-4 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3.5 text-center">

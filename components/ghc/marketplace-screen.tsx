@@ -36,6 +36,7 @@ import { EmptyState } from "./empty-state"
 import { LazyImage } from "./lazy-image"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
 import {
@@ -250,7 +251,10 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const listingCur = (listing.currency || "GHC").toUpperCase()
-  const [payRail, setPayRail] = useState<"ghc" | "pi">(listingCur === "PI" ? "pi" : "ghc")
+  // Orders are settled in the listing's server-authoritative currency. Do not offer
+  // a second rail unless a verified conversion/dual-currency quote exists.
+  const requiredRail: "ghc" | "pi" = listingCur === "PI" ? "pi" : "ghc"
+  const [payRail, setPayRail] = useState<"ghc" | "pi">(requiredRail)
   const viewerId = IdentityService.getCurrentUserId() || ""
   const isOwn = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
 
@@ -348,7 +352,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
   return (
     <div className="mt-3 space-y-2">
       <div className="flex gap-2">
-        {(["ghc", "pi"] as const).map((rail) => (
+        {([requiredRail] as const).map((rail) => (
           <button
             key={rail}
             type="button"
@@ -378,8 +382,8 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
       </button>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         {payRail === "ghc"
-          ? "Debits available GHC on the durable ledger. Seller settles after fulfillment."
-          : "Reserves inventory then opens Pi payment. Amount is server-authoritative."}
+          ? "This listing is priced in GHC. Payment debits available GHC on the durable ledger; seller settlement follows fulfillment."
+          : "This listing is priced in Pi. Inventory is reserved and Pi payment is verified against a server-created intent. No currency conversion is implied."}
       </p>
       {msg ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{msg}</p> : null}
       {err ? <p className="text-xs font-medium text-red-600 dark:text-red-400">{err}</p> : null}
@@ -1088,6 +1092,10 @@ export function MarketplaceScreen({
   const [sellLocation, setSellLocation] = useState("")
   const [sellMedia, setSellMedia] = useState<string[]>([])
   const [sellFeeRail, setSellFeeRail] = useState<ListingFeeRail>("GHC")
+  // Preserve identity/intent across retries so a successful fee payment can be reconciled
+  // to the same listing instead of charging again after a transient listing-write failure.
+  const [sellDraftId, setSellDraftId] = useState<string | null>(null)
+  const [sellFeeIntentId, setSellFeeIntentId] = useState<string | null>(null)
   const [sellEditId, setSellEditId] = useState<string | null>(null)
   const [sellBusy, setSellBusy] = useState(false)
   const [sellError, setSellError] = useState<string | null>(null)
@@ -1813,25 +1821,108 @@ export function MarketplaceScreen({
                   void loadMineListings()
                   return
                 }
-                if (!domain?.createListing) {
-                  setSellError("Listing create is not available right now")
-                  return
+                // Prefer durable server create with selected fee rail (never invent success).
+                let res: { ok: boolean; error?: string; message?: string; data?: { listing?: { id?: string } }; listing?: { id?: string } }
+                let serverPublished = false
+                try {
+                  const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
+                  // Stable listing identity binds any Pi listing-fee intent to exactly this listing.
+                  const listingId = sellDraftId || `lst_${crypto.randomUUID()}`
+                  if (!sellDraftId) setSellDraftId(listingId)
+                  let listingFeePaymentId: string | undefined = sellFeeRail === "PI" ? (sellFeeIntentId || undefined) : undefined
+                  if (sellFeeRail === "PI" && !listingFeePaymentId) {
+                    const quoteResponse = await fetch(`/api/marketplace/listing-fee?mode=create&price=${encodeURIComponent(String(priceNum))}&currency=${encodeURIComponent(sellCurrency)}&kind=product&feeCurrency=PI`, {
+                      cache: "no-store",
+                      headers: IdentityService.getAuthHeaders(),
+                    })
+                    const quoteData = await quoteResponse.json().catch(() => ({})) as { ok?: boolean; fee?: { amount?: number; currency?: string; requiresSettlement?: boolean } }
+                    const feeAmount = Number(quoteData.fee?.amount)
+                    if (!quoteResponse.ok || !quoteData.ok || !Number.isFinite(feeAmount) || feeAmount <= 0 || String(quoteData.fee?.currency).toUpperCase() !== "PI") {
+                      setSellError("Pi listing fee is not configured correctly on the server. No payment was started.")
+                      return
+                    }
+                    const referenceId = `marketplace_listing_fee_${listingId}`
+                    const intentResponse = await fetch("/api/payments/intents", {
+                      method: "POST",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json", ...IdentityService.getAuthHeaders() },
+                      body: JSON.stringify({
+                        purpose: "marketplace",
+                        amount: feeAmount,
+                        currency: "PI",
+                        referenceId,
+                        idempotencyKey: referenceId,
+                        metadata: { kind: "listing_fee", feeKind: "listing_fee", listingId, marketplaceListingId: listingId },
+                      }),
+                    })
+                    const intentData = await intentResponse.json().catch(() => ({})) as { ok?: boolean; intent?: { id?: string }; error?: string; message?: string }
+                    const intentId = String(intentData.intent?.id || "")
+                    if (!intentResponse.ok || !intentData.ok || !intentId) {
+                      setSellError(intentData.message || intentData.error || "Could not prepare a secure Pi listing-fee payment.")
+                      return
+                    }
+                    const payment = await startUserToAppPayment({
+                      amount: feeAmount,
+                      memo: `GreenHaven marketplace listing fee · ${sellTitle.trim().slice(0, 80)}`,
+                      intentId,
+                      authHeaders: IdentityService.getAuthHeaders(),
+                      metadata: { purpose: "marketplace", kind: "listing_fee", listingId, intentId, referenceId },
+                    })
+                    if (!payment.ok) {
+                      setSellError(payment.cancelled ? "Pi payment was cancelled. Your listing was not published." : payment.error || "Pi listing-fee payment did not complete. Your listing was not published.")
+                      return
+                    }
+                    listingFeePaymentId = intentId
+                    setSellFeeIntentId(intentId)
+                  }
+                  const durable = await socialCreateMarketplaceListing({
+                    id: listingId,
+                    title: sellTitle.trim(),
+                    description: sellDesc.trim() || sellTitle.trim(),
+                    category: sellCategory,
+                    price: priceNum,
+                    currency: sellCurrency,
+                    location: sellLocation.trim() || undefined,
+                    media: sellMedia.slice(0, 6),
+                    status: "active",
+                    kind: "product",
+                    feeCurrency: sellFeeRail,
+                    listingFeePaymentId,
+                  })
+                  if (!durable.ok) {
+                    const err = String(durable.error || "")
+                    const msg = String(durable.message || "")
+                    if (sellFeeRail === "PI") {
+                      setSellError(
+                        msg.includes("GHC")
+                          ? "Pi listing fee requires a completed Pi payment. Tap Publish after paying with π, or switch to Pay with GHC."
+                          : msg || err || "Pi listing fee could not be completed. Complete GH Pay for the fee, or use GHC.",
+                      )
+                    } else {
+                      setSellError(
+                        err === "INSUFFICIENT_BALANCE" || msg.toLowerCase().includes("insufficient")
+                          ? "Not enough available GHC for the listing fee. Claim matured rewards or buy a GHC pack, then retry."
+                          : msg || err || "Listing fee could not be settled from available GHC.",
+                      )
+                    }
+                    return
+                  }
+                  res = {
+                    ok: true,
+                    data: { listing: durable.listing as { id?: string } },
+                    listing: durable.listing as { id?: string },
+                  }
+                  serverPublished = true
+                } catch (error) {
+                  // Preserve an offline draft queue, but never call it published or charge a fee locally.
+                  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                    res = { ok: true }
+                  } else {
+                    setSellError(error instanceof Error ? error.message : "Could not reach the marketplace server. Check your Orders/Payments before retrying.")
+                    return
+                  }
                 }
-                const res = await domain.createListing({
-                  kind: "product",
-                  title: sellTitle.trim(),
-                  description: sellDesc.trim() || sellTitle.trim(),
-                  category: sellCategory,
-                  price: priceNum,
-                  currency: sellCurrency,
-                  location: sellLocation.trim() || undefined,
-                  media: sellMedia.slice(0, 6),
-                })
-                if (!res.ok) {
-                  setSellError(res.error || "Could not create listing")
-                  return
-                }
-                let id = res.data?.listing?.id
+                let id = res.data?.listing?.id || sellDraftId || undefined
                 // Server-first durable marketplace — no silent local-only public listing
                 const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
                 if (!online) {
@@ -1860,6 +1951,8 @@ export function MarketplaceScreen({
                     setSellDesc("")
                     setSellLocation("")
                     setSellMedia([])
+                    setSellDraftId(null)
+                    setSellFeeIntentId(null)
                     setBucket("browse")
                     refresh()
                     setSellError(null)
@@ -1882,7 +1975,7 @@ export function MarketplaceScreen({
                   }
                   return
                 }
-                if (online) {
+                if (online && !serverPublished) {
                   try {
                     const { socialCreateMarketplaceListing } = await import("@/lib/social/client")
                     const remote = await socialCreateMarketplaceListing({
@@ -1897,6 +1990,7 @@ export function MarketplaceScreen({
                       media: sellMedia.slice(0, 6),
                       location: sellLocation.trim() || undefined,
                       category: sellCategory,
+                      feeCurrency: sellFeeRail,
                     })
                     if (!remote.ok || remote.durable === false) {
                       setSellError(
@@ -1943,6 +2037,8 @@ export function MarketplaceScreen({
                 setSellLocation("")
                 setSellMedia([])
                 setSellEditId(null)
+                setSellDraftId(null)
+                setSellFeeIntentId(null)
                 setBucket("browse")
                 refresh()
                 if (id) setSelectedId(id)

@@ -26,6 +26,8 @@ export type ListingFeeInput = {
   category?: string
   kind?: string
   durationDays?: number
+  /** Seller-selected settlement rail when both GHC and Pi fees are configured / testnet unlocked */
+  preferredFeeCurrency?: "GHC" | "PI"
 }
 
 export type ListingFeeResult = {
@@ -64,9 +66,40 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
     }
   }
 
-  // Prefer explicit fixed GHC fee after business approval.
+  const preferred =
+    String(input.preferredFeeCurrency || "").toUpperCase() === "PI"
+      ? "PI"
+      : String(input.preferredFeeCurrency || "").toUpperCase() === "GHC"
+        ? "GHC"
+        : null
+
   const fixedGhc = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_GHC)
-  if (fixedGhc != null) {
+  const fixedPi = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_PI)
+
+  // Honor seller rail when that rail has an explicit amount (or testnet unlock below).
+  if (preferred === "PI" && fixedPi != null) {
+    const feeAmount = Math.round(fixedPi * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "PI",
+      ratesApproved: true,
+      basis: "fixed_pi",
+      code: "FEE_FIXED",
+    }
+  }
+  if (preferred === "GHC" && fixedGhc != null) {
+    const feeAmount = Math.round(fixedGhc * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
+  // Prefer explicit fixed GHC fee after business approval.
+  if (fixedGhc != null && preferred !== "PI") {
     const feeAmount = Math.round(fixedGhc * 1e8) / 1e8
     return {
       feeAmount,
@@ -78,7 +111,6 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
   }
 
   // Prefer explicit fixed Pi fee after business approval.
-  const fixedPi = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_PI)
   if (fixedPi != null) {
     const feeAmount = Math.round(fixedPi * 1e8) / 1e8
     return {
@@ -105,6 +137,15 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
   }
 
   if (isTestnetProductUnlocked()) {
+    if (preferred === "PI") {
+      return {
+        feeAmount: 0.05,
+        feeCurrency: "PI",
+        ratesApproved: true,
+        basis: "fixed_pi",
+        code: "FEE_FIXED",
+      }
+    }
     return {
       feeAmount: 1,
       feeCurrency: "GHC",

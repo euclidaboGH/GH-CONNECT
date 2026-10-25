@@ -880,6 +880,8 @@ export async function socialCreateMarketplaceListing(input: {
   category?: string
   condition?: string
   tags?: string[]
+  /** Preferred listing-fee rail — server settles GHC or verifies Pi intent */
+  feeCurrency?: "GHC" | "PI"
   listingFeePaymentId?: string
   feePaymentId?: string
 }): Promise<{

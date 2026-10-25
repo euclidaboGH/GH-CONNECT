@@ -43,7 +43,6 @@ import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
-import { useDailyClaimStatus } from "./use-daily-claim-status"
 import { FeedInterstitial, interstitialKindAt } from "./feed-interstitial"
 
 const FEED_FILTERS: {
@@ -549,8 +548,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const displayPosts = useMemo(() => searchResults.slice(0, displayedPostsCount), [searchResults, displayedPostsCount])
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
-  const currentUserId = IdentityService.getCurrentUserId() || ""
-  const dailyClaim = useDailyClaimStatus(currentUserId, Boolean(currentUserId))
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -578,627 +575,141 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         actions={
           <>
             <PremiumSurfaceActions />
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  if (dailyClaim.status?.claimable) {
-                    window.localStorage.removeItem("ghc-daily-claim-dismissed-day")
-                    window.dispatchEvent(new CustomEvent("ghc:open-daily-claim"))
-                  } else {
-                    window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
-                  }
-                } catch { /* */ }
-              }}
-              aria-label={dailyClaim.status?.claimable ? "Daily GHC reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily GHC reward claimed today" : "Open daily GHC rewards"}
-              title={dailyClaim.status?.claimable ? "Daily reward ready to claim" : dailyClaim.status?.claimedToday ? "Daily reward claimed today" : "Daily rewards"}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold transition hover:bg-muted ${dailyClaim.status?.claimable ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-border/60 text-foreground/80"}`}
-            >
-              <span aria-hidden>◈</span>
-              <span>{dailyClaim.status?.claimable ? "Reward ready" : dailyClaim.status?.claimedToday ? "Claimed" : "GHC"}</span>
-              {dailyClaim.status?.claimable ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden /> : null}
-            </button>
-            <NotificationBell
-              onOpenTarget={(n) => {
-                if (n.type === "message") setTab("messages")
-                else if (n.type === "match" || n.type === "follow" || n.type === "friend_request")
-                  setTab("discover")
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(true)}
-              aria-label="Search"
-              aria-expanded={isSearchOpen}
-              className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-muted active:scale-90"
-            >
-              <Search size={18} className="text-foreground/80" />
-            </button>
-          </>
-        }
-        secondary={
-          <>
-            {/* Daily claim uses fixed modal (DailyClaimPrompt) — do not push header/content */}
-            {/* header search only */}
-            {isSearchOpen && searchQuery && (
-              <div className="mb-1.5 flex gap-2">
-                <input
-                  type="text"
-                  data-ghc-search="1" placeholder="Search posts, people, hashtags..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 rounded-full border border-border/70 bg-muted/40 px-4 py-2 text-sm outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
-                  autoFocus
-                />
-              </div>
-            )}
-            <div
-              className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
-              role="tablist"
-              aria-label="Feed modes"
-              onKeyDown={(e) => {
-                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
-                e.preventDefault()
-                const idx = FEED_FILTERS.findIndex((f) => f.value === activeFilter)
-                if (idx < 0) return
-                let next = idx
-                if (e.key === "ArrowRight") next = (idx + 1) % FEED_FILTERS.length
-                if (e.key === "ArrowLeft") next = (idx - 1 + FEED_FILTERS.length) % FEED_FILTERS.length
-                if (e.key === "Home") next = 0
-                if (e.key === "End") next = FEED_FILTERS.length - 1
-                setActiveFilter(FEED_FILTERS[next].value); try { window.localStorage.setItem("ghc.feedFilter", FEED_FILTERS[next].value) } catch { /* */ }
-                setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
-              }}
-            >
-              {FEED_FILTERS.map((filter) => {
-                const selected = activeFilter === filter.value
-                return (
-                  <button
-                    key={filter.value}
-                    type="button"
-                    onClick={() => {
-                      setActiveFilter(filter.value); try { window.localStorage.setItem("ghc.feedFilter", filter.value) } catch { /* */ }
-                      setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
-                    }}
-                    role="tab"
-                    aria-selected={selected}
-                    tabIndex={selected ? 0 : -1}
-                    aria-label={`${filter.label} feed — ${filter.hint}`}
-                    title={filter.hint}
-                    className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] ${
-                      selected
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    }`}
-                  >
-                    <span className={selected ? "text-primary-foreground/90" : "text-muted-foreground"} aria-hidden>
-                      {filter.icon}
-                    </span>
-                    {filter.shortLabel}
-                  </button>
-                )
-              })}
-            </div>
           </>
         }
       />
 
-      <div className="sr-only" role="status" aria-live="polite">
-        {feedStatusMsg || (isRefreshing ? "Refreshing feed" : "")}
-      </div>
-
-      {isOffline && (
-        <div
-          className="mx-3 mt-2 flex items-start gap-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-left shadow-sm dark:border-amber-900 dark:bg-amber-950/40"
-          role="status"
-        >
-          <span className="mt-0.5 text-amber-800 dark:text-amber-200" aria-hidden>
-            !
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-amber-950 dark:text-amber-100">You&apos;re offline</p>
-            <p className="text-[11px] leading-snug text-amber-900/90 dark:text-amber-200/90">
-              Showing what&apos;s already on this device. New posts load when you&apos;re back online.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Error state */}
-      {feedError && (
-        <div className="mx-3 mt-4 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 text-destructive" aria-hidden="true">⚠️</div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-destructive">Couldn&apos;t load your feed</h3>
-              <p className="mt-1 text-xs text-destructive/90">{feedError.message || "Check your connection and try again."}</p>
-              <button
-                type="button"
-                onClick={() => { setFeedError(null); void handleRefresh() }}
-                className="mt-2 min-h-9 rounded-full border border-destructive/30 bg-card px-3 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
-              >
-                Try again
-              </button>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="border-b border-border/50 bg-background/95 px-3 py-2 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Feed filters">
+              {FEED_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeFilter === filter.value}
+                  onClick={() => setActiveFilter(filter.value)}
+                  className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition ${activeFilter === filter.value ? "bg-[var(--gh-green)] text-white" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}
+                >
+                  {filter.icon}<span>{filter.shortLabel}</span>
+                </button>
+              ))}
             </div>
+            <button type="button" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? "Close feed search" : "Search feed"} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card">
+              {isSearchOpen ? <X size={16} /> : <Search size={16} />}
+            </button>
+            <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} aria-label="Refresh feed" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card disabled:opacity-50">
+              <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
+            </button>
           </div>
+          {isSearchOpen ? (
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search posts, people, hashtags…"
+              aria-label="Search posts, people, and hashtags"
+              className="mt-2 min-h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            />
+          ) : null}
+          {feedStatusMsg ? <p className="mt-1 text-[10px] text-muted-foreground" role="status">{feedStatusMsg}</p> : null}
         </div>
-      )}
 
-      {/* Feed content — skeleton until bootstrap so empty state never flashes under load */}
-      {(!feedBootstrapped || (isRefreshing && rankedPosts.length === 0)) ? (
-        <FeedSkeleton />
-      ) : (
-      <div
-        ref={containerRef}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onScroll={(e) => {
-          onHeaderScroll(e)
-          closeAllActionSheets()
-        }}
-        role="feed"
-        aria-label={`${activeFilter} feed`}
-        aria-busy={isRefreshing || isLoadingMore}
-        className="gh-feed-scroll gh-scroll-root min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-background scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
-        style={pullDistance > 0 ? { transform: `translateY(${Math.min(pullDistance, 72)}px)` } : undefined}
-      >
-        <div className="gh-feed-column space-y-3 pb-6 pt-2 sm:pt-3">
-          {/* Moments lead the feed; the public timeline begins immediately underneath. */}
-          <ProfileStorySection scope="feed" />
-          {/* Daily reward status is kept compact in the app header; details live in Rewards Centre. */}
+        {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">Offline — showing available feed data. New actions may require a connection.</div> : null}
+        {feedError ? <div className="mx-3 mt-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">{feedError.message}</div> : null}
 
-      {draftPosts.length > 0 ? (
-        <div className="mx-3 mb-2 rounded-2xl border border-border/50 bg-card/80 px-3 py-2.5">
-          <div className="mb-1.5 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Drafts</p>
-            <span className="text-[10px] text-muted-foreground">{draftPosts.length}</span>
-          </div>
-          <ul className="space-y-1.5">
-            {draftPosts.slice(0, 3).map((d) => (
-              <li key={d.id} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 truncate text-left text-[13px] text-foreground"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent("ghc:open-compose", {
-                          detail: { mode: "post", draftId: d.id, text: d.content },
-                        }),
-                      )
-                    } catch { /* */ }
-                  }}
-                >
-                  {d.content.trim() || "Untitled draft"}
-                </button>
-                <button
-                  type="button"
-                  className="shrink-0 text-[11px] font-semibold text-muted-foreground"
-                  onClick={() => {
-                    removePostDraft(d.id)
-                    setDraftPosts((prev) => prev.filter((x) => x.id !== d.id))
-                  }}
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-
-          {displayPosts.length === 0 ? (
+        <div
+          ref={containerRef}
+          className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]"
+          onScroll={onHeaderScroll}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={() => void handleTouchEnd()}
+        >
+          {pullDistance > 0 ? <div className="px-4 py-1 text-center text-[10px] text-muted-foreground">{isRefreshing ? "Refreshing…" : pullDistance > 80 ? "Release to refresh" : "Pull to refresh"}</div> : null}
+          {!feedBootstrapped ? (
+            <FeedSkeleton />
+          ) : displayPosts.length === 0 ? (
             <EmptyState
-              variant="feed"
-              title={
-                activeFilter === "following"
-                  ? "Your Following feed is quiet"
-                  : activeFilter === "friends"
-                    ? "No posts from friends yet"
-                    : activeFilter === "communities"
-                      ? "No community posts yet"
-                      : activeFilter === "trending"
-                        ? "Nothing trending right now"
-                        : "Your feed is ready"
-              }
-              description={
-                activeFilter === "following"
-                  ? "Follow people you care about — their posts appear here. Blocked accounts never show."
-                  : activeFilter === "friends"
-                    ? "Connect with people — posts from friends show up here."
-                    : activeFilter === "communities"
-                      ? "Join communities to see discussions and shared posts here."
-                      : activeFilter === "trending"
-                        ? "Check back soon for rising posts across GreenHaven."
-                        : "Posts from people and communities you follow will show up here. Use Discover to grow your network, or the + button to share."
-              }
-              action={
-                activeFilter === "communities"
-                  ? { label: "Explore communities", onClick: () => setTab?.("communities") }
-                  : { label: "Discover people", onClick: () => setTab?.("discover") }
-              }
-              secondaryAction={
-                activeFilter !== "for-you"
-                  ? {
-                      label: "View For You",
-                      onClick: () => {
-                        setActiveFilter("for-you")
-                        setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
-                      },
-                    }
-                  : {
-                      label: "Create a post",
-                      onClick: () => {
-                        try {
-                          window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } }))
-                        } catch {
-                          /* App shell owns the global composer. */
-                        }
-                      },
-                    }
-              }
+              title={searchQuery.trim() ? "No matching posts" : "Your feed is getting ready"}
+              description={searchQuery.trim() ? "Try another keyword or hashtag." : hasRealPosts ? "No posts match this filter yet. Try another feed filter." : "Follow people or explore communities to bring relevant posts into your feed."}
+              action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
             />
           ) : (
-            displayPosts.map((rankedPost, postIndex) => (
-            <div key={rankedPost.post.id} className="cv-auto min-w-0 max-w-full">
-              <PostErrorBoundary postId={rankedPost.post.id}>
-                <EnhancedPostCard
-                  post={rankedPost.post}
-                  isLiked={likedPosts.includes(rankedPost.post.id)}
-                  isSaved={bookmarkedPostIds.includes(rankedPost.post.id)}
-                  isOwnPost={isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile)}
-                  onLike={(id) => {
-                    // Post-level likes deprecated for matching; keep handler for ranking legacy signals only
-                    if (!perms.canLike(rankedPost.post.authorId)) return
-                    handleLike(id)
-                  }}
-                  onReact={(id, reaction) => {
-                    if (!perms.canLike(rankedPost.post.authorId)) {
-                      addToast("You can't react to this post", "error")
-                      return
-                    }
-                    void handleReact(id, reaction)
-                  }}
-                  onComment={() => {
-                    if (!perms.canComment(rankedPost.post.authorId)) {
-                      addToast("You can't comment on this post", "error")
-                      return
-                    }
-                    openComments(rankedPost.post.id)
-                  }}
-                  onShare={(postId) => setSharePostId(postId)}
-                  onSave={handleSave}
-                  onNotInterested={handleNotInterested}
-                  onShowVisibilityReason={handleShowVisibilityReason}
-                  visibilityReason={rankedPost.reason}
-                  onOpenProfile={(authorId) => {
-                    const id = authorId || rankedPost.post.authorId
-                    if (!id || id === "current-user" || id === profile?.id) {
-                      onProfile?.()
-                      setTab("profile")
-                      return
-                    }
-                    setViewingAuthorId(id)
-                  }}
-                  onDelete={
-                    isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) || perms.canDeletePost(rankedPost.post.authorId)
-                      ? (postId) => void deletePost(postId)
-                      : undefined
-                  }
-                  onInsights={
-                    isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile)
-                      ? (postId) => {
-                          const p = posts.find((x) => x.id === postId) || rankedPost.post
-                          setInsightsPost(p)
-                        }
-                      : undefined
-                  }
-                  onOpenPost={openPostDetail}
-                  onArchive={
-                    isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && archivePost
-                      ? (postId) => void archivePost(postId)
-                      : undefined
-                  }
-                  onReport={
-                    !perms.isBlockedUser(rankedPost.post.authorId)
-                      ? (postId, reason) => void (reportContent?.("post", postId, reason) ?? reportPost?.(postId, reason))
-                      : undefined
-                  }
-                  onBlock={
-                    perms.canBlock(rankedPost.post.authorId)
-                      ? () => void perms.tryBlock(rankedPost.post.authorId)
-                      : undefined
-                  }
-                  onMute={
-                    rankedPost.post.authorId !== "current-user" && muteUser
-                      ? () => {
-                          void muteUser(rankedPost.post.authorId)
-                          addToast("Author muted", "info")
-                        }
-                      : undefined
-                  }
-                  onEdit={
-                    isOwnAuthor(rankedPost.post.authorId, rankedPost.post.authorName, profile) && editPost
-                      ? (postId, content, media) => void editPost(postId, content, media)
-                      : undefined
-                  }
-                />
-              </PostErrorBoundary>
-              {(() => {
-                const kind = interstitialKindAt(postIndex + 1)
-                if (!kind) return null
-                return (
-                  <FeedInterstitial
-                    kind={kind}
-                    onFindPeople={() => {
-                      try {
-                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
-                      } catch { /* */ }
-                    }}
-                    onOpenMarketplace={() => {
-                      try {
-                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))
-                      } catch { /* */ }
-                    }}
-                    onOpenCommunities={() => {
-                      try {
-                        window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
-                      } catch { /* */ }
-                    }}
-                    onCreate={() => {
-                      try {
-                        window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
-                      } catch { /* */ }
-                    }}
-                  />
-                )
-              })()}
-            </div>
-            ))
-          )}
-
-{/* Loading indicator */}
-          {isLoadingMore && (
-            <div className="space-y-4">
-              <PostSkeleton />
-              <PostSkeleton />
-            </div>
-          )}
-
-          {/* Infinite scroll trigger */}
-          {hasMorePosts && <div ref={observerTargetRef} className="h-10" aria-hidden="true" />}
-
-          {/* Pagination stays available while the local list is expanded or the server may have older posts. */}
-          {(displayedPostsCount < rankedPosts.length || hasMorePosts) && rankedPosts.length > 0 && (
-            <div className="flex justify-center py-3">
-              <button
-                type="button"
-                disabled={isLoadingMore}
-                onClick={() => void loadMorePosts()}
-                className="min-h-10 rounded-full border border-border/70 bg-card px-5 text-xs font-bold text-foreground shadow-sm transition hover:bg-muted disabled:opacity-60"
-              >
-                {isLoadingMore ? "Loading…" : "Load more"}
-              </button>
-            </div>
-          )}
-
-          {displayedPostsCount >= rankedPosts.length && !hasMorePosts && rankedPosts.length > 0 && (
-            <div
-              className="mx-1 rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-gradient-to-b from-emerald-50/70 to-background px-5 py-8 text-center dark:border-emerald-900/50 dark:from-emerald-950/30"
-              role="status"
-            >
-              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                <Users size={20} aria-hidden="true" />
-              </div>
-              <p className="text-sm font-bold text-foreground">You&apos;re all caught up</p>
-              <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
-                Find people or share a moment.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTab?.("discover")}
-                  className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
-                >
-                  Find people
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
-                    } catch {
-                      /* App shell owns the global composer. */
-                    }
-                  }}
-                  className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-105 active:scale-95"
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
-                    } catch {
-                      /* App shell owns the global composer. */
-                    }
-                  }}
-                  className="rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95"
-                >
-                  Add story
-                </button>
+            <div className="space-y-3 px-3 py-3">
+              {displayPosts.map(({ post, reason }, index) => (
+                <div key={post.id}>
+                  {index > 0 && interstitialKindAt(index) ? (
+                    <FeedInterstitial
+                      kind={interstitialKindAt(index)!}
+                      onFindPeople={() => setTab("discover")}
+                      onOpenMarketplace={() => setTab("marketplace")}
+                      onOpenCommunities={() => setTab("communities")}
+                      onCreate={() => onCompose?.()}
+                    />
+                  ) : null}
+                  <PostErrorBoundary>
+                    <EnhancedPostCard
+                      post={post}
+                      isLiked={likedPosts.includes(post.id)}
+                      isSaved={bookmarkedPostIds.includes(post.id)}
+                      isOwnPost={isOwnAuthor(post.authorId, post.authorName, profile)}
+                      onLike={handleLike}
+                      onReact={handleReact}
+                      onComment={openComments}
+                      onShare={(postId) => setSharePostId(postId)}
+                      onSave={handleSave}
+                      onNotInterested={handleNotInterested}
+                      onShowVisibilityReason={handleShowVisibilityReason}
+                      visibilityReason={reason}
+                      onOpenPost={openPostDetail}
+                      onOpenProfile={() => { onProfile?.(); setTab("profile") }}
+                    />
+                  </PostErrorBoundary>
+                </div>
+              ))}
+              <div ref={observerTargetRef} className="flex min-h-12 items-center justify-center py-3" aria-live="polite">
+                {isLoadingMore ? <span className="text-[11px] text-muted-foreground">Loading more posts…</span> : hasMorePosts ? <button type="button" onClick={() => void loadMorePosts()} className="rounded-full border border-border/70 bg-card px-4 py-2 text-[11px] font-bold">Load more</button> : <span className="text-[10px] text-muted-foreground">You’re all caught up</span>}
               </div>
             </div>
           )}
         </div>
       </div>
-      )}
 
-
-      {sharePostId && (() => {
-        const sp = posts.find((p) => p.id === sharePostId) || rankedPosts.find((r) => r.post.id === sharePostId)?.post
-        if (!sp) return null
-        return (
-          <ShareSheet
-            post={sp}
-            open={!!sharePostId}
-            onClose={() => setSharePostId(null)}
-            shareContext={{
-              currentUserId: IdentityService.getCurrentUserId(),
-              blockedUsers: blockedUsers || settings?.blockedUsers || [],
-              posts,
-              conversations: conversations || [],
-            }}
-            onComplete={(result: ShareResult) => {
-              applyShareResult?.(result)
-              if (!result.ok) return
-              void (async () => {
-                let durableOk = true
-                if (sharePostId) {
-                  try {
-                    const { socialSharePost } = await import("@/lib/social/client")
-                    const remote = await socialSharePost(sharePostId)
-                    durableOk = remote.ok !== false
-                    if (remote.ok && typeof remote.shareCount === "number") {
-                      broadcastPostEngagement({ postId: sharePostId, kind: "share", shareCount: remote.shareCount })
-                    }
-                  } catch {
-                    durableOk = false
-                  }
-                  if (shouldSendAttention(sharePostId, "share")) {
-                    void socialRecordAttention(sharePostId, "share")
-                  }
-                }
-                if (result.link) addToast("Link copied", "success")
-                else if (result.repost) addToast("Shared to your timeline", "success")
-                else if (result.story) addToast("Added to your story", "success")
-                else if (result.messages?.length) {
-                  const n = result.messages.length
-                  addToast(n > 1 ? `Shared to ${n} communities/chats` : "Shared to community", "success")
-                }
-                else if (!durableOk) addToast("Could not sync share to server", "error")
-                else addToast("Shared", "success")
-              })()
-            }}
-            onFindPeople={() => setTab?.("discover")}
-            onDiscoverCommunities={() => setTab?.("communities")}
-          />
-        )
-      })()}
-
+      <CommentSheet post={posts.find((post) => post.id === commentingPostId) || routedPost} open={Boolean(commentingPostId)} onClose={() => setCommentingPostId(null)} />
       <PostDetailSheet
-        post={selectedPostId ? posts.find((p) => p.id === selectedPostId) || rankedPosts.find((r) => r.post.id === selectedPostId)?.post || (routedPost?.id === selectedPostId ? routedPost : null) : null}
+        post={posts.find((post) => post.id === selectedPostId) || rankedPosts.find((item) => item.post.id === selectedPostId)?.post || routedPost}
         open={Boolean(selectedPostId)}
         onClose={() => setSelectedPostId(null)}
-        onComments={(postId) => { setSelectedPostId(null); setCommentingPostId(postId) }}
-        onShare={(postId) => { setSelectedPostId(null); setSharePostId(postId) }}
+        onComments={openComments}
+        onShare={(postId) => setSharePostId(postId)}
         onOpenMedia={(url, caption) => setLightbox({ url, caption })}
         loadComments={loadPostComments}
       />
-
-      <CommentSheet
-        post={commentingPostId ? posts.find((p) => p.id === commentingPostId) || (routedPost?.id === commentingPostId ? routedPost : null) : null}
-        open={Boolean(commentingPostId)}
-        onClose={() => {
-          setCommentingPostId(null)
-        }}
-      />
-
-
-      {/* Visibility reason tooltip */}
-      {selectedVisibilityReason && (
-        <VisibilityReasonTooltip
-          reason={selectedVisibilityReason}
-          onClose={() => {
-            setVisibilityReasonPostId(null)
-            setSelectedVisibilityReason(null)
-          }}
-        />
-      )}
-
-      <GlobalSearchModal
-        open={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectPerson={() => setTab?.("discover")}
-        onSelectPost={() => {
-          /* stay on feed; post already listed */
-        }}
-        onSelectCommunity={() => setTab?.("communities")}
-      />
-
+      <MediaLightbox open={Boolean(lightbox)} url={lightbox?.url || null} caption={lightbox?.caption} onClose={() => setLightbox(null)} />
       <SaveToCollectionSheet
         open={Boolean(saveCollectionPostId)}
         postId={saveCollectionPostId}
         onClose={() => setSaveCollectionPostId(null)}
-        onSaved={(name) => addToast(`Saved to ${name}`, "success")}
+        onSaved={() => {
+          if (saveCollectionPostId) {
+            setBookmarkedPostIds((current) => current.includes(saveCollectionPostId) ? current : [...current, saveCollectionPostId])
+          }
+        }}
       />
-      <MediaLightbox
-        open={Boolean(lightbox)}
-        url={lightbox?.url || null}
-        caption={lightbox?.caption}
-        onClose={() => setLightbox(null)}
-      />
-      <PostInsightsSheet
-        open={Boolean(insightsPost)}
-        post={insightsPost}
-        onClose={() => setInsightsPost(null)}
-      />
-
-      {/* Public profile peek from feed author name/photo */}
-      {viewingAuthorId && (() => {
-        const samplePost = posts.find((p) => p.authorId === viewingAuthorId)
-        const candidate = (candidates || []).find((c: { id: string }) => c.id === viewingAuthorId)
-        const name = candidate?.name || samplePost?.authorName || "Member"
-        const photo = candidate?.photo || samplePost?.authorPhoto || "/placeholder.svg?width=80&height=80"
-        const isFollowingAuthor = (following || []).includes(viewingAuthorId)
-        return (
-          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center" role="dialog" aria-modal="true" aria-label={`${name}'s profile`}>
-            <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={() => setViewingAuthorId(null)} />
-            <div className="relative z-10 max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-card shadow-2xl sm:rounded-3xl">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-card px-4 py-3">
-                <h3 className="text-base font-bold text-foreground">Profile</h3>
-                <button type="button" onClick={() => setViewingAuthorId(null)} className="rounded-full bg-muted px-3 py-1.5 text-xs font-bold text-foreground">Close</button>
-              </div>
-              <div className="px-5 py-5">
-                <div className="flex items-center gap-4">
-                  <img src={photo} alt="" className="h-16 w-16 rounded-full object-cover ring-2 ring-emerald-100 dark:ring-emerald-900" loading="lazy" decoding="async" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-bold text-foreground">{name}</p>
-                    <p className="text-xs text-muted-foreground">{candidate?.location || "GreenHaven member"}</p>
-                    {candidate?.verified && <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Verified</span>}
-                  </div>
-                </div>
-                {candidate?.bio && <p className="mt-4 text-sm leading-relaxed text-foreground/90">{candidate.bio}</p>}
-                {/* Peer-only actions — no Edit / Write / cover upload */}
-                <div className="mt-5">
-                  <RelationshipActions
-                    userId={viewingAuthorId}
-                    userName={name}
-                    userPhoto={photo}
-                    compact={false}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewingAuthorId(null)
-                    setTab("discover")
-                  }}
-                  className="mt-3 min-h-10 w-full rounded-xl border border-border/70 bg-muted/40 text-sm font-semibold text-foreground"
-                >
-                  Open in Find
-                </button>
-                <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                  Like or pass for matching, or connect and message — based on your relationship. Blocks are always respected.
-                </p>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      <PostInsightsSheet post={insightsPost} open={Boolean(insightsPost)} onClose={() => setInsightsPost(null)} />
+      {sharePostId && (posts.find((post) => post.id === sharePostId) || rankedPosts.find((item) => item.post.id === sharePostId)?.post) ? (
+        <ShareSheet
+          post={(posts.find((post) => post.id === sharePostId) || rankedPosts.find((item) => item.post.id === sharePostId)!.post)}
+          open
+          onClose={() => setSharePostId(null)}
+          shareContext={{ currentUserId: profile?.id || IdentityService.getCurrentUserId() || "", blockedUsers: blockedUsers || [], posts: posts || [], conversations: conversations || [] }}
+          onComplete={(result: ShareResult) => { applyShareResult(result); setSharePostId(null) }}
+          onFindPeople={() => setTab("discover")}
+          onDiscoverCommunities={() => setTab("communities")}
+        />
+      ) : null}
     </div>
   )
 }

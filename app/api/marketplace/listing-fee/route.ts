@@ -17,11 +17,14 @@ export async function GET(request: Request) {
   const price = Number(url.searchParams.get("price") || 0)
   const currency = String(url.searchParams.get("currency") || "GHC").toUpperCase()
   const kind = String(url.searchParams.get("kind") || "product")
+  const preferred = String(url.searchParams.get("feeCurrency") || url.searchParams.get("preferredFeeCurrency") || "").toUpperCase()
+  const preferredFeeCurrency = preferred === "PI" || preferred === "GHC" ? preferred : undefined
 
   const fee = calculateMarketplaceListingFee({
     sellerPrice: Number.isFinite(price) && price >= 0 ? price : 0,
     currency,
     kind,
+    preferredFeeCurrency,
   })
 
   let amount = fee.feeAmount

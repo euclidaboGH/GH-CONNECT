@@ -1,4 +1,4 @@
-name: GreenHaven CI
+name: GH-CONNECT CI
 
 on:
   push:
@@ -11,32 +11,48 @@ permissions:
   contents: read
 
 concurrency:
-  group: greenhaven-ci-${{ github.ref }}
+  group: gh-connect-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    name: Static checks, typecheck and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v5
-      - name: Set up supported Node.js
-        uses: actions/setup-node@v5
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 24.22.1
+          node-version-file: .nvmrc
           cache: npm
-      - name: Verify lockfile completeness
-        run: node scripts/check-dependency-lock-integrity.mjs
+
       - name: Install locked dependencies
-        run: npm ci --legacy-peer-deps --no-audit
-      - name: JSX safety scan
-        run: npm run check:jsx
-      - name: Release hygiene
-        run: npm run check:release-hygiene
-      - name: Production safety scan
-        run: npm run test:safety
+        run: npm ci
+
+      - name: Verify dependency lock and Pi SDK
+        run: |
+          node scripts/check-dependency-lock-integrity.mjs
+          node scripts/verify-pi-backend-lock.mjs
+
+      - name: Verify source safety and release metadata
+        run: |
+          node scripts/check-jsx-safety.mjs
+          node scripts/scan-production-safety.mjs
+          node scripts/check-project-truth.mjs
+          node scripts/check-release-hygiene.mjs
+          node scripts/check-clean-migrations.mjs
+          node scripts/check-database-contract-source.mjs
+          node scripts/generate-migration-inventory.mjs --check
+          node scripts/check-migration-release-readiness.mjs
+
       - name: TypeScript
         run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
       - name: Production build
         run: npm run build

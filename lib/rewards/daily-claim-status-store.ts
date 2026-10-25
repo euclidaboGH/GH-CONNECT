@@ -105,12 +105,13 @@ function attachRuntime(userId: string, entry: Entry) {
     if (document.visibilityState !== "hidden") onResume()
   }
   entry.interval = window.setInterval(() => {
+    if (document.visibilityState === "hidden" || !navigator.onLine) return
     const currentDay = lagosDayKey()
-    if (currentDay !== entry.observedDay) {
-      entry.observedDay = currentDay
-      void refreshEntry(userId, entry)
-    }
-  }, 30_000)
+    if (currentDay !== entry.observedDay) entry.observedDay = currentDay
+    // Server status may change in another tab/device or after a delayed request.
+    // Reconcile periodically so the claim affordance cannot stay stale all day.
+    void refreshEntry(userId, entry)
+  }, 60_000)
   window.addEventListener("focus", onResume)
   window.addEventListener("online", onResume)
   window.addEventListener("ghc:daily-reward-claimed", onClaimed)

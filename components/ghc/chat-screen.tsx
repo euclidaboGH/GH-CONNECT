@@ -142,8 +142,12 @@ export function ChatScreen() {
         privacy: formData.privacy,
       }
 
-      setMyGroups((prev) => [newGroup, ...prev])
-      await createGroup(formData)
+      const createdId = await createGroup(formData)
+      if (!createdId) {
+        throw new Error("Community creation was not confirmed by the server. No group was added locally.")
+      }
+      newGroup.id = createdId
+      setMyGroups((prev) => [newGroup, ...prev.filter((group) => group.id !== createdId)])
 
       const memberText = formData.invitedMembers.length > 0 ? `${formData.invitedMembers.length} members invited` : "no members invited yet"
       const privacyText = formData.privacy === "public" ? "Public" : formData.privacy === "private" ? "Private" : "Invite Only"

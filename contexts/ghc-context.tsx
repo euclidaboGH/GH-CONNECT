@@ -45,6 +45,7 @@ import {
 } from "@/lib/local-profiles"
 import { usePiAuth } from "./pi-auth-context"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
 import {
   findCompletedLocalProfileForUser,
   isCompletedProfileShape,
@@ -6209,9 +6210,104 @@ const dismissMatchCelebration = useCallback(() => {
   const createGroup = useCallback(
     async (formData: any): Promise<string> => {
       try {
-        // Community org + chat share one group conversation with kind=community
+        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
+        // Paid community creation must never silently become a local-only/offline create.
+        if (!online) {
+          addToast("Connect to the internet before creating a community so payment and ownership can be verified.", "error")
+          return ""
+        }
+
+        const rail = String(formData.feeCurrency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC"
+        const proposedId = `comm_${crypto.randomUUID()}`
+        let feePaymentId: string | undefined
+
+        // Pi fees require a server-owned durable intent and a completed Pi SDK payment.
+        // Never pass a client-supplied amount to the payment API.
+        if (rail === "PI") {
+          const authHeaders = IdentityService.getAuthHeaders()
+          const quoteResponse = await fetch(`/api/communities/create-fee?currency=PI`, {
+            cache: "no-store",
+            credentials: "include",
+            headers: authHeaders,
+          })
+          const quoteData = await quoteResponse.json().catch(() => ({})) as {
+            ok?: boolean; fee?: { amount?: number; currency?: string; requiresSettlement?: boolean }
+            error?: string; message?: string
+          }
+          const feeAmount = Number(quoteData.fee?.amount)
+          if (!quoteResponse.ok || !quoteData.ok || !Number.isFinite(feeAmount) || feeAmount <= 0 || String(quoteData.fee?.currency).toUpperCase() !== "PI") {
+            addToast(quoteData.message || quoteData.error || "Pi community creation fee is not configured on the server. No payment was started.", "error")
+            return ""
+          }
+          const referenceId = `community_create_fee_${proposedId}`
+          const intentResponse = await fetch("/api/payments/intents", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({
+              purpose: "other",
+              amount: feeAmount,
+              currency: "PI",
+              referenceId,
+              idempotencyKey: referenceId,
+              metadata: { kind: "community_create_fee", communityId: proposedId, feeKind: "community_create_fee" },
+            }),
+          })
+          const intentData = await intentResponse.json().catch(() => ({})) as {
+            ok?: boolean; intent?: { id?: string }; error?: string; message?: string
+          }
+          const intentId = String(intentData.intent?.id || "")
+          if (!intentResponse.ok || !intentData.ok || !intentId) {
+            addToast(intentData.message || intentData.error || "Could not prepare a secure Pi community-fee payment.", "error")
+            return ""
+          }
+          const payment = await startUserToAppPayment({
+            amount: feeAmount,
+            memo: `GreenHaven community creation fee · ${String(formData.name || "Community").trim().slice(0, 70)}`,
+            intentId,
+            authHeaders,
+            metadata: { purpose: "other", kind: "community_create_fee", communityId: proposedId, intentId, referenceId },
+          })
+          if (!payment.ok) {
+            addToast(payment.cancelled ? "Pi payment was cancelled. Your community was not created." : payment.error || "Pi community-fee payment did not complete. Your community was not created.", "error")
+            return ""
+          }
+          feePaymentId = intentId
+        }
+
+        // Create the durable server record first. Do not mutate local community state
+        // until the authoritative server has confirmed creation and fee settlement.
+        const { socialCreateCommunity } = await import("@/lib/social/client")
+        const durable = await socialCreateCommunity({
+          id: proposedId,
+          name: String(formData.name || "").trim(),
+          purpose: formData.description || "",
+          description: formData.description || "",
+          privacy: formData.privacy,
+          category: formData.category,
+          coverImage: formData.coverImage && !String(formData.coverImage).startsWith("data:") && !String(formData.coverImage).startsWith("blob:") ? String(formData.coverImage) : undefined,
+          welcomeMessage: formData.welcomeMessage || undefined,
+          rules: Array.isArray(formData.rules) ? formData.rules : undefined,
+          feeCurrency: rail,
+          feePaymentId,
+        })
+        const durableOk = Boolean(durable && durable.ok && durable.durable !== false && (durable.community || durable.id))
+        if (!durableOk) {
+          const err = String(durable?.error || "")
+          const message = String(durable?.message || "")
+          let human = message || err || "Could not create community on the server. No community was added locally."
+          if (err === "INSUFFICIENT_BALANCE" || /insufficient/i.test(human)) {
+            human = "Not enough available GHC for the community creation fee. Claim matured rewards or top up, then retry."
+          } else if (err.includes("FEE_PAYMENT") || err === "COMMUNITY_CREATE_FEE_REQUIRED") {
+            human = rail === "PI" ? "Pi fee verification did not complete. Check payment status before retrying." : "GHC community fee could not be settled. Check your available balance and retry."
+          }
+          addToast(human, "error")
+          return ""
+        }
+
+        const serverCommunity = (durable.community || {}) as Record<string, unknown>
         const result = await domains.community.createCommunity({
-          name: formData.name,
+          name: String(formData.name || "").trim(),
           description: formData.description,
           privacy: formData.privacy,
           category: formData.category,
@@ -6221,58 +6317,12 @@ const dismissMatchCelebration = useCallback(() => {
           invitedMembers: formData.invitedMembers || [],
         })
         if (!result.ok) {
-          addToast(result.error, "error")
-          return ""
+          // Server creation is authoritative; report a local hydration issue rather than
+          // falsely claiming the paid server operation failed.
+          addToast("Community was created on the server, but local view hydration failed. Refresh Communities to load it.", "error")
+          return String((serverCommunity.id as string) || durable.id || proposedId)
         }
-        let newGroup = result.data.community
-        const online = typeof navigator === "undefined" ? true : navigator.onLine !== false
-        if (online) {
-          try {
-            const { socialCreateCommunity } = await import("@/lib/social/client")
-            const durable = await socialCreateCommunity({
-              id: newGroup.id,
-              name: newGroup.name || formData.name,
-              purpose: formData.description || "",
-              description: formData.description || "",
-              privacy: formData.privacy,
-              category: formData.category,
-              coverImage:
-                formData.coverImage &&
-                !String(formData.coverImage).startsWith("data:") &&
-                !String(formData.coverImage).startsWith("blob:")
-                  ? String(formData.coverImage)
-                  : undefined,
-              welcomeMessage: formData.welcomeMessage || undefined,
-              rules: Array.isArray(formData.rules) ? formData.rules : undefined,
-              feeCurrency:
-                String(formData.feeCurrency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC",
-            })
-            const ok =
-              durable &&
-              typeof durable === "object" &&
-              (durable as { ok?: boolean }).ok !== false &&
-              (durable as { durable?: boolean }).durable !== false
-            if (!ok) {
-              addToast(
-                (durable as { error?: string })?.error ||
-                  "Could not create community on the server",
-                "error"
-              )
-              return ""
-            }
-            const serverId = String(
-              (durable as { id?: string; community?: { id?: string } }).id ||
-                (durable as { community?: { id?: string } }).community?.id ||
-                ""
-            ).trim()
-            if (serverId && serverId !== newGroup.id) {
-              newGroup = { ...newGroup, id: serverId }
-            }
-          } catch {
-            addToast("Could not reach the server to create this community", "error")
-            return ""
-          }
-        }
+        let newGroup = { ...result.data.community, id: String(serverCommunity.id || durable.id || proposedId) }
         const me = IdentityService.getCurrentUserId() || "current-user"
         const stamped = {
           ...newGroup,

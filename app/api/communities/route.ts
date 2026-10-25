@@ -70,6 +70,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "INVALID_NAME" }, { status: 400 })
   }
 
+  // Fail before charging a fee when durable community persistence is unavailable.
+  // A paid community must never be represented as created by an in-memory fallback.
+  if (!socialDbConfigured()) {
+    const nd = nonDurableWriteResponse("Community create", { extra: { community: null } })
+    return NextResponse.json(nd.body, { status: nd.status })
+  }
+
   // Stage 5: community create fee — collection only when env rates approved.
   const feeQuote = quoteCommunityCreateFee(
     String(body.feeCurrency || "").toUpperCase() === "PI" ? "PI" : "GHC"
@@ -150,11 +157,6 @@ export async function POST(request: Request) {
         { status }
       )
     }
-  }
-
-  if (!socialDbConfigured()) {
-    const nd = nonDurableWriteResponse("Community create", { extra: { community: null } })
-    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_community_create", { p_row: row })
