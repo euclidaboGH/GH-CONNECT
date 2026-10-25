@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.91.2",
+  "version": "0.91.5",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -23,6 +23,7 @@
     "check:dependency-lock-integrity": "node scripts/check-dependency-lock-integrity.mjs",
     "check:pi-backend-lock": "node scripts/verify-pi-backend-lock.mjs",
     "check:project-truth": "node scripts/check-project-truth.mjs",
+    "check:phase31": "node scripts/check-phase31-floating-header-settlement.mjs",
     "check:clean-migrations": "node scripts/check-clean-migrations.mjs",
     "check:database-contract-source": "node scripts/check-database-contract-source.mjs",
     "check:migration-release-readiness": "node scripts/check-migration-release-readiness.mjs",

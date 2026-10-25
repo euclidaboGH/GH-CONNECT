@@ -304,13 +304,27 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       if (!cancelled && status.ok) setSocialEconomy(status)
     }
     const refreshAuthoritativeWallet = async () => {
-      void refreshWalletAuthority()
       void refreshSocialEconomy()
       try {
+        // Mature Daily Claim holds server-side before taking the wallet snapshot.
+        // This is idempotent and never accepts client amounts or user IDs.
+        if (navigator.onLine) {
+          const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" }
+          try {
+            const { IdentityService } = await import("@/lib/identity/identity-service")
+            Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+          } catch { /* session cookie remains available */ }
+          await fetch("/api/economy/rewards/claim-matured", {
+            method: "POST", credentials: "include", cache: "no-store", headers, body: JSON.stringify({}),
+          }).catch(() => null)
+        }
+      } catch { /* the wallet read still proceeds; no local credit is fabricated */ }
+      try {
+        await refreshWalletAuthority()
         const eco = getBoundDomainServices()?.economy
         await eco?.refresh?.()
       } catch {
-        // The wallet remains fail-closed; the existing cached snapshot is retained.
+        // The wallet remains fail-closed; the existing verified snapshot is retained.
       } finally {
         if (!cancelled) setTick((x) => x + 1)
       }

@@ -130,3 +130,4 @@ filename,classification,bytes
 20261023040001_gh_pulse_media_platform_v2.sql,REQUIRED,13345
 20261023040002_gh_security_control_plane_v2.sql,REQUIRED,6209
 20261023040003_gh_feed_engagement_batch_v2.sql,REQUIRED,5149
+20261025090001_backfill_daily_claim_48h_metadata.sql,REVIEW_REQUIRED,760

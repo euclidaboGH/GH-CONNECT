@@ -56,11 +56,13 @@ const reviewRequired = new Set([
   '20261022010097_gh_social_canonical_visibility.sql',
   '20261022010098_gh_social_engagement_write_integrity.sql',
   '20261025010001_gh_community_create_idempotency_guard.sql',
+  '20261025090001_backfill_daily_claim_48h_metadata.sql',
 ])
 
 const notes = {
   '20261022010015_connection_request_intents.sql': 'Product/security review; do not auto-apply.',
   '20261025010001_gh_community_create_idempotency_guard.sql': 'Review community ID-conflict behavior and verify same-owner retries plus cross-owner rejection on disposable PostgreSQL/Testnet before applying; reconcile remote migration history first.',
+  '20261025090001_backfill_daily_claim_48h_metadata.sql': 'Review exact pending DAILY_CLAIM_V12 rows and metadata before applying on Testnet. Backfill does not change amounts/status, but unlocks strict claim RPC eligibility after the original 48-hour timestamp; reconcile remote history first.',
   '20261022010016_community_join_reasons_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010017_community_governance_log_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010027_gh_messaging_durable.sql': 'Durable messaging; flag remains off until two-user authorization gate passes.',

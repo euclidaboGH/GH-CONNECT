@@ -483,6 +483,48 @@ export async function rpcStagePending(
   }
 }
 
+/** List only matured Daily Claim V12 holds for the authenticated owner. */
+export async function rpcListMaturedDailyClaimHolds(
+  userId: string,
+  cutoff: Date,
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<Array<{ id: string; amount: number; createdAt: number; metadata: Record<string, unknown> }> | null> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  const params = new URLSearchParams({
+    select: "id,amount,created_at,metadata",
+    user_id: `eq.${userId}`,
+    status: "eq.pending",
+    source_event: "eq.DAILY_CLAIM_V12",
+    amount: "gt.0",
+    created_at: `lt.${cutoff.toISOString()}`,
+    order: "created_at.asc",
+    limit: "100",
+  })
+  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_transactions?${params.toString()}`
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout?.(12_000),
+    })
+    if (!res.ok) return null
+    const rows = (await res.json()) as Array<Record<string, unknown>>
+    return rows.map((row) => ({
+      id: String(row.id),
+      amount: Number(row.amount),
+      createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : 0,
+      metadata: row.metadata && typeof row.metadata === "object"
+        ? row.metadata as Record<string, unknown>
+        : {},
+    })).filter((row) => row.id && Number.isFinite(row.amount) && row.amount > 0 && Number.isFinite(row.createdAt))
+  } catch {
+    return null
+  }
+}
+
 /** Server-authoritative claim of pending GHC */
 
 /**

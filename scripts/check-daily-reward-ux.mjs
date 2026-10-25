@@ -11,13 +11,16 @@ const route = readFileSync(join(root, "app/api/economy/rewards/daily/route.ts"),
 const feed = readFileSync(join(root, "components/ghc/daily-reward-experience.tsx"), "utf8")
 const rewardsCentre = readFileSync(join(root, "components/ghc/rewards-centre-screen.tsx"), "utf8")
 const checks = [
-  ["claimable server status automatically opens the daily popup", /setOpen\(true\)/.test(prompt) && /status\?\.claimable/.test(prompt) && /autoPromptedKeyRef/.test(prompt)],
-  ["auto-popup is throttled per user/day within the tab session", /ghc:daily-claim-prompted/.test(prompt) && /sessionStorage/.test(prompt)],
-  ["lightning action remains available while status is unknown", /status === null \|\| status\.claimable/.test(prompt) && /const showFab = canAttemptClaim/.test(prompt)],
-  ["unknown status still gives an actionable server-verified claim path", /Check & Claim Daily GHC/.test(prompt) && /disabled=\{claiming \|\| !canAttemptClaim\}/.test(prompt)],
+  ["daily claim remains a floating action instead of auto-opening over the header", !/autoPromptedKeyRef/.test(prompt) && !/ghc:daily-claim-prompted/.test(prompt) && /const showFab = canAttemptClaim/.test(prompt)],
+  ["daily claim uses official round GHC coin art with lightning accents", /<GhcCoinIcon size=\{42\}/.test(prompt) && /gh-daily-lightning-one/.test(prompt) && /gh-daily-lightning-two/.test(prompt) && /gh-daily-lightning-three/.test(prompt)],
+  ["claim opens a compact non-modal popover without full-screen backdrop", /gh-daily-claim-popover fixed/.test(prompt) && /aria-modal="false"/.test(prompt) && !/bg-black\/45/.test(prompt)],
+  ["daily claim copy explains check-in, server verification and 48-hour hold", /Check in every day/.test(prompt) && !/Tap below to verify/.test(prompt)],
+  ["coin lightning effects respect reduced-motion preference", /gh-daily-coin-aura/.test(readFileSync(join(root, "app/globals.css"), "utf8")) && /prefers-reduced-motion: reduce/.test(readFileSync(join(root, "app/globals.css"), "utf8"))],
+  ["floating lightning action stays available while status is unknown", /status === null \|\| status\.claimable/.test(prompt) && /fixed z-\[150\]/.test(prompt)],
+  ["unknown status still gives an actionable server-verified claim path", /if \(canAttemptClaim\) void claim\(\)/.test(prompt) && /Verifying your daily reward/.test(prompt)],
   ["failed claim retains retryable error state", /setError\(res\.error \|\|/.test(prompt) && /role="alert"/.test(prompt)],
   ["duplicate taps are guarded while claim is in flight", /if \(claiming \|\| !canAttemptClaim\) return/.test(prompt) && /setClaiming\(true\)/.test(prompt)],
-  ["dialog cannot be closed while a claim is in flight", /disabled=\{claiming\} className="rounded-full p-2 hover:bg-muted/.test(prompt)],
+  ["popover close control is disabled while a claim is in flight", /disabled=\{claiming\} className="-mr-1 -mt-1 rounded-full/.test(prompt)],
   ["daily claim uses canonical server endpoint and no client amount", /fetch\("\/api\/economy\/rewards\/daily"/.test(client) && /body: JSON\.stringify\(\{\}\)/.test(client)],
   ["server rejects unauthenticated claim requests", /resolveAuthenticatedUser\(request\.headers\)/.test(route) && /AUTH_REQUIRED/.test(route)],
   ["server rate-limits repeated daily claim attempts", /checkRateLimit\(`daily_claim:\$\{auth\.userId\}`/.test(route)],
@@ -27,6 +30,10 @@ const checks = [
   ["feed claim failure preserves retry and refreshes server status", /Claim failed — your reward is still available to retry/.test(feed) && /refreshServerStatus\(\)/.test(feed)],
   ["claim completion forces a fresh status read after an in-flight GET", /const active = entry\.inFlight/.test(statusStore) && /active\.finally\(\(\) => \{ void refreshEntry/.test(statusStore)],
   ["matured reward claim action clears stale claiming status on every outcome", /setStatusMsg\(null\)/.test(rewardsCentre) && /setClaimingId\(null\)/.test(rewardsCentre)],
+  ["coin tap initiates claim directly without a second claim button", /if \(canAttemptClaim\) void claim\(\)/.test(prompt) && !/Claim today’s reward/.test(prompt)],
+  ["success notice auto-dismisses after ten seconds", /setTimeout\(\(\) => setOpen\(false\), 10_000\)/.test(prompt)],
+  ["outside screen tap dismisses the notice", /document\.addEventListener\("pointerdown", onPointerDown\)/.test(prompt) && /popoverRef\.current\?\.contains/.test(prompt)],
+  ["notice copy no longer asks user to tap below", !/Tap below to verify/.test(prompt) && /Check in every day to collect your GHC reward and keep your streak going/.test(prompt)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${label}`); if (!ok) failed++ }

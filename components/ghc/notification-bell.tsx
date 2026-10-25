@@ -703,13 +703,13 @@ export function NotificationBell({
       <button
         type="button"
         onClick={openPanel}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-card/95 text-foreground shadow-sm backdrop-blur-md transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        className="relative flex h-9 w-9 items-center justify-center rounded-full border border-amber-400/50 bg-amber-50/90 text-amber-600 shadow-sm transition hover:border-amber-500 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-300 dark:hover:bg-amber-900/50"
         aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
         title="Notifications"
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <Bell size={20} strokeWidth={2.1} />
+        <Bell size={18} strokeWidth={2.25} className="text-amber-500 dark:text-amber-300" />
         {unread > 0 ? (
           <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm">
             {unread > 99 ? "99+" : unread}

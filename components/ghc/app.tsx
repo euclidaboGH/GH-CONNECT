@@ -85,10 +85,6 @@ const MatchCelebrationLazy = lazy(() =>
 const ProfilePreviewPageLazy = lazy(() =>
   import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
 )
-const NotificationBellLazy = lazy(() =>
-  import("./notification-bell").then((m) => ({ default: m.NotificationBell }))
-)
-
 function TabScreenFallback({ label }: { label: string }) {
   return (
     <div
@@ -99,7 +95,9 @@ function TabScreenFallback({ label }: { label: string }) {
     >
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-card/90 p-1.5" aria-hidden="true">
+            <img src="/gh-connect-logo.png" alt="" className="h-full w-full object-contain" width={36} height={36} />
+          </div>
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
             <div className="h-2.5 w-1/3 animate-pulse rounded bg-muted/70" />
@@ -1054,14 +1052,6 @@ export function GHConnectApp() {
       <DailyClaimPrompt />
       <OfflineBanner />
       <PaymentRecoveryListener />
-      {/* Global notification entry point: keep the bell reachable across primary sections. */}
-      <div className="pointer-events-none absolute right-3 top-3 z-[75]" style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}>
-        <div className="pointer-events-auto">
-          <Suspense fallback={null}>
-            <NotificationBellLazy />
-          </Suspense>
-        </div>
-      </div>
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
         id="ghc-main-content"

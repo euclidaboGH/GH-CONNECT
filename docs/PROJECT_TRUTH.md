@@ -1,6 +1,13 @@
+## v0.91.5 coin-tap claim and transient confirmation
+
+- Tapping the floating GHC coin starts the authenticated server claim; the popover shows verification progress and then the confirmed result.
+- Removed the extra claim CTA and outdated “tap below” copy. The short notice explains daily check-ins and streaks; reward state is displayed only after server confirmation.
+- The notice closes on an outside-screen tap or automatically after 10 seconds. Failed claims retain a retry action, and duplicate taps remain guarded while a request is in flight.
+- Runtime Testnet and production-build verification remain required before release approval.
+
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.91.2`
+**Current source version:** `0.91.5`
 
 This document describes the checked-in archive only. It does not establish that any remote deployment, database migration, payment provider, Pi Platform integration, or account-security flow is live or verified.
 
@@ -41,14 +48,27 @@ Payment failure handling now preserves community/group drafts and stable IDs, an
 
 ## v0.91.0 notification center restoration
 
-The global notification bell is mounted in the primary app shell again. Notification source wiring, update refresh, accessible focus, and section attention indicators have been hardened. See `PHASE-28-NOTIFICATION-CENTER-RESTORATION.md`.
+The notification center is mounted in the shared compact header actions after Marketplace and Ecosystem. Notification source wiring, update refresh, accessible focus, and section attention indicators have been hardened. See `PHASE-28-NOTIFICATION-CENTER-RESTORATION.md`.
 
+
+## v0.91.5 floating claim, notification header, and matured reward settlement
+
+- Daily claim is a compact floating action above bottom navigation; it no longer auto-opens or occupies header/content flow.
+- Marketplace, Ecosystem, and a compact gold notification bell share one header row; the old global top-right overlay was removed.
+- Loading fallbacks use a small GreenHaven brand blink that respects reduced-motion preferences.
+- Wallet refresh invokes an authenticated, rate-limited server reconciliation for matured Daily Claim V12 holds. The durable RPC still enforces owner, 48-hour lock, review status, and idempotency. A migration backfills metadata for identifiable legacy pending Daily Claim rows.
+- Full production build and live Testnet settlement still require Node 24, applied migrations, and authenticated Testnet validation.
 
 ## v0.91.2 daily rewards reliability
 
-The daily claim experience now opens once when server status confirms a new claimable day. If status is temporarily unavailable, the lightning action remains usable and the server remains the authority for claim acceptance. Claim failures remain retryable; no client-side balance minting or economy bypass was introduced.
+The daily claim experience keeps a floating lightning action and opens the claim sheet only when the user taps it or another explicit action requests it. If status is temporarily unavailable, the lightning action remains usable and the server remains the authority for claim acceptance. Claim failures remain retryable; no client-side balance minting or economy bypass was introduced.
 
 
 ## v0.91.2 wallet and utility reliability
 
 Wallet action wiring and the Spend GHC path received a surgical reliability pass. The legacy boost chip now opens the utility catalog instead of silently returning when its domain method is absent. Utility purchases require a review step, target-bound purchases require a target, catalog load errors can be retried, and request idempotency keys remain stable across retries. Unconfigured effects stay unavailable and fail closed. Static contract checks do not prove live database settlement or production build readiness; the release remains NOT APPROVED until Node 24 build and authenticated testnet verification complete.
+
+
+## v0.91.5 compact GHC daily reward popover
+
+The floating daily claim control uses the official round GHC coin image with reduced-motion-aware gold glow and lightning accents. It opens a compact non-modal popover above the bottom navigation with short explanatory copy and server-verified claim status. This visual change does not change reward eligibility, claim amounts, ledger authority, or the 48-hour hold.

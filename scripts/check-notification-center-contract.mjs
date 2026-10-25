@@ -5,10 +5,11 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 const root = join(fileURLToPath(new URL("..", import.meta.url)))
 const app = readFileSync(join(root, "components/ghc/app.tsx"), "utf8")
+const actions = readFileSync(join(root, "components/ghc/premium-surface-actions.tsx"), "utf8")
 const bell = readFileSync(join(root, "components/ghc/notification-bell.tsx"), "utf8")
 const checks = [
-  ["notification center is mounted in the global app shell", /const NotificationBellLazy = lazy\([\s\S]*?import\("\.\/notification-bell"\)/.test(app) && /<NotificationBellLazy\s*\/>/.test(app)],
-  ["global bell remains reachable independently of the active primary tab", /Global notification entry point/.test(app) && /absolute right-3 top-3 z-\[75\]/.test(app) && /top: "calc\(env\(safe-area-inset-top, 0px\) \+ 0\.5rem\)"/.test(app)],
+  ["notification center is lazy-loaded inside the shared compact header actions", /const NotificationBell = lazy\([\s\S]*?import\("\.\/notification-bell"\)/.test(actions) && /<NotificationBell\s*\/>/.test(actions)],
+  ["gold bell sits inline after Marketplace and Ecosystem, with no top-right overlay", actions.indexOf("Open Marketplace") < actions.indexOf("Open Ecosystem") && actions.indexOf("<NotificationBell />") > actions.indexOf("Open Ecosystem") && !app.includes("Global notification entry point")],
   ["home red dot no longer incorrectly mirrors all local and economy alerts", /id === "home" && socialAttentionCount > 0/.test(app) && !/id === "home" && \(socialAttentionCount \+ localAttentionCount \+ economyAttentionCount/.test(app)],
   ["bell has a keyboard-visible focus indicator and accessible unread label", /focus-visible:ring-2/.test(bell) && /aria-label=\{unread > 0 \? `\$\{unread\} unread notifications` : "Notifications"\}/.test(bell)],
   ["notification permission is not requested as a side effect of opening the inbox", /const openPanel = \(\) => \{\s*setOpen\(true\)\s*refresh\(\)/.test(bell) && !/const openPanel = \(\) => \{[\s\S]{0,180}requestBrowserNotificationPermission/.test(bell)],
