@@ -45,14 +45,16 @@ async function rpc(fn: string, body: Record<string, unknown>): Promise<RpcResult
 
 export async function refreshReputationIntelligence(userId: string) {
   const result = await rpc("gh_reputation_intelligence_refresh", { p_user_id: userId })
-  if (!result.ok || !result.data) return { ok: false as const, error: result.error }
+  if (!result.ok) return { ok: false as const, error: result.error }
+  if (!result.data) return { ok: false as const, error: "RPC_RESPONSE_INVALID" }
   if (result.data.ok === false) return { ok: false as const, error: String(result.data.error || "REFRESH_FAILED") }
   return { ok: true as const, data: result.data }
 }
 
 export async function getPublicReputationIntelligence(userId: string) {
   const result = await rpc("gh_reputation_intelligence_get", { p_user_id: userId })
-  if (!result.ok || !result.data) return { ok: false as const, error: result.error }
+  if (!result.ok) return { ok: false as const, error: result.error }
+  if (!result.data) return { ok: false as const, error: "RPC_RESPONSE_INVALID" }
   if (result.data.ok === false) return { ok: false as const, error: String(result.data.error || "GET_FAILED") }
   return { ok: true as const, data: result.data }
 }

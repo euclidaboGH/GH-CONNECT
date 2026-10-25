@@ -48,8 +48,11 @@ async function rpc(
 
 export async function getReputationState(userId: string) {
   const result = await rpc("gh_reputation_get", { p_user_id: userId })
-  if (!result.ok || !result.data) {
+  if (!result.ok) {
     return { ok: false as const, error: result.error || "GET_FAILED" }
+  }
+  if (!result.data) {
+    return { ok: false as const, error: "RPC_RESPONSE_INVALID" }
   }
   if (result.data.ok === false) {
     return { ok: false as const, error: String(result.data.error || "GET_FAILED") }
@@ -106,8 +109,11 @@ export async function applyReputationEvent(input: {
     p_metadata: input.metadata ?? {},
   })
 
-  if (!result.ok || !result.data) {
+  if (!result.ok) {
     return { ok: false as const, error: result.error || "APPLY_FAILED" }
+  }
+  if (!result.data) {
+    return { ok: false as const, error: "RPC_RESPONSE_INVALID" }
   }
   if (result.data.ok === false) {
     return { ok: false as const, error: String(result.data.error || "APPLY_FAILED") }

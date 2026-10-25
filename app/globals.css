@@ -334,37 +334,95 @@
 .gh-brand-loading-blink { animation: gh-brand-loading-blink 1.05s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .gh-brand-loading-blink { animation: none; } }
 
-/* Compact floating daily GHC claim — official coin art with restrained lightning accents. */
-@keyframes gh-daily-coin-aura {
-  0%, 100% { transform: scale(.88); opacity: .42; }
-  50% { transform: scale(1.14); opacity: .9; }
+/* Golden lightning daily GHC claim FAB — every screen, never in header. */
+@keyframes gh-daily-fab-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 185, 42, 0.45), 0 10px 28px rgba(180, 120, 10, 0.35); }
+  55% { box-shadow: 0 0 0 10px rgba(245, 185, 42, 0), 0 12px 32px rgba(180, 120, 10, 0.4); }
 }
-@keyframes gh-daily-coin-float {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  50% { transform: translateY(-2px) rotate(2deg); }
+@keyframes gh-daily-fab-glow {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
 }
-@keyframes gh-daily-lightning-flash {
-  0%, 100% { opacity: .18; transform: scale(.72) rotate(-14deg); filter: drop-shadow(0 0 0 rgba(255,196,47,0)); }
-  42% { opacity: 1; transform: scale(1.12) rotate(10deg); filter: drop-shadow(0 0 5px rgba(255,196,47,.95)); }
-  58% { opacity: .7; transform: scale(.92) rotate(-5deg); }
+@keyframes gh-daily-bolt-nudge {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1.5px) scale(1.04); }
 }
 @keyframes gh-daily-popover-enter {
-  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes gh-daily-button-spin { to { transform: rotate(360deg); } }
-.gh-daily-coin-button { isolation: isolate; background: radial-gradient(circle at 50% 48%, rgba(255,224,111,.18), rgba(14,82,50,.12) 70%, transparent 72%); }
-.gh-daily-coin-aura { position: absolute; inset: -5px; z-index: 0; border: 1px solid rgba(244,190,54,.7); border-radius: 9999px; box-shadow: 0 0 14px rgba(245,185,42,.35), inset 0 0 10px rgba(245,185,42,.16); animation: gh-daily-coin-aura 2.3s ease-in-out infinite; pointer-events: none; }
-.gh-daily-coin-art { animation: gh-daily-coin-float 3.2s ease-in-out infinite; }
-.gh-daily-lightning { position: absolute; z-index: 1; color: #ffd34e; pointer-events: none; filter: drop-shadow(0 0 3px rgba(255,191,36,.75)); }
-.gh-daily-lightning-one { top: -4px; right: 0; animation: gh-daily-lightning-flash 1.45s ease-in-out infinite; }
-.gh-daily-lightning-two { left: -5px; top: 9px; animation: gh-daily-lightning-flash 1.8s .28s ease-in-out infinite; }
-.gh-daily-lightning-three { right: 1px; bottom: -3px; animation: gh-daily-lightning-flash 1.65s .62s ease-in-out infinite; }
-.gh-daily-claim-popover { animation: gh-daily-popover-enter .18s ease-out both; transform-origin: bottom right; }
-.gh-daily-popover-coin { background: radial-gradient(circle, rgba(244,190,54,.2), rgba(244,190,54,.04) 70%); }
-.gh-daily-button-spinner { width: 14px; height: 14px; border: 2px solid rgba(90,55,0,.3); border-top-color: currentColor; border-radius: 50%; animation: gh-daily-button-spin .7s linear infinite; }
+
+.gh-daily-lightning-fab {
+  isolation: isolate;
+  position: relative;
+  display: inline-flex;
+  height: 3.5rem;
+  width: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(255, 220, 120, 0.85);
+  background: linear-gradient(145deg, #ffe08a 0%, #f5b923 38%, #d4920a 72%, #a66b00 100%);
+  color: #3b2a00;
+  box-shadow: 0 10px 28px rgba(180, 120, 10, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  animation: gh-daily-fab-pulse 2.4s ease-out infinite;
+}
+.gh-daily-lightning-fab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(245, 185, 42, 0.45), 0 10px 28px rgba(180, 120, 10, 0.4);
+}
+.gh-daily-lightning-fab-aura {
+  position: absolute;
+  inset: -6px;
+  z-index: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 210, 90, 0.55);
+  background: radial-gradient(circle, rgba(255, 210, 90, 0.28), transparent 70%);
+  animation: gh-daily-fab-glow 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.gh-daily-lightning-fab-bolt {
+  position: relative;
+  z-index: 1;
+  color: #2a1c00;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35)) drop-shadow(0 0 6px rgba(255, 200, 60, 0.85));
+  animation: gh-daily-bolt-nudge 2.6s ease-in-out infinite;
+}
+.gh-daily-lightning-fab-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  z-index: 2;
+  height: 0.7rem;
+  width: 0.7rem;
+  border-radius: 9999px;
+  background: #34d399;
+  box-shadow: 0 0 0 2px #fff, 0 0 8px rgba(52, 211, 153, 0.7);
+}
+.gh-daily-claim-popover { animation: gh-daily-popover-enter 0.18s ease-out both; transform-origin: bottom right; }
+.gh-daily-button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(90, 55, 0, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: gh-daily-button-spin 0.7s linear infinite;
+}
+/* Legacy class aliases so older markup still resolves */
+.gh-daily-coin-button { isolation: isolate; }
+.gh-daily-coin-aura { display: none; }
+.gh-daily-coin-art { display: none; }
+.gh-daily-lightning { color: #ffd34e; }
+
 @media (prefers-reduced-motion: reduce) {
-  .gh-daily-coin-aura, .gh-daily-coin-art, .gh-daily-lightning, .gh-daily-claim-popover, .gh-daily-button-spinner { animation: none !important; }
+  .gh-daily-lightning-fab,
+  .gh-daily-lightning-fab-aura,
+  .gh-daily-lightning-fab-bolt,
+  .gh-daily-claim-popover,
+  .gh-daily-button-spinner {
+    animation: none !important;
+  }
 }
 
 /* Loading & Status Animations */

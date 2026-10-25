@@ -273,10 +273,11 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         idempotencyKey: `buy_${listing.id}_${viewerId || "anon"}_${Math.floor(Date.now() / 60_000)}`,
       })
       if (!created.ok || !created.order) {
+        const errCode = !created.ok ? String(created.error || "") : ""
         setErr(
-          created.error === "CANNOT_BUY_OWN"
+          errCode === "CANNOT_BUY_OWN"
             ? "Cannot buy your own listing"
-            : created.error || "Could not create order",
+            : errCode || "Could not create order",
         )
         return
       }
