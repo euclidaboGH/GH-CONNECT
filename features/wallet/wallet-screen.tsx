@@ -1245,6 +1245,48 @@ const lowBalance = balance === 0 && displayPending === 0
             monthEarned={monthInsight.monthEarned}
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}
+            primaryActions={
+              <WalletPrimaryActions
+                embedded
+                disabled={!!claimingHoldId}
+                onSend={() => {
+                  if (balance <= 0 && (displayPending > 0 || pending > 0)) {
+                    setSendEducate(
+                      "Claim pending GHC to send — only available balance can be transferred."
+                    )
+                    setShowPendingSheet(true)
+                    return
+                  }
+                  setSendEducate(null)
+                  setP2pMode("send")
+                  setP2pError(null)
+                  setP2pSuccess(null)
+                }}
+                onRequest={() => {
+                  setSendEducate(null)
+                  setP2pMode("request")
+                  setP2pError(null)
+                  setP2pSuccess(null)
+                }}
+                onReceive={() => {
+                  setSendEducate(null)
+                  setP2pMode("receive")
+                  setP2pError(null)
+                  setP2pSuccess(null)
+                }}
+                onActivity={() => {
+                  setSendEducate(null)
+                  setTab("activity")
+                  try {
+                    document
+                      .getElementById("ghc-wallet-activity")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  } catch {
+                    /* */
+                  }
+                }}
+              />
+            }
           />
           <PaymentRecoveryBanner />
           <div className="mt-3"><PaymentRecoveryPanel /></div>
@@ -1264,138 +1306,7 @@ const lowBalance = balance === 0 && displayPending === 0
           </div>
         </div>
 
-        {/* ZONE: ACTIONS — balance → primary actions (not withdraw first) */}
-        <WalletPrimaryActions
-          disabled={!!claimingHoldId}
-          onSend={() => {
-            if (balance <= 0 && (displayPending > 0 || pending > 0)) {
-              setSendEducate(
-                "Claim pending GHC to send — only available balance can be transferred."
-              )
-              setShowPendingSheet(true)
-              return
-            }
-            setSendEducate(null)
-            setP2pMode("send")
-            setP2pError(null)
-            setP2pSuccess(null)
-          }}
-          onRequest={() => {
-            setSendEducate(null)
-            setP2pMode("request")
-            setP2pError(null)
-            setP2pSuccess(null)
-          }}
-          onReceive={() => {
-            setSendEducate(null)
-            setP2pMode("receive")
-            setP2pError(null)
-            setP2pSuccess(null)
-          }}
-          onActivity={() => {
-            setSendEducate(null)
-            setTab("activity")
-            try {
-              document
-                .getElementById("ghc-wallet-activity")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            } catch {
-              /* */
-            }
-          }}
-          onAdd={() => setShowAddGhc(true)}
-        />
-
-        {/* ZONE: YOUR ASSETS — reference arrangement; real GHC only, Pi is payment rail */}
-        <div className="mx-3 mt-4">
-          <h2 className="mb-2 px-0.5 text-[13px] font-bold text-foreground">Your Assets</h2>
-          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-[var(--gh-card-shadow)]">
-            <button
-              type="button"
-              onClick={() => {
-                setAssetRail("ghc")
-                setTab("activity")
-              }}
-              className="flex w-full items-center gap-3 border-b border-border/40 px-3.5 py-3.5 text-left transition hover:bg-muted/40 active:scale-[0.99]"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:ring-emerald-900">
-                <GhcCoinIcon size={28} title="GHC" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold text-foreground">GHC (GreenHaven Coin)</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Available
-                  {pending > 0 ? ` · ${formatGhc(pending)} pending` : ""}
-                  {locked > 0 ? ` · ${formatGhc(locked)} reserved` : ""}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[15px] font-bold tabular-nums text-foreground">
-                  {balanceVisible ? formatGhc(balance) : "••••"}
-                </p>
-              </div>
-              <span className="text-muted-foreground" aria-hidden>›</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAssetRail("pi")
-                setTab("activity")
-                try {
-                  document.getElementById("ghc-wallet-activity")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                } catch { /* */ }
-              }}
-              className="flex w-full items-center gap-3 px-3.5 py-3.5 text-left transition hover:bg-muted/40 active:scale-[0.99]"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-sm font-bold text-violet-700 ring-1 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-300 dark:ring-violet-900">
-                π
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold text-foreground">Pi</p>
-                <p className="text-[11px] text-muted-foreground">Payments through Pi Browser</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[12px] font-semibold text-muted-foreground">View activity</p>
-              </div>
-              <span className="text-muted-foreground" aria-hidden>›</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Pending GHC — explain why held, then claim */}
-        {displayPending > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowPendingSheet(true)
-            }}
-            className="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-3.5 text-left shadow-sm transition hover:bg-amber-100/80 active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/40"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-200/80 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/50">
-              <Clock size={18} aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-bold text-amber-950 dark:text-amber-100">
-                {formatGhc(displayPending)} GHC pending validation
-              </span>
-              <span className="block text-[11px] text-amber-800/80 dark:text-amber-200/80">
-                Not available to spend yet · open for details
-              </span>
-            </span>
-            <ChevronRight size={18} className="shrink-0 text-amber-700" aria-hidden />
-          </button>
-        )}
-
-        {/* ZONE: TOOLS — secondary shortcuts (not primary money actions) */}
-        <p className="gh-type-meta mx-3 mt-3 mb-1.5 font-bold uppercase tracking-wide text-muted-foreground">
-          Tools
-        </p>
-        <div className="mx-3 flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-          <QuickChip
-            icon={<Gift size={14} />}
-            label="Rewards"
-            onClick={() => navigateSettingsSection("rewards")}
-          />
+        
           <QuickChip
             icon={<Share2 size={14} />}
             label="Spend GHC"

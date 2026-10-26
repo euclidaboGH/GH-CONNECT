@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 "use client"
 
 /**
@@ -21,6 +22,7 @@ export function WalletBalanceCard({
   monthEarned,
   monthSpent,
   onOpenPending,
+  primaryActions,
 }: {
   balance: number
   balanceVisible: boolean
@@ -32,6 +34,8 @@ export function WalletBalanceCard({
   monthEarned: number
   monthSpent: number
   onOpenPending: () => void
+  /** Optional action row (Send / Request / Receive / History) attached under the card */
+  primaryActions?: ReactNode
 }) {
   const mask = (n: number) => (balanceVisible ? formatGhc(n) : "••••")
   const synced =
@@ -164,6 +168,11 @@ export function WalletBalanceCard({
         </p>
         <p className="sr-only">{ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}</p>
       </div>
-    </section>
+          {primaryActions ? (
+        <div className="border-t border-border/40 bg-card/80 px-2 pb-3 pt-1">
+          {primaryActions}
+        </div>
+      ) : null}
+</section>
   )
 }

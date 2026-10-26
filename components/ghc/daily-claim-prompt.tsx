@@ -41,6 +41,9 @@ export function DailyClaimPrompt() {
   const { profile } = useGHCProfile()
   const userId = profile?.id || ""
   const { status, refresh } = useDailyClaimStatus(userId)
+  useEffect(() => {
+    if (userId) void refresh()
+  }, [userId, refresh])
   const [open, setOpen] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [done, setDone] = useState<DoneState | null>(null)
@@ -49,8 +52,9 @@ export function DailyClaimPrompt() {
   const sheetRef = useRef<HTMLElement | null>(null)
 
   const claimedToday = Boolean(status?.claimedToday)
-  const canAttemptClaim = Boolean(userId && !claimedToday && (status === null || status.claimable))
-  const claimable = Boolean(userId && status?.claimable && !claimedToday)
+  // Status null = still loading / offline — keep FAB visible so users never lose the claim entry point.
+  const canAttemptClaim = Boolean(userId && !claimedToday && (status === null || status.claimable !== false))
+  const claimable = Boolean(userId && !claimedToday && (status === null || status.claimable !== false))
   const cycleDay =
     typeof status?.cycleDay === "number" && status.cycleDay > 0 ? status.cycleDay : null
   const tier =
@@ -168,8 +172,8 @@ export function DailyClaimPrompt() {
     return () => window.removeEventListener("ghc:open-daily-claim", onOpen)
   }, [])
 
-  // Golden lightning on every screen while claimable; hide when sheet open or already claimed
-  const showFab = canAttemptClaim && !open && !done
+  // Golden coin+lightning on every screen until claimed (mid-right of content, never in header)
+  const showFab = Boolean(userId) && !claimedToday && !open && !done
 
   return (
     <>
@@ -177,8 +181,9 @@ export function DailyClaimPrompt() {
         <div
           className="pointer-events-none fixed z-[150] flex flex-col items-end gap-2"
           style={{
-            right: "max(0.75rem, env(safe-area-inset-right))",
-            bottom: "calc(var(--gh-bottom-nav-height, 5.35rem) + 0.85rem + env(safe-area-inset-bottom, 0px))",
+            right: "max(0.65rem, env(safe-area-inset-right))",
+            top: "max(28%, calc(env(safe-area-inset-top, 0px) + 7.5rem))",
+            transform: "translateY(-20%)",
           }}
         >
           {hint ? (
@@ -329,7 +334,7 @@ export function DailyClaimPrompt() {
                   type="button"
                   disabled={claiming || !canAttemptClaim}
                   onClick={() => void claim()}
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 text-sm font-bold text-amber-950 shadow-md hover:from-amber-400 hover:to-amber-500 disabled:opacity-50"
+                  className="flex min-h-14 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 text-[15px] font-bold text-amber-950 shadow-md active:scale-[0.98] hover:from-amber-400 hover:to-amber-500 disabled:opacity-50"
                 >
                   {claiming ? (
                     <span className="gh-daily-button-spinner" aria-hidden />

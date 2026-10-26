@@ -362,8 +362,12 @@
   isolation: isolate;
   position: relative;
   display: inline-flex;
-  height: 3.55rem;
-  width: 3.55rem;
+  height: 3.85rem;
+  width: 3.85rem;
+  min-height: 3.85rem;
+  min-width: 3.85rem;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;

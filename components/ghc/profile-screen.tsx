@@ -408,10 +408,31 @@ export function ProfileScreen({
     return `@${base || "member"}`
   }, [p.username, name])
 
-  const ghDisplay = useMemo(
-    () => formatGreenHavenIdDisplay(getOrCreateGreenHavenId(meId, null)),
-    [meId]
-  )
+  const [serverGreenHavenId, setServerGreenHavenId] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/identity/me", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d?.ok) return
+        const id = String(d.greenHavenId || "").trim()
+        if (id) {
+          setServerGreenHavenId(id)
+          try {
+            // Align local cache with server public id so referrals and Copy ID match
+            getOrCreateGreenHavenId(meId, id)
+          } catch { /* */ }
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [meId])
+  const ghDisplay = useMemo(() => {
+    const preferred = serverGreenHavenId || getOrCreateGreenHavenId(meId, null)
+    return formatGreenHavenIdDisplay(preferred)
+  }, [meId, serverGreenHavenId])
 
   const locationLine = [p.city, p.country].filter(Boolean).join(", ")
   const profileCompletion = useMemo(() => calculateProfileCompletion(p), [p])
