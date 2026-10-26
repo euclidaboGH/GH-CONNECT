@@ -143,6 +143,15 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   } | null>(null)
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>([])
   const [hiddenPostIds, setHiddenPostIds] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("ghc.hidden-post-ids")
+      const ids = raw ? JSON.parse(raw) : []
+      if (Array.isArray(ids) && ids.length) {
+        setHiddenPostIds(ids.map(String).filter(Boolean).slice(0, 200))
+      }
+    } catch { /* */ }
+  }, [])
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<Error | null>(null)
   const [isOffline, setIsOffline] = useState(false)

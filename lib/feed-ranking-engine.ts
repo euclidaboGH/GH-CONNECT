@@ -500,7 +500,7 @@ function rankSavedFeed(posts: Post[], context: FeedContext): RankedPost[] {
         reason: "Saved by you",
         category: "saved",
         shortLabel: "Saved",
-      } as PostVisibilityReason,
+      },
     }))
 }
 

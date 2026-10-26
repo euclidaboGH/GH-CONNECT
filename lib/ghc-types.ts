@@ -549,6 +549,7 @@ export interface PostVisibilityReason {
     | "location"
     | "intention"
     | "contribution"
+    | "saved"
     | "error"
   /** Optional short label for chip UI */
   shortLabel?: string
