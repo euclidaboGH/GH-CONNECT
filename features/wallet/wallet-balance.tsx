@@ -1,12 +1,11 @@
-import type { ReactNode } from "react"
 "use client"
 
 /**
  * Financial dashboard hero — Available balance + Pending / Earned / Spent.
  * GHC only (never Pi). Official coin mark for currency.
- * Visual treatment aligned to GreenHaven reference language (presentation only).
  */
 
+import type { ReactNode } from "react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
@@ -48,7 +47,6 @@ export function WalletBalanceCard({
       className="gh-reference-panel mx-3 mt-3 overflow-hidden"
       aria-label="GHC wallet balance"
     >
-      {/* Premium balance hero — restrained gradient, strong hierarchy */}
       <div className="gh-balance-hero relative overflow-hidden px-5 pb-6 pt-5">
         <div
           className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/10 blur-2xl"
@@ -65,60 +63,41 @@ export function WalletBalanceCard({
               <GhcCoinIcon size={40} className="drop-shadow-sm" title="GreenHaven Coin" />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-wide text-white/80">
-                Wallet Balance
-              </p>
-              <p className="mt-0.5 text-[10px] font-medium text-white/60">
-                GreenHaven Coin · GHC
-              </p>
+              <p className="text-[11px] font-semibold tracking-wide text-white/80">Wallet Balance</p>
+              <p className="mt-0.5 text-[10px] font-medium text-white/60">GreenHaven Coin · GHC</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onToggleVisible}
-            className="shrink-0 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/90 backdrop-blur-sm transition hover:bg-white/20 active:scale-95"
+            className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/95 backdrop-blur-sm"
             aria-label={balanceVisible ? "Hide balance" : "Show balance"}
           >
             {balanceVisible ? "Hide" : "Show"}
           </button>
         </div>
 
-        <p className="relative mt-4 flex flex-wrap items-baseline gap-2.5 text-[2.6rem] font-bold leading-none tracking-tight tabular-nums sm:text-[2.85rem]">
-          {refreshing && balance === 0 ? (
-            <span
-              className="inline-block h-11 w-44 animate-pulse rounded-xl bg-white/20"
-              aria-label="Loading balance"
-            />
-          ) : (
-            <>
-              <span className="text-white">{mask(balance)}</span>
-            </>
-          )}
-        </p>
-
-        <div className="relative mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/65">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/15 px-2.5 py-0.5 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-200" aria-hidden />
-            Available balance
-          </span>
-          {synced && <span>Updated {synced}</span>}
+        <div className="relative mt-5">
+          <p className="text-[2.15rem] font-black leading-none tracking-tight text-white tabular-nums">
+            {mask(balance)}
+          </p>
+          <p className="mt-1.5 text-[11px] font-medium text-white/75">
+            {refreshing ? "Refreshing…" : synced ? `Updated ${synced}` : "Available balance"}
+          </p>
         </div>
+
+        {primaryActions ? (
+          <div className="relative mt-5 border-t border-white/15 pt-3">{primaryActions}</div>
+        ) : null}
       </div>
 
-      {/* Summary strip */}
-      <div
-        className="grid grid-cols-4 divide-x divide-border/70 bg-card"
-        role="group"
-        aria-label="Balance summary"
-      >
+      <div className="grid grid-cols-4 divide-x divide-border/50 border-t border-border/60 bg-card">
         <button
           type="button"
           onClick={onOpenPending}
-          className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center transition hover:bg-amber-50/80 active:scale-[0.98] dark:hover:bg-amber-950/25"
+          className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center transition hover:bg-muted/40"
         >
-          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Pending
-          </span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pending</span>
           <span
             className={`text-[15px] font-bold tabular-nums ${
               pending > 0 ? "text-amber-700 dark:text-amber-400" : "text-foreground"
@@ -126,36 +105,24 @@ export function WalletBalanceCard({
           >
             {mask(pending)}
           </span>
-          {pending > 0 && (
-            <span className="text-[9px] font-semibold text-amber-600/90 dark:text-amber-400/90">
-              Tap details
-            </span>
-          )}
+          {pending > 0 ? (
+            <span className="text-[9px] font-semibold text-amber-600/90 dark:text-amber-400/90">Tap details</span>
+          ) : null}
         </button>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Reserved
-          </span>
-          <span className="text-[15px] font-bold tabular-nums text-foreground">
-            {mask(locked)}
-          </span>
-          {locked > 0 && <span className="text-[9px] text-muted-foreground">Not spendable</span>}
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Reserved</span>
+          <span className="text-[15px] font-bold tabular-nums text-foreground">{mask(locked)}</span>
+          {locked > 0 ? <span className="text-[9px] text-muted-foreground">Not spendable</span> : null}
         </div>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Earned
-          </span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Earned</span>
           <span className="text-[15px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
             {mask(monthEarned)}
           </span>
         </div>
         <div className="flex flex-col items-center gap-0.5 px-2 py-3.5 text-center">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Spent
-          </span>
-          <span className="text-[15px] font-bold tabular-nums text-foreground">
-            {mask(monthSpent)}
-          </span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Spent</span>
+          <span className="text-[15px] font-bold tabular-nums text-foreground">{mask(monthSpent)}</span>
         </div>
       </div>
 
@@ -164,15 +131,13 @@ export function WalletBalanceCard({
           <span className="font-semibold text-foreground">GHC</span> is spendable in-app utility
           {pending > 0 ? " · pending may wait up to ~48h before claim" : ""}
           {locked > 0 ? " · reserved is not spendable" : ""}.{" "}
-          <span className="font-semibold text-foreground">π</span> stays on the Pi payment rail — not mixed into this balance.
+          <span className="font-semibold text-foreground">π</span> stays on the Pi payment rail — not mixed into this
+          balance.
         </p>
-        <p className="sr-only">{ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}</p>
+        <p className="sr-only">
+          {ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}
+        </p>
       </div>
-          {primaryActions ? (
-        <div className="border-t border-border/40 bg-card/80 px-2 pb-3 pt-1">
-          {primaryActions}
-        </div>
-      ) : null}
-</section>
+    </section>
   )
 }

@@ -1306,7 +1306,8 @@ const lowBalance = balance === 0 && displayPending === 0
           </div>
         </div>
 
-        
+        {/* Quick tools under balance card */}
+        <div className="mx-3 mt-3 flex flex-wrap gap-2" role="group" aria-label="Wallet quick tools">
           <QuickChip
             icon={<Share2 size={14} />}
             label="Spend GHC"
