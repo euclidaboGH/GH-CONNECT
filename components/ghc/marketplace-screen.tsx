@@ -1,5 +1,6 @@
-import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
 "use client"
+
+import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
 
 /**
  * GreenHaven Marketplace — product surface.

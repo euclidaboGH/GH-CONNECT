@@ -79,6 +79,15 @@ export default function PortalSetupPage() {
         </p>
       </section>
 
+      <section className="mt-4 space-y-2 rounded-2xl border border-border bg-card p-4">
+        <h2 className="font-bold">Compliance posture</h2>
+        <p className="text-[13px] text-muted-foreground">
+          <a className="text-emerald-700 underline" href="/api/public/compliance-posture">
+            /api/public/compliance-posture
+          </a>
+        </p>
+      </section>
+
       <p className="mt-6 text-[12px] text-muted-foreground">
         <Link href="/" className="underline">
           Back to app
