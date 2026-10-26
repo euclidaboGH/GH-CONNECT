@@ -20,6 +20,7 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useGHC } from "@/contexts/ghc-context"
+import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
 
 function formatGhc(n: number): string {
@@ -38,6 +39,7 @@ export function RewardsJourneyHero({
   onOpenWallet?: () => void
 }) {
   const ghc = useGHC()
+  const walletRead = useWalletRead()
   const [tick, setTick] = useState<number>(0)
   const [isOffline, setIsOffline] = useState(false)
   const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
@@ -77,12 +79,14 @@ export function RewardsJourneyHero({
 
   const walletBal = useMemo(() => {
     void tick
+    const avail = Number(walletRead?.snapshot?.availableGhc)
+    if (Number.isFinite(avail)) return avail
     try {
       return Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
     } catch {
       return 0
     }
-  }, [tick])
+  }, [tick, walletRead?.snapshot?.availableGhc])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -93,6 +97,19 @@ export function RewardsJourneyHero({
     return () => {
       window.removeEventListener("online", sync)
       window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => setTick((x) => x + 1)
+    window.addEventListener("ghc:wallet-synced", bump)
+    window.addEventListener("ghc:wallet-refresh", bump)
+    window.addEventListener("ghc:daily-reward-claimed", bump)
+    return () => {
+      window.removeEventListener("ghc:wallet-synced", bump)
+      window.removeEventListener("ghc:wallet-refresh", bump)
+      window.removeEventListener("ghc:daily-reward-claimed", bump)
     }
   }, [])
 
@@ -216,10 +233,11 @@ export function RewardsJourneyHero({
               <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center">
                 <GhcCoinIcon size={28} title="GreenHaven Coin" />
               </div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Balance</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available</p>
               <p className="mt-0.5 text-[13px] font-bold tabular-nums text-foreground">
-                {formatGhc(walletBal)} <span className="text-[10px] font-semibold text-muted-foreground">GHC</span>
+                {formatGhc(walletBal)}
               </p>
+              <p className="text-[9px] text-muted-foreground">Wallet</p>
             </div>
             <div className="rounded-[1.25rem] border border-border/50 bg-card/90 px-2.5 py-3 text-center shadow-sm">
               <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">

@@ -14,6 +14,7 @@ import {
   findOrCreateFromVerifiedPi,
 } from "@/lib/server/identity/pi-identity-store"
 import { upsertServerProfile } from "@/lib/server/identity/profile-store"
+import { recordPioneerActivity } from "@/lib/server/engagement/pioneer-activity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,10 +29,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Reject body-supplied user identity as proof of ownership
-    // (client may send nothing; we ignore userId from body entirely)
-
-    // Resolve mapping from verified auth subject only
     let ghUserId = auth.userId
     const byPi = await getByPiAppUid(auth.userId)
     if (byPi) {
@@ -41,8 +38,6 @@ export async function POST(request: Request) {
       if (byGh) {
         ghUserId = byGh.ghUserId
       } else if (auth.source === "pi_platform") {
-        // Edge: /me succeeded but mapping missing (e.g. cold start before /api/auth/pi).
-        // Create mapping from verified Pi uid only — still no client-supplied id.
         const { record } = await findOrCreateFromVerifiedPi({
           piAppUid: auth.userId,
           piUsername: auth.username ?? null,
@@ -66,15 +61,17 @@ export async function POST(request: Request) {
       )
     }
 
-    // Also stamp social profile onboarded when durable profile store is available.
-    // Client may also PATCH /api/profile/me; dual-write avoids hydrate races.
     try {
       await upsertServerProfile(updated.ghUserId, { onboarded: true }, { allowOnboardedChange: true })
     } catch {
-      /* non-blocking — identity onboardingCompleted remains source of gate */
+      /* non-blocking */
     }
 
-    // Idempotent: already-completed still returns ok:true
+    void recordPioneerActivity({
+      userId: updated.ghUserId,
+      kind: "onboarding_completed",
+    })
+
     return NextResponse.json({
       ok: true,
       identity: {

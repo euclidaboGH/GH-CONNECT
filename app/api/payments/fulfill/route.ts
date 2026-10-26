@@ -1,3 +1,4 @@
+import { recordPioneerActivity } from "@/lib/server/engagement/pioneer-activity"
 /**
  * POST /api/payments/fulfill
  * Grant benefit only when durable intent is COMPLETED and owned by caller.
@@ -147,6 +148,11 @@ export async function POST(request: Request) {
     }
 
     const fulfilled = await markIntentFulfilled(intent.id, auth.userId)
+    void recordPioneerActivity({
+      userId: auth.userId,
+      kind: "payment_completed",
+      metadata: { intentId: intent.id, purpose: intent.purpose },
+    })
     const finalIntent = fulfilled || getPaymentIntent(intent.id) || intent
 
     // Membership: grant from verified COMPLETED→FULFILLED intent (idempotent).

@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.108.1",
+  "version": "0.131.0",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {

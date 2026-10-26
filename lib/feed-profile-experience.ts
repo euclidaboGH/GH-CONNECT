@@ -81,6 +81,30 @@ export function savePostToCollection(collectionId: string, postId: string): Save
   return next
 }
 
+
+export function createCollection(name: string): SavedCollection {
+  const trimmed = String(name || "").trim().slice(0, 40)
+  const cols = loadCollections()
+  if (!trimmed) {
+    return cols[0] || { id: "col_0", name: "Later", postIds: [], createdAt: Date.now() }
+  }
+  const existing = cols.find((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+  if (existing) return existing
+  const col: SavedCollection = {
+    id: `col_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    name: trimmed,
+    postIds: [],
+    createdAt: Date.now(),
+  }
+  const next = [col, ...cols]
+  try {
+    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(next))
+  } catch {
+    /* */
+  }
+  return col
+}
+
 export function removePostFromCollections(postId: string): SavedCollection[] {
   const next = loadCollections().map((c) => ({
     ...c,

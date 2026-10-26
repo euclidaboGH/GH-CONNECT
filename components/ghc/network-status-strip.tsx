@@ -5,6 +5,34 @@ import { WifiOff } from "lucide-react"
 
 /** Thin offline banner — does not block content or navigation */
 export function NetworkStatusStrip() {
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const onFlush = (ev: Event) => {
+      try {
+        const d = (ev as CustomEvent).detail as {
+          stories?: number
+          listings?: number
+          posts?: number
+          deletes?: number
+          skipped?: boolean
+        } | undefined
+        if (!d || d.skipped) return
+        const n = Number(d.stories || 0) + Number(d.listings || 0) + Number(d.posts || 0) + Number(d.deletes || 0)
+        if (n <= 0) return
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: {
+              message: n === 1 ? "Queued item synced" : `${n} queued items synced`,
+              type: "success",
+            },
+          }),
+        )
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:reconnect-flush", onFlush as EventListener)
+    return () => window.removeEventListener("ghc:reconnect-flush", onFlush as EventListener)
+  }, [])
+
   const [online, setOnline] = useState(true)
 
   useEffect(() => {

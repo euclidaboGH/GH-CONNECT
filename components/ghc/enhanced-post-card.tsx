@@ -25,6 +25,9 @@ import { absoluteTimeLabel, formatRelativeTime } from "@/lib/product/essentials"
 import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
+import { PollInline, resolvePostPoll } from "./poll-inline"
+import { ChallengeInline, resolvePostChallenge } from "./challenge-inline"
+import { PostContentText } from "./post-content-text"
 import { DurableVideo } from "./durable-video"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { isDurableMediaUrl } from "@/lib/media/durable-url"
@@ -701,7 +704,19 @@ function EnhancedPostCardInner({
                     <button
                       key={idx}
                       type="button"
+                      data-post-no-open
                       className="text-emerald-700 hover:underline dark:text-emerald-400"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        try {
+                          window.dispatchEvent(
+                            new CustomEvent("ghc:feed-search", {
+                              detail: { query: String(part.value || "") },
+                            }),
+                          )
+                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                        } catch { /* */ }
+                      }}
                     >
                       {part.value}
                     </button>
@@ -806,6 +821,24 @@ function EnhancedPostCardInner({
           </div>
         )}
       </div>
+
+
+      {(() => {
+        const pollView = resolvePostPoll(post as { content?: string; poll?: import("./poll-inline").PollView | null })
+        return pollView ? (
+          <div className="px-3.5">
+            <PollInline poll={pollView} postId={post.id} />
+          </div>
+        ) : null
+      })()}
+      {(() => {
+        const ch = resolvePostChallenge(post as { content?: string })
+        return ch ? (
+          <div className="px-3.5">
+            <ChallengeInline challenge={ch} />
+          </div>
+        ) : null
+      })()}
 
       {/* Reaction summary only. Comment/share totals live beside their single action controls below. */}
       {visibleReactionEntries.length > 0 ? (
@@ -916,7 +949,7 @@ function EnhancedPostCardInner({
                   : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
               }`}
             >
-              <ThumbsUp size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
+                <ThumbsUp size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
               <span className="tabular-nums">{upvoteCount}</span>
             </button>
             <button

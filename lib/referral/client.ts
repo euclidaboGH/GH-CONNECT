@@ -74,6 +74,7 @@ export async function fetchReferralStatus(): Promise<ReferralStatus> {
 export async function attributeReferralCode(input: {
   code?: string
   greenHavenId?: string
+  referrerKey?: string
 }): Promise<{ ok: boolean; idempotent?: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/referral/attribute", {
     method: "POST",
@@ -82,6 +83,7 @@ export async function attributeReferralCode(input: {
     body: JSON.stringify({
       code: input.code,
       greenHavenId: input.greenHavenId,
+      referrerKey: input.referrerKey || input.greenHavenId || input.code,
     }),
   })
   const data = await res.json().catch(() => ({}))

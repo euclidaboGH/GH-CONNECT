@@ -4,13 +4,16 @@
  */
 import { NextResponse } from "next/server"
 import { quoteCommunityCreateFee, feesRequireSettlement } from "@/lib/server/fees/pilot-fee-policy"
+import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const preferred = String(url.searchParams.get("currency") || "GHC").toUpperCase() === "PI" ? "PI" : "GHC"
+  let preferred: "PI" | "GHC" =
+    String(url.searchParams.get("currency") || "GHC").toUpperCase() === "PI" ? "PI" : "GHC"
+  if (isPiOnlyCommerceEnabled()) preferred = "PI"
   const fee = quoteCommunityCreateFee(preferred)
   return NextResponse.json(
     {

@@ -27,6 +27,7 @@ function LazyImageInner({
 }: LazyImageProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading")
   const [displaySrc, setDisplaySrc] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
   const safeAlt = alt ?? "Member"
   const rawSrc = typeof src === "string" && src.trim() ? src.trim() : ""
   const initials =
@@ -37,6 +38,10 @@ function LazyImageInner({
       .join("")
       .slice(0, 2)
       .toUpperCase() || "?"
+
+  useEffect(() => {
+    setRetryToken(0)
+  }, [rawSrc])
 
   useEffect(() => {
     let cancelled = false
@@ -81,7 +86,18 @@ function LazyImageInner({
     return () => {
       cancelled = true
     }
-  }, [rawSrc])
+  }, [rawSrc, retryToken])
+
+  const handleImgError = () => {
+    if (retryToken < 1 && rawSrc && isMediaFacadeUrl(rawSrc)) {
+      setRetryToken(1)
+      setStatus("loading")
+      setDisplaySrc(null)
+      return
+    }
+    setStatus("error")
+    onError?.()
+  }
 
   if (status === "error" || (!displaySrc && status !== "loading")) {
     return (
@@ -120,10 +136,7 @@ function LazyImageInner({
             setStatus("loaded")
             onLoad?.()
           }}
-          onError={() => {
-            setStatus("error")
-            onError?.()
-          }}
+          onError={handleImgError}
         />
       ) : null}
       {(online || verified) && (

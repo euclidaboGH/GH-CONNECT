@@ -1,3 +1,4 @@
+import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
 "use client"
 
 import { onCloseTransientUI } from "@/lib/transient-ui"
@@ -53,7 +54,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     welcomeMessage: "",
     rules: [],
     invitedMembers: [],
-    feeCurrency: "GHC",
+    feeCurrency: isPiOnlyCommerceClient() ? "PI" : "GHC",
   })
   const [feeRail, setFeeRail] = useState<CommunityFeeRail>("GHC")
   const [feePaymentConfirmed, setFeePaymentConfirmed] = useState(false)
@@ -274,7 +275,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           welcomeMessage: "",
           rules: [],
           invitedMembers: [],
-          feeCurrency: "GHC",
+          feeCurrency: isPiOnlyCommerceClient() ? "PI" : "GHC",
         })
         setFeeRail("GHC")
       } catch (err) {

@@ -163,8 +163,11 @@ export function DiscoveryGridScreen() {
     const exclude = new Set<string>([
       String(meId || ""),
       ...(graphSnap.friends || []).map(String),
+      ...(graphSnap.following || []).map(String),
       ...(graphSnap.blockedUsers || []).map(String),
       ...(graphSnap.matchIds || []).map(String),
+      ...(graphSnap.outgoingFriendRequestIds || []).map(String),
+      ...(graphSnap.incomingFriendRequestIds || []).map(String),
     ].filter(Boolean))
     list = list.filter((c) => {
       const id = String((c as { id?: string; userId?: string }).id || (c as { userId?: string }).userId || "")
@@ -193,8 +196,11 @@ export function DiscoveryGridScreen() {
     ghc.profile?.city,
     ghc.profile?.country,
     graphSnap.friends,
+    graphSnap.following,
     graphSnap.blockedUsers,
     graphSnap.matchIds,
+    graphSnap.outgoingFriendRequestIds,
+    graphSnap.incomingFriendRequestIds,
   ])
 
   const connectionStateFor = useCallback(
@@ -344,6 +350,35 @@ export function DiscoveryGridScreen() {
         void declineUnifiedConnectionRequest(meId, id).then((r) => {
           if (!r.ok) ghc.addToast?.(r.error || "Could not decline", "error")
         })
+        return
+      }
+      if (action === "follow" || action === "unfollow") {
+        const follow = action === "follow"
+        void import("@/lib/social/client").then(({ socialFollow }) =>
+          socialFollow(id, follow).then((r) => {
+            if (!r.ok) {
+              ghc.addToast?.(r.error || (follow ? "Could not follow" : "Could not unfollow"), "error")
+              return
+            }
+            ghc.addToast?.(
+              r.durable
+                ? follow
+                  ? "Following"
+                  : "Unfollowed"
+                : follow
+                  ? "Follow saved on this device — will sync when online"
+                  : "Unfollow saved on this device",
+              r.durable ? "success" : "info",
+            )
+            try {
+              window.dispatchEvent(
+                new CustomEvent("ghc:follow-changed", {
+                  detail: { userId: id, following: follow, durable: r.durable },
+                }),
+              )
+            } catch { /* */ }
+          }),
+        )
         return
       }
     },

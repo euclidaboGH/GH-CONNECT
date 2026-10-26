@@ -21,6 +21,8 @@ import {
   touchLastSeen,
   isPiIdentityDurable,
 } from "@/lib/server/identity/pi-identity-store"
+import { ensurePublicIdentity } from "@/lib/server/economy/public-id"
+import { recordPioneerActivity } from "@/lib/server/engagement/pioneer-activity"
 import {
   createSession,
   buildSessionCookieHeader,
@@ -139,6 +141,14 @@ export async function POST(request: Request) {
     }
 
     void touchLastSeen(record.ghUserId)
+    try {
+      await ensurePublicIdentity({
+        userId: record.ghUserId,
+        displayName: record.piUsername,
+      })
+    } catch {
+      /* public id best-effort — referral still has derived GH- id */
+    }
 
     const isReturning = !isNew && record.onboardingCompleted === true
     const needsOnboarding = record.onboardingCompleted !== true
@@ -199,6 +209,7 @@ export async function POST(request: Request) {
           onboardingCompleted: record.onboardingCompleted,
           verifiedAt: record.verifiedAt,
           lastSeenAt: record.lastSeenAt,
+          serverVerified: true,
         },
       },
       { headers: { "Cache-Control": "no-store" } }
@@ -210,6 +221,11 @@ export async function POST(request: Request) {
     )
 
     void appendSecurityEvent({ eventType: "auth.pi.success", outcome: "allowed", actorUserId: record.ghUserId, correlationId })
+    void recordPioneerActivity({
+      userId: record.ghUserId,
+      kind: isReturning ? "session_verified" : "session_verified",
+      metadata: { isNew, isReturning },
+    })
     return res
   } catch (err) {
     console.error(

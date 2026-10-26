@@ -7,6 +7,7 @@ import {
   calculateMarketplaceListingFee,
   listingFeeRequiresSettlement,
 } from "@/lib/server/marketplace/listing-fee"
+import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,9 @@ export async function GET(request: Request) {
   const currency = String(url.searchParams.get("currency") || "GHC").toUpperCase()
   const kind = String(url.searchParams.get("kind") || "product")
   const preferred = String(url.searchParams.get("feeCurrency") || url.searchParams.get("preferredFeeCurrency") || "").toUpperCase()
-  const preferredFeeCurrency = preferred === "PI" || preferred === "GHC" ? preferred : undefined
+  let preferredFeeCurrency: "PI" | "GHC" | undefined =
+    preferred === "PI" || preferred === "GHC" ? preferred : undefined
+  if (isPiOnlyCommerceEnabled()) preferredFeeCurrency = "PI"
 
   const fee = calculateMarketplaceListingFee({
     sellerPrice: Number.isFinite(price) && price >= 0 ? price : 0,

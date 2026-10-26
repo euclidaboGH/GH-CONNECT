@@ -39,6 +39,8 @@ export function ReferralShareCard({
   > | null>(null)
   const [copied, setCopied] = useState<"link" | "code" | null>(null)
   const [referrerGhId, setReferrerGhId] = useState("")
+  const [myGreenHavenId, setMyGreenHavenId] = useState("")
+  const [myPiUsername, setMyPiUsername] = useState("")
   const [referrerStatus, setReferrerStatus] = useState<
     "idle" | "submitting" | "locked" | "error"
   >("idle")
@@ -178,14 +180,14 @@ export function ReferralShareCard({
     setReferrerStatus("submitting")
     setReferrerMessage("")
     try {
-      const data = await attributeReferralCode({ greenHavenId: value })
+      const data = await attributeReferralCode({ greenHavenId: value, referrerKey: value })
       if (!data.ok) {
         setReferrerStatus("error")
         setReferrerMessage(
           String(
             data.message ||
               data.error ||
-              "Could not save that GreenHaven ID. Check it and try once more.",
+              "Could not find that referrer. Use invite code, GH- ID, or exact Pi username.",
           ),
         )
         return
@@ -214,6 +216,18 @@ export function ReferralShareCard({
       setReferrerMessage("Network error — try again.")
     }
   }
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => { try { void load() } catch { /* */ } }
+    window.addEventListener("ghc:wallet-synced", bump)
+    window.addEventListener("ghc:wallet-refresh", bump)
+    return () => {
+      window.removeEventListener("ghc:wallet-synced", bump)
+      window.removeEventListener("ghc:wallet-refresh", bump)
+    }
+  }, [load])
 
   return (
     <section
@@ -264,6 +278,15 @@ export function ReferralShareCard({
               {copied === "code" ? "Code copied" : "Copy code"}
             </button>
           </div>
+          {(myGreenHavenId || myPiUsername) ? (
+            <p className="text-[11px] text-muted-foreground">
+              Friends can also use{" "}
+              {myGreenHavenId ? <span className="font-mono font-semibold text-foreground">{myGreenHavenId}</span> : null}
+              {myGreenHavenId && myPiUsername ? " or " : null}
+              {myPiUsername ? <span className="font-semibold text-foreground">@{myPiUsername}</span> : null}
+              {" "}when locking their referral.
+            </p>
+          ) : null}
 
           {stats ? (
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -341,7 +364,7 @@ export function ReferralShareCard({
       <div className="mt-4 border-t border-border/60 pt-3">
         <h4 className="text-xs font-semibold text-foreground">Who invited you?</h4>
         <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-          Enter their GreenHaven ID once (for example GH-1JYHGG) or use a shared invite link. Wrong IDs
+          Enter their invite code, GreenHaven ID (GH-……), or exact Pi username once — or use a shared invite link. Wrong entries
           are rejected. You cannot edit after submit.
         </p>
         {referrerStatus === "locked" ? (
@@ -354,7 +377,7 @@ export function ReferralShareCard({
               type="text"
               value={referrerGhId}
               onChange={(e) => setReferrerGhId(e.target.value)}
-              placeholder="GH-XXXXXXXX"
+              placeholder="Code, GH-ID, or @PiUserXXXXXXXX"
               disabled={referrerStatus === "submitting"}
               className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium uppercase tracking-wide outline-none focus:ring-2 focus:ring-emerald-500/40"
               autoComplete="off"

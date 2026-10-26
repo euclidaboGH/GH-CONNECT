@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { X, Zap, Shield, Clock } from "lucide-react"
+import { GhcCoinIcon } from "./ghc-coin-icon"
 import { useGHCProfile } from "@/contexts/ghc-context"
 import { useDailyClaimStatus } from "./use-daily-claim-status"
 import { notifyRewardClaimed } from "@/lib/notifications"
@@ -201,7 +202,11 @@ export function DailyClaimPrompt() {
             }}
           >
             <span className="gh-daily-lightning-fab-aura" aria-hidden />
-            <Zap size={28} fill="currentColor" strokeWidth={1.75} className="gh-daily-lightning-fab-bolt" aria-hidden />
+            <Zap size={14} fill="currentColor" className="gh-daily-lightning-fab-bolt gh-daily-lightning-fab-bolt-1" aria-hidden />
+            <Zap size={12} fill="currentColor" className="gh-daily-lightning-fab-bolt gh-daily-lightning-fab-bolt-2" aria-hidden />
+            <span className="gh-daily-lightning-fab-coin">
+              <GhcCoinIcon size={34} title="GreenHaven Coin" />
+            </span>
             <span className="gh-daily-lightning-fab-dot" aria-hidden />
           </button>
         </div>
@@ -251,7 +256,10 @@ export function DailyClaimPrompt() {
                 <>
                   <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent p-3">
                     <div className="gh-daily-lightning-fab h-12 w-12 shrink-0 !shadow-md" aria-hidden>
-                      <Zap size={22} fill="currentColor" className="gh-daily-lightning-fab-bolt" />
+                      <Zap size={11} fill="currentColor" className="gh-daily-lightning-fab-bolt gh-daily-lightning-fab-bolt-1" />
+                      <span className="gh-daily-lightning-fab-coin">
+                        <GhcCoinIcon size={28} />
+                      </span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold">

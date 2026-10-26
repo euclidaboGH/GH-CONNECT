@@ -525,42 +525,50 @@ We may update these terms at any time with notice to users.`,
 
   privacy: `Privacy Policy - GreenHaven
 
-1. Information We Collect
-- Account information (name, age, location)
-- Profile content (photos, bio, interests)
-- Interaction data (matches, messages, likes)
-- Device information (IP, device type, operating system)
-- Usage data (features used, time spent)
+Last updated: 2026-10-26
 
-2. How We Use Information
-- To provide and improve our service
-- To personalize your experience
-- To communicate with you
-- To detect and prevent fraud
-- To comply with legal obligations
+GreenHaven is a social and marketplace app for Pioneers. We design data practices to collect only what is needed to run the product.
 
-3. Data Security
-We use industry-standard encryption and security measures to protect your data.
+1. Authentication with Pi
+- You sign in with Pi Authentication (Pi Browser / Pi SDK). We do not operate a separate password login.
+- After you authorize the app, our servers verify your session with Pi Platform (/v2/me) and store an app-specific Pi user identifier linked to your GreenHaven account.
+- We may store your Pi display username when Pi provides it. This is not a password and is not a legal identity document.
+- We do not receive your Pi wallet seed phrase. Payments are authorized by you through Pi payment flows.
 
-4. Your Rights
-You can:
-- Access your personal data
-- Request corrections
-- Download your data
-- Delete your account and associated data
-- Opt out of marketing communications
+2. Information We Collect
+- Profile content you choose to provide (display name, photos, bio, interests, location you set)
+- Social and marketplace activity inside GreenHaven (posts, messages, listings, communities)
+- Technical logs needed for security and reliability (approximate device/browser metadata, IP for abuse prevention)
+- Payment intent records for π transactions you complete in-app (amount, status, purpose) — separate from any internal GHC reward balance
 
-5. Third-Party Sharing
-We do not sell your data. We only share with:
-- Service providers (hosting, analytics)
-- Legal authorities when required
-- Other users (as you authorize)
+3. What We Do Not Require
+- We do not require email or phone number solely to use core social features unless a specific feature genuinely needs it and you consent.
+- We do not sell personal data.
+- We do not import Pi private messages or the Pi social graph; messaging and communities on GreenHaven are our own systems.
 
-6. Data Retention
-We retain your data as long as your account is active, then delete it within 90 days of deletion.
+4. How We Use Information
+- Provide and improve GreenHaven features
+- Secure accounts, prevent fraud and abuse
+- Process π payments you initiate and related support
+- Operate optional internal rewards (GHC) under our product rules — rewards are not a substitute for π and are not a claim on Pi Network
 
-7. Contact
-For privacy questions, email support@ghconnect.com`,
+5. Sharing
+- Other GreenHaven users see what you publish under your privacy settings
+- Infrastructure providers (hosting, database) process data under contract to run the service
+- Legal requests when required by law
+- Pi Platform receives what is necessary for authentication and payments you start
+
+6. Retention and Your Rights
+- You may update profile content in-app
+- You may request account deletion; residual legal/security logs may be kept as required
+- Contact support through in-app Support or the contact listed in the app store / Developer Portal listing
+
+7. International and Ecosystem Context
+- GreenHaven may be accessed via Pi Browser. Hosting regions depend on our deployment provider (for example Vercel).
+- This policy is the Privacy Policy URL for Developer Portal configuration.
+
+8. Changes
+We may update this policy; material changes will be reflected by updating this page.`,
 }
 
 

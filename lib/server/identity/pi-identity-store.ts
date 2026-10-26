@@ -267,6 +267,56 @@ export async function getByPiAppUid(piAppUid: string): Promise<PiIdentityRecord 
   return memoryGetByPi(key)
 }
 
+
+/**
+ * Lookup by current Pi display username (case-insensitive). Username can change;
+ * prefer pi_app_uid when available. Used for referral attribution convenience only.
+ */
+export async function getByPiUsername(username: string): Promise<PiIdentityRecord | null> {
+  const key = String(username || "").trim().replace(/^@/, "")
+  if (!key || key.length < 2) return null
+  if (dbConfigured()) {
+    try {
+      const env = readGhcServerEnv()
+      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+        const base = env.supabaseUrl.replace(/\/$/, "")
+        const params = new URLSearchParams({
+          select: "*",
+          pi_username: `ilike.${key}`,
+          limit: "5",
+        })
+        const res = await fetch(`${base}/rest/v1/gh_pi_identities?${params}`, {
+          headers: {
+            apikey: env.supabaseServiceRoleKey,
+            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (res.ok) {
+          const rows = (await res.json()) as DbRow[]
+          if (Array.isArray(rows) && rows.length === 1) {
+            const rec = rowToRecord(rows[0])
+            memoryPut(rec)
+            return rec
+          }
+          // Ambiguous or empty — do not guess
+          if (Array.isArray(rows) && rows.length > 1) return null
+        }
+      }
+    } catch (err) {
+      console.error("[pi-identity] getByPiUsername", err instanceof Error ? err.message : "unknown")
+    }
+  }
+  // Memory fallback: exact case-insensitive match unique only
+  const matches: PiIdentityRecord[] = []
+  for (const rec of byPiUid.values()) {
+    if (rec.piUsername && rec.piUsername.toLowerCase() === key.toLowerCase()) matches.push(rec)
+  }
+  return matches.length === 1 ? matches[0] : null
+}
+
 export async function getByGhUserId(ghUserId: string): Promise<PiIdentityRecord | null> {
   const key = String(ghUserId || "").trim()
   if (!key) return null

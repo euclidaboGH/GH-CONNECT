@@ -425,36 +425,25 @@ export function RewardsCentreScreen({
 
   return (
     <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven Rewards Centre">
-      {(serverEconomy.balance !== null || serverEconomy.curationBalance !== null) ? (
-        <div className="mx-auto w-full max-w-3xl px-3 pt-3">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-card p-3 sm:grid-cols-4">
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.balance ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pending</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.pending ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Locked</p><p className="mt-0.5 text-sm font-bold tabular-nums">₲ {(serverEconomy.locked ?? 0).toLocaleString(undefined,{maximumFractionDigits:4})}</p></div>
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Curation</p><p className="mt-0.5 text-sm font-bold tabular-nums">{serverEconomy.canFundCuration === true ? "Fundable" : serverEconomy.curationBalance !== null ? `₲ ${serverEconomy.curationBalance.toLocaleString(undefined,{maximumFractionDigits:4})}` : "Unavailable"}</p></div>
-          </div>
-        </div>
-      ) : null}
-      <header className="flex shrink-0 items-center gap-2.5 border-b border-border/60 bg-card/95 px-3 py-3 backdrop-blur-md">
+
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
           aria-label="Back"
         >
-          <ArrowLeft size={18} strokeWidth={2.25} />
+          <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold tracking-tight text-foreground">Your GHC journey</h1>
-          <p className="text-[11px] text-muted-foreground">
-            Daily · missions · achievements · not pay-to-win
-          </p>
+          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">Rewards</h1>
+          <p className="text-[10px] leading-tight text-muted-foreground">Daily · missions · not pay-to-win</p>
         </div>
         {onOpenWallet && (
           <button
             type="button"
             onClick={onOpenWallet}
-            className="min-h-10 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+            className="h-8 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -462,7 +451,8 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={refresh}
-          className="min-h-10 rounded-full border border-border/70 bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:bg-muted"
+          className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted"
+          aria-label="Refresh rewards"
         >
           Refresh
         </button>

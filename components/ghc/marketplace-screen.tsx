@@ -1,3 +1,4 @@
+import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
 "use client"
 
 /**
@@ -286,6 +287,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         setErr("Order created without id")
         return
       }
+      emitMarketplaceEconomyRefresh("marketplace-order-create")
 
       if (payRail === "pi") {
         setMsg("Order reserved. Complete Pi payment to confirm.")
@@ -325,6 +327,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         return
       }
       setMsg("Paid with GHC. Order confirmed — track it under Orders.")
+      emitMarketplaceEconomyRefresh("marketplace-order-paid-ghc")
       try {
         window.dispatchEvent(
           new CustomEvent("ghc:toast", {
@@ -485,7 +488,7 @@ function ListingDetail({
 
   return (
     <div className="gh-world-marketplace flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2.5 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-2.5 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <button
           type="button"
           onClick={onBack}
@@ -908,7 +911,7 @@ function SellListingForm({
         <p className="mt-1 text-[13px] text-muted-foreground">
           {mode === "edit"
             ? "Updates cost half the listing fee. Listing fees are non-refundable platform charges."
-            : "Priced in ₲ GHC or π Pi. A non-refundable listing fee is charged when you publish."}
+            : "Priced in ₲ GHC or π Pi. A non-refundable π listing fee is charged when you publish (Pi-only commerce for ecosystem listing)."}
         </p>
       </div>
 
@@ -1074,6 +1077,14 @@ function SellListingForm({
     </div>
   )
 }
+
+function emitMarketplaceEconomyRefresh(reason: string) {
+  try {
+    window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason } }))
+    window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason } }))
+  } catch { /* */ }
+}
+
 
 export function MarketplaceScreen({
   onBack,
@@ -1536,7 +1547,7 @@ export function MarketplaceScreen({
 
   return (
     <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven marketplace">
-      <header className="flex shrink-0 flex-col gap-2.5 border-b border-border/50 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-border/50 px-2.5 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -1818,6 +1829,7 @@ export function MarketplaceScreen({
                       }),
                     )
                   } catch { /* */ }
+                  emitMarketplaceEconomyRefresh("marketplace-listing-edit")
                   const editedId = sellEditId
                   setSellEditId(null)
                   setSellTitle("")
@@ -1923,6 +1935,7 @@ export function MarketplaceScreen({
                     listing: durable.listing as { id?: string },
                   }
                   serverPublished = true
+                  emitMarketplaceEconomyRefresh("marketplace-listing-create")
                 } catch (error) {
                   // Preserve an offline draft queue, but never call it published or charge a fee locally.
                   if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -2109,6 +2122,7 @@ export function MarketplaceScreen({
                                 }
                                 const paid = await socialPayMarketplaceOrder(o.id, "ghc")
                                 if (!paid.ok) throw new Error(paid.error || "Payment failed")
+                                emitMarketplaceEconomyRefresh("marketplace-order-pay-now")
                                 await loadDurableOrders()
                                 window.dispatchEvent(
                                   new CustomEvent("ghc:toast", {

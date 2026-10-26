@@ -61,6 +61,8 @@ import { isValidGreenHavenIdFormat, normalizeGreenHavenId, resolveGreenHavenIdSe
 import { socialEconomyStatus } from "@/lib/social/client"
 import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 import { PaymentRecoveryBanner } from "@/components/ghc/payment-recovery-banner"
+import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
+import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
 
 const formatGhc = formatGhcShared
 
@@ -725,6 +727,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         } catch {
           /* */
         }
+        // Second pass after ledger commit lag — avoids "stuck pending until logout"
+        window.setTimeout(() => {
+          try {
+            void refresh()
+          } catch { /* */ }
+          try {
+            void refreshWalletAuthority()
+          } catch { /* */ }
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "pending-hold-claimed-revalidate" } }))
+          } catch { /* */ }
+          setTick((x) => x + 1)
+        }, 900)
       }
     } catch (e) {
       setClaimFeedback(e instanceof Error ? e.message : "Claim failed")
@@ -1122,7 +1137,35 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     }
   }, [p2pAmount, p2pName, p2pId, p2pNote, p2pMode, balance])
 
-  const lowBalance = balance === 0 && displayPending === 0
+  
+  // Production: pending holds and balances revalidate when the wallet is focused or tab returns.
+  useEffect(() => {
+    const onFocus = () => {
+      try {
+        void refresh()
+      } catch { /* */ }
+    }
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") onFocus()
+    }
+    const onClaimed = () => {
+      try {
+        void refresh()
+      } catch { /* */ }
+    }
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVis)
+    window.addEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
+    window.addEventListener("ghc:wallet-synced", onClaimed as EventListener)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVis)
+      window.removeEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
+      window.removeEventListener("ghc:wallet-synced", onClaimed as EventListener)
+    }
+  }, [refresh])
+
+const lowBalance = balance === 0 && displayPending === 0
   const showAuthorityBanner = offline || refreshFailed
   const socialFunding = socialEconomy?.curation
   const claimableToday = Boolean(socialEconomy?.claim && (socialEconomy.claim as { claimable?: boolean }).claimable)
@@ -1156,19 +1199,6 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
               {claimableToday ? <p className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim is available.</p> : null}
             </div>
             <span className="shrink-0 rounded-full border border-border bg-background px-2 py-1 text-[10px] font-bold uppercase tracking-wide">Ledger-backed</span>
-          </div>
-        </div>
-      ) : null}
-      {socialFunding ? (
-        <div className="mx-3 mt-2 rounded-2xl border border-border bg-card p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold">Social economy</p>
-              <p className="text-[11px] text-muted-foreground">Curation contribution: {formatGhc(Number(socialFunding.suggestedContribution || 0))} from your existing balance.</p>
-            </div>
-            <span className={`text-[11px] font-semibold ${socialFunding.canFundSuggestedContribution ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
-              {socialFunding.canFundSuggestedContribution ? "Ready" : "Needs balance"}
-            </span>
           </div>
         </div>
       ) : null}
@@ -1217,6 +1247,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             onOpenPending={() => setShowPendingSheet(true)}
           />
           <PaymentRecoveryBanner />
+          <div className="mt-3"><PaymentRecoveryPanel /></div>
+          <div className="mt-3"><PiPaymentUtilityStatus /></div>
           <div className="gh-premium-wallet-metrics mt-3 grid grid-cols-3 gap-2" aria-label="GHC wallet state">
             {[
               ["Available", balance, "Spendable"],

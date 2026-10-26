@@ -251,6 +251,10 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
           rows.filter((i) => !(i.fromUserId === meId && i.toUserId === fromUserId))
         )
         ghc.addToast?.("Connected — they can message you now", "success")
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "connection-accept" } }))
+          window.dispatchEvent(new CustomEvent("ghc:connection-changed", { detail: { userId: fromUserId, status: "accepted" } }))
+        } catch { /* */ }
         setTick((n) => n + 1)
       }
     } finally {
@@ -266,6 +270,10 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
       else {
         setServerIncoming((rows) => rows.filter((i) => i.fromUserId !== fromUserId))
         ghc.addToast?.("Request declined", "info")
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "connection-decline" } }))
+          window.dispatchEvent(new CustomEvent("ghc:connection-changed", { detail: { userId: fromUserId, status: "declined" } }))
+        } catch { /* */ }
         setTick((n) => n + 1)
       }
     } finally {

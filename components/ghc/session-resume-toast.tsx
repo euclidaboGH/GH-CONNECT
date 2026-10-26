@@ -19,9 +19,14 @@ export function SessionResumeToast() {
       if (away < 45_000) return
       try {
         window.dispatchEvent(new CustomEvent("ghc:session-resume", { detail: { awayMs: away } }))
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "session-resume" } }))
+        window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "session-resume" } }))
+        void import("@/lib/client/feature-health-probe")
+          .then((m) => m.probeFeatureHealth())
+          .catch(() => {})
         window.dispatchEvent(new CustomEvent("ghc:toast", {
           detail: {
-            message: "Welcome back — refreshing your feed and inbox",
+            message: "Welcome back — refreshing your feed, wallet and inbox",
             type: "info",
           },
         }))

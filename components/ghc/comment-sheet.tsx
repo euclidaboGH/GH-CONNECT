@@ -1,5 +1,7 @@
 "use client"
 
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { X, Send, ChevronDown, ChevronUp, Heart, MessageCircle } from "lucide-react"
@@ -177,10 +179,19 @@ useEffect(() => {
   const handleSubmit = async () => {
     const value = text.trim()
     if ((!value && !pendingMedia.length) || busy || submittingRef.current || !post?.id) return
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      addToast("You are offline — comments need a connection so they reach the author", "info")
+      return
+    }
+    const media = pendingMedia.filter((m) => m.url && !m.url.startsWith("blob:") && !m.url.startsWith("data:"))
+    if (pendingMedia.length && media.length !== pendingMedia.length) {
+      addToast("Remove unfinished media uploads before commenting", "error")
+      return
+    }
     submittingRef.current = true
     setBusy(true)
     try {
-      await addComment(post.id, value, replyToId || undefined, pendingMedia.length ? pendingMedia : undefined)
+      await addComment(post.id, value, replyToId || undefined, media.length ? media : undefined)
       setPendingMedia([])
       try {
         await loadPostComments?.(post.id)
@@ -189,12 +200,20 @@ useEffect(() => {
       }
       setText("")
       setReplyToId(null)
-      // Toast may also come from context — keep one friendly line if needed
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:post-engagement", {
+            detail: { postId: post.id, kind: "comment" },
+          }),
+        )
+        window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "comment" } }))
+      } catch {
+        /* */
+      }
       requestAnimationFrame(() => {
         listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
       })
     } catch {
-      // Keep entered text for retry
       try {
         addToast("Could not post comment — your text was kept", "error")
       } catch {
@@ -632,11 +651,17 @@ useEffect(() => {
                       if (next.length >= 4) break
                       const kind = file.type.startsWith("video/") ? "video" : "image"
                       const up = await uploadDurableMedia(file, { category: file.type.startsWith("video/") ? "videos" : file.type.startsWith("image/") ? "images" : "documents", fileName: file.name })
-                      if (up.ok && up.url) {
+                      if (up.ok) {
+                        const rawUrl = "url" in up && typeof up.url === "string" ? up.url : ""
+                        const facade = toRelativeMediaFacadeUrl(rawUrl) || rawUrl
+                        if (!facade || facade.startsWith("blob:") || facade.startsWith("data:")) {
+                          addToast("Photo must finish uploading to the server before you can comment with it", "error")
+                          continue
+                        }
                         next.push({
                           id: `catt_${Date.now().toString(36)}_${next.length}`,
                           type: kind as "image" | "video",
-                          url: up.url,
+                          url: facade,
                           fileName: file.name,
                         })
                       } else {

@@ -1526,6 +1526,10 @@ export function CommunitiesScreen() {
           }
           setCreateSubmitError(null)
           setShowCreate(false)
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "community-create-fee" } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "community-create-fee" } }))
+          } catch { /* */ }
           // Creator is always a member — mirror join id so My list updates even when
           // identity id drifts between "current-user" and Pi uid before rehydrate.
           setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))

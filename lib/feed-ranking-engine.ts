@@ -488,6 +488,22 @@ export function diversifyRankedFeed(items: RankedPost[], maxConsecutiveAuthor = 
 }
 
 // Main feed ranking function — one content system, mode = filter/rank strategy
+
+function rankSavedFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const saved = new Set((context.savedPostIds || []).map(String))
+  return posts
+    .filter((p) => saved.has(String(p.id)))
+    .map((post) => ({
+      post,
+      score: 100,
+      reason: {
+        reason: "Saved by you",
+        category: "saved",
+        shortLabel: "Saved",
+      } as PostVisibilityReason,
+    }))
+}
+
 export function rankFeed(
   posts: Post[],
   filterType: FeedFilter,
@@ -508,6 +524,8 @@ export function rankFeed(
       return rankTrendingFeed(posts, context)
     case "latest":
       return rankLatestFeed(posts, context)
+    case "saved":
+      return rankSavedFeed(posts, context)
     default:
       return rankForYouFeed(posts, context)
   }

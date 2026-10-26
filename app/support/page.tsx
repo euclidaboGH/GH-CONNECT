@@ -11,6 +11,10 @@ export default function SupportPage() {
   return (
     <LegalPage title="Help & Support">
       <p className="text-muted-foreground">Reach the GreenHaven team through any of these channels.</p>
+      <a href="/portal-setup" className={card}>
+        <p className="text-[15px] font-bold">Pi Developer Portal setup</p>
+        <p className="text-[13px] text-muted-foreground">Privacy URL, domain validation path, checklist for greenhaven.pi</p>
+      </a>
       <a href={`mailto:${SUPPORT_CONTACTS.email}`} className={card}>
         <p className="text-[15px] font-bold">Email Support</p>
         <p className="text-[13px] text-muted-foreground">{SUPPORT_CONTACTS.email}</p>

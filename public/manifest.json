@@ -1,7 +1,7 @@
 {
-  "name": "GreenHaven — Human Connection OS",
+  "name": "GreenHaven",
   "short_name": "GreenHaven",
-  "description": "Social connections, communities, messaging and the GHC utility economy on Pi Network",
+  "description": "Social connections, communities, messaging and marketplace for Pioneers in Pi Browser. Pay listing and community fees with \u03c0. Internal GHC is a reward balance, not a substitute for \u03c0.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

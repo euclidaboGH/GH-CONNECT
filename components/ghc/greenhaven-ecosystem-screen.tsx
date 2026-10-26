@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { PiSupporterBadge, PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
 import { openService } from "@/lib/navigation/navigate"
 import {
   SERVICE_CATEGORIES,
@@ -340,6 +341,7 @@ export function GreenHavenEcosystemScreen({
               <PiSupporterBadge showCtaWhenNone className="shrink-0" />
             </div>
             <div className="mt-2">
+              <PiPlatformCapabilitiesCard className="mb-3" />
               <PiStakingStatusNote />
             </div>
           </div>

@@ -1,8 +1,10 @@
 /**
+ * GET  /api/social/saves — list saved post ids for session user
  * POST /api/social/saves — { postId } toggle save for session user
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
@@ -10,6 +12,58 @@ import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+export async function GET(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!socialDbConfigured()) {
+    const nd = nonDurableReadResponse("Saved posts")
+    return NextResponse.json(nd.body, { status: nd.status, headers: { "Cache-Control": "no-store" } })
+  }
+  const env = readGhcServerEnv()
+  const base = env.supabaseUrl!.replace(/\/$/, "")
+  const limit = Math.min(100, Math.max(1, Number(new URL(request.url).searchParams.get("limit") || 50) || 50))
+  try {
+    const params = new URLSearchParams({
+      select: "post_id,created_at",
+      user_id: `eq.${auth.userId}`,
+      order: "created_at.desc",
+      limit: String(limit),
+    })
+    const res = await fetch(`${base}/rest/v1/gh_saves?${params}`, {
+      headers: {
+        apikey: env.supabaseServiceRoleKey!,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    })
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "")
+      return NextResponse.json(
+        { ok: false, durable: false, error: "SAVES_LIST_FAILED", message: errText.slice(0, 120) },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const rows = (await res.json().catch(() => [])) as Array<{ post_id?: string; created_at?: string }>
+    const postIds = Array.isArray(rows)
+      ? rows.map((r) => String(r.post_id || "").trim()).filter(Boolean)
+      : []
+    return NextResponse.json(
+      { ok: true, durable: true, postIds, count: postIds.length },
+      { headers: { "Cache-Control": "no-store" } },
+    )
+  } catch {
+    return NextResponse.json(
+      { ok: false, durable: false, error: "SAVES_LIST_UNAVAILABLE" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+}
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)

@@ -385,6 +385,27 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:connection-updated", refresh)
     }
   }, [])
+
+  // Content queues (posts/stories/listings/deletes) — single-flight on reconnect.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const run = () => {
+      void import("@/lib/offline/reconnect-flush")
+        .then((m) => m.runReconnectFlush())
+        .catch(() => {})
+    }
+    const onVis = () => {
+      if (document.visibilityState === "visible") run()
+    }
+    window.addEventListener("online", run)
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.removeEventListener("online", run)
+      document.removeEventListener("visibilitychange", onVis)
+    }
+  }, [])
+
+
   // One canonical peer-profile entry point for cards, messages, matches and notifications.
   // The profile data is sourced from the authenticated discovery context; unknown IDs fail visibly.
   useEffect(() => {

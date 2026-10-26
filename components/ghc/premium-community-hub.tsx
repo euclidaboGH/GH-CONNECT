@@ -1092,8 +1092,19 @@ export function PremiumCommunityHub({
                   type="button"
                   disabled={!composeBody.trim()}
                   onClick={() => {
-                    onPost(composeBody.trim(), "text")
+                    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "You are offline — post discussion when reconnected", type: "info" } }))
+                      } catch { /* */ }
+                      return
+                    }
+                    const body = composeBody.trim()
+                    if (!body) return
                     setComposeBody("")
+                    try {
+                      onPost(body, "text")
+                      window.dispatchEvent(new CustomEvent("ghc:post-engagement", { detail: { kind: "community_board", communityId: community.id } }))
+                    } catch { /* */ }
                   }}
                   className="mt-2 min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >

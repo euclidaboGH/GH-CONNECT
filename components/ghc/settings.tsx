@@ -33,6 +33,9 @@ import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
 import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
+import { AccountSecuritySignals } from "@/components/ghc/account-security-signals"
+import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
+import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
@@ -355,11 +358,11 @@ export function SettingsScreen({
   if (section === "about") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">About GreenHaven</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">About GreenHaven</h2>
           <p className="text-[12px] text-muted-foreground">Version {APP_RELEASE_VERSION}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
@@ -377,11 +380,11 @@ export function SettingsScreen({
   if (section === "terms") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Terms of Service</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Terms of Service</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
           <div className="space-y-4 text-[14px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.terms}</div>
@@ -393,11 +396,11 @@ export function SettingsScreen({
   if (section === "privacy-policy") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Privacy Policy</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Privacy Policy</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
           <div className="space-y-4 text-[14px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.privacy}</div>
@@ -409,11 +412,11 @@ export function SettingsScreen({
   if (section === "help") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Help & Contact</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Help & Contact</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-3">
           <a
@@ -452,11 +455,11 @@ export function SettingsScreen({
     const { lockNow, configurePin, idleLockMs, policy, setPolicy } = sessionLock
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Device lock</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Device lock</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -543,6 +546,9 @@ export function SettingsScreen({
 
           {/* Phase 5: server sessions (separate from local App Lock) */}
           <ActiveSessionsPanel />
+          <div className="mt-3"><AccountSecuritySignals /></div>
+          <div className="mt-3"><PiPlatformCapabilitiesCard /></div>
+          <div className="mt-3"><PiListingReadinessCard /></div>
 
           {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
           <PasskeysPanel />
@@ -554,11 +560,11 @@ export function SettingsScreen({
   if (section === "privacy") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Privacy & Safety</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Privacy & Safety</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <div>
@@ -749,7 +755,7 @@ export function SettingsScreen({
     const rel = Array.isArray(settings.relationshipType) ? settings.relationshipType : []
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border px-4 py-3.5">
+        <div className="border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <div className="flex items-center gap-3">
             <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
               <ChevronLeft size={24} />
@@ -916,7 +922,7 @@ export function SettingsScreen({
     ]
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border px-4 py-3.5">
+        <div className="border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <div className="flex items-center gap-3">
             <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
               <ChevronLeft size={24} />
@@ -999,11 +1005,11 @@ export function SettingsScreen({
 
     return (
       <div className="h-full flex flex-col bg-background text-foreground">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Appearance</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Appearance</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-6">
           {/* Mode */}

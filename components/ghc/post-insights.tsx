@@ -17,6 +17,10 @@ export function PostInsightsSheet({
   const i = computePostInsights(post)
   const up = Number((post as { upvotes?: number }).upvotes ?? (post as { voteUp?: number }).voteUp ?? 0)
   const down = Number((post as { downvotes?: number }).downvotes ?? (post as { voteDown?: number }).voteDown ?? 0)
+  const durableFlag = Boolean((post as { durable?: boolean }).durable !== false)
+  const honesty = durableFlag
+    ? "Counts reflect the last values loaded with this post. Refresh the feed for the newest server totals."
+    : "These figures may be incomplete until the post is confirmed on the server."
 
   return (
     <div className="fixed inset-0 z-[75] flex items-end bg-black/40 sm:items-center sm:justify-center" onClick={onClose}>
@@ -63,7 +67,7 @@ export function PostInsightsSheet({
           <span>~{i.engagementRate}% eng.</span>
         </div>
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Insights are private to you · estimates until server analytics is connected
+          Insights are private to you · {honesty}
         </p>
       </div>
     </div>

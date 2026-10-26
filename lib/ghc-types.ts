@@ -514,6 +514,7 @@ export type FeedFilter =
   | "trending"
   | "nearby"
   | "latest"
+  | "saved"
 
 export interface PostReaction {
   type:

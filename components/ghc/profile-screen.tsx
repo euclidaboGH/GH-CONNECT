@@ -33,6 +33,7 @@ import {
 } from "@/lib/domains/greenhaven-id"
 import { shareText } from "@/lib/pi-native"
 import { PiSupporterBadge } from "./pi-supporter-badge"
+import { PiConnectedBadge, PioneerIdentityStrip } from "./pi-connected-badge"
 import { TrustBadge } from "./trust-badge"
 import { getPublicSiteOrigin } from "@/lib/site-url"
 import { uploadDurableMedia, isMediaStorageUnavailable } from "@/lib/media/upload-client"
@@ -607,7 +608,7 @@ export function ProfileScreen({
 
   return (
     <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label="Your GreenHaven profile">
-      <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-4 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
+      <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-md">
         <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
         <div className="flex items-center gap-1">
           <PremiumSurfaceActions />
@@ -717,6 +718,7 @@ export function ProfileScreen({
               {p.verified ? (
                 <BadgeCheck size={18} className="shrink-0 text-sky-600" aria-label="Verified" />
               ) : null}
+              <PiConnectedBadge />
               <PiSupporterBadge showCtaWhenNone />
               <TrustBadge userId={p.id || meId} showWhenNew />
             </h2>
@@ -794,6 +796,7 @@ export function ProfileScreen({
               </div>
             ) : null}
             <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
+            <div className="mt-2"><PioneerIdentityStrip /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
                 type="button"
@@ -1077,7 +1080,7 @@ export function ProfileScreen({
 
       {dashboardPageOpen ? (
       <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
-          <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <button type="button" onClick={() => setDashboardPageOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close dashboard"><X size={20} /></button>
             <div className="min-w-0"><h2 className="text-base font-bold">Dashboard</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
           </header>
@@ -1107,7 +1110,7 @@ export function ProfileScreen({
       {socialList ? (() => {
         const list = socialList === "Posts" ? posts : socialList === "Friends" ? (Array.isArray(ghc.friends) ? ghc.friends : []) : socialList === "Following" ? (Array.isArray(ghc.following) ? ghc.following : []) : (Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers! : [])
         return <div className="fixed inset-0 z-[85] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label={socialList}>
-          <header className="flex items-center gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]"><button type="button" onClick={() => setSocialList(null)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Back to profile"><X size={20} /></button><h2 className="text-base font-bold">{socialList}</h2><span className="ml-auto text-xs text-muted-foreground">{list.length}</span></header>
+          <header className="flex items-center gap-2 border-b border-border px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]"><button type="button" onClick={() => setSocialList(null)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Back to profile"><X size={20} /></button><h2 className="text-base font-bold">{socialList}</h2><span className="ml-auto text-xs text-muted-foreground">{list.length}</span></header>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">{list.length ? list.map((entry, i) => { const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null; const idValue = item?.id ?? item?.userId ?? item?.ownerId ?? item?.targetUserId ?? (typeof entry === "string" ? entry : null); const memberId = idValue == null ? "" : String(idValue).trim(); const label = socialList === "Posts" ? String(item?.content || item?.text || "Post") : String(item?.displayName || item?.name || item?.username || (memberId && !/^[a-f0-9-]{16,}$/i.test(memberId) ? memberId : "GreenHaven member")); const key = memberId || `entry-${i}`; const openEntry = () => { if (socialList === "Posts" && memberId) { window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" })); window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: memberId } })); setSocialList(null); return; } if (memberId) { window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: memberId } })); setSocialList(null); } }; return <button type="button" key={key} onClick={openEntry} disabled={!memberId} className="flex w-full items-center gap-3 border-b border-border/60 px-2 py-3 text-left transition hover:bg-muted/50 disabled:cursor-default"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-sm font-bold text-emerald-700">{label.slice(0,1).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{label}</p>{socialList === "Posts" && item?.createdAt ? <p className="text-xs text-muted-foreground">{new Date(Number(item.createdAt)).toLocaleDateString()}</p> : socialList !== "Posts" && item?.username ? <p className="truncate text-xs text-muted-foreground">@{String(item.username).replace(/^@/, "")}</p> : null}</div>{memberId ? <span className="text-xs font-semibold text-emerald-700">Open</span> : null}</button> }) : <div className="p-8 text-center text-sm text-muted-foreground">{socialList === "Posts" ? "Your posts will appear here." : `No ${socialList.toLowerCase()} to show yet.`}</div>}</div>
         </div>
       })() : null}

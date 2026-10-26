@@ -6,6 +6,7 @@
  */
 
 import { isTestnetProductUnlocked } from "@/lib/server/economy/testnet-unlock"
+import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 
 export type FeeCurrency = "GHC" | "PI"
 
@@ -30,6 +31,7 @@ export function feesRequireSettlement(fee: PilotFeeQuote): boolean {
 }
 
 export function quoteMarketplaceListingFee(preferred?: FeeCurrency): PilotFeeQuote {
+  if (isPiOnlyCommerceEnabled()) preferred = "PI"
   const ghc = readNum("GHC_MARKETPLACE_LISTING_FEE_GHC")
   const pi = readNum("GHC_MARKETPLACE_LISTING_FEE_PI")
   if (preferred === "GHC" && ghc != null) {
@@ -45,6 +47,17 @@ export function quoteMarketplaceListingFee(preferred?: FeeCurrency): PilotFeeQuo
     return { feature: "marketplace_listing", feeAmount: pi, feeCurrency: "PI", ratesApproved: pi > 0, code: "FEE_FIXED_PI", basis: "env_pi" }
   }
   const unlock = isTestnetProductUnlocked()
+  if (isPiOnlyCommerceEnabled()) {
+    const piDefault = readNum("GHC_MARKETPLACE_LISTING_FEE_PI")
+    return {
+      feature: "marketplace_listing",
+      feeAmount: piDefault != null ? piDefault : unlock ? 0.05 : 0.05,
+      feeCurrency: "PI",
+      ratesApproved: unlock || piDefault != null,
+      code: unlock ? "FEE_TESTNET_UNLOCK" : "FEE_PI_ONLY_COMMERCE",
+      basis: "pi_only_commerce",
+    }
+  }
   return {
     feature: "marketplace_listing",
     feeAmount: unlock ? 1 : 5,
@@ -56,6 +69,7 @@ export function quoteMarketplaceListingFee(preferred?: FeeCurrency): PilotFeeQuo
 }
 
 export function quoteCommunityCreateFee(preferred?: FeeCurrency): PilotFeeQuote {
+  if (isPiOnlyCommerceEnabled()) preferred = "PI"
   const ghc = readNum("GHC_COMMUNITY_CREATE_FEE_GHC")
   const pi = readNum("GHC_COMMUNITY_CREATE_FEE_PI")
   if (preferred === "GHC" && ghc != null) {
@@ -72,10 +86,21 @@ export function quoteCommunityCreateFee(preferred?: FeeCurrency): PilotFeeQuote 
   }
   const unlock = isTestnetProductUnlocked()
   if (unlock) {
-    if (preferred === "PI") {
+    if (preferred === "PI" || isPiOnlyCommerceEnabled()) {
       return { feature: "community_create", feeAmount: 0.1, feeCurrency: "PI", ratesApproved: true, code: "FEE_TESTNET_UNLOCK", basis: "testnet_unlock_0_1_pi" }
     }
     return { feature: "community_create", feeAmount: 5, feeCurrency: "GHC", ratesApproved: true, code: "FEE_TESTNET_UNLOCK", basis: "testnet_unlock_5_ghc" }
+  }
+  if (isPiOnlyCommerceEnabled()) {
+    const piDefault = readNum("GHC_COMMUNITY_CREATE_FEE_PI")
+    return {
+      feature: "community_create",
+      feeAmount: piDefault != null ? piDefault : 0.5,
+      feeCurrency: "PI",
+      ratesApproved: piDefault != null,
+      code: "FEE_PI_ONLY_COMMERCE",
+      basis: "pi_only_commerce",
+    }
   }
   return {
     feature: "community_create",

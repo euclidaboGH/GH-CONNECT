@@ -335,6 +335,21 @@ export async function socialToggleStoryReaction(
   })
 }
 
+export async function socialListSaves(limit = 50): Promise<{
+  ok: boolean
+  durable: boolean
+  postIds: string[]
+  error?: string
+}> {
+  const data = await json<{ postIds?: string[]; error?: string }>("/api/social/saves?limit=" + encodeURIComponent(String(limit)))
+  return {
+    ok: data.ok !== false,
+    durable: Boolean(data.durable),
+    postIds: Array.isArray(data.postIds) ? data.postIds.map(String) : [],
+    error: data.error,
+  }
+}
+
 export async function socialToggleSave(
   postId: string
 ): Promise<{ ok: boolean; durable: boolean; saved?: boolean; error?: string }> {

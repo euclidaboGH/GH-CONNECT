@@ -56,6 +56,7 @@ const FEED_FILTERS: {
   { value: "friends", label: "Friends", shortLabel: "Friends", icon: <UsersRound size={14} />, hint: "Your connections" },
   { value: "communities", label: "Communities", shortLabel: "Communities", icon: <Hash size={14} />, hint: "Community activity" },
   { value: "trending", label: "Trending", shortLabel: "Trending", icon: <TrendingUp size={14} />, hint: "What's rising now" },
+  { value: "saved", label: "Saved", shortLabel: "Saved", icon: <Bookmark size={14} />, hint: "Posts you saved" },
 ]
 
 
@@ -95,8 +96,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     addToast, followUser,
     blockUser, reportPost, reportContent, deletePost, following, friends,
     blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
-    muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed, loadPostComments,
-  } = useGHCFeed()
+    muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed, loadPostComments, hidePost } = useGHCFeed()
   const { setTab: shellSetTab } = useGHCShell()
   const { conversations } = useGHCMessaging()
   // Prefer feed setTab; shell keeps chrome in sync when needed
@@ -142,6 +142,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     category: string
   } | null>(null)
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>([])
+  const [hiddenPostIds, setHiddenPostIds] = useState<string[]>([])
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<Error | null>(null)
   const [isOffline, setIsOffline] = useState(false)
@@ -177,6 +178,38 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     const onChange = () => load()
     window.addEventListener("ghc:post-drafts-changed", onChange as EventListener)
     return () => window.removeEventListener("ghc:post-drafts-changed", onChange as EventListener)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const { socialListSaves } = await import("@/lib/social/client")
+        const res = await socialListSaves(80)
+        if (cancelled || !res.ok) return
+        if (res.postIds.length) {
+          setBookmarkedPostIds((prev) => Array.from(new Set([...res.postIds, ...prev])))
+        }
+      } catch {
+        /* device bookmarks still work */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      try {
+        const q = String((e as CustomEvent).detail?.query || "").trim()
+        if (!q) return
+        setIsSearchOpen(true)
+        setSearchQuery(q)
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:feed-search", onSearch as EventListener)
+    return () => window.removeEventListener("ghc:feed-search", onSearch as EventListener)
   }, [])
 
 
@@ -274,7 +307,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         focusMode,
       }
 
-      const realPosts = posts.filter((post) => !seedPostIds.has(post.id) && !(post as any).deletedAt && !(post as any).isArchived)
+      const realPosts = posts.filter((post) => !seedPostIds.has(post.id) && !(post as any).deletedAt && !(post as any).isArchived && !hiddenPostIds.includes(post.id))
       // Production: empty feed when no real posts (honest empty state). Demo: optional seed filler.
       const feedPosts =
         realPosts.length > 0
@@ -297,7 +330,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       setRankedPosts(posts.map((post) => ({ post, score: 0, reason: { reason: "Feed unavailable", category: "error" } })))
       setFeedBootstrapped(true)
     }
-  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode])
+  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode, hiddenPostIds])
 
   // Pull-to-refresh handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -337,6 +370,28 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       window.removeEventListener("offline", sync)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    let last = 0
+    const soft = () => {
+      const now = Date.now()
+      if (now - last < 15_000) return
+      last = now
+      try {
+        void refreshFeed?.()
+      } catch { /* */ }
+    }
+    const onVis = () => {
+      if (document.visibilityState === "visible") soft()
+    }
+    window.addEventListener("focus", soft)
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.removeEventListener("focus", soft)
+      document.removeEventListener("visibilitychange", onVis)
+    }
+  }, [refreshFeed])
 
   const handleRefresh = async () => {
     try {
@@ -419,6 +474,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         if (savePost) {
           await savePost(postId)
           if (shouldSendAttention(postId, "save")) void socialRecordAttention(postId, "save")
+          try {
+            window.dispatchEvent(
+              new CustomEvent("ghc:post-engagement", { detail: { postId, kind: "save" } }),
+            )
+          } catch { /* */ }
         }
       }
     } catch (error) {
@@ -616,6 +676,55 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         </div>
 
         {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">Offline — showing available feed data. New actions may require a connection.</div> : null}
+
+        {draftPosts.length > 0 ? (
+          <div className="mx-3 mt-2 rounded-xl border border-border/60 bg-card px-3 py-2" aria-label="Unpublished drafts">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold text-foreground">Drafts on this device</p>
+              <p className="text-[10px] text-muted-foreground">{draftPosts.length} saved</p>
+            </div>
+            <ul className="space-y-1.5">
+              {draftPosts.slice(0, 4).map((d) => (
+                <li key={d.id} className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 rounded-lg bg-muted/50 px-2.5 py-2 text-left transition hover:bg-muted"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent("ghc:open-compose", {
+                            detail: { mode: "post", draftId: d.id, text: d.content },
+                          }),
+                        )
+                      } catch { /* */ }
+                      onCompose?.()
+                    }}
+                  >
+                    <p className="line-clamp-2 text-[12px] font-medium text-foreground">
+                      {d.content?.trim() || (d.images?.length ? "Media draft" : "Empty draft")}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Edited {new Date(d.lastEditedAt || d.createdAt).toLocaleString()}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+                    aria-label="Delete draft"
+                    onClick={() => {
+                      try {
+                        removePostDraft(d.id)
+                        setDraftPosts(listPostDrafts())
+                      } catch { /* */ }
+                    }}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {feedError ? <div className="mx-3 mt-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">{feedError.message}</div> : null}
 
         <div
@@ -660,10 +769,49 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       onShare={(postId) => setSharePostId(postId)}
                       onSave={handleSave}
                       onNotInterested={handleNotInterested}
+                      onReport={(postId, reason) => { void reportPost?.(postId, reason) }}
+                      onBlock={(postId) => {
+                        const authorId = String(post.authorId || "")
+                        if (authorId) void blockUser?.(authorId)
+                      }}
+                      onMute={(postId) => {
+                        const authorId = String(post.authorId || "")
+                        if (authorId) void muteUser?.(authorId)
+                      }}
+                      onDelete={(postId) => { void deletePost?.(postId) }}
+                      onArchive={(postId) => { void archivePost?.(postId) }}
+                      onHide={(postId) => { setHiddenPostIds((prev) => prev.includes(postId) ? prev : [...prev, postId]); void hidePost?.(postId) }}
+                      onCopyLink={(postId) => {
+                        try {
+                          const url = `${typeof window !== "undefined" ? window.location.origin : ""}/?post=${encodeURIComponent(postId)}`
+                          void navigator.clipboard?.writeText(url)
+                          addToast?.("Link copied", "success")
+                        } catch {
+                          addToast?.("Could not copy link", "error")
+                        }
+                      }}
+                      onEdit={(postId, content, media) => {
+                        void editPost?.(postId, content, media)
+                      }}
+                      onInsights={(postId) => {
+                        const p =
+                          posts.find((x) => x.id === postId) ||
+                          rankedPosts.find((item) => item.post.id === postId)?.post
+                        if (p) setInsightsPost(p)
+                      }}
                       onShowVisibilityReason={handleShowVisibilityReason}
                       visibilityReason={reason}
                       onOpenPost={openPostDetail}
-                      onOpenProfile={() => { onProfile?.(); setTab("profile") }}
+                      onOpenProfile={(userId) => {
+                        if (userId) {
+                          try {
+                            window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId } }))
+                          } catch { /* */ }
+                        } else {
+                          onProfile?.()
+                          setTab("profile")
+                        }
+                      }}
                     />
                   </PostErrorBoundary>
                 </div>
@@ -704,7 +852,24 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           open
           onClose={() => setSharePostId(null)}
           shareContext={{ currentUserId: profile?.id || IdentityService.getCurrentUserId() || "", blockedUsers: blockedUsers || [], posts: posts || [], conversations: conversations || [] }}
-          onComplete={(result: ShareResult) => { applyShareResult(result); setSharePostId(null) }}
+          onComplete={(result: ShareResult) => {
+            applyShareResult(result)
+            const pid = sharePostId
+            setSharePostId(null)
+            if (pid) {
+              void import("@/lib/social/client").then(({ socialSharePost, socialRecordAttention }) => {
+                void socialSharePost(pid)
+                void socialRecordAttention(pid, "share")
+              })
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:post-engagement", {
+                    detail: { postId: pid, kind: "share" },
+                  }),
+                )
+              } catch { /* */ }
+            }
+          }}
           onFindPeople={() => setTab("discover")}
           onDiscoverCommunities={() => setTab("communities")}
         />

@@ -1,3 +1,4 @@
+import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 import { isTestnetProductUnlocked } from "@/lib/server/economy/testnet-unlock"
 
 /**
@@ -55,6 +56,9 @@ function readNonNegativeNumber(raw: string | undefined): number | null {
  * Client-supplied listingFee / feeAmount must be ignored by callers.
  */
 export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingFeeResult {
+  if (isPiOnlyCommerceEnabled()) {
+    input = { ...input, preferredFeeCurrency: "PI" }
+  }
   const sellerPrice = Number(input.sellerPrice)
   if (!Number.isFinite(sellerPrice) || sellerPrice < 0) {
     return {

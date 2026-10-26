@@ -440,6 +440,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       if (data.recovered) {
         addToast("Membership recovered from your paid purchase", "success")
         emitMembershipActivated(String(data.entitlement?.tier || "vip"), "pi")
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "membership-recover" } }))
+          window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "membership-recover" } }))
+        } catch { /* */ }
       } else {
         addToast("No orphaned purchase found — status is already authoritative", "info")
       }
@@ -605,7 +609,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-3 py-3 backdrop-blur-md">
+      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}

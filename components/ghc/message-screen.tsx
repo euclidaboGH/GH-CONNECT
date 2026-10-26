@@ -75,6 +75,7 @@ export function MessageScreen() {
   const [filter, setFilter] = useState<InboxFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  const lastScreenSendRef = useRef<{ key: string; at: number }>({ key: "", at: 0 })
   const [sending, setSending] = useState(false)
   const [windowSize, setWindowSize] = useState(MESSAGE_WINDOW)
   const [isOffline, setIsOffline] = useState(false)
@@ -449,6 +450,12 @@ export function MessageScreen() {
   const handleSend = useCallback(async () => {
     const text = draft.trim()
     if (!text || !selectedId || sending) return
+    const dedupeKey = `${selectedId}:${text}`
+    const now = Date.now()
+    if (lastScreenSendRef.current.key === dedupeKey && now - lastScreenSendRef.current.at < 1500) {
+      return
+    }
+    lastScreenSendRef.current = { key: dedupeKey, at: now }
     setSending(true)
     setDraft("")
     stopTyping()
