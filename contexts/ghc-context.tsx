@@ -472,6 +472,8 @@ const GHCFeedContext = createContext<{
   applyShareResult: GHCContextType["applyShareResult"]
   savePost: GHCContextType["savePost"]
   unsavePost: GHCContextType["unsavePost"]
+  hidePost: GHCContextType["hidePost"]
+  markNotInterested: GHCContextType["markNotInterested"]
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
@@ -2754,6 +2756,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       if (durableStatus === "ok") {
         addToast("Post published", "success")
         try {
+          const { reportPioneerActivity } = await import("@/lib/engagement/pioneer-activity-client")
+          reportPioneerActivity("post_created")
+        } catch { /* */ }
+        try {
           const { reportMissionProgress } = await import("@/lib/missions/progress")
           const m = await reportMissionProgress("first_post", { postId: publishedPost.id })
           if (m.ok && m.grantedGhc && m.grantedGhc > 0) {
@@ -4128,12 +4134,28 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [addToast, state.posts])
 
   const hidePost = useCallback(async (postId: string) => {
+    const id = String(postId || "").trim()
+    if (!id) return
+    // Remove from active feed immediately; hideCount retained on archive paths if present.
     setState((s) => ({
       ...s,
-      posts: s.posts.map((post) =>
-        post.id === postId ? { ...post, hideCount: (post.hideCount || 0) + 1 } : post
-      ),
+      posts: s.posts
+        .filter((post) => post.id !== id)
+        .map((post) =>
+          post.id === id ? { ...post, hideCount: (post.hideCount || 0) + 1 } : post
+        ),
     }))
+    try {
+      if (typeof window !== "undefined") {
+        const key = "ghc.hidden-post-ids"
+        const prev = JSON.parse(window.localStorage.getItem(key) || "[]")
+        const next = Array.isArray(prev) ? prev : []
+        if (!next.includes(id)) {
+          next.push(id)
+          window.localStorage.setItem(key, JSON.stringify(next.slice(-200)))
+        }
+      }
+    } catch { /* */ }
     addToast("Post hidden", "success")
   }, [addToast])
 
@@ -6428,6 +6450,10 @@ const dismissMatchCelebration = useCallback(() => {
             }
             if (String(durable.status || "") === "active") {
               addToast("Joined community", "success")
+              try {
+                const { reportPioneerActivity } = await import("@/lib/engagement/pioneer-activity-client")
+                reportPioneerActivity("community_joined")
+              } catch { /* */ }
               return true
             }
           } catch {
@@ -8385,6 +8411,8 @@ const dismissMatchCelebration = useCallback(() => {
       applyShareResult,
       savePost,
       unsavePost,
+      hidePost,
+      markNotInterested,
       reportPost,
       reportContent,
       publishStory,
@@ -8434,6 +8462,8 @@ const dismissMatchCelebration = useCallback(() => {
       applyShareResult,
       savePost,
       unsavePost,
+      hidePost,
+      markNotInterested,
       reportPost,
       reportContent,
       publishStory,
