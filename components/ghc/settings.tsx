@@ -37,6 +37,7 @@ import { AccountSecuritySignals } from "@/components/ghc/account-security-signal
 import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
 import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
 import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
+import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
@@ -551,6 +552,7 @@ export function SettingsScreen({
           <div className="mt-3"><PiPlatformCapabilitiesCard /></div>
           <div className="mt-3"><PiListingReadinessCard /></div>
           <div className="mt-3"><CompliancePostureCard /></div>
+          <div className="mt-3"><ClaimReadinessCard /></div>
 
           {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
           <PasskeysPanel />

@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
   }
   if (!socialDbConfigured()) {
-    const nd = nonDurableReadResponse("Saved posts")
+    const nd = nonDurableReadResponse("Saved posts", { postIds: [], count: 0 })
     return NextResponse.json(nd.body, { status: nd.status, headers: { "Cache-Control": "no-store" } })
   }
   const env = readGhcServerEnv()
