@@ -121,7 +121,7 @@ export async function downloadMedia(
     document.body.appendChild(a)
     a.click()
     a.remove()
-    if (!opts?.silent) toast("Opened media — long-press to save if download did not start", "info")
+    if (!opts?.silent) toast("Save from the system share sheet, or long-press the image", "info")
     return { ok: true, filename, via: "open" }
   } catch {
     if (!opts?.silent) toast("Download is not available in this browser", "error")

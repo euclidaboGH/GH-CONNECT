@@ -18,7 +18,8 @@ export function extractMediaFacadeId(src: string): string | null {
       : s.startsWith("/")
         ? s
         : ""
-    const m = path.match(/^\/api\/media\/(media_[A-Za-z0-9_]+)\/content\/?$/i)
+    // Accept media_* and other opaque ids used by older uploads
+    const m = path.match(/^\/api\/media\/([A-Za-z0-9_-]+)\/content\/?$/i)
     return m?.[1] ?? null
   } catch {
     return null
@@ -78,7 +79,8 @@ export async function resolveDisplayMediaUrl(src: string | null | undefined): Pr
         expiresIn?: number
       } | null
       if (!res.ok || !data?.ok || typeof data.url !== "string" || !data.url.startsWith("https://")) {
-        return null
+        // CONTENT_FACADE_FALLBACK — same-origin content route may still stream for authorized sessions
+        return `/api/media/${encodeURIComponent(mediaId)}/content`
       }
       const ttlMs = Math.max(30_000, Math.min(280_000, (Number(data.expiresIn) || 300) * 1000 - 20_000))
       SIGNED_CACHE.set(mediaId, { url: data.url, expiresAt: Date.now() + ttlMs })

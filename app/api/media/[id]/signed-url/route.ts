@@ -128,19 +128,105 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const objectPath = storagePath.split("/").map((part) => encodeURIComponent(part)).join("/")
     const signed = await fetch(`${base}/storage/v1/object/sign/${bucket}/${objectPath}`, {
       method: "POST",
-      headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, "Content-Type": "application/json" },
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ expiresIn: 300 }),
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
     })
-    if (!signed.ok) return reply({ ok: false, error: "MEDIA_SIGNING_UNAVAILABLE" }, 503)
-    const payload = await signed.json() as { signedURL?: string; signedUrl?: string }
-    const relative = payload.signedURL || payload.signedUrl
-    if (typeof relative !== "string" || !relative.startsWith("/storage/v1/object/sign/")) {
-      return reply({ ok: false, error: "MEDIA_SIGNING_INVALID_RESPONSE" }, 502)
+    const rawBody = await signed.text()
+    let payload: {
+      signedURL?: string
+      signedUrl?: string
+      url?: string
+      error?: string | { message?: string }
+      message?: string
+      statusCode?: string | number
+    } = {}
+    try {
+      payload = rawBody ? JSON.parse(rawBody) as typeof payload : {}
+    } catch {
+      payload = {}
     }
-    return reply({ ok: true, mediaId: asset.mediaId, url: `${base}${relative}`, expiresIn: 300, mime: asset.mime })
+    if (!signed.ok) {
+      const detail =
+        (typeof payload.message === "string" && payload.message) ||
+        (typeof payload.error === "string" && payload.error) ||
+        (payload.error && typeof payload.error === "object" && typeof payload.error.message === "string"
+          ? payload.error.message
+          : null) ||
+        `HTTP_${signed.status}`
+      // Surface a stable code plus non-secret detail so operators can see Object not found / JWT etc.
+      return reply(
+        { ok: false, error: "MEDIA_SIGNING_UNAVAILABLE", detail: String(detail).slice(0, 180), status: signed.status },
+        503,
+      )
+    }
+
+    // Supabase Storage has returned several shapes across versions:
+    // - { signedURL: "/storage/v1/object/sign/..." }
+    // - { signedURL: "/object/sign/..." }
+    // - { signedUrl: "https://xxx.supabase.co/storage/v1/object/sign/..." }
+    // - { url: "..." } (rare / client-shaped)
+    const candidate =
+      (typeof payload.signedURL === "string" && payload.signedURL) ||
+      (typeof payload.signedUrl === "string" && payload.signedUrl) ||
+      (typeof payload.url === "string" && payload.url) ||
+      ""
+
+    const trustedOrigin = new URL(base).origin
+    let absolute: string | null = null
+    if (candidate.startsWith("https://")) {
+      try {
+        const u = new URL(candidate)
+        if (u.origin === trustedOrigin && u.pathname.includes("/object/sign/")) {
+          absolute = u.toString()
+        }
+      } catch {
+        absolute = null
+      }
+    } else if (candidate.startsWith("/storage/v1/object/sign/")) {
+      absolute = `${base}${candidate}`
+    } else if (candidate.startsWith("/object/sign/")) {
+      absolute = `${base}/storage/v1${candidate}`
+    } else if (candidate.startsWith("storage/v1/object/sign/")) {
+      absolute = `${base}/${candidate}`
+    } else if (candidate.startsWith("object/sign/")) {
+      absolute = `${base}/storage/v1/${candidate}`
+    }
+
+    if (!absolute) {
+      return reply(
+        {
+          ok: false,
+          error: "MEDIA_SIGNING_INVALID_RESPONSE",
+          detail: "Unexpected signed-url shape from storage",
+          keys: Object.keys(payload).slice(0, 8),
+        },
+        502,
+      )
+    }
+
+    try {
+      const check = new URL(absolute)
+      if (check.protocol !== "https:" || check.origin !== trustedOrigin || !check.pathname.includes("/object/sign/")) {
+        return reply({ ok: false, error: "MEDIA_SIGNING_INVALID_RESPONSE", detail: "Untrusted signed origin" }, 502)
+      }
+    } catch {
+      return reply({ ok: false, error: "MEDIA_SIGNING_INVALID_RESPONSE", detail: "Malformed signed url" }, 502)
+    }
+
+    return reply({
+      ok: true,
+      mediaId: asset.mediaId,
+      url: absolute,
+      expiresIn: 300,
+      mime: asset.mime,
+    })
   } catch {
-    return reply({ ok: false, error: "MEDIA_SIGNING_UNAVAILABLE" }, 503)
+    return reply({ ok: false, error: "MEDIA_SIGNING_UNAVAILABLE", detail: "SIGN_EXCEPTION" }, 503)
   }
 }

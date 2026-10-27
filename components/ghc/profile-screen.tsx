@@ -540,7 +540,7 @@ export function ProfileScreen({
             if (kind === "photo") {
               const previous = photos[0]
               const oldHistory = Array.isArray(p.profilePhotoHistory) ? p.profilePhotoHistory : []
-              const history = previous && /^https:\/\//i.test(previous) && previous !== imageUrl
+              const history = previous && previous !== imageUrl && (previous.startsWith("http") || previous.includes("/api/media/"))
                 ? [{ url: previous, changedAt, caption: "Previous profile photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
                 : oldHistory.slice(0, 24)
               const next = [imageUrl, ...photos.filter((x) => x !== imageUrl)].slice(0, 6)
@@ -560,7 +560,7 @@ export function ProfileScreen({
             } else {
               const previous = cover
               const oldHistory = Array.isArray(p.coverPhotoHistory) ? p.coverPhotoHistory : []
-              const history = previous && /^https:\/\//i.test(previous) && previous !== imageUrl
+              const history = previous && previous !== imageUrl && (previous.startsWith("http") || previous.includes("/api/media/"))
                 ? [{ url: previous, changedAt, caption: "Previous cover photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
                 : oldHistory.slice(0, 24)
               await ghc.updateProfile?.({

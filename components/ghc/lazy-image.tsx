@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useState } from "react"
 import { ImageSkeleton } from "./skeleton-loaders"
-import { isMediaFacadeUrl, resolveDisplayMediaUrl } from "@/lib/media/resolve-display-url"
+import { isMediaFacadeUrl, resolveDisplayMediaUrl, clearDisplayMediaCache, extractMediaFacadeId } from "@/lib/media/resolve-display-url"
 
 interface LazyImageProps {
   src?: string | null
@@ -91,7 +91,9 @@ function LazyImageInner({
 
   const handleImgError = () => {
     if (retryToken < 2 && rawSrc && isMediaFacadeUrl(rawSrc)) {
-      setRetryToken((t) => t + 1)
+      const id = extractMediaFacadeId(rawSrc)
+      if (id) clearDisplayMediaCache(id)
+      setRetryToken((n) => n + 1)
       setStatus("loading")
       setDisplaySrc(null)
       return

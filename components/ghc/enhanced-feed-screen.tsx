@@ -773,6 +773,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           onTouchEnd={() => void handleTouchEnd()}
         >
           {pullDistance > 0 ? <div className="px-4 py-1 text-center text-[10px] text-muted-foreground">{isRefreshing ? "Refreshing…" : pullDistance > 80 ? "Release to refresh" : "Pull to refresh"}</div> : null}
+          <div className="px-2 pt-2">
+            <ProfileStorySection scope="feed" />
+          </div>
           {!feedBootstrapped ? (
             <FeedSkeleton />
           ) : displayPosts.length === 0 ? (

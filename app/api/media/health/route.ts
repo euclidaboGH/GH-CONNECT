@@ -61,6 +61,49 @@ export async function GET(request: Request) {
     }
   }
 
+
+  // Optional operator probe: /api/media/health?probeMediaId=media_xxx
+  // Signs one known asset so we surface real storage sign errors (not just bucket list).
+  let signProbe: {
+    attempted: boolean
+    ok: boolean
+    error?: string
+    detail?: string
+    status?: number
+  } = { attempted: false, ok: false }
+  try {
+    const probeId = new URL(request.url).searchParams.get("probeMediaId")?.trim() || ""
+    if (probeId && /^media_[a-z0-9]+_[a-z0-9]+$/i.test(probeId) && auth && hasUrl && hasKey) {
+      signProbe.attempted = true
+      const origin = new URL(request.url).origin
+      const res = await fetch(`${origin}/api/media/${encodeURIComponent(probeId)}/signed-url`, {
+        method: "GET",
+        headers: {
+          ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie")! } : {}),
+          ...(request.headers.get("authorization") ? { authorization: request.headers.get("authorization")! } : {}),
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        error?: string
+        detail?: string
+        status?: number
+        url?: string
+      } | null
+      signProbe.status = res.status
+      if (res.ok && body?.ok === true && typeof body.url === "string") {
+        signProbe.ok = true
+      } else {
+        signProbe.error = body?.error || `HTTP_${res.status}`
+        signProbe.detail = typeof body?.detail === "string" ? body.detail.slice(0, 180) : undefined
+      }
+    }
+  } catch {
+    signProbe = { attempted: true, ok: false, error: "PROBE_EXCEPTION" }
+  }
+
   const ready =
     Boolean(auth) && hasUrl && hasKey && bucketReachable === true && bucketEnsured !== false
 
@@ -78,6 +121,7 @@ export async function GET(request: Request) {
       /** Operator expects private=true for GreenHaven. Public buckets still work via signed facade. */
       bucketPublic,
       fileSizeLimitBytes: fileSizeLimit,
+      signProbe,
       privacy: "private-bucket-via-authorized-facade",
       folders: ["avatars", "images", "videos", "audio", "documents"],
       pathPattern: "{ownerUserId}/{folder}/{uuid}.{ext}",
