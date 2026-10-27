@@ -1056,32 +1056,36 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               <AudienceIcon size={16} />
             </button>
           )}
-          {mode === "post" && (
-            <button
-              type="button"
-              onClick={() => {
-                close()
-                window.dispatchEvent(new CustomEvent("ghc:open-poll"))
-              }}
-              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300"
-              aria-label="Create a poll"
-              title="Create a poll"
-            >
-              <BarChart3 size={16} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                close()
-                window.dispatchEvent(new CustomEvent("ghc:open-challenge"))
-              }}
-              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-orange-50 px-3 text-xs font-bold text-orange-700 transition hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300"
-              aria-label="Create a challenge"
-              title="Create a challenge"
-            >
-              <span className="text-sm" aria-hidden>🎯</span>
-            </button>
-          )}
+          {mode === "post" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  close()
+                  window.dispatchEvent(new CustomEvent("ghc:open-poll"))
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300"
+                aria-label="Create a poll"
+                title="Create a poll"
+              >
+                <BarChart3 size={16} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  close()
+                  window.dispatchEvent(new CustomEvent("ghc:open-challenge"))
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-orange-50 px-3 text-xs font-bold text-orange-700 transition hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300"
+                aria-label="Create a challenge"
+                title="Create a challenge"
+              >
+                <span className="text-sm" aria-hidden>
+                  🎯
+                </span>
+              </button>
+            </>
+          ) : null}
         </div>
         {mode === "post" && selectedDocName ? (
           <p className="mt-1.5 flex items-center justify-between rounded-lg bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800">
