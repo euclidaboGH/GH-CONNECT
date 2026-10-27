@@ -840,10 +840,19 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       visibilityReason={reason}
                       onOpenPost={openPostDetail}
                       onOpenMedia={({ urls, index, caption, kind }) => {
-                        const items = (urls || []).map((u) => ({
-                          url: u,
-                          kind: (kind === "video" && urls.length === 1 ? "video" : "image") as "image" | "video",
-                        }))
+                        const items = (urls || []).map((u) => {
+                          if (typeof u === "string") {
+                            return {
+                              url: u,
+                              kind: (kind === "video" && (urls?.length ?? 0) === 1 ? "video" : "image") as "image" | "video",
+                            }
+                          }
+                          return {
+                            url: u.url,
+                            kind: (u.kind || (kind === "video" && (urls?.length ?? 0) === 1 ? "video" : "image")) as "image" | "video",
+                            alt: u.alt,
+                          }
+                        })
                         setLightbox({
                           urls: items,
                           index: index ?? 0,

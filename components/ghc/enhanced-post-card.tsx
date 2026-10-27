@@ -80,7 +80,12 @@ interface EnhancedPostCardProps {
   onInsights?: (postId: string) => void
   onOpenPost?: (postId: string) => void
   /** Open clean full-screen media viewer (preferred over opening the post sheet). */
-  onOpenMedia?: (payload: { urls: string[]; index?: number; caption?: string; kind?: "image" | "video" }) => void
+  onOpenMedia?: (payload: {
+    urls: Array<string | { url: string; kind?: "image" | "video"; alt?: string }>
+    index?: number
+    caption?: string
+    kind?: "image" | "video"
+  }) => void
   onShowVisibilityReason: (postId: string) => void
   visibilityReason?: { reason: string; category: string }
   onOpenProfile?: (userId: string) => void
@@ -403,7 +408,7 @@ function EnhancedPostCardInner({
     const v = typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null
     if (onOpenMedia && v) {
       onOpenMedia({
-        urls: [v],
+        urls: [{ url: v, kind: "video" as const }],
         index: 0,
         caption: displayAuthor ? `Video · ${displayAuthor}` : "Video",
         kind: "video",
