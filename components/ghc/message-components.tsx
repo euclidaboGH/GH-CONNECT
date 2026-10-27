@@ -363,7 +363,7 @@ export function MessageInput({
           title="Add emoji"
           aria-label="Add emoji"
           disabled={disabled}
-      aria-busy={disabled || undefined}
+          aria-busy={disabled || undefined}
         >
           <Smile size={20} aria-hidden />
         </button>
@@ -371,7 +371,9 @@ export function MessageInput({
         {/* Message input */}
         <textarea
           value={messageText}
-          onChange={(e) = onFocus={() => emitTypingUi(true)} onBlur={() => emitTypingUi(false)}> onMessageChange(e.target.value)}
+          onChange={(e) => onMessageChange(e.target.value)}
+          onFocus={() => emitTypingUi(true)}
+          onBlur={() => emitTypingUi(false)}
           onKeyDown={handleKeyPress}
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}
