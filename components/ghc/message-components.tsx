@@ -365,6 +365,12 @@ export function MessageInput({
         <textarea
           value={messageText}
           onChange={(e) => onMessageChange(e.target.value)}
+          onFocus={() => {
+            try { window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true, reason: "message-composer" } })) } catch { /* non-fatal */ }
+          }}
+          onBlur={() => {
+            try { window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false, reason: "message-composer" } })) } catch { /* non-fatal */ }
+          }}
           onKeyDown={handleKeyPress}
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}

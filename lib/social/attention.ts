@@ -28,14 +28,14 @@ export function isAttentionEventType(v: unknown): v is AttentionEventType {
 
 /**
  * Dedup window keys (server-computed; client window ignored for authority).
- * - view: UTC calendar day (simple, stable)
- * - qualified_view: UTC calendar day
+ * - view: lifetime once per authenticated user per post
+ * - qualified_view: lifetime once per authenticated user per post
  * - complete: lifetime once per post
  * - save / share: UTC calendar day
  */
 export function attentionWindowKey(eventType: AttentionEventType, now = new Date()): string {
   const day = now.toISOString().slice(0, 10) // YYYY-MM-DD UTC
-  if (eventType === "complete") return "once"
+  if (eventType === "complete" || eventType === "view" || eventType === "qualified_view") return "once"
   return day
 }
 

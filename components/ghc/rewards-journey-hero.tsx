@@ -127,13 +127,7 @@ export function RewardsJourneyHero({
     return () => window.removeEventListener("ghc:daily-reward-claimed", onClaimed as EventListener)
   }, [])
 
-  const openDailyClaim = () => {
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:open-daily-claim"))
-    } catch {
-      /* The global floating claim control remains available. */
-    }
-  }
+
 
   const opportunities = [
     {
@@ -141,7 +135,7 @@ export function RewardsJourneyHero({
       label: "Daily login reward",
       ghc: daily.todayGhc || DAILY_STREAK_GHC[daily.displayCycleDay] || 10,
       done: !daily.canClaimToday,
-      action: daily.canClaimToday ? openDailyClaim : undefined,
+      action: undefined,
       cta: daily.canClaimToday ? "Open claim" : "Done",
     },
     {
@@ -329,15 +323,9 @@ export function RewardsJourneyHero({
             })}
           </div>
           {daily.canClaimToday ? (
-            <button
-              type="button"
-              onClick={openDailyClaim}
-              disabled={isOffline}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] py-3.5 text-[13px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
-            >
-              <GhcCoinIcon size={18} />
-              {isOffline ? "Offline — reconnect to claim" : `Open daily claim · +${formatGhc(daily.todayGhc)}`}
-            </button>
+            <p className="mt-4 rounded-2xl border border-border/60 bg-muted/30 px-4 py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+              {isOffline ? "Reconnect to claim your daily GHC." : "Tap the floating lightning coin to open your daily claim."}
+            </p>
           ) : (
             <div className="mt-4 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3.5 text-center">
               <p className="text-[13px] font-bold text-foreground">Claimed today</p>
