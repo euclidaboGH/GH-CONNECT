@@ -166,8 +166,8 @@ export function DailyClaimPrompt() {
       try {
         notifyRewardClaimed({
           title: "Daily GHC claimed",
-          body: amountLabel,
-          amount: res.serverAmount,
+          message: `Daily reward claimed: ${amountLabel}`,
+          amountLabel,
         })
       } catch {
         /* */
