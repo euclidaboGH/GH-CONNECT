@@ -17,7 +17,7 @@ import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
 import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash } from "lucide-react"
-import { MOBILE_PAGE_SIZES } from "@/lib/mobile-performance"
+import { MOBILE_PAGE_SIZES, prefetchMediaFacades } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { GlobalSearchModal } from "./global-search"
 import { EmptyState } from "./empty-state"
@@ -77,6 +77,7 @@ function FeedSkeleton() {
     window.addEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
     return () => window.removeEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
   }, [])
+
 
   return (
     <div className="space-y-4 px-3 py-3" role="status" aria-busy="true" aria-label="Loading feed">
@@ -147,6 +148,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<string[]>([])
   const [draftPosts, setDraftPosts] = useState<PostDraft[]>([])
   const [rankedPosts, setRankedPosts] = useState<RankedPost[]>([])
+
+  // Prefetch signed URLs for visible post media (idle, best-effort)
+  useEffect(() => {
+    const list = rankedPosts.slice(0, 8).flatMap((item) => {
+      const post = item.post
+      const imgs = Array.isArray(post?.images) ? post.images : []
+      const vid = typeof post?.video === "string" ? [post.video] : []
+      return [...imgs, ...vid].filter((u): u is string => typeof u === "string")
+    })
+    if (list.length) prefetchMediaFacades(list, 6)
+  }, [rankedPosts])
   const [visibilityReasonPostId, setVisibilityReasonPostId] = useState<string | null>(null)
   const [selectedVisibilityReason, setSelectedVisibilityReason] = useState<{
     reason: string
@@ -171,7 +183,12 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [commentingPostId, setCommentingPostId] = useState<string | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [saveCollectionPostId, setSaveCollectionPostId] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; caption?: string } | null>(null)
+  const [lightbox, setLightbox] = useState<{
+    url?: string
+    urls?: { url: string; kind?: "image" | "video"; alt?: string }[]
+    index?: number
+    caption?: string
+  } | null>(null)
   const [insightsPost, setInsightsPost] = useState<Post | null>(null)
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } = useScrollHeader({
     threshold: 40,
@@ -778,7 +795,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     />
                   ) : null}
                   <PostErrorBoundary>
-                    <div className="gh-feed-post-slot"><EnhancedPostCard
+                    <div className="gh-feed-post-slot cv-auto"><EnhancedPostCard
                       post={post}
                       isLiked={likedPosts.includes(post.id)}
                       isSaved={bookmarkedPostIds.includes(post.id)}
@@ -822,6 +839,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       onShowVisibilityReason={handleShowVisibilityReason}
                       visibilityReason={reason}
                       onOpenPost={openPostDetail}
+                      onOpenMedia={({ urls, index, caption, kind }) => {
+                        const items = (urls || []).map((u) => ({
+                          url: u,
+                          kind: (kind === "video" && urls.length === 1 ? "video" : "image") as "image" | "video",
+                        }))
+                        setLightbox({
+                          urls: items,
+                          index: index ?? 0,
+                          caption,
+                        })
+                      }}
                       onOpenProfile={(userId) => {
                         if (userId) {
                           try {
@@ -854,7 +882,14 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         onOpenMedia={(url, caption) => setLightbox({ url, caption })}
         loadComments={loadPostComments}
       />
-      <MediaLightbox open={Boolean(lightbox)} url={lightbox?.url || null} caption={lightbox?.caption} onClose={() => setLightbox(null)} />
+      <MediaLightbox
+        open={Boolean(lightbox)}
+        url={lightbox?.url || null}
+        urls={lightbox?.urls}
+        index={lightbox?.index ?? 0}
+        caption={lightbox?.caption}
+        onClose={() => setLightbox(null)}
+      />
       <SaveToCollectionSheet
         open={Boolean(saveCollectionPostId)}
         postId={saveCollectionPostId}

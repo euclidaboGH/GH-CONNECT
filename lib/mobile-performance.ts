@@ -226,3 +226,28 @@ export function preferReducedData(): boolean {
   if (conn?.effectiveType === "2g" || conn?.effectiveType === "slow-2g") return true
   return false
 }
+
+
+/** Schedule non-critical work when the browser is idle (or after timeout). */
+export function scheduleIdle(fn: () => void, timeoutMs = 1200): void {
+  if (typeof window === "undefined") return
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback
+  if (typeof ric === "function") {
+    ric(() => fn(), { timeout: timeoutMs })
+    return
+  }
+  window.setTimeout(fn, Math.min(400, timeoutMs))
+}
+
+/** Prefetch a list of media facade URLs into the signed-url cache (best-effort). */
+export function prefetchMediaFacades(urls: string[], limit = 4): void {
+  if (typeof window === "undefined" || !Array.isArray(urls) || urls.length === 0) return
+  scheduleIdle(() => {
+    void import("@/lib/media/resolve-display-url")
+      .then(({ resolveDisplayMediaUrl, isMediaFacadeUrl }) => {
+        const slice = urls.filter((u) => typeof u === "string" && isMediaFacadeUrl(u)).slice(0, limit)
+        return Promise.allSettled(slice.map((u) => resolveDisplayMediaUrl(u)))
+      })
+      .catch(() => undefined)
+  }, 800)
+}

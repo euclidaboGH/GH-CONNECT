@@ -501,6 +501,15 @@ export function GHConnectApp() {
   const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
+  useEffect(() => {
+    const onTyping = (e: Event) => {
+      const detail = (e as CustomEvent<{ active?: boolean }>).detail
+      setBottomNavHidden(Boolean(detail?.active))
+    }
+    window.addEventListener("ghc:message-typing", onTyping as EventListener)
+    return () => window.removeEventListener("ghc:message-typing", onTyping as EventListener)
+  }, [])
+
   const openSettings = useCallback((section: typeof settingsInitialSection = "main") => {
     setSettingsInitialSection(section)
     setSettingsOpen(true)

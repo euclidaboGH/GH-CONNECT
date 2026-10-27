@@ -31,6 +31,7 @@ import { PostContentText } from "./post-content-text"
 import { DurableVideo } from "./durable-video"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { isDurableMediaUrl } from "@/lib/media/durable-url"
+import { downloadMedia } from "@/lib/media/download-media"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
 import { SpecialPostBody, detectSpecialPost } from "./feed-special-blocks"
@@ -78,6 +79,8 @@ interface EnhancedPostCardProps {
   onCopyLink?: (postId: string) => void
   onInsights?: (postId: string) => void
   onOpenPost?: (postId: string) => void
+  /** Open clean full-screen media viewer (preferred over opening the post sheet). */
+  onOpenMedia?: (payload: { urls: string[]; index?: number; caption?: string; kind?: "image" | "video" }) => void
   onShowVisibilityReason: (postId: string) => void
   visibilityReason?: { reason: string; category: string }
   onOpenProfile?: (userId: string) => void
@@ -105,6 +108,7 @@ function EnhancedPostCardInner({
   onCopyLink,
   onInsights,
   onOpenPost,
+  onOpenMedia,
   onShowVisibilityReason,
   visibilityReason,
   onOpenProfile,
@@ -135,6 +139,9 @@ function EnhancedPostCardInner({
   const [editMediaBusy, setEditMediaBusy] = useState(false)
   const editImageInputRef = useRef<HTMLInputElement>(null)
   const [imageIndex, setImageIndex] = useState<number>(0)
+  const [mediaToolsOpen, setMediaToolsOpen] = useState(false)
+  const mediaLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mediaLongPressFiredRef = useRef(false)
   const [contentExpanded, setContentExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const galleryIdentity = realImages.join("\u001f")
@@ -337,11 +344,72 @@ function EnhancedPostCardInner({
     }
   }, [post.id])
 
-  // A single tap on the post media opens the complete post view, not just a thumbnail.
+  // Tap media → clean full-screen lightbox when available; never jam comments into the media view.
+    const clearMediaLongPress = () => {
+    if (mediaLongPressRef.current) {
+      clearTimeout(mediaLongPressRef.current)
+      mediaLongPressRef.current = null
+    }
+  }
+
+  const startMediaLongPress = () => {
+    clearMediaLongPress()
+    mediaLongPressFiredRef.current = false
+    mediaLongPressRef.current = setTimeout(() => {
+      mediaLongPressRef.current = null
+      mediaLongPressFiredRef.current = true
+      setMediaToolsOpen(true)
+      try {
+        if ("vibrate" in navigator) navigator.vibrate(10)
+      } catch {
+        /* */
+      }
+    }, 480)
+  }
+
+  const endMediaLongPress = () => {
+    clearMediaLongPress()
+  }
+
+  const handleDownloadCurrentMedia = async () => {
+    const src = realImages[Math.min(imageIndex, Math.max(0, realImages.length - 1))] || realImages[0]
+    if (!src) return
+    setMediaToolsOpen(false)
+    await downloadMedia(src, { kind: "image" })
+  }
+
   const handleImageTap = (event?: React.MouseEvent) => {
     const target = event?.target as HTMLElement | null
     if (target?.closest("button, a, [role=button]")) return
     event?.stopPropagation()
+    if (mediaLongPressFiredRef.current) {
+      mediaLongPressFiredRef.current = false
+      return
+    }
+    if (onOpenMedia && realImages.length > 0) {
+      onOpenMedia({
+        urls: realImages.map((u) => ({ url: u, kind: "image" as const })),
+        index: imageIndex,
+        caption: post.content?.slice(0, 120) || undefined,
+        kind: "image",
+      })
+      return
+    }
+    onOpenPost?.(post.id)
+  }
+
+  const handleVideoTap = (event?: React.MouseEvent) => {
+    event?.stopPropagation()
+    const v = typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null
+    if (onOpenMedia && v) {
+      onOpenMedia({
+        urls: [v],
+        index: 0,
+        caption: displayAuthor ? `Video · ${displayAuthor}` : "Video",
+        kind: "video",
+      })
+      return
+    }
     onOpenPost?.(post.id)
   }
 
@@ -779,21 +847,35 @@ function EnhancedPostCardInner({
           <div
             className="group relative mb-2 aspect-[4/5] max-h-[24rem] w-full cursor-pointer overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem]"
             onClick={handleImageTap}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              if ((e.target as HTMLElement).closest("button")) return
+              startMediaLongPress()
+            }}
+            onPointerUp={endMediaLongPress}
+            onPointerCancel={endMediaLongPress}
+            onPointerLeave={endMediaLongPress}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMediaToolsOpen(true)
+            }}
             role="group"
-            tabIndex={onOpenPost ? 0 : undefined}
-            aria-label={`Post image gallery, image ${imageIndex + 1} of ${realImages.length}`}
+            tabIndex={onOpenPost || onOpenMedia ? 0 : undefined}
+            aria-label={`Post image gallery, image ${imageIndex + 1} of ${realImages.length}. Hold for download.`}
             onKeyDown={(event) => {
               if (event.target !== event.currentTarget) return
-              if ((event.key === "Enter" || event.key === " ") && onOpenPost) {
+              if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault()
-                onOpenPost(post.id)
+                handleImageTap()
               }
             }}
           >
             <LazyImage
               src={realImages[Math.min(imageIndex, realImages.length - 1)] || realImages[0]}
-              alt={`Post image ${imageIndex + 1} of ${realImages.length}`}
+              alt={`Photo ${imageIndex + 1} of ${realImages.length}`}
               className="absolute inset-0 h-full w-full object-cover"
+              variant="post-media"
             />
             {realImages.length > 1 && (
               <>
@@ -811,7 +893,7 @@ function EnhancedPostCardInner({
           </div>
         )}
 
-        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={(event) => { event.stopPropagation(); onOpenPost?.(post.id) }} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Open video post in full view"><DurableVideo src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video · View post</span></button> : null}
+        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={handleVideoTap} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Play video full screen"><DurableVideo src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video</span></button> : null}
 
         {/* Quote repost */}
         {post.quoteOf && (
@@ -886,7 +968,7 @@ function EnhancedPostCardInner({
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Curation weight only; this setting does not issue GHC"
             >
-              <span className="sr-only sm:not-sr-only sm:inline">Weight</span>
+              <span className="sr-only sm:not-sr-only sm:inline">{isOwn ? "Weight" : "Support"}</span>
               <select
                 aria-label="Curation vote weight percentage; does not issue GHC"
                 value={rewardPercentage}
@@ -1014,6 +1096,73 @@ function EnhancedPostCardInner({
         kind={rosterKind}
         postId={post.id}
       />
+      {mediaToolsOpen && (
+        <div
+          className="fixed inset-0 z-[210] flex items-end justify-center bg-black/45 sm:items-center"
+          onClick={(e) => {
+            e.stopPropagation()
+            setMediaToolsOpen(false)
+          }}
+          role="presentation"
+          data-post-no-open
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl border border-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="menu"
+            aria-label="Post media tools"
+            data-post-no-open
+          >
+            <p className="mb-3 text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">Media tools</p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                role="menuitem"
+                className="flex min-h-12 items-center gap-3 rounded-xl bg-muted/80 px-4 text-sm font-semibold hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMediaToolsOpen(false)
+                  if (onOpenMedia && realImages.length > 0) {
+                    onOpenMedia({
+                      urls: realImages.map((u) => ({ url: u, kind: "image" as const })),
+                      index: imageIndex,
+                      caption: post.content?.slice(0, 120) || undefined,
+                      kind: "image",
+                    })
+                  } else {
+                    handleImageTap()
+                  }
+                }}
+              >
+                View full screen
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex min-h-12 items-center gap-3 rounded-xl bg-muted/80 px-4 text-sm font-semibold hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handleDownloadCurrentMedia()
+                }}
+              >
+                Download photo
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="mt-1 flex min-h-11 items-center justify-center rounded-xl text-sm text-muted-foreground hover:bg-muted/50"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMediaToolsOpen(false)
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

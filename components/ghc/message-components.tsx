@@ -5,6 +5,7 @@ import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX
 import type { Conversation } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
+import { downloadMedia } from "@/lib/media/download-media"
 // Import for re-export: enhanced group message component available
 // Group chats use MessageScreen threads (conversationType/group). EnhancedGroupMessage is deprecated.
 // This file preserves private message components and maintains separation of concerns
@@ -302,6 +303,12 @@ export function MessageInput({
 }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const sendLockRef = useRef(false)
+  const emitTypingUi = (active: boolean) => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:message-typing", { detail: { active } }))
+    } catch { /* */ }
+  }
+
 
   const handleEmojiSelect = useCallback((emoji: string) => {
     onMessageChange(messageText + emoji)
@@ -364,13 +371,7 @@ export function MessageInput({
         {/* Message input */}
         <textarea
           value={messageText}
-          onChange={(e) => onMessageChange(e.target.value)}
-          onFocus={() => {
-            try { window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true, reason: "message-composer" } })) } catch { /* non-fatal */ }
-          }}
-          onBlur={() => {
-            try { window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false, reason: "message-composer" } })) } catch { /* non-fatal */ }
-          }}
+          onChange={(e) = onFocus={() => emitTypingUi(true)} onBlur={() => emitTypingUi(false)}> onMessageChange(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}
@@ -533,7 +534,28 @@ function MessageBubbleBase({
                 <div key={media.id} className="overflow-hidden rounded-xl bg-black/5">
                   {media.type === "image" || media.type === "video" ? (
                     <div className="relative">
-                      <LazyImage src={media.thumbnail || media.url} alt={media.fileName || "Message attachment"} className="max-h-56 w-full rounded-xl object-cover" />
+                      <button
+                        type="button"
+                        className="block w-full overflow-hidden rounded-xl text-left"
+                        aria-label="Open or hold to download attachment"
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          if (media.url) void downloadMedia(media.url, { kind: media.type === "video" ? "video" : "image", filename: media.fileName })
+                        }}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return
+                          const el = e.currentTarget
+                          const timer = window.setTimeout(() => {
+                            if (media.url) void downloadMedia(media.url, { kind: media.type === "video" ? "video" : "image", filename: media.fileName })
+                            try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ }
+                          }, 500)
+                          const clear = () => window.clearTimeout(timer)
+                          el.addEventListener("pointerup", clear, { once: true })
+                          el.addEventListener("pointercancel", clear, { once: true })
+                        }}
+                      >
+                        <LazyImage variant="post-media" src={media.thumbnail || media.url} alt={media.fileName || "Message attachment"} className="max-h-56 w-full rounded-xl object-cover pointer-events-none" />
+                      </button>
                       {media.type === "video" && <span className="absolute inset-0 flex items-center justify-center"><span className="rounded-full bg-black/55 p-2 text-white"><Play size={16} fill="currentColor" /></span></span>}
                     </div>
                   ) : media.type === "file" ? (

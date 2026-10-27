@@ -2752,3 +2752,56 @@ body { overflow-x: clip; }
 .gh-composer-sheet {
   overscroll-behavior: contain;
 }
+
+
+/* === GreenHaven performance & motion boost (0.148) === */
+.gh-feed-column > .cv-auto,
+.gh-post-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}
+.gh-post-card img,
+.gh-post-card video {
+  content-visibility: auto;
+  contain: paint;
+}
+.gh-section-enter {
+  animation: gh-section-fade 220ms var(--gh-motion-standard, ease) both;
+}
+@keyframes gh-section-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.gh-soft-transition {
+  transition: opacity 180ms ease, transform 180ms ease, background-color 160ms ease;
+}
+.gh-media-tile {
+  background: linear-gradient(145deg, hsl(var(--muted)) 0%, hsl(var(--muted) / 0.55) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-section-enter,
+  .gh-soft-transition {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+/* Reduce paint on off-screen feed slots */
+.gh-feed-scroll {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.gh-world-media-viewer img,
+.gh-world-media-viewer video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  touch-action: pan-x pan-y;
+}
+
+
+
+/* === 0.149 media tools + list perf === */
+.gh-notif-scroll {
+  content-visibility: auto;
+  contain: content;
+}

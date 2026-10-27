@@ -5,6 +5,7 @@
 import { useState, useMemo, memo } from "react"
 import { Heart, MessageCircle, Pin, MoreVertical, Download, Copy, Reply } from "lucide-react"
 import type { Message } from "@/lib/ghc-types"
+import { downloadMedia } from "@/lib/media/download-media"
 
 interface EnhancedGroupMessageProps {
   message: Message
@@ -58,16 +59,44 @@ function MediaAttachment({
   switch (attachment.type) {
     case "image":
       return (
-        <div className="relative group mt-2 rounded-lg overflow-hidden max-w-xs">
-          <img
-            src={attachment.url}
-            alt="Attachment"
-            loading="lazy"
-            className="max-w-full h-auto rounded-lg"
-          />
+        <div className="relative group mt-2 max-w-xs overflow-hidden rounded-lg">
           <button
-            className="absolute top-2 right-2 p-1.5 bg-black/50 opacity-0 group-hover:opacity-100 rounded-lg transition-opacity"
+            type="button"
+            className="block w-full text-left"
+            aria-label="Hold or use download to save image"
+            onContextMenu={(e) => {
+              e.preventDefault()
+              if (attachment.url) void downloadMedia(attachment.url, { kind: "image", filename: attachment.fileName })
+            }}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              const el = e.currentTarget
+              const timer = window.setTimeout(() => {
+                if (attachment.url) void downloadMedia(attachment.url, { kind: "image", filename: attachment.fileName })
+                try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ }
+              }, 500)
+              const clear = () => window.clearTimeout(timer)
+              el.addEventListener("pointerup", clear, { once: true })
+              el.addEventListener("pointercancel", clear, { once: true })
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={attachment.url}
+              alt={attachment.fileName || "Attachment"}
+              loading="lazy"
+              className="h-auto max-w-full rounded-lg pointer-events-none"
+            />
+          </button>
+          <button
+            type="button"
+            className="absolute right-2 top-2 rounded-lg bg-black/50 p-1.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
             title="Download"
+            aria-label="Download image"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (attachment.url) void downloadMedia(attachment.url, { kind: "image", filename: attachment.fileName })
+            }}
           >
             <Download size={16} className="text-white" />
           </button>
@@ -108,7 +137,14 @@ function MediaAttachment({
               {attachment.size ? `${(attachment.size / 1024).toFixed(1)}KB` : ""}
             </div>
           </div>
-          <button className="p-1 hover:bg-background rounded transition-colors flex-shrink-0">
+          <button
+            type="button"
+            className="flex-shrink-0 rounded p-1 transition-colors hover:bg-background"
+            aria-label="Download file"
+            onClick={() => {
+              if (attachment.url) void downloadMedia(attachment.url, { filename: attachment.fileName })
+            }}
+          >
             <Download size={16} className="text-muted-foreground" />
           </button>
         </div>

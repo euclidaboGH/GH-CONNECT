@@ -13,6 +13,8 @@ interface LazyImageProps {
   onClick?: () => void
   online?: boolean
   verified?: boolean
+  /** post-media: neutral tile + retry (never show misleading initials like "PI") */
+  variant?: "default" | "avatar" | "post-media"
 }
 
 function LazyImageInner({
@@ -24,11 +26,12 @@ function LazyImageInner({
   onClick,
   online = false,
   verified = false,
+  variant = "default",
 }: LazyImageProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading")
   const [displaySrc, setDisplaySrc] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const safeAlt = alt ?? "Member"
+  const safeAlt = alt ?? (variant === "post-media" ? "Photo" : "Member")
   const rawSrc = typeof src === "string" && src.trim() ? src.trim() : ""
   const initials =
     safeAlt
@@ -53,7 +56,6 @@ function LazyImageInner({
       return
     }
 
-    // Direct non-facade sources (http, data, relative non-api)
     if (!isMediaFacadeUrl(rawSrc)) {
       if (
         rawSrc.startsWith("https://") ||
@@ -77,7 +79,6 @@ function LazyImageInner({
       if (resolved) {
         setDisplaySrc(resolved)
       } else {
-        // Fallback: try the content facade itself (cookies + redirect)
         setDisplaySrc(rawSrc.startsWith("http") ? rawSrc : rawSrc.startsWith("/") ? rawSrc : null)
         if (!rawSrc.startsWith("http") && !rawSrc.startsWith("/")) setStatus("error")
       }
@@ -89,8 +90,8 @@ function LazyImageInner({
   }, [rawSrc, retryToken])
 
   const handleImgError = () => {
-    if (retryToken < 1 && rawSrc && isMediaFacadeUrl(rawSrc)) {
-      setRetryToken(1)
+    if (retryToken < 2 && rawSrc && isMediaFacadeUrl(rawSrc)) {
+      setRetryToken((t) => t + 1)
       setStatus("loading")
       setDisplaySrc(null)
       return
@@ -99,7 +100,42 @@ function LazyImageInner({
     onError?.()
   }
 
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRetryToken((t) => t + 1)
+    setStatus("loading")
+    setDisplaySrc(null)
+  }
+
   if (status === "error" || (!displaySrc && status !== "loading")) {
+    if (variant === "post-media") {
+      return (
+        <div
+          onClick={onClick}
+          className={`relative flex flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 ${className}`}
+          role="img"
+          aria-label="Media unavailable"
+        >
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" className="text-slate-400" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="8.5" cy="10" r="1.5" fill="currentColor" />
+            <path d="M3 16l5-4 3 2.5L16 10l5 6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+          <span className="text-[11px] font-medium text-slate-500">Media unavailable</span>
+          {rawSrc ? (
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="rounded-full bg-white/80 px-3 py-1 text-[10px] font-semibold text-slate-700 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+            >
+              Retry
+            </button>
+          ) : null}
+          <span className="sr-only">{safeAlt} unavailable</span>
+        </div>
+      )
+    }
+
     return (
       <div onClick={onClick} className={`relative overflow-hidden bg-muted ${className}`}>
         <div className="flex h-full min-h-[2.5rem] w-full items-center justify-center bg-gradient-to-br from-muted to-muted/60 text-[11px] font-bold text-muted-foreground">
@@ -118,6 +154,7 @@ function LazyImageInner({
     >
       {status === "loading" && <ImageSkeleton className="absolute inset-0" />}
       {displaySrc ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           key={displaySrc}
           src={displaySrc}

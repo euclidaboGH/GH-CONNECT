@@ -5,6 +5,7 @@ import { X, MessageCircle, Share2, Clock3, LoaderCircle, Image as ImageIcon } fr
 import type { Post } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
+import { downloadMedia } from "@/lib/media/download-media"
 
 const REACTION_EMOJI: Record<string, string> = {
   like: "❤️", love: "😍", support: "💪", inspire: "✨", insight: "💡", celebrate: "🎉",
@@ -81,8 +82,31 @@ export function PostDetailSheet({
           {post.content?.trim() ? <p className="whitespace-pre-wrap break-words px-4 pb-4 text-[15px] leading-7 text-foreground">{post.content}</p> : null}
           {post.video ? <div className="bg-black"><video src={post.video} controls playsInline className="max-h-[65dvh] w-full object-contain" /></div> : null}
           {media.length > 0 ? <div className="relative bg-black">
-            <button type="button" onClick={() => onOpenMedia?.(media[mediaIndex] || media[0], post.content?.slice(0, 120) || "Post photo")} className="block w-full cursor-zoom-in" aria-label="Open photo full screen">
-              <LazyImage src={media[mediaIndex] || media[0]} alt={`Post media ${mediaIndex + 1}`} className="max-h-[65dvh] w-full object-contain" />
+            <button
+              type="button"
+              onClick={() => onOpenMedia?.(media[mediaIndex] || media[0], post.content?.slice(0, 120) || "Post photo")}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                const src = media[mediaIndex] || media[0]
+                if (src) void downloadMedia(src, { kind: "image" })
+              }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                const el = e.currentTarget
+                const timer = window.setTimeout(() => {
+                  const src = media[mediaIndex] || media[0]
+                  if (src) void downloadMedia(src, { kind: "image" })
+                  try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ }
+                }, 500)
+                const clear = () => { window.clearTimeout(timer); el.releasePointerCapture?.(e.pointerId) }
+                el.setPointerCapture?.(e.pointerId)
+                el.addEventListener("pointerup", clear, { once: true })
+                el.addEventListener("pointercancel", clear, { once: true })
+              }}
+              className="block w-full cursor-zoom-in"
+              aria-label="Open photo full screen. Hold to download."
+            >
+              <LazyImage variant="post-media" src={media[mediaIndex] || media[0]} alt={`Post media ${mediaIndex + 1}`} className="max-h-[65dvh] w-full object-contain" />
             </button>
             {media.length > 1 ? <div className="flex items-center justify-center gap-2 bg-black px-3 py-2">{media.map((url, index) => <button key={`${url}-${index}`} type="button" onClick={() => setMediaIndex(index)} aria-label={`View image ${index + 1}`} aria-pressed={index === mediaIndex} className={`h-2.5 w-2.5 rounded-full ${index === mediaIndex ? "bg-white" : "bg-white/35"}`} />)}<span className="ml-1 text-[11px] text-white/70">{mediaIndex + 1} of {media.length}</span></div> : null}
           </div> : null}

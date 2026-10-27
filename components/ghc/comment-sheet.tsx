@@ -10,6 +10,7 @@ import type { Post, PostComment } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { buildCommentTree, countThread } from "@/lib/comment-thread-utils"
 import { LazyImage } from "./lazy-image"
+import { downloadMedia } from "@/lib/media/download-media"
 import { ReportChooser } from "./report-chooser"
 import { isOwnAuthor, canEditComment, canDeleteComment } from "@/lib/ownership"
 
@@ -347,13 +348,32 @@ useEffect(() => {
                             const kind = String(m.type || "file")
                             if (kind === "image" || kind === "gif") {
                               return (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img key={m.id || m.url} src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover" />
+                                <button
+                                  key={m.id || m.url}
+                                  type="button"
+                                  className="block overflow-hidden rounded-lg"
+                                  aria-label="Hold to download comment photo"
+                                  onContextMenu={(e) => { e.preventDefault(); if (m.url) void downloadMedia(m.url, { kind: "image" }) }}
+                                  onPointerDown={(e) => {
+                                    if (e.button !== 0) return
+                                    const el = e.currentTarget
+                                    const timer = window.setTimeout(() => { if (m.url) void downloadMedia(m.url, { kind: "image" }) }, 500)
+                                    const clear = () => window.clearTimeout(timer)
+                                    el.addEventListener("pointerup", clear, { once: true })
+                                    el.addEventListener("pointercancel", clear, { once: true })
+                                  }}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover pointer-events-none" />
+                                </button>
                               )
                             }
                             if (kind === "video") {
                               return (
-                                <video key={m.id || m.url} src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                                <div key={m.id || m.url} className="relative">
+                                  <video src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                                  <button type="button" className="mt-1 text-[10px] font-semibold text-primary" onClick={() => m.url && void downloadMedia(m.url, { kind: "video" })}>Download video</button>
+                                </div>
                               )
                             }
                             return (

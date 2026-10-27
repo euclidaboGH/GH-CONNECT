@@ -36,6 +36,7 @@ import { messageListingSeller, openPayForListing } from "@/lib/marketplace/comme
 import { openCommunity } from "@/lib/navigation/navigate"
 import { EmptyState } from "./empty-state"
 import { LazyImage } from "./lazy-image"
+import { downloadMedia } from "@/lib/media/download-media"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
@@ -533,7 +534,25 @@ function ListingDetail({
         {/* Hero media */}
         <div className="relative aspect-[4/3] w-full bg-muted/40">
           {media ? (
-            <LazyImage src={media} alt={listing.title} className="absolute inset-0 h-full w-full object-cover" />
+            <button
+              type="button"
+              className="absolute inset-0 block h-full w-full"
+              aria-label="Hold listing photo to download"
+              onContextMenu={(e) => { e.preventDefault(); if (media) void downloadMedia(media, { kind: "image", filename: listing.title }) }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                const el = e.currentTarget
+                const timer = window.setTimeout(() => {
+                  if (media) void downloadMedia(media, { kind: "image", filename: listing.title })
+                  try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ }
+                }, 500)
+                const clear = () => window.clearTimeout(timer)
+                el.addEventListener("pointerup", clear, { once: true })
+                el.addEventListener("pointercancel", clear, { once: true })
+              }}
+            >
+              <LazyImage variant="post-media" src={media} alt={listing.title} className="absolute inset-0 h-full w-full object-cover pointer-events-none" />
+            </button>
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <Package size={40} className="text-muted-foreground/50" aria-hidden />
@@ -552,7 +571,18 @@ function ListingDetail({
                 onClick={() => setMediaIndex(i)}
                 className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 ${i === mediaIndex ? "border-emerald-600" : "border-transparent"}`}
               >
-                <LazyImage src={src} alt="" className="h-full w-full object-cover" />
+                <span
+                  onContextMenu={(e) => { e.preventDefault(); if (src) void downloadMedia(src, { kind: "image" }) }}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return
+                    const el = e.currentTarget
+                    const timer = window.setTimeout(() => { if (src) void downloadMedia(src, { kind: "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 500)
+                    const clear = () => window.clearTimeout(timer)
+                    el.addEventListener("pointerup", clear, { once: true })
+                    el.addEventListener("pointercancel", clear, { once: true })
+                  }}
+                  className="block h-full w-full"
+                ><LazyImage variant="post-media" src={src} alt="" className="h-full w-full object-cover pointer-events-none" /></span>
               </button>
             ))}
           </div>

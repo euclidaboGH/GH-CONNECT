@@ -4,7 +4,7 @@
  * Pi-style daily GHC claim:
  * - Golden lightning + GHC coin FAB portaled to document.body (never clipped by headers).
  * - Mid-right of the viewport on every screen until claimed.
- * - Opens the claim sheet only after an explicit tap on the lightning/coin action.
+ * - Sheet opens only when the user taps the FAB (or ghc:open-daily-claim from Rewards).
  * - Does not inject banners into page headers.
  */
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -16,6 +16,7 @@ import { useDailyClaimStatus } from "./use-daily-claim-status"
 import { notifyRewardClaimed } from "@/lib/notifications"
 import { postDailyClaim } from "@/lib/rewards/claim-daily-client"
 import { markDailyClaimedForUi, ghcForCycleDay } from "@/lib/domains/reward-level-domain"
+import { useSessionLock } from "@/contexts/session-lock-context"
 
 type DoneState = {
   amount?: number
@@ -40,8 +41,13 @@ function formatRedeemable(iso?: string) {
   }
 }
 
+function autoOpenKey(dayKey: string | undefined) {
+  return `ghc.dailyClaimAutoOpen.${dayKey || "unknown"}`
+}
+
 export function DailyClaimPrompt() {
   const { profile } = useGHCProfile()
+  const { isLocked } = useSessionLock()
   const userId = profile?.id || ""
   const { status, refresh } = useDailyClaimStatus(userId)
   const [mounted, setMounted] = useState(false)
@@ -49,6 +55,7 @@ export function DailyClaimPrompt() {
   const [claiming, setClaiming] = useState(false)
   const [done, setDone] = useState<DoneState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hint, setHint] = useState(false)
   const sheetRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -75,6 +82,21 @@ export function DailyClaimPrompt() {
   useEffect(() => {
     if (claimable) setDone(null)
   }, [claimable, status?.dayKey])
+
+  // Hint bubble once per session when claimable
+  useEffect(() => {
+    if (!claimable || claimedToday) return
+    try {
+      if (sessionStorage.getItem("ghc.dailyClaimHintShown") === "1") return
+      sessionStorage.setItem("ghc.dailyClaimHintShown", "1")
+      setHint(true)
+      const t = window.setTimeout(() => setHint(false), 10000)
+      return () => window.clearTimeout(t)
+    } catch {
+      /* private mode */
+    }
+  }, [claimable, claimedToday])
+
 
   const close = useCallback(() => {
     setOpen(false)
@@ -133,8 +155,8 @@ export function DailyClaimPrompt() {
       try {
         notifyRewardClaimed({
           title: "Daily GHC claimed",
-          message: `Daily reward claimed: ${amountLabel}`,
-          amountLabel,
+          message: amountLabel,
+          amountLabel: typeof res.serverAmount === "number" ? String(res.serverAmount) : amountLabel,
         })
       } catch {
         /* */
@@ -163,10 +185,27 @@ export function DailyClaimPrompt() {
     }
   }, [canAttemptClaim, claiming, refresh, userId])
 
+  useEffect(() => {
+    const onOpen = () => {
+      setOpen(true)
+      setDone(null)
+      setError(null)
+      setHint(false)
+    }
+    window.addEventListener("ghc:open-daily-claim", onOpen)
+    return () => window.removeEventListener("ghc:open-daily-claim", onOpen)
+  }, [])
 
+  // Visible until claimed — do not hide solely because status is still loading.
+  
+  useEffect(() => {
+    if (isLocked) {
+      setOpen(false)
+      setHint(false)
+    }
+  }, [isLocked])
 
-  // Keep the entry-point coin visible; never open the claim UI automatically.
-  const showFab = Boolean(userId) && !claimedToday && !open && !done
+  const showFab = Boolean(userId) && !claimedToday && !open && !done && !isLocked
 
   if (!mounted || typeof document === "undefined") return null
 
@@ -182,11 +221,23 @@ export function DailyClaimPrompt() {
           }}
           data-testid="gh-daily-claim-fab-root"
         >
+          {hint ? (
+            <div
+              className="pointer-events-auto max-w-[12rem] rounded-2xl border border-amber-400/50 bg-card/95 px-3 py-2 text-right shadow-lg backdrop-blur-md"
+              role="status"
+            >
+              <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">Tap to claim GHC</p>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Daily reward is ready — same idea as Pi’s daily check-in.
+              </p>
+            </div>
+          ) : null}
           <button
             type="button"
             className="gh-daily-lightning-fab pointer-events-auto"
             aria-label="Claim daily GHC reward"
             onClick={() => {
+              setHint(false)
               setOpen(true)
               setDone(null)
               setError(null)
@@ -203,7 +254,7 @@ export function DailyClaimPrompt() {
         </div>
       ) : null}
 
-      {open ? (
+      {open && !isLocked ? (
         <div
           className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 sm:items-center"
           role="presentation"

@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CalendarDays, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Search, X } from "lucide-react"
+import { Download, CalendarDays, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Search, X } from "lucide-react"
 import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
+import { downloadMedia } from "@/lib/media/download-media"
 
 type LibraryKind = "all" | "posts" | "photos" | "videos" | "documents" | "history"
 type HistoryEntry = { url: string; changedAt: number; caption?: string }
@@ -278,7 +279,7 @@ export function ProfileContentLibrary({
                 {(["Profile photos", "Cover photos"] as const).map((group) => {
                   const items = historyItems.filter((item) => item.category === group)
                   if (!items.length) return null
-                  return <section key={group}><h3 className="mb-2 flex items-center gap-2 text-sm font-bold"><CalendarDays size={16} />{group}</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{items.map((item) => <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card"><button type="button" onClick={() => setLightbox({ src: item.url, alt: item.title })} className="block w-full cursor-zoom-in" aria-label={`View ${item.title} full screen`}><img src={item.url} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className={`w-full bg-muted object-cover ${group === "Cover photos" ? "aspect-[16/9]" : "aspect-square"}`} /></button><div className="p-2.5"><p className="text-xs font-semibold">{item.title}</p>{item.changedAt ? <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(item.changedAt)}</p> : null}</div></article>)}</div></section>
+                  return <section key={group}><h3 className="mb-2 flex items-center gap-2 text-sm font-bold"><CalendarDays size={16} />{group}</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{items.map((item) => <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card"><button type="button" onClick={() => setLightbox({ src: item.url, alt: item.title })} onContextMenu={(e) => { e.preventDefault(); if (item.url) void downloadMedia(item.url, { kind: "image", filename: item.title }) }} onPointerDown={(e) => { if (e.button !== 0) return; const el = e.currentTarget; const timer = window.setTimeout(() => { if (item.url) void downloadMedia(item.url, { kind: "image", filename: item.title }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 500); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }} className="block w-full cursor-zoom-in" aria-label={`View ${item.title} full screen. Hold to download.`}><img src={item.url} alt={item.title} loading="lazy" referrerPolicy="no-referrer" className={`w-full bg-muted object-cover pointer-events-none ${group === "Cover photos" ? "aspect-[16/9]" : "aspect-square"}`} /></button><div className="p-2.5"><p className="text-xs font-semibold">{item.title}</p>{item.changedAt ? <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(item.changedAt)}</p> : null}</div></article>)}</div></section>
                 })}
                 {!isOwner ? <p className="text-xs text-muted-foreground">Only profile and cover images shared with you are shown here.</p> : null}
               </div>
@@ -313,8 +314,11 @@ export function ProfileContentLibrary({
       </section>
       {lightbox ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Photo viewer" onClick={() => setLightbox(null)}>
-          <button type="button" onClick={() => setLightbox(null)} className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white" aria-label="Close photo viewer"><X size={22} /></button>
-          <img src={lightbox.src} alt={lightbox.alt} referrerPolicy="no-referrer" className="max-h-[92dvh] max-w-full object-contain" onClick={(event) => event.stopPropagation()} />
+          <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+            <button type="button" onClick={(e) => { e.stopPropagation(); void downloadMedia(lightbox.src, { kind: "image", filename: lightbox.alt }) }} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white" aria-label="Download photo"><Download size={20} /></button>
+            <button type="button" onClick={() => setLightbox(null)} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white" aria-label="Close photo viewer"><X size={22} /></button>
+          </div>
+          <img src={lightbox.src} alt={lightbox.alt} referrerPolicy="no-referrer" className="max-h-[92dvh] max-w-full object-contain" onClick={(event) => event.stopPropagation()} onContextMenu={(e) => { e.preventDefault(); void downloadMedia(lightbox.src, { kind: "image", filename: lightbox.alt }) }} />
         </div>
       ) : null}
     </div>

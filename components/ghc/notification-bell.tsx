@@ -8,6 +8,7 @@
 
 import { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useGHC } from "@/contexts/ghc-context"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
 import {
@@ -554,12 +555,18 @@ export function NotificationBell({
   const openPanel = () => {
     setOpen(true)
     refresh()
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:message-typing", { detail: { active: true } }))
+    } catch { /* hide bottom chrome while panel open */ }
   }
 
   const closePanel = () => {
     setOpen(false)
     setExpandedId(null)
     setThreadKey(null)
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:message-typing", { detail: { active: false } }))
+    } catch { /* */ }
     dispatchCloseTransientUI({ reason: "notification-close" })
   }
 
@@ -717,10 +724,11 @@ export function NotificationBell({
         ) : null}
       </button>
 
-      {open ? (
-        <div className="gh-world-notifications fixed inset-0 z-[85]" role="dialog" aria-modal="true" aria-label="Notifications">
-          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={closePanel} />
-          <div className="absolute inset-x-0 top-0 mx-auto flex max-h-[min(88vh,640px)] w-full max-w-[36rem] flex-col overflow-hidden rounded-b-[1.25rem] border border-border/50 bg-card shadow-2xl sm:top-3 sm:rounded-[1.25rem]">
+      {open && typeof document !== "undefined"
+        ? createPortal(
+        <div className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label="Notifications">
+          <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label="Close notifications" onClick={closePanel} />
+          <div className="absolute inset-0 flex flex-col bg-background sm:inset-x-auto sm:left-1/2 sm:top-0 sm:h-full sm:w-full sm:max-w-[28rem] sm:-translate-x-1/2 sm:border-x sm:border-border sm:shadow-2xl">
             <div className="flex items-center justify-between border-b border-border/50 px-4 py-3.5">
               <div>
                 <p className="text-[15px] font-bold text-foreground">Notifications</p>
@@ -830,7 +838,7 @@ export function NotificationBell({
               <span className="ml-auto text-[10px] text-muted-foreground">Auto-sync 12s</span>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="min-h-0 flex-1 overflow-y-auto [content-visibility:auto] overscroll-contain">
               {filtered.length > 0 ? (
                 <p className="px-4 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
                   {filtered.length} notification{filtered.length === 1 ? "" : "s"}
@@ -976,8 +984,10 @@ export function NotificationBell({
               )}
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </div>
   )
 }
