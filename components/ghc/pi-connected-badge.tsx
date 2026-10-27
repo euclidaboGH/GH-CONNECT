@@ -58,7 +58,7 @@ export function PiConnectedBadge({
 }
 
 /** Compact identity strip for profile / settings */
-export function PioneerIdentityStrip({ className = "" }: { className?: string }) {
+export function PioneerIdentityStrip({ className = "", hideGreenHavenId = false }: { className?: string; hideGreenHavenId?: boolean }) {
   const [me, setMe] = useState<{
     greenHavenId?: string | null
     piUsername?: string | null
@@ -87,12 +87,12 @@ export function PioneerIdentityStrip({ className = "" }: { className?: string })
         {me.serverVerified ? "Verified Pioneer account" : "Signed in"}
       </p>
       <p className="mt-0.5 text-muted-foreground">
-        {me.greenHavenId ? (
+        {!hideGreenHavenId && me.greenHavenId ? (
           <>
             GreenHaven ID <span className="font-mono font-bold text-foreground">{me.greenHavenId}</span>
           </>
         ) : null}
-        {me.greenHavenId && me.piUsername ? " · " : null}
+        {!hideGreenHavenId && me.greenHavenId && me.piUsername ? " · " : null}
         {me.piUsername ? (
           <>
             Pi <span className="font-semibold text-foreground">@{me.piUsername}</span>

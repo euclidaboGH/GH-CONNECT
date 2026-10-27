@@ -2698,3 +2698,44 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .gh-premium-feed-toolbar *, .gh-premium-feed-list *, .gh-world-membership *, .gh-rewards-shell * { transition-duration: .01ms !important; }
 }
+
+
+/* Feed performance: skip offscreen post layout work */
+.gh-feed-post-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+}
+
+.gh-marketplace-card-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
+}
+
+.gh-discover-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+/* Bottom nav — active indicator pill (stable, no layout shift) */
+.gh-bottom-nav button[aria-current="page"] {
+  color: var(--gh-standard-green, #0d7a3f);
+  font-weight: 700;
+}
+.gh-bottom-nav button[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.2rem;
+  width: 1.1rem;
+  height: 0.18rem;
+  border-radius: 999px;
+  background: var(--gh-standard-green, #0d7a3f);
+  transform: translateX(-50%);
+}
+.gh-bottom-nav button {
+  position: relative;
+}
+/* Top header compact bar — respect safe area without expanding chrome */
+.gh-page-header-slim {
+  min-height: 2.5rem;
+}

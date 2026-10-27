@@ -356,6 +356,7 @@ export function MessageInput({
           title="Add emoji"
           aria-label="Add emoji"
           disabled={disabled}
+      aria-busy={disabled || undefined}
         >
           <Smile size={20} aria-hidden />
         </button>

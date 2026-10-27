@@ -1192,6 +1192,12 @@ export function GHConnectApp() {
               <button
                 key={id}
                 type="button"
+                onPointerDown={() => {
+                  if (id === "create" || !isPrimaryTab(id)) return
+                  try {
+                    window.dispatchEvent(new CustomEvent("ghc:prefetch-tab", { detail: id }))
+                  } catch { /* */ }
+                }}
                 onClick={() => {
                   if (id === "create") {
                     setShowCreateHub(true)

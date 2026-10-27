@@ -56,6 +56,7 @@ function formatExpiry(ts?: number): string {
 export function ProfileEcosystemHub({
   userId,
   displayName,
+  preferredGreenHavenId,
   onOpenWallet,
   onOpenMembership,
   onOpenRewards,
@@ -63,13 +64,43 @@ export function ProfileEcosystemHub({
 }: {
   userId: string
   displayName?: string
+  /** Server public GreenHaven ID — when set, never show a derived alternate */
+  preferredGreenHavenId?: string | null
   onOpenWallet?: () => void
   onOpenMembership?: () => void
   onOpenRewards?: () => void
   onShareProfile?: () => void
 }) {
   const uid = userId || IdentityService.getCurrentUserId() || "member"
-  const ghId = formatGreenHavenIdDisplay(getOrCreateGreenHavenId(uid, null))
+  const [serverId, setServerId] = useState<string | null>(
+    preferredGreenHavenId ? String(preferredGreenHavenId).trim() || null : null,
+  )
+  useEffect(() => {
+    if (preferredGreenHavenId) {
+      setServerId(String(preferredGreenHavenId).trim() || null)
+      return
+    }
+    let cancelled = false
+    void fetch("/api/identity/me", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d?.ok) return
+        const id = String(d.greenHavenId || "").trim()
+        if (id) {
+          setServerId(id)
+          try {
+            getOrCreateGreenHavenId(uid, id)
+          } catch {
+            /* */
+          }
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [uid, preferredGreenHavenId])
+  const ghId = formatGreenHavenIdDisplay(getOrCreateGreenHavenId(uid, serverId))
   const [membership, setMembership] = useState<MembershipSummary>({
     tier: "free",
     active: true,

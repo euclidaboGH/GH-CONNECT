@@ -854,36 +854,14 @@ function EnhancedPostCardInner({
         </section>
       ) : null}
 
-      {/* Engagement stats */}
-      {post.engagement && (
-        <div className="space-y-1 border-t border-border/40 bg-muted/25 px-3.5 py-1.5 text-[11px] text-muted-foreground">
-          <div className="flex justify-between">
-            <button
-              type="button"
-              className="text-left hover:underline"
-              onClick={() => openRoster("viewers")}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openRoster("viewers")
-              }}
-              onPointerDown={(e) => {
-                if (e.button !== 0) return
-                const timer = window.setTimeout(() => openRoster("viewers"), 480)
-                const clear = () => {
-                  window.clearTimeout(timer)
-                  window.removeEventListener("pointerup", clear)
-                  window.removeEventListener("pointercancel", clear)
-                }
-                window.addEventListener("pointerup", clear, { once: true })
-                window.addEventListener("pointercancel", clear, { once: true })
-              }}
-            >
-              {post.engagement.views} views
-            </button>
-            <span>{post.engagement.saves} saved</span>
+      {/* Saves only — views are shown once inside Curation & post insights (no duplicate 0 views). */}
+      {post.engagement && Number(post.engagement.saves || 0) > 0 ? (
+        <div className="border-t border-border/40 bg-muted/25 px-3.5 py-1.5 text-[11px] text-muted-foreground">
+          <div className="flex justify-end">
+            <span className="tabular-nums">{Number(post.engagement.saves).toLocaleString()} saved</span>
           </div>
         </div>
-      )}
+      ) : null}
 
       {showReactions && (
         <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>

@@ -1,11 +1,14 @@
 "use client"
 
 /**
- * Daily GHC claim — production golden lightning FAB on every screen.
- * Does not use the GHC coin logo on the FAB. Does not push page headers.
- * Sheet confirms claim; server postDailyClaim is authoritative.
+ * Pi-style daily GHC claim:
+ * - Golden lightning + GHC coin FAB portaled to document.body (never clipped by headers).
+ * - Mid-right of the viewport on every screen until claimed.
+ * - Auto-opens the claim sheet once per Lagos day when the server says claimable.
+ * - Does not inject banners into page headers.
  */
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { X, Zap, Shield, Clock } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { useGHCProfile } from "@/contexts/ghc-context"
@@ -37,13 +40,15 @@ function formatRedeemable(iso?: string) {
   }
 }
 
+function autoOpenKey(dayKey: string | undefined) {
+  return `ghc.dailyClaimAutoOpen.${dayKey || "unknown"}`
+}
+
 export function DailyClaimPrompt() {
   const { profile } = useGHCProfile()
   const userId = profile?.id || ""
   const { status, refresh } = useDailyClaimStatus(userId)
-  useEffect(() => {
-    if (userId) void refresh()
-  }, [userId, refresh])
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [done, setDone] = useState<DoneState | null>(null)
@@ -51,10 +56,20 @@ export function DailyClaimPrompt() {
   const [hint, setHint] = useState(false)
   const sheetRef = useRef<HTMLElement | null>(null)
 
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (userId) void refresh()
+  }, [userId, refresh])
+
   const claimedToday = Boolean(status?.claimedToday)
-  // Status null = still loading / offline — keep FAB visible so users never lose the claim entry point.
-  const canAttemptClaim = Boolean(userId && !claimedToday && (status === null || status.claimable !== false))
-  const claimable = Boolean(userId && !claimedToday && (status === null || status.claimable !== false))
+  // Prefer server claimable; keep FAB while status is still loading so the entry point never vanishes.
+  const serverClaimable = status?.claimable === true
+  const loadingStatus = status === null
+  const canAttemptClaim = Boolean(userId && !claimedToday && (loadingStatus || status?.claimable !== false))
+  const claimable = Boolean(userId && !claimedToday && (serverClaimable || loadingStatus))
   const cycleDay =
     typeof status?.cycleDay === "number" && status.cycleDay > 0 ? status.cycleDay : null
   const tier =
@@ -66,18 +81,33 @@ export function DailyClaimPrompt() {
     if (claimable) setDone(null)
   }, [claimable, status?.dayKey])
 
+  // Hint bubble once per session when claimable
   useEffect(() => {
     if (!claimable || claimedToday) return
     try {
       if (sessionStorage.getItem("ghc.dailyClaimHintShown") === "1") return
       sessionStorage.setItem("ghc.dailyClaimHintShown", "1")
       setHint(true)
-      const t = window.setTimeout(() => setHint(false), 8000)
+      const t = window.setTimeout(() => setHint(false), 10000)
       return () => window.clearTimeout(t)
     } catch {
       /* private mode */
     }
   }, [claimable, claimedToday])
+
+  // Auto-open claim sheet once per Lagos day when server says claimable (Pi-style attention)
+  useEffect(() => {
+    if (!userId || !serverClaimable || claimedToday || open || done) return
+    try {
+      const key = autoOpenKey(status?.dayKey)
+      if (sessionStorage.getItem(key) === "1") return
+      sessionStorage.setItem(key, "1")
+      setOpen(true)
+      setHint(false)
+    } catch {
+      setOpen(true)
+    }
+  }, [userId, serverClaimable, claimedToday, open, done, status?.dayKey])
 
   const close = useCallback(() => {
     setOpen(false)
@@ -127,24 +157,29 @@ export function DailyClaimPrompt() {
         await syncWalletAfterServerClaim({
           userId,
           claimedAmount: null,
-          alreadyClaimed: Boolean(res.alreadyClaimed || res.idempotent),
-          referenceId: res.referenceId ?? null,
+          alreadyClaimed: Boolean(res.alreadyClaimed),
         })
       } catch {
-        /* keep last verified wallet snapshot */
+        /* non-fatal */
       }
 
-      if (!res.alreadyClaimed) {
-        try {
-          notifyRewardClaimed({ message: `Daily rewards claimed — ${amountLabel}`, amountLabel })
-          window.dispatchEvent(
-            new CustomEvent("ghc:toast", {
-              detail: { message: `Daily rewards claimed — ${amountLabel}`, type: "success" },
-            }),
-          )
-        } catch {
-          /* */
-        }
+      try {
+        notifyRewardClaimed({
+          title: "Daily GHC claimed",
+          body: amountLabel,
+          amount: res.serverAmount,
+        })
+      } catch {
+        /* */
+      }
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: { message: `Daily rewards claimed — ${amountLabel}`, type: "success" },
+          }),
+        )
+      } catch {
+        /* */
       }
       try {
         window.dispatchEvent(new CustomEvent("ghc:daily-reward-claimed", { detail: res }))
@@ -172,27 +207,32 @@ export function DailyClaimPrompt() {
     return () => window.removeEventListener("ghc:open-daily-claim", onOpen)
   }, [])
 
-  // Golden coin+lightning on every screen until claimed (mid-right of content, never in header)
+  // Visible until claimed — do not hide solely because status is still loading.
   const showFab = Boolean(userId) && !claimedToday && !open && !done
 
-  return (
+  if (!mounted || typeof document === "undefined") return null
+
+  const ui = (
     <>
       {showFab ? (
         <div
-          className="pointer-events-none fixed z-[150] flex flex-col items-end gap-2"
+          className="gh-daily-claim-root pointer-events-none fixed z-[9999] flex flex-col items-end gap-2"
           style={{
-            right: "max(0.65rem, env(safe-area-inset-right))",
-            top: "max(28%, calc(env(safe-area-inset-top, 0px) + 7.5rem))",
-            transform: "translateY(-20%)",
+            right: "max(0.75rem, env(safe-area-inset-right))",
+            top: "42%",
+            transform: "translateY(-50%)",
           }}
+          data-testid="gh-daily-claim-fab-root"
         >
           {hint ? (
             <div
-              className="pointer-events-auto max-w-[11.5rem] rounded-2xl border border-amber-400/50 bg-card/95 px-3 py-2 text-right shadow-lg backdrop-blur-md"
+              className="pointer-events-auto max-w-[12rem] rounded-2xl border border-amber-400/50 bg-card/95 px-3 py-2 text-right shadow-lg backdrop-blur-md"
               role="status"
             >
-              <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">Tap the lightning!</p>
-              <p className="text-[10px] leading-snug text-muted-foreground">Daily GHC is ready to claim.</p>
+              <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">Tap to claim GHC</p>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Daily reward is ready — same idea as Pi’s daily check-in.
+              </p>
             </div>
           ) : null}
           <button
@@ -219,7 +259,7 @@ export function DailyClaimPrompt() {
 
       {open ? (
         <div
-          className="fixed inset-0 z-[160] flex items-end justify-center bg-black/45 p-3 sm:items-center"
+          className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 sm:items-center"
           role="presentation"
           onClick={(e) => {
             if (e.target === e.currentTarget && !claiming) close()
@@ -277,102 +317,72 @@ export function DailyClaimPrompt() {
                   </div>
 
                   <div className="rounded-2xl border border-border bg-muted/30 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
-                        <Shield size={13} className="text-emerald-600" aria-hidden />
-                        Governed daily path
-                      </span>
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-                        Active
-                      </span>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Shield size={14} className="shrink-0 text-emerald-600" />
+                      <span>Ledger-backed claim · not pay-to-win · not convertible to π here</span>
                     </div>
-                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                      Claiming registers today’s reward on the durable ledger. Social actions do not mint extra GHC beyond this path.
-                    </p>
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Clock size={14} className="shrink-0" />
+                      <span>Pending GHC may wait ~48h before it becomes spendable</span>
+                    </div>
                   </div>
 
                   {error ? (
-                    <p
-                      className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] text-destructive"
-                      role="alert"
-                    >
+                    <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive" role="alert">
                       {error}
                     </p>
                   ) : null}
+
+                  <button
+                    type="button"
+                    disabled={claiming || !canAttemptClaim}
+                    onClick={() => void claim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-3.5 text-sm font-bold text-amber-950 shadow-md transition active:scale-[0.99] disabled:opacity-60"
+                  >
+                    {claiming ? (
+                      <>
+                        <span className="gh-daily-button-spinner" aria-hidden />
+                        Claiming…
+                      </>
+                    ) : (
+                      <>
+                        <GhcCoinIcon size={18} />
+                        Claim daily GHC
+                      </>
+                    )}
+                  </button>
                 </>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex flex-col items-center gap-2 py-2 text-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                      <Zap size={28} fill="currentColor" />
-                    </div>
-                    <p className="text-lg font-bold text-amber-800 dark:text-amber-200">
-                      {done.alreadyClaimed ? "Already claimed today" : formatAmount(done.amount)}
-                    </p>
-                    {done.pending ? (
-                      <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Clock size={12} aria-hidden />
-                        Pending until maturity
-                        {formatRedeemable(done.redeemableAt)
-                          ? ` · available ${formatRedeemable(done.redeemableAt)}`
-                          : ""}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">Credited on the durable wallet ledger.</p>
-                    )}
+                <div className="space-y-3 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15">
+                    <GhcCoinIcon size={40} />
                   </div>
-                  <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-                    Wallet shows pending holds · Rewards centre shows streak and missions.
+                  <p className="text-lg font-bold text-foreground">
+                    {done.alreadyClaimed ? "Already claimed today" : formatAmount(done.amount)}
                   </p>
+                  {done.pending ? (
+                    <p className="text-[12px] text-muted-foreground">
+                      Held as pending until maturity
+                      {done.redeemableAt ? ` · available around ${formatRedeemable(done.redeemableAt)}` : ""}.
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground">Added to your available GHC balance.</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="w-full rounded-2xl border border-border bg-background py-3 text-sm font-bold"
+                  >
+                    Done
+                  </button>
                 </div>
               )}
             </div>
-
-            <footer className="grid gap-2 border-t border-border p-3">
-              {!done ? (
-                <button
-                  type="button"
-                  disabled={claiming || !canAttemptClaim}
-                  onClick={() => void claim()}
-                  className="flex min-h-14 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 text-[15px] font-bold text-amber-950 shadow-md active:scale-[0.98] hover:from-amber-400 hover:to-amber-500 disabled:opacity-50"
-                >
-                  {claiming ? (
-                    <span className="gh-daily-button-spinner" aria-hidden />
-                  ) : (
-                    <Zap size={16} fill="currentColor" aria-hidden />
-                  )}
-                  {claiming ? "Claiming…" : "Claim GHC"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={close}
-                  className="flex min-h-11 items-center justify-center rounded-2xl bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800"
-                >
-                  Done
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  close()
-                  try {
-                    window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:open-settings-section", { detail: { section: "rewards" } }),
-                    )
-                  } catch {
-                    /* */
-                  }
-                }}
-                className="min-h-10 text-[11px] font-semibold text-muted-foreground underline-offset-2 hover:underline"
-              >
-                Open Rewards details
-              </button>
-            </footer>
           </section>
         </div>
       ) : null}
     </>
   )
+
+  return createPortal(ui, document.body)
 }

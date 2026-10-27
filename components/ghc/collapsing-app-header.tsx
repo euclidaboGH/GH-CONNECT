@@ -54,7 +54,7 @@ export function CollapsingAppHeader({
         }`}
         aria-hidden={!compact}
       >
-        <div className="flex items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-1.5 sm:px-4">
+        <div className="flex min-h-11 items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-1 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
@@ -78,13 +78,14 @@ export function CollapsingAppHeader({
 
       {/* Expanded header — part of scroll stream conceptually; hides on scroll-down */}
       <div
+        role="banner"
         className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
           hidden && compact
             ? "pointer-events-none max-h-0 -translate-y-2 overflow-hidden opacity-0 border-transparent"
             : "translate-y-0 opacity-100"
         } ${className}`}
       >
-        <div className="px-3 py-1 sm:px-4 sm:py-1.5">
+        <div className="px-3 py-0.5 sm:px-4 sm:py-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               {leading}

@@ -1042,6 +1042,16 @@ export function CommunitiesScreen() {
     )
   }
 
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try { window.dispatchEvent(new CustomEvent("ghc:communities-refresh")) } catch { /* */ }
+      }
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [])
+
   return (
     <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven communities">
       <CollapsingAppHeader

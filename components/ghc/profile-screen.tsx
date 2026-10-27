@@ -817,7 +817,7 @@ export function ProfileScreen({
               </div>
             ) : null}
             <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
-            <div className="mt-2"><PioneerIdentityStrip /></div>
+            <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
                 type="button"
@@ -1106,7 +1106,7 @@ export function ProfileScreen({
             <div className="min-w-0"><h2 className="text-base font-bold">Dashboard</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8">
-            <ProfileEcosystemHub userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
+            <ProfileEcosystemHub preferredGreenHavenId={serverGreenHavenId} userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
             <div className="mt-4"><UnifiedActivityCenter limit={40} /></div>
             <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Your communities">
               <h3 className="mb-2 text-sm font-bold">Your communities</h3>

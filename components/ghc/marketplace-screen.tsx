@@ -192,6 +192,16 @@ function ListingCard({
 }) {
   const chip = statusChip(listing.status)
   const media = listing.media?.[0]
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try { window.dispatchEvent(new CustomEvent("ghc:marketplace-refresh")) } catch { /* */ }
+      }
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [])
+
   return (
     <button
       type="button"

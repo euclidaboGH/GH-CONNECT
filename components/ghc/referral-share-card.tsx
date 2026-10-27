@@ -229,6 +229,16 @@ export function ReferralShareCard({
     }
   }, [load])
 
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try { window.dispatchEvent(new CustomEvent("ghc:referral-refresh")) } catch { /* */ }
+      }
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [])
+
   return (
     <section
       className={`rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-background to-background p-4 shadow-sm ${className}`}

@@ -126,7 +126,11 @@ export function PostRewardPanel({
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-bold tracking-wide text-foreground">Curation & post insights</span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-medium text-muted-foreground">
+            {viewCount > 0 ? (
             <span className="inline-flex items-center gap-1"><Eye size={12} aria-hidden /> {viewCount.toLocaleString()} views</span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-muted-foreground">Insights</span>
+          )}
             <span className="inline-flex items-center gap-1"><ThumbsUp size={11} aria-hidden /> {up.toLocaleString()}</span>
             <span className="inline-flex items-center gap-1"><ThumbsDown size={11} aria-hidden /> {down.toLocaleString()}</span>
           </span>

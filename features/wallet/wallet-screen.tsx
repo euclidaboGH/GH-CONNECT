@@ -504,6 +504,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [piIntents, txDateRange, query, txFilter])
 
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
+  const [showFullHistory, setShowFullHistory] = useState(false)
+  const [historyRail, setHistoryRail] = useState<"ghc" | "pi">("ghc")
   const [showAddGhc, setShowAddGhc] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<SendRecipient | null>(null)
   const [selectedTx, setSelectedTx] = useState<GhcTransaction | null>(null)
@@ -1276,14 +1278,8 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onActivity={() => {
                   setSendEducate(null)
-                  setTab("activity")
-                  try {
-                    document
-                      .getElementById("ghc-wallet-activity")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  } catch {
-                    /* */
-                  }
+                  setHistoryRail("ghc")
+                  setShowFullHistory(true)
                 }}
               />
             }
@@ -2356,6 +2352,59 @@ const lowBalance = balance === 0 && displayPending === 0
           void refresh()
         }}
       />
+
+
+      {showFullHistory ? (
+        <div className="fixed inset-0 z-[90] flex flex-col bg-background" role="dialog" aria-modal="true" aria-label="Wallet history">
+          <header className="flex items-center gap-2 border-b border-border px-3 py-3">
+            <button type="button" onClick={() => setShowFullHistory(false)} className="rounded-full p-2 hover:bg-muted" aria-label="Close history">
+              <ArrowLeft size={18} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold">Transaction history</h2>
+              <p className="text-[11px] text-muted-foreground">GHC ledger and π payments stay on separate rails</p>
+            </div>
+          </header>
+          <div className="flex gap-2 border-b border-border px-3 py-2">
+            <button type="button" onClick={() => setHistoryRail("ghc")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${historyRail === "ghc" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>GHC</button>
+            <button type="button" onClick={() => setHistoryRail("pi")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${historyRail === "pi" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>π Payments</button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {historyRail === "ghc" ? (
+              <div className="space-y-1">
+                {(txs || []).length === 0 ? (
+                  <p className="py-10 text-center text-sm text-muted-foreground">No GHC transactions yet.</p>
+                ) : (
+                  (txs || []).map((tx: any) => (
+                    <TxRow key={tx.id || `${tx.createdAt}-${tx.amount}`} tx={tx} onOpen={() => setSelectedTx?.(tx)} />
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(piIntents || []).length === 0 ? (
+                  <p className="py-10 text-center text-sm text-muted-foreground">No π payment intents for this account.</p>
+                ) : (
+                  (piIntents || []).map((intent: any) => (
+                    <button
+                      key={intent.id}
+                      type="button"
+                      onClick={() => setSelectedPiIntent?.(intent)}
+                      className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-3 py-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{intent.memo || intent.purpose || intent.id}</p>
+                        <p className="text-[11px] text-muted-foreground">{intent.status} · {intent.amountPi != null ? `${intent.amountPi} π` : ""}</p>
+                      </div>
+                      <ChevronRight size={16} className="text-muted-foreground" />
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <PiPaymentDetail
         intent={selectedPiIntent as PiPaymentDetailRecord | null}

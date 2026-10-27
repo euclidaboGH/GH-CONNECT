@@ -5,9 +5,9 @@ import { WifiOff, Wifi } from "lucide-react"
 import { PendingQueueChip } from "./pending-queue-chip"
 
 /**
- * Non-blocking network status.
- * Offline: amber strip. Brief "Back online" confirmation after restore.
- * Does not claim sync success — only connectivity.
+ * Non-blocking network status overlay.
+ * Fixed under the status area so it does not push page headers downward.
+ * Offline: amber. Brief "Back online" after restore. Does not claim sync success.
  */
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false)
@@ -36,13 +36,15 @@ export function OfflineBanner() {
   if (offline) {
     return (
       <div
-        className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-amber-600/95 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm"
+        className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top,0px)] z-[70] flex justify-center px-3 pt-1"
         role="status"
         aria-live="polite"
       >
-        <WifiOff size={14} aria-hidden />
-        <span>You&apos;re offline — actions queue until you&apos;re back.</span>
-        <PendingQueueChip />
+        <div className="pointer-events-auto flex max-w-md items-center justify-center gap-2 rounded-full bg-amber-600/95 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm">
+          <WifiOff size={14} aria-hidden />
+          <span>You&apos;re offline — actions queue until you&apos;re back.</span>
+          <PendingQueueChip />
+        </div>
       </div>
     )
   }
@@ -50,13 +52,15 @@ export function OfflineBanner() {
   if (justOnline) {
     return (
       <div
-        className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-emerald-700/95 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm"
+        className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top,0px)] z-[70] flex justify-center px-3 pt-1"
         role="status"
         aria-live="polite"
       >
-        <Wifi size={14} aria-hidden />
-        <span>Back online — pending actions will retry when ready</span>
-        <PendingQueueChip />
+        <div className="pointer-events-auto flex max-w-md items-center justify-center gap-2 rounded-full bg-emerald-700/95 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm">
+          <Wifi size={14} aria-hidden />
+          <span>Back online — pending actions will retry when ready</span>
+          <PendingQueueChip />
+        </div>
       </div>
     )
   }

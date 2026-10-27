@@ -67,6 +67,17 @@ interface EnhancedFeedScreenProps {
 
 
 function FeedSkeleton() {
+  useEffect(() => {
+    const onPrefetch = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      if (id === "home" || id === "feed") {
+        try { window.dispatchEvent(new CustomEvent("ghc:feed-soft-revalidate")) } catch { /* */ }
+      }
+    }
+    window.addEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+    return () => window.removeEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+  }, [])
+
   return (
     <div className="space-y-4 px-3 py-3" role="status" aria-busy="true" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
@@ -767,7 +778,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     />
                   ) : null}
                   <PostErrorBoundary>
-                    <EnhancedPostCard
+                    <div className="gh-feed-post-slot"><EnhancedPostCard
                       post={post}
                       isLiked={likedPosts.includes(post.id)}
                       isSaved={bookmarkedPostIds.includes(post.id)}
@@ -821,7 +832,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                           setTab("profile")
                         }
                       }}
-                    />
+                    /></div>
                   </PostErrorBoundary>
                 </div>
               ))}

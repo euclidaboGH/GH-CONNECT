@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.138.0",
+  "version": "0.142.0",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -41,7 +41,8 @@
     "operator:phase7-runtime-hardening": "node scripts/operator-phase7-runtime-hardening.mjs",
     "check:phase8-wallet-history": "node scripts/check-phase8-wallet-history-foundation.mjs",
     "check:phase9-wallet-transactions": "node scripts/check-phase9-wallet-transaction-integration.mjs",
-    "check:phase16-payment-timeline": "node scripts/check-phase16-payment-timeline.mjs"
+    "check:phase16-payment-timeline": "node scripts/check-phase16-payment-timeline.mjs",
+    "verify:legal": "node scripts/verify-legal-public.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

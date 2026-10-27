@@ -402,6 +402,17 @@ export function DiscoveryGridScreen() {
   const loading = Boolean(ghc.loading)
   const error = ghc.error
 
+  useEffect(() => {
+    const onPrefetch = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      if (id === "discover") {
+        try { window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate")) } catch { /* */ }
+      }
+    }
+    window.addEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+    return () => window.removeEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+  }, [])
+
   return (
     <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Discover people and communities">
       <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">

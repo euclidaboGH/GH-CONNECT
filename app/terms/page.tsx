@@ -1,13 +1,23 @@
 import type { Metadata } from "next"
-import { LegalPage } from "@/components/legal-page"
-import { LEGAL } from "@/lib/ghc-data"
+import { LegalDocument, LegalPage } from "@/components/legal-page"
+import { POLICY_META } from "@/lib/legal/policy-meta"
+import { TERMS_INTRO, TERMS_SECTIONS } from "@/lib/legal/terms-of-service"
 
-export const metadata: Metadata = { title: "Terms of Service" }
+export const metadata: Metadata = {
+  title: "Terms of Service · GreenHaven",
+  description:
+    "Terms governing use of GreenHaven, including accounts, content, GHC utility ledger, and Pi payments.",
+  robots: { index: true, follow: true },
+}
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service">
-      <div className="whitespace-pre-wrap">{LEGAL.terms}</div>
+    <LegalPage
+      title="Terms of Service"
+      effectiveDate={POLICY_META.termsEffectiveDate}
+      lastUpdated={POLICY_META.termsLastUpdated}
+    >
+      <LegalDocument intro={TERMS_INTRO} sections={TERMS_SECTIONS} />
     </LegalPage>
   )
 }

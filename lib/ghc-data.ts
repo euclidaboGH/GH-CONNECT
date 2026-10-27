@@ -494,81 +494,19 @@ Our Values:
 • Respect: We maintain a culture of kindness and mutual respect
 • Transparency: We are open about how your data is used and protected`,
 
-  terms: `Terms of Service - GreenHaven
+  terms: `Terms of Service — GreenHaven
 
-1. Acceptance of Terms
-By using GreenHaven, you accept these terms and our privacy policy.
+The authoritative Terms of Service are published at /terms (structured document with table of contents).
+Effective date and full clauses are maintained in lib/legal/terms-of-service.ts.
 
-2. User Conduct
-You agree to:
-- Be at least 18 years old
-- Provide accurate information
-- Respect other users
-- Not engage in harassment or abuse
-- Not share explicit content
-- Follow all applicable laws
+By using GreenHaven you agree to those Terms and the Privacy Policy at /privacy.`,
 
-3. Account Responsibility
-You are responsible for maintaining your account security and all activities under your account.
+  privacy: `Privacy Policy — GreenHaven
 
-4. User Content
-You retain all rights to content you post. By posting, you grant GreenHaven a license to use that content.
+The authoritative Privacy Policy is published at /privacy (structured document with table of contents).
+Effective date and full clauses are maintained in lib/legal/privacy-policy.ts.
 
-5. Limitations of Liability
-GreenHaven is provided "as is". We are not liable for indirect damages or issues arising from third-party content.
-
-6. Termination
-We reserve the right to terminate accounts that violate these terms.
-
-7. Changes to Terms
-We may update these terms at any time with notice to users.`,
-
-  privacy: `Privacy Policy - GreenHaven
-
-Last updated: 2026-10-26
-
-GreenHaven is a social and marketplace app for Pioneers. We design data practices to collect only what is needed to run the product.
-
-1. Authentication with Pi
-- You sign in with Pi Authentication (Pi Browser / Pi SDK). We do not operate a separate password login.
-- After you authorize the app, our servers verify your session with Pi Platform (/v2/me) and store an app-specific Pi user identifier linked to your GreenHaven account.
-- We may store your Pi display username when Pi provides it. This is not a password and is not a legal identity document.
-- We do not receive your Pi wallet seed phrase. Payments are authorized by you through Pi payment flows.
-
-2. Information We Collect
-- Profile content you choose to provide (display name, photos, bio, interests, location you set)
-- Social and marketplace activity inside GreenHaven (posts, messages, listings, communities)
-- Technical logs needed for security and reliability (approximate device/browser metadata, IP for abuse prevention)
-- Payment intent records for π transactions you complete in-app (amount, status, purpose) — separate from any internal GHC reward balance
-
-3. What We Do Not Require
-- We do not require email or phone number solely to use core social features unless a specific feature genuinely needs it and you consent.
-- We do not sell personal data.
-- We do not import Pi private messages or the Pi social graph; messaging and communities on GreenHaven are our own systems.
-
-4. How We Use Information
-- Provide and improve GreenHaven features
-- Secure accounts, prevent fraud and abuse
-- Process π payments you initiate and related support
-- Operate optional internal rewards (GHC) under our product rules — rewards are not a substitute for π and are not a claim on Pi Network
-
-5. Sharing
-- Other GreenHaven users see what you publish under your privacy settings
-- Infrastructure providers (hosting, database) process data under contract to run the service
-- Legal requests when required by law
-- Pi Platform receives what is necessary for authentication and payments you start
-
-6. Retention and Your Rights
-- You may update profile content in-app
-- You may request account deletion; residual legal/security logs may be kept as required
-- Contact support through in-app Support or the contact listed in the app store / Developer Portal listing
-
-7. International and Ecosystem Context
-- GreenHaven may be accessed via Pi Browser. Hosting regions depend on our deployment provider (for example Vercel).
-- This policy is the Privacy Policy URL for Developer Portal configuration.
-
-8. Changes
-We may update this policy; material changes will be reflected by updating this page.`,
+Contact: support@ghconnect.com`,
 }
 
 
