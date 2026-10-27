@@ -238,6 +238,16 @@ export function GreenHavenEcosystemScreen({
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        try { window.dispatchEvent(new CustomEvent("ghc:ecosystem-refresh")) } catch { /* */ }
+      }
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [])
+
+  useEffect(() => {
     if (initialFocus) setFocusId(initialFocus)
   }, [initialFocus])
 

@@ -13,6 +13,7 @@ import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durabl
 import { validatePulseVideo } from "@/lib/media/video-inspection"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
+import { COMPOSE_LIMITS, textMaxForMode } from "@/lib/composer/compose-limits"
 
 export type ComposeMode = "post" | "story"
 export type Audience = "public" | "followers" | "mutuals" | "private"
@@ -67,9 +68,33 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [isPublishing, setIsPublishing] = useState(false)
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>("")
   const [promptHint, setPromptHint] = useState(pickComposePrompt)
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
 
 
   const publishingRef = useRef(false)
+  const handlePublishRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    const sync = () => setIsOffline(typeof navigator !== "undefined" && navigator.onLine === false)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
   const activeDraftIdRef = useRef<string | null>(null)
   const pendingComposeRef = useRef<{ text?: string; draftId?: string } | null>(null)
 
@@ -121,7 +146,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     setMode("post")
     const close = () => onOpenChange(false)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !uploadProgress && !isPublishing) close()
+      if (e.key === "Escape" && !uploadProgress && !isPublishing) {
+        close()
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !uploadProgress && !isPublishing) {
+        e.preventDefault()
+        void handlePublishRef.current?.()
+      }
     }
     window.addEventListener("ghc:tab-change", close)
     window.addEventListener("ghc:close-compose", close)
@@ -134,6 +166,18 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       window.removeEventListener("keydown", onKey)
     }
   }, [open, initialMode, onOpenChange, uploadProgress, isPublishing])
+
+  useEffect(() => {
+    if (!open) return
+    const dirty = Boolean(text.trim() || selectedImages.length || selectedVideo || selectedDoc)
+    if (!dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [open, text, selectedImages.length, selectedVideo, selectedDoc])
 
   useEffect(() => {
     if (open) {
@@ -182,6 +226,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     if (!text.trim()) return
     const payload = JSON.stringify({ text, audience, at: Date.now() })
     const tId = window.setTimeout(() => {
+      setLastSavedAt(Date.now())
       void piLocalSet("post-draft-v1", payload).catch(() => {
         try {
           window.localStorage.setItem("ghc-post-draft-v1", payload)
@@ -229,6 +274,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const handleImages = async (files: FileList | null) => {
     if (!files?.length) return
+    if (mode === "post" && selectedImages.length >= COMPOSE_LIMITS.maxImagesPerPost) {
+      addToast(`You can attach up to ${COMPOSE_LIMITS.maxImagesPerPost} photos per post`, "info")
+      return
+    }
     setUploadProgress(MEDIA_PROGRESS.preparingPhoto)
     try {
       if (mode === "story") {
@@ -282,7 +331,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ Photo ready", "success")
       } else {
-        const selectedFiles = Array.from(files)
+        const selectedFiles = Array.from(files).slice(0, Math.max(0, COMPOSE_LIMITS.maxImagesPerPost - selectedImages.length))
         const validationError = validateImageFiles(selectedFiles)
         if (validationError) {
           addToast(validationError, "error")
@@ -593,6 +642,11 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const AudienceIcon =
     audience === "public" ? Globe : audience === "private" ? Lock : Users
 
+
+  handlePublishRef.current = () => {
+    void handlePublish()
+  }
+
   return (
     <div
       className="gh-world-compose fixed inset-0 z-[70] flex flex-col bg-background text-foreground"
@@ -604,7 +658,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       <header className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-card/95 px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <button
           type="button"
-          onClick={close}
+          onClick={() => {
+              const dirty = Boolean(text.trim() || selectedImages.length || selectedVideo || selectedDoc)
+              if (dirty && !window.confirm("Discard this draft? Your text is still autosaved on this device until you clear it.")) {
+                return
+              }
+              close()
+            }}
           className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Close"
           disabled={isPublishing || Boolean(uploadProgress)}
@@ -796,13 +856,34 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             aria-label="Post text"
             aria-describedby="post-character-count"
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, mode === "story" ? 500 : 5000))}
+            onChange={(e) => setText(e.target.value.slice(0, textMaxForMode(mode)))}
             placeholder={mode === "post" ? "What's on your mind?" : "Share a moment…"}
-            className="min-h-[110px] w-full resize-none bg-transparent text-[17px] leading-relaxed text-foreground placeholder-gray-400 focus:outline-none"
+            className="min-h-[110px] max-h-[45vh] w-full resize-y bg-transparent text-[17px] leading-relaxed text-foreground placeholder-gray-400 focus:outline-none"
+            onPaste={(e) => {
+              if (mode !== "post" || isPublishing) return
+              const items = e.clipboardData?.items
+              if (!items) return
+              const files: File[] = []
+              for (let i = 0; i < items.length; i++) {
+                const it = items[i]
+                if (it.type.startsWith("image/")) {
+                  const f = it.getAsFile()
+                  if (f) files.push(f)
+                }
+              }
+              if (files.length) {
+                e.preventDefault()
+                const dt = new DataTransfer()
+                files.slice(0, COMPOSE_LIMITS.maxImagesPerPost - selectedImages.length).forEach((f) => dt.items.add(f))
+                if (dt.files.length) void handleImages(dt.files)
+              }
+            }}
             rows={5}
           />
           <p id="post-character-count" className="text-right text-[11px] text-muted-foreground">
-            {text.length}/{mode === "story" ? 500 : 5000}
+            {text.length}/{textMaxForMode(mode)}{textMaxForMode(mode) - text.length <= COMPOSE_LIMITS.textWarnRemaining && text.length > 0 ? (
+              <span className="ml-2 font-semibold text-amber-600">· almost at limit</span>
+            ) : null}
           </p>
 
           {(hashSuggestions.length > 0 || mentionSuggestions.length > 0) && (
@@ -844,7 +925,12 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
           {/* Media previews */}
           {mode === "post" && selectedImages.length > 0 && (
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="mt-3">
+            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              {selectedImages.length}/{COMPOSE_LIMITS.maxImagesPerPost} photos
+              {selectedImages.length >= COMPOSE_LIMITS.maxImagesPerPost ? " · limit reached" : ""}
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {selectedImages.map((src, i) => (
                 <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
                   <img src={src} alt={`Attached photo ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
@@ -858,6 +944,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                   </button>
                 </div>
               ))}
+            </div>
+            {selectedImages.length > 1 ? (
+              <button
+                type="button"
+                className="mt-1.5 text-[11px] font-bold text-rose-700"
+                onClick={() => setSelectedImages([])}
+              >
+                Clear all photos
+              </button>
+            ) : null}
             </div>
           )}
           {mode === "post" && selectedVideo && (
@@ -973,6 +1069,18 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             >
               <BarChart3 size={16} aria-hidden />
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                window.dispatchEvent(new CustomEvent("ghc:open-challenge"))
+              }}
+              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-orange-50 px-3 text-xs font-bold text-orange-700 transition hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300"
+              aria-label="Create a challenge"
+              title="Create a challenge"
+            >
+              <span className="text-sm" aria-hidden>🎯</span>
+            </button>
           )}
         </div>
         {mode === "post" && selectedDocName ? (
@@ -985,7 +1093,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         ) : null}
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
           {mode === "post"
-            ? "Text, photos, video and files in one post · photos up to 25 MB · videos up to 40 MB"
+            ? "Text, photos, video and files · Ctrl/⌘+Enter to post · photos up to 25 MB · videos up to 40 MB"
             : "Stories disappear after 24 hours"}
         </p>
       </footer>

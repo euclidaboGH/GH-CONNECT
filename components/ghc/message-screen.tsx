@@ -94,6 +94,17 @@ export function MessageScreen() {
 
 
   useEffect(() => {
+    const onPrefetch = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      if (id === "messages") {
+        try { window.dispatchEvent(new CustomEvent("ghc:messages-soft-revalidate")) } catch { /* */ }
+      }
+    }
+    window.addEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+    return () => window.removeEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
+  }, [])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setIsOffline(!navigator.onLine)
     sync()
@@ -793,16 +804,6 @@ export function MessageScreen() {
     { id: "communities", label: "Communities" },
   ]
 
-  useEffect(() => {
-    const onPrefetch = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail
-      if (id === "messages") {
-        try { window.dispatchEvent(new CustomEvent("ghc:messages-soft-revalidate")) } catch { /* */ }
-      }
-    }
-    window.addEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
-    return () => window.removeEventListener("ghc:prefetch-tab", onPrefetch as EventListener)
-  }, [])
 
   return (
     <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Messages inbox">

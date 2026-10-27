@@ -2739,3 +2739,16 @@ body { overflow-x: clip; }
 .gh-page-header-slim {
   min-height: 2.5rem;
 }
+
+.gh-inbox-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+
+.gh-profile-media-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+.gh-composer-sheet {
+  overscroll-behavior: contain;
+}

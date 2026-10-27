@@ -202,6 +202,14 @@ function ListingCard({
     return () => document.removeEventListener("visibilitychange", onVis)
   }, [])
 
+  useEffect(() => {
+    const onOnline = () => {
+      try { window.dispatchEvent(new CustomEvent("ghc:marketplace-refresh")) } catch { /* */ }
+    }
+    window.addEventListener("online", onOnline)
+    return () => window.removeEventListener("online", onOnline)
+  }, [])
+
   return (
     <button
       type="button"
