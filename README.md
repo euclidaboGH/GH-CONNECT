@@ -1,10 +1,10 @@
-## v0.157.15 — Phase 1–12 connection, moderation and financial request hardening
+## v0.157.16 — Phase 1–12 connection, moderation and financial request hardening
 
-This increment adds bounded streaming JSON parsing to connection requests, user/community report intake, matching signals, creator tips, and bank beneficiary creation/disable. It rejects malformed/non-object payloads before route business logic, requires string identifiers for matching/report/bank-beneficiary fields, validates connection note/source lengths, and prevents boolean/object or exponent-style coercion in tip amounts. The shared bounded JSON parser now has a dedicated runtime test covering valid JSON, declared and streamed size limits, malformed JSON, non-object bodies, invalid UTF-8, invalid limits and bodyless requests. Static checks and runtime helper tests do not replace a full Next.js build or live integration tests. See `docs/UPGRADE-WORKLOG-0.157.15.md`.
+This increment adds bounded streaming JSON parsing to connection requests, user/community report intake, matching signals, creator tips, and bank beneficiary creation/disable. It rejects malformed/non-object payloads before route business logic, requires string identifiers for matching/report/bank-beneficiary fields, validates connection note/source lengths, and prevents boolean/object or exponent-style coercion in tip amounts. The shared bounded JSON parser now has a dedicated runtime test covering valid JSON, declared and streamed size limits, malformed JSON, non-object bodies, invalid UTF-8, invalid limits and bodyless requests. Static checks and runtime helper tests do not replace a full Next.js build or live integration tests. See `docs/UPGRADE-WORKLOG-0.157.16.md`.
 
 ## v0.157.14 — Phase 1–12 financial, identity and social request hardening
 
-This cross-phase increment adds streaming JSON byte limits to twelve additional high-impact write routes: seller and bank payout intake, membership activation, GHC pack payment intents, Pi step-up authentication, ad verification signals, social block/restrict/mute/follow/save mutations, and payment recovery. The payout amount parser no longer accepts booleans or malformed values through JavaScript coercion, and follow target IDs must be strings. Requests that exceed limits receive HTTP 413; malformed/non-object JSON receives HTTP 400 before route business logic. The existing v0.157.13 body-boundary work remains included. No remote systems are contacted and no production state is mutated. Source checks are not production approval. See `docs/UPGRADE-WORKLOG-0.157.15.md`.
+This cross-phase increment adds streaming JSON byte limits to twelve additional high-impact write routes: seller and bank payout intake, membership activation, GHC pack payment intents, Pi step-up authentication, ad verification signals, social block/restrict/mute/follow/save mutations, and payment recovery. The payout amount parser no longer accepts booleans or malformed values through JavaScript coercion, and follow target IDs must be strings. Requests that exceed limits receive HTTP 413; malformed/non-object JSON receives HTTP 400 before route business logic. The existing v0.157.13 body-boundary work remains included. No remote systems are contacted and no production state is mutated. Source checks are not production approval. See `docs/UPGRADE-WORKLOG-0.157.16.md`.
 
 ## v0.157.11 — Phase 11 wallet cross-feature reconciliation integrity
 
@@ -148,7 +148,7 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 # GreenHaven — GH Connect
 
-**Current source version:** `0.157.15`
+**Current source version:** `0.157.16`
 
 Phase 6 navigation implementation notes: `docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md`. Phase 5 design-system notes remain in `docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md`. Source checks do not substitute for browser journey and accessibility acceptance.
 
@@ -207,4 +207,4 @@ The notification bell is inline with Marketplace and Ecosystem in the compact sh
 - Run `node scripts/check-phase5-reliability.mjs` alongside the Phase 3/4 identity checks, release hygiene, lock integrity, safety scan, and static verification suite.
 
 
-Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.15.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.
+Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.16.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.

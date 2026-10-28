@@ -1,6 +1,6 @@
 # Phase 12 — Final integration and release readiness
 
-Release: `0.157.15` (2026-10-28)
+Release: `0.157.16` (2026-10-28)
 
 ## Delivered in v0.157.12
 
@@ -33,6 +33,6 @@ No production database, balances, payments, orders, entitlements, or migrations 
 The subsequent cross-phase hardening increment added streaming bounded JSON parsing to seven high-impact mutation endpoints. The Phase 1–12 consolidated gate now includes a dedicated request-boundary regression contract. These source checks improve release confidence but do not replace Node.js 24.15.0 install/build checks, browser tests, disposable PostgreSQL restore/concurrency drills, migration-history reconciliation, or Pi Testnet acceptance.
 
 
-## Cross-phase follow-up — v0.157.15
+## Cross-phase follow-up — v0.157.16
 
 Added bounded streaming JSON parsing and stricter input types to connection request, moderation report, matching signal, creator tip, and bank-beneficiary mutation routes. Added a runtime test for the shared bounded JSON reader. This does not prove the full Next.js application builds or that provider/database integrations pass. Production remains NOT APPROVED until the supported Node.js 24.15.0 locked install, TypeScript/lint/build, browser journeys, database restore/concurrency tests, migration history reconciliation, and Pi Testnet checks are completed.

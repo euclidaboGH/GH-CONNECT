@@ -1,9 +1,9 @@
 /**
-import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/ledger/spend
  * Server-authoritative GHC debit (membership, boosts, catalog spends).
  * Amount from spend-catalog — client amount cannot inflate charge.
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   allowMemoryServer,

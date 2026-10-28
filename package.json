@@ -1,8 +1,8 @@
 {
   "name": "gh-connect",
-  "version": "0.157.15",
+  "version": "0.157.16",
   "private": true,
-  "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
+  "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
     "dev": "next dev",
     "build": "ESLINT_USE_FLAT_CONFIG=false next build",
@@ -95,7 +95,8 @@
     "check:phase1-12-cross-system-hardening": "node scripts/check-phase1-12-cross-system-hardening.mjs",
     "check:phase1-12-request-boundary-expansion": "node scripts/check-phase1-12-request-boundary-expansion.mjs",
     "check:phase1-12-request-boundary-followup": "node scripts/check-phase1-12-request-boundary-followup.mjs",
-    "test:bounded-json-runtime": "node --experimental-strip-types scripts/test-bounded-json-runtime.mjs"
+    "test:bounded-json-runtime": "node --experimental-strip-types scripts/test-bounded-json-runtime.mjs",
+    "check:spend-bounded-json-import": "node scripts/check-spend-bounded-json-import.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",
