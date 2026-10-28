@@ -10,7 +10,7 @@ const pkg = JSON.parse(read("package.json"))
 const lock = JSON.parse(read("package-lock.json"))
 const checks = []
 const test = (name, condition) => { checks.push([name, Boolean(condition)]); console.log(`${condition ? "PASS" : "FAIL"} ${name}`) }
-test("package version is the consolidated release", pkg.version === "0.157.19")
+test("package version is the consolidated release", pkg.version === "0.157.20")
 test("lockfile root version matches package", lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version)
 test("application release version matches package", read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test("verified manifest version matches package", read("VERIFIED_MANIFEST.txt").includes(`project_version=${pkg.version}`))

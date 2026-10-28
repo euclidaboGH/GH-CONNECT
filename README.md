@@ -1,6 +1,6 @@
-## v0.157.19 — build type-safety and CI runtime hardening
+## v0.157.20 — Pi wallet history type-predicate correction
 
-This release fixes the latest wallet, Pi intent, payment-order and governance TypeScript errors, tightens untrusted JSON validation, and updates GitHub Actions to Node-24-compatible actions on Ubuntu 24.04. Earlier bounded-JSON import guards remain included. Dependency audit and npm environment warnings are documented separately; they are not falsely marked resolved. See `docs/UPGRADE-WORKLOG-0.157.19.md`.
+This release fixes the Pi wallet history type predicate that blocked the v0.157.19 Vercel build, and updates the regression guard to require the canonical `PiTransactionProjection` type. It retains the previous wallet, payment-order, governance, bounded-JSON and CI runtime hardening. Dependency audit and npm environment warnings are documented separately; they are not falsely marked resolved. See `docs/UPGRADE-WORKLOG-0.157.20.md`.
 
 ## v0.157.16 — Phase 1–12 connection, moderation and financial request hardening
 
@@ -152,7 +152,7 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 # GreenHaven — GH Connect
 
-**Current source version:** `0.157.19`
+**Current source version:** `0.157.20`
 
 Phase 6 navigation implementation notes: `docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md`. Phase 5 design-system notes remain in `docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md`. Source checks do not substitute for browser journey and accessibility acceptance.
 
@@ -211,4 +211,4 @@ The notification bell is inline with Marketplace and Ecosystem in the compact sh
 - Run `node scripts/check-phase5-reliability.mjs` alongside the Phase 3/4 identity checks, release hygiene, lock integrity, safety scan, and static verification suite.
 
 
-Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.19.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.
+Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.20.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.

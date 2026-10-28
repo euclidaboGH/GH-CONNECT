@@ -63,7 +63,7 @@ import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 import { PaymentRecoveryBanner } from "@/components/ghc/payment-recovery-banner"
 import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
-import { normalizePiTransactionIntent, paymentPurposeLabel } from "@/lib/domains/pi-transaction-normalizer"
+import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 
 const formatGhc = formatGhcShared
 
@@ -406,7 +406,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             list
               .filter((raw: unknown) => Boolean(raw) && typeof raw === "object" && !Array.isArray(raw))
               .map((raw: unknown) => normalizePiTransactionIntent(raw))
-              .filter((x): x is PiIntentRow => x !== null)
+              .filter((x): x is PiTransactionProjection => x !== null)
               // This endpoint is Pi history: never coerce unknown/mixed rails into π.
               .filter((x: PiIntentRow) => Boolean(x.id) && x.currency === "PI")
           )
