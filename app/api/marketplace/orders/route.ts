@@ -6,6 +6,7 @@
  * GET  /api/marketplace/orders — durable list for authenticated user
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   genOrderId,
@@ -23,9 +24,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => ({}))
-  const listingId = String(body.listingId || "").trim()
-  const quantity = Math.max(1, Math.min(99, Math.floor(Number(body.quantity) || 1)))
+  const parsed = await readBoundedJson(request, 16 * 1024)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+  }
+  const body = parsed.value
+  const listingId = typeof body.listingId === "string" ? body.listingId.trim() : ""
+  const rawQuantity = body.quantity
+  const quantity = rawQuantity === undefined ? 1 : typeof rawQuantity === "number" ? rawQuantity : Number.NaN
   const idempotencyKey = String(request.headers.get("Idempotency-Key") || body.idempotencyKey || "").trim()
 
   // Ignore client price/seller/title/currency — never trust for financial totals
@@ -36,13 +43,16 @@ export async function POST(request: Request) {
   void body.totalAmount
   void body.price
 
-  if (!listingId) {
+  if (!listingId || listingId.length > 160 || /[\u0000-\u001f\u007f]/.test(listingId)) {
     return NextResponse.json({ ok: false, error: "listingId required" }, { status: 400 })
+  }
+  if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) {
+    return NextResponse.json({ ok: false, error: "INVALID_QUANTITY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
   if (idempotencyKey.length < 8 || idempotencyKey.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) {
     return NextResponse.json(
       { ok: false, error: "IDEMPOTENCY_KEY_REQUIRED", message: "Provide a stable 8–128 character Idempotency-Key for order creation." },
-      { status: 400 }
+      { status: 400, headers: { "Cache-Control": "no-store" } }
     )
   }
 

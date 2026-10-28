@@ -3,6 +3,7 @@
  * POST /api/social/posts/[id]/comments — author = session user
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRest, socialRpc } from "@/lib/server/social/rpc"
@@ -105,7 +106,9 @@ export async function POST(
   if (canView === null) return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   if (!canView) return NextResponse.json({ ok: false, error: "POST_NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } })
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 24 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
   const text = String(body.text || body.content || "").trim()
   if (text.length > 2000) {
     return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400 })

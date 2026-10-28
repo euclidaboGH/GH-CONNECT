@@ -3,6 +3,7 @@
  * POST /api/communities — create (owner = session user)
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 16 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
   // Creator is always session — never trust client ownership fields
   void body.createdBy
   void body.ownerId

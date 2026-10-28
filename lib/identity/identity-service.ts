@@ -91,9 +91,11 @@ export function resolveCanonicalUserId(input?: {
   profileUserId?: string | null
   explicitUserId?: string | null
 }): string {
+  // A newly verified Pi UID must outrank a previously cached explicit ID.
+  // Otherwise an account switch can accidentally keep the prior user's identity.
   const candidates = [
-    input?.explicitUserId,
     input?.piUid,
+    input?.explicitUserId,
     input?.profileUserId,
   ]
   for (const c of candidates) {

@@ -4,6 +4,7 @@
  * Verifies intent + Pi payment, completes on Pi, marks COMPLETED (idempotent).
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getPaymentIntent,
@@ -75,7 +76,15 @@ async function settleVerifiedCreatorTip(intent: {
 export async function POST(request: Request) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
-    const body = await request.json().catch(() => ({}))
+    const parsedBody = await readBoundedJson(request, 8 * 1024)
+    if (!parsedBody.ok) {
+      const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json(
+        { ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST_BODY" },
+        { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const body = parsedBody.value
     const paymentId = typeof body.paymentId === "string" ? body.paymentId.trim() : ""
     const txid = typeof body.txid === "string" ? body.txid.trim() : ""
     const intentId = typeof body.intentId === "string" ? body.intentId.trim() : ""

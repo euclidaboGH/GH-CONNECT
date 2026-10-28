@@ -4,6 +4,7 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,12 +29,19 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = (await req.json().catch(() => ({}))) as {
-      targetUserId?: string
-      signal?: string
+    const parsedBody = await readBoundedJson(req, 4 * 1024)
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { ok: false, error: parsedBody.error },
+        { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 },
+      )
     }
-    const targetUserId = String(body.targetUserId || "").trim()
-    const signal = String(body.signal || "").trim().toLowerCase()
+    const body = parsedBody.value
+    if (typeof body.targetUserId !== "string" || typeof body.signal !== "string") {
+      return NextResponse.json({ ok: false, error: "INVALID_SIGNAL" }, { status: 400 })
+    }
+    const targetUserId = body.targetUserId.trim()
+    const signal = body.signal.trim().toLowerCase()
     if (!targetUserId || targetUserId === auth.userId) {
       return NextResponse.json({ ok: false, error: "INVALID_TARGET" }, { status: 400 })
     }

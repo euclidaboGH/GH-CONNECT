@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,12 +20,22 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
-  const body = await request.json().catch(() => ({}))
-  const targetType = String(body.targetType || body.type || "user").slice(0, 40)
-  const targetId = String(body.targetId || "").trim()
-  const reason = String(body.reason || "").trim().slice(0, 500)
-  const communityId = body.communityId ? String(body.communityId).trim() : null
-  if (!targetId || !reason) {
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { ok: false, error: parsedBody.error },
+      { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 },
+    )
+  }
+  const body = parsedBody.value
+  const rawTargetType = body.targetType ?? body.type ?? "user"
+  const targetType = typeof rawTargetType === "string" ? rawTargetType.slice(0, 40) : ""
+  const targetId = typeof body.targetId === "string" ? body.targetId.trim() : ""
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : ""
+  const communityId = body.communityId === undefined || body.communityId === null || body.communityId === ""
+    ? null
+    : typeof body.communityId === "string" ? body.communityId.trim() : "__invalid__"
+  if (!targetId || !reason || !targetType || communityId === "__invalid__") {
     return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
   }
 

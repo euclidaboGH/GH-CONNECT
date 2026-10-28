@@ -1,134 +1,82 @@
-import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
-/**
- * GET /api/system/status — non-secret operator diagnostic.
- * Helps explain why media/rewards/messaging still fail after env is set.
- */
+/** GET /api/system/status — operator-only, read-only deployment diagnostics. */
+import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
+import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { isDatabaseConfigured } from "@/lib/server/economy/http"
-import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 import { backendAuthoritySnapshot } from "@/lib/server/platform/backend-authority"
 import { BACKEND_CONTRACT_VERSION } from "@/lib/server/platform/backend-contracts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+function reply(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache", Vary: "Authorization, X-GH-System-Status-Key" },
+  })
+}
+
+function authorized(request: Request): boolean {
+  const expected = Buffer.from(String(process.env.GH_SYSTEM_STATUS_OPERATOR_KEY || ""), "utf8")
+  const supplied = Buffer.from(String(request.headers.get("x-gh-system-status-key") || ""), "utf8")
+  return expected.length >= 32 && supplied.length === expected.length && timingSafeEqual(supplied, expected)
+}
+
+export async function GET(request: Request) {
+  // This endpoint reports privileged configuration and backend capabilities.
+  // Deny by default unless a dedicated, high-entropy operator secret is configured.
+  if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+
   try {
     const env = readGhcServerEnv()
-    const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
-    const flags = {
-      activityRewards: testnetUnlockSnapshot().activityRewards,
-      referralSettlement: testnetUnlockSnapshot().referralSettlement,
-      curationRedistribute: testnetUnlockSnapshot().curationRedistribute,
-    }
+    const flags = testnetUnlockSnapshot()
     const supabase = {
       urlPresent: Boolean(env.supabaseUrl),
       serviceRolePresent: Boolean(env.supabaseServiceRoleKey),
       privilegedDatabase: hasPrivilegedDatabase(),
       economyDbConfigured: isDatabaseConfigured(),
     }
+    const probes: Record<string, string> = {}
+    const base = env.supabaseUrl?.replace(/\/$/, "")
+    const key = env.supabaseServiceRoleKey
 
-    let bucket: { ok: boolean; error?: string; created?: boolean } = { ok: false }
-    if (supabase.urlPresent && supabase.serviceRolePresent) {
-      bucket = await ensureMediaBucket(storageBucket)
-    }
-
-    // Probe critical RPCs (presence only — no side effects)
-    const rpcProbe: Record<string, string> = {}
-    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
-      const base = env.supabaseUrl.replace(/\/$/, "")
-      const headers = {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        "Content-Type": "application/json",
-      }
-      for (const name of [
-        "gh_media_asset_create",
-        "ghc_execute_daily_claim_v12",
+    // Only GET probes are permitted here. Never POST empty arguments to privileged RPCs:
+    // a function can have side effects even when invoked with an empty payload.
+    if (base && key) {
+      const headers = { apikey: key, Authorization: `Bearer ${key}` }
+      for (const [label, path] of [
+        ["table:gh_media_assets", "/rest/v1/gh_media_assets?select=id&limit=0"],
+        ["table:gh_conversation_members", "/rest/v1/gh_conversation_members?select=conversation_id&limit=0"],
       ] as const) {
         try {
-          const res = await fetch(`${base}/rest/v1/rpc/${name}`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({}),
-            cache: "no-store",
-          })
-          // 404 = missing function; 400/PGRST = exists but bad args
-          if (res.status === 404) rpcProbe[name] = "MISSING"
-          else if (res.status >= 500) rpcProbe[name] = `ERROR_${res.status}`
-          else rpcProbe[name] = "PRESENT"
+          const response = await fetch(`${base}${path}`, { method: "GET", headers, cache: "no-store", signal: AbortSignal.timeout(5_000) })
+          probes[label] = response.status === 404 ? "MISSING" : response.ok ? "PRESENT" : `HTTP_${response.status}`
         } catch {
-          rpcProbe[name] = "UNREACHABLE"
+          probes[label] = "UNREACHABLE"
         }
-      }
-      // table probe
-      try {
-        const t = await fetch(
-          `${base}/rest/v1/gh_media_assets?select=id&limit=1`,
-          { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" }
-        )
-        rpcProbe["table:gh_media_assets"] = t.status === 404 ? "MISSING" : t.ok || t.status === 200 || t.status === 206 ? "PRESENT" : `HTTP_${t.status}`
-      } catch {
-        rpcProbe["table:gh_media_assets"] = "UNREACHABLE"
-      }
-      try {
-        const t = await fetch(
-          `${base}/rest/v1/gh_conversation_members?select=conversation_id&limit=1`,
-          { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" }
-        )
-        rpcProbe["table:gh_conversation_members"] = t.status === 404 ? "MISSING" : t.ok || t.status === 200 || t.status === 206 ? "PRESENT" : `HTTP_${t.status}`
-      } catch {
-        rpcProbe["table:gh_conversation_members"] = "UNREACHABLE"
       }
     }
 
     const blockers: string[] = []
-    if (!supabase.urlPresent || !supabase.serviceRolePresent) {
-      blockers.push("Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY on Vercel, then Redeploy.")
-    }
-    if (supabase.serviceRolePresent && bucket.ok === false) {
-      blockers.push(`Storage bucket "${storageBucket}" not ready: ${bucket.error || "unknown"}. Create it in Supabase Storage or allow service-role create.`)
-    }
-    if (rpcProbe["gh_media_asset_create"] === "MISSING" && rpcProbe["table:gh_media_assets"] === "MISSING") {
-      blockers.push("Apply media migration 20261022010049_gh_media_assets.sql (RPC + table).")
-    }
-    if (rpcProbe["ghc_execute_daily_claim_v12"] === "MISSING") {
-      blockers.push("Apply economy daily-claim migration (ghc_execute_daily_claim_v12). Flags alone do not credit GHC.")
-    }
-    if (rpcProbe["table:gh_conversation_members"] === "MISSING") {
-      blockers.push("Apply messaging migrations (gh_conversations / gh_conversation_members) or community chat stays FORBIDDEN.")
-    }
-    if (flags.activityRewards && !supabase.economyDbConfigured) {
-      blockers.push("GHC_ACTIVITY_REWARDS_ENABLED=1 but economy DB not configured — mission GHC will stay at 0.")
-    }
+    if (!supabase.urlPresent || !supabase.serviceRolePresent) blockers.push("SUPABASE_CONFIGURATION_MISSING")
+    if (probes["table:gh_media_assets"] === "MISSING") blockers.push("MEDIA_ASSET_TABLE_MISSING")
+    if (probes["table:gh_conversation_members"] === "MISSING") blockers.push("CONVERSATION_MEMBERS_TABLE_MISSING")
+    if (flags.activityRewards && !supabase.economyDbConfigured) blockers.push("ACTIVITY_REWARDS_DATABASE_NOT_CONFIGURED")
 
-    return NextResponse.json(
-      {
-        ok: blockers.length === 0,
-        version: process.env.npm_package_version || "unknown",
-        flags,
-        supabase,
-        storage: { bucket: storageBucket, ...bucket },
-        probes: rpcProbe,
-        backendContract: { version: BACKEND_CONTRACT_VERSION },
-        authorities: backendAuthoritySnapshot(),
-        blockers,
-        hint:
-          blockers.length === 0
-            ? "Configuration looks coherent. If users still fail, check Vercel function logs for the specific route."
-            : "Env flags are not enough — missing tables/RPCs/bucket must be fixed in Supabase, then Redeploy.",
-      },
-      { headers: { "Cache-Control": "no-store" } }
-    )
-  } catch (e) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "STATUS_FAILED",
-        message: e instanceof Error ? e.message : "unknown",
-      },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
-    )
+    return reply({
+      ok: blockers.length === 0,
+      version: process.env.npm_package_version || "unknown",
+      flags,
+      supabase,
+      probes,
+      backendContract: { version: BACKEND_CONTRACT_VERSION },
+      authorities: backendAuthoritySnapshot(),
+      blockers,
+      diagnostics: "read-only; bucket provisioning and RPC execution are not performed by this endpoint",
+    })
+  } catch {
+    // Avoid reflecting exception messages, URLs, SQL, or provider response bodies.
+    return reply({ ok: false, error: "STATUS_FAILED" }, 500)
   }
 }

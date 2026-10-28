@@ -11,7 +11,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { buildOwnedMediaPath, isSafeMediaBucket } from "@/lib/server/media/path-policy.mjs"
+import { buildOwnedMediaPath, isSafeMediaBucket, MAX_MEDIA_BYTES, maxMediaBytesForMime } from "@/lib/server/media/path-policy.mjs"
 import {
   createMediaAssetRecord,
   resolveMediaAssets,
@@ -30,10 +30,6 @@ const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/g
 const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
 const ALLOWED_FILE = new Set(["application/pdf"])
 const ALLOWED_AUDIO = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm", "audio/flac"])
-const MAX_IMAGE_BYTES = 50 * 1024 * 1024
-const MAX_VIDEO_BYTES = 40 * 1024 * 1024
-const MAX_FILE_BYTES = 50 * 1024 * 1024
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 function sniffMime(buf: Buffer): string | null {
   if (buf.length < 12) return null
@@ -108,9 +104,18 @@ export async function POST(request: Request) {
   const hasStorage = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
 
   const contentType = (request.headers.get("content-type") || "").toLowerCase()
-  const contentLength = Number(request.headers.get("content-length") || 0)
+  const rawContentLength = request.headers.get("content-length")
+  // Multipart uploads are buffered by request.formData(); require a trustworthy
+  // declared length so chunked/invalid-length requests cannot bypass the preflight cap.
+  if (rawContentLength === null) {
+    return jsonNoStore({ ok: false, error: "CONTENT_LENGTH_REQUIRED", message: "Use direct upload for clients that cannot provide a content length." }, { status: 411 })
+  }
+  if (!/^\d+$/.test(rawContentLength)) {
+    return jsonNoStore({ ok: false, error: "INVALID_CONTENT_LENGTH" }, { status: 400 })
+  }
+  const contentLength = Number(rawContentLength)
   // Leave room for multipart boundaries/metadata above the largest accepted file.
-  if (Number.isFinite(contentLength) && contentLength > MAX_VIDEO_BYTES + 2 * 1024 * 1024) {
+  if (!Number.isSafeInteger(contentLength) || contentLength > MAX_MEDIA_BYTES + 2 * 1024 * 1024) {
     return jsonNoStore({ ok: false, error: "REQUEST_TOO_LARGE", message: "This upload exceeds the supported request size." }, { status: 413 })
   }
   if (!contentType.includes("multipart/form-data")) {
@@ -137,23 +142,6 @@ export async function POST(request: Request) {
       },
       { status: 501 }
     )
-  }
-
-  try {
-    const ensured = await ensureMediaBucket(storageBucket)
-    if (!ensured.ok) {
-      return jsonNoStore(
-        {
-          ok: false,
-          error: "MEDIA_STORAGE_CONFIGURATION_INVALID",
-          message: ensured.error || "Storage bucket could not be prepared.",
-          clientCompress: true,
-        },
-        { status: 503 }
-      )
-    }
-  } catch {
-    /* continue — upload may still work if bucket already exists */
   }
 
   let form: FormData
@@ -193,7 +181,7 @@ export async function POST(request: Request) {
   const isVideo = ALLOWED_VIDEO.has(mime)
   const isFile = ALLOWED_FILE.has(mime)
   const isAudio = ALLOWED_AUDIO.has(mime)
-  const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : isAudio ? MAX_AUDIO_BYTES : MAX_FILE_BYTES
+  const maxBytes = maxMediaBytesForMime(mime)
   if (file.size > maxBytes) {
     return jsonNoStore({ ok: false, error: "FILE_TOO_LARGE" }, { status: 400 })
   }
@@ -247,6 +235,25 @@ export async function POST(request: Request) {
   const category = requestedCategory === "avatars" && isImage ? "avatars" : isAudio ? "audio" : isFile ? "documents" : isVideo ? "videos" : "images"
   const objectPath = buildOwnedMediaPath(auth.userId, category, objectName)
   if (!objectPath) return jsonNoStore({ ok: false, error: "MEDIA_PATH_INVALID" }, { status: 400 })
+
+  // Provisioning is a side effect; defer it until the request, file signature,
+  // MIME type, size and metadata have all passed validation.
+  try {
+    const ensured = await ensureMediaBucket(storageBucket)
+    if (!ensured.ok) {
+      return jsonNoStore(
+        {
+          ok: false,
+          error: "MEDIA_STORAGE_CONFIGURATION_INVALID",
+          message: ensured.error || "Storage bucket could not be prepared.",
+          clientCompress: true,
+        },
+        { status: 503 }
+      )
+    }
+  } catch {
+    /* continue — upload may still work if bucket already exists */
+  }
 
   try {
     const buf = Buffer.from(await file.arrayBuffer())

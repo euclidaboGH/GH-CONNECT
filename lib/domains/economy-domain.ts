@@ -618,7 +618,7 @@ export function createEconomyDomain(deps: {
       sourceEvent: string
       referenceId?: string
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      const abs = Math.abs(Number(input.amount) || 0)
+      const abs = Number(input.amount)
       if (!Number.isFinite(abs) || abs <= 0) {
         return { ok: false, error: "Invalid spend amount", phase: "validate", requestId: "local" }
       }
@@ -982,7 +982,7 @@ export function createEconomyDomain(deps: {
       /** When fulfilling a request */
       requestId?: string
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot; creditTxId?: string }>> {
-      const amount = Math.abs(Number(input.amount))
+      const amount = Number(input.amount)
       const partyErr = validatePeerParty(input.toUserId)
       if (partyErr) {
         try {
@@ -1262,7 +1262,7 @@ export function createEconomyDomain(deps: {
       note?: string
       referenceId?: string
     }): Promise<MutationResult<{ tx: GhcTransaction; wallet: GhcWalletSnapshot }>> {
-      const amount = Math.abs(Number(input.amount))
+      const amount = Number(input.amount)
       const partyErr = validatePeerParty(input.fromUserId)
       if (partyErr) return { ok: false, error: partyErr, phase: "validate", requestId: "local" }
       const amtErr = validateTransferAmount(amount)
@@ -1536,7 +1536,11 @@ export function createEconomyDomain(deps: {
         }
       }
 
-      const amount = Math.abs(Number(input.amount || reqTx?.amount || 0))
+      const rawAmount = input.amount ?? reqTx?.amount
+      const amount = Number(rawAmount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return { ok: false, error: "Invalid transfer request amount", phase: "validate", requestId: "local" }
+      }
       const sendRes = await this.sendGhcToUser({
         toUserId: input.toUserId,
         toUserName: input.toUserName,

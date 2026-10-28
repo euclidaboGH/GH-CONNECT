@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { paystackTransfersEnabled } from "@/lib/server/payouts/paystack"
 
@@ -18,10 +19,13 @@ export async function POST(request: Request) {
   const rl = checkRateLimit(`payout-bank-request:${auth.userId}`, 3, 60 * 60_000)
   if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
   if (process.env.PAYSTACK_TRANSFERS_ENABLED !== "true" || !paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null
-  const obligationId = String(body?.obligationId || "").trim()
-  const beneficiaryId = String(body?.beneficiaryId || "").trim()
-  const idempotencyKey = String(request.headers.get("Idempotency-Key") || body?.idempotencyKey || "").trim()
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value
+  const obligationId = typeof body.obligationId === "string" ? body.obligationId.trim() : ""
+  const beneficiaryId = typeof body.beneficiaryId === "string" ? body.beneficiaryId.trim() : ""
+  const headerKey = request.headers.get("Idempotency-Key")
+  const idempotencyKey = (headerKey ?? (typeof body.idempotencyKey === "string" ? body.idempotencyKey : "")).trim()
   if (!/^gbo_[a-f0-9]{32}$/i.test(obligationId) || !/^gbn_[a-f0-9]{32}$/i.test(beneficiaryId) || idempotencyKey.length < 8 || idempotencyKey.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) return reply({ ok: false, error: "INVALID_INPUT" }, 400)
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)

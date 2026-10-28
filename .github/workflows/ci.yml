@@ -1,0 +1,68 @@
+name: GreenHaven CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greenhaven-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-integrity:
+    name: Source integrity and static contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - name: Check dependency lock integrity before install
+        run: node scripts/check-dependency-lock-integrity.mjs
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps --no-audit
+      - name: JSX safety
+        run: npm run check:jsx
+      - name: Release hygiene
+        run: npm run check:release-hygiene
+      - name: Deployment security headers
+        run: npm run check:security-headers
+      - name: API CSRF contract
+        run: npm run check:api-csrf
+      - name: Project truth
+        run: npm run check:project-truth
+      - name: Pi backend lock
+        run: npm run check:pi-backend-lock
+      - name: Clean migrations
+        run: npm run check:clean-migrations
+      - name: Migration release readiness
+        run: npm run check:migration-release-readiness
+      - name: Phase 3 database recovery source contracts
+        run: npm run check:phase3-database-recovery
+      - name: Phase 3 restored catalog gate contracts
+        run: npm run check:phase3-restore-catalog-gate
+      - name: Phase 3 restore evidence regression tests
+        run: npm run test:database-restore-evidence
+      - name: Phase 4 recovery release gate (source-only)
+        run: node scripts/check-phase4-recovery-release-gate.mjs
+      - name: Phase 4 recovery gate fail-closed regression tests
+        run: npm run test:phase4-recovery-release-gate
+      - name: Phase 4 cross-feature identity integration
+        run: npm run check:phase4-identity-integration
+      - name: Comprehensive source-only contract suite
+        run: npm run verify:static
+      - name: Discovery-based production verification pack
+        run: npm run verify:production
+      - name: Economy gates remain operator-controlled
+        run: node scripts/verify-economy-stage1-gates.mjs
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build

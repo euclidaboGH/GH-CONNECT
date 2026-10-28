@@ -14,7 +14,7 @@ import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profi
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-async function mutedAuthorIds(viewerId: string): Promise<Set<string>> {
+async function mutedAuthorIds(viewerId: string): Promise<Set<string> | null> {
   const out = new Set<string>()
   try {
     const q = `gh_user_mutes?muter_id=eq.${encodeURIComponent(viewerId)}&select=muted_id`
@@ -24,11 +24,14 @@ async function mutedAuthorIds(viewerId: string): Promise<Set<string>> {
         const id = String(row.muted_id || "").trim()
         if (id) out.add(id)
       }
+      return out
     }
+    return null
   } catch {
-    /* feed still returns; mute filter best-effort */
+    // Mute is a user privacy control: never disclose potentially muted authors
+    // when its authoritative state cannot be loaded.
+    return null
   }
-  return out
 }
 
 type FeedCommentRow = {
@@ -178,15 +181,25 @@ export async function GET(request: Request) {
 
   // Server-side mute enforcement (canonical visibility has already checked blocks)
   const muted = await mutedAuthorIds(auth.userId)
+  if (muted === null) {
+    return NextResponse.json({ ok: false, error: "FEED_PRIVACY_FILTER_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  // The canonical feed RPC must identify every post author. If that contract
+  // regresses, do not let an author-less row bypass the mute privacy boundary.
+  const authorIdOf = (value: unknown): string => {
+    if (!value || typeof value !== "object") return ""
+    const row = value as { authorId?: unknown; author_id?: unknown }
+    const candidate = typeof row.authorId === "string" ? row.authorId : row.author_id
+    return typeof candidate === "string" ? candidate.trim() : ""
+  }
+  if (posts.some((post) => !authorIdOf(post))) {
+    return NextResponse.json(
+      { ok: false, error: "FEED_AUTHOR_ID_UNAVAILABLE" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
+  }
   if (muted.size > 0) {
-    posts = posts.filter((p) => {
-      const authorId = String(
-        (p as { authorId?: string; author_id?: string }).authorId ||
-          (p as { author_id?: string }).author_id ||
-          ""
-      )
-      return !authorId || !muted.has(authorId)
-    })
+    posts = posts.filter((post) => !muted.has(authorIdOf(post)))
   }
 
   // Engagement counts and recent comment previews are hydrated in two batched reads,

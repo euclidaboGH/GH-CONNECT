@@ -10,7 +10,7 @@ const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
 const checks = [
   ['release/package/lock versions agree', pkg.version === lock.version && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 12 report exists', fs.existsSync(path.join(process.cwd(), 'PHASE-12-PI-TRANSACTION-DETAILS-RECEIPTS.md'))],
+  ['Phase 12 report exists', fs.existsSync(path.join(process.cwd(), 'docs/archive/phase-notes/PHASE-12-PI-TRANSACTION-DETAILS-RECEIPTS.md'))],
   ['Pi payment rows expose a details action', /View details/.test(wallet) && /setSelectedPiIntent\(intent\)/.test(wallet)],
   ['detail view is mounted with matching server reconciliation finding', /<PiPaymentDetail/.test(wallet) && /findings\.find\(\(item\) => item\.intentId === selectedPiIntent\.id\)/.test(wallet)],
   ['modal declares accessible dialog semantics', /role="dialog"/.test(detail) && /aria-modal="true"/.test(detail) && /aria-labelledby="pi-payment-detail-title"/.test(detail)],

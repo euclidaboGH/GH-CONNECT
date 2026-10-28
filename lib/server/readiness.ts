@@ -244,6 +244,25 @@ export function evaluateReadiness(opts?: {
       "Apply migration 20260919_gh_user_profiles_and_progress.sql after identity migrations",
   })
 
+  // --- High: explicit network flag schema ---
+  // A typo must not silently fall through to an environment-derived network.
+  // This is especially important because a false default can select Mainnet.
+  const rawSandboxFlag = (process.env.NEXT_PUBLIC_PI_SANDBOX || "").trim()
+  const invalidSandboxFlag = rawSandboxFlag !== "" && rawSandboxFlag !== "true" && rawSandboxFlag !== "false"
+  const mainnetTarget = vercelEnv === "production" || process.env.GHC_ENV === "production"
+  checks.push({
+    id: "pi_sandbox_flag_schema",
+    label: "Pi sandbox flag schema",
+    status: invalidSandboxFlag ? (mainnetTarget ? "fail" : "warn") : "pass",
+    severity: mainnetTarget ? "critical" : "medium",
+    detail: invalidSandboxFlag
+      ? "NEXT_PUBLIC_PI_SANDBOX must be exactly true or false; its current value is ignored by the network resolver"
+      : rawSandboxFlag
+        ? "NEXT_PUBLIC_PI_SANDBOX uses an accepted boolean string"
+        : "No explicit sandbox flag; environment-aware network resolution applies",
+    remediation: "Set NEXT_PUBLIC_PI_SANDBOX to exactly true for Testnet or false for Mainnet; align the Pi Portal app and server API key to the same network.",
+  })
+
   // --- High: network consistency ---
   // Mainnet Production + sandbox flag is a critical misconfiguration. Vercel Preview uses NODE_ENV=production too, but should remain on Testnet.
   // NODE_ENV=production is also set for Vercel Preview builds. Vercel Preview is expected to use Pi Testnet, so only the actual Vercel Production target (or

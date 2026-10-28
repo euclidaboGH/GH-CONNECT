@@ -460,19 +460,29 @@ export function GHConnectApp() {
     return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
   }, [candidates, profile?.id, setTab, addToast])
 
-  // Deep link: /?tab=messages|discover|profile|... (PWA shortcuts, /share redirect)
+  // Deep links: primary tabs and canonical overlay destinations. Keep unrelated
+  // query parameters/hash intact (e.g. referral attribution and shared content).
+  // Overlay dispatch is deferred one task so the shell's event listeners have mounted.
   useEffect(() => {
     if (!ready || typeof window === "undefined") return
+    let overlayTimer: number | undefined
     try {
       const url = new URL(window.location.href)
       const requested = url.searchParams.get("tab")
       if (!requested) return
-      if (isPrimaryTab(requested)) startTransition(() => setTab(requested))
+      const destination = resolveDestination(requested)
+      if (destination && isPrimaryTab(destination)) {
+        startTransition(() => setTab(destination))
+      } else if (destination) {
+        overlayTimer = window.setTimeout(() => { navigateTo(destination) }, 0)
+      }
+      // Invalid destinations are discarded rather than left to repeatedly reopen.
       url.searchParams.delete("tab")
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
     } catch {
-      /* ignore malformed URLs */
+      /* malformed URLs must not interrupt app startup */
     }
+    return () => { if (overlayTimer !== undefined) window.clearTimeout(overlayTimer) }
   }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<

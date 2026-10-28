@@ -12,6 +12,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialRpc } from "@/lib/server/social/rpc"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   listMessages,
   appendMessage,
@@ -48,6 +49,13 @@ export async function GET(request: Request, ctx: Ctx) {
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100)
     const before = url.searchParams.get("before")
     const beforeId = url.searchParams.get("beforeId")
+    // Bound cursor input before it reaches date parsing or database query construction.
+    if (before !== null && (before.length > 80 || /[\u0000-\u001f\u007f]/.test(before))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    if (beforeId !== null && (!beforeId.trim() || beforeId.length > 180 || /[\u0000-\u001f\u007f]/.test(beforeId))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     // Ignore client identity query params
     void url.searchParams.get("userId")
     void url.searchParams.get("senderId")
@@ -103,14 +111,15 @@ export async function POST(request: Request, ctx: Ctx) {
     if (!rl.ok) {
       return NextResponse.json(
         { ok: false, error: "RATE_LIMITED" },
-        { status: 429, headers: { "Cache-Control": "no-store" } }
+        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } }
       )
     }
-    const contentLength = request.headers.get("content-length")
-    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 24 * 1024)) {
-      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    const parsed = await readBoundedJson(request, 24 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
     }
-    const body = await request.json().catch(() => ({}))
+    const body = parsed.value
     // Actor is session only — never trust client identity fields
     void body.senderId
     void body.userId
@@ -124,7 +133,10 @@ export async function POST(request: Request, ctx: Ctx) {
       )
     }
     const clientMessageId =
-      typeof body?.clientMessageId === "string" ? body.clientMessageId : null
+      typeof body?.clientMessageId === "string" ? body.clientMessageId.trim() : null
+    if (clientMessageId !== null && (!clientMessageId || clientMessageId.length > 180 || /[\u0000-\u001f\u007f]/.test(clientMessageId))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CLIENT_MESSAGE_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const replyToMessageId =
       typeof body?.replyToMessageId === "string" ? body.replyToMessageId.trim() : ""
     const sharedPostId = typeof body?.sharedPostId === "string" ? body.sharedPostId.trim() : ""
@@ -228,11 +240,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
       return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
-    const contentLength = request.headers.get("content-length")
-    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 16 * 1024)) {
-      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    const parsed = await readBoundedJson(request, 16 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
     }
-    const body = await request.json().catch(() => ({}))
+    const body = parsed.value
     const messageId = String(body?.messageId || "").trim()
     if (!messageId || messageId.length > 180 || /[\u0000-\u001f\u007f]/.test(messageId)) {
       return NextResponse.json(

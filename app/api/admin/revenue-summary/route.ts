@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic"
 function adminAuthorized(request: Request): boolean {
   const expectedRaw =
     String(process.env.GHC_ADMIN_API_KEY || process.env.GHC_A2U_ADMIN_KEY || "").trim()
-  if (!expectedRaw) return false
+  if (Buffer.byteLength(expectedRaw, "utf8") < 32) return false
   const expected = Buffer.from(expectedRaw, "utf8")
   const supplied = Buffer.from(String(request.headers.get("x-ghc-admin-key") || "").trim(), "utf8")
   if (expected.length === 0 || expected.length !== supplied.length) return false

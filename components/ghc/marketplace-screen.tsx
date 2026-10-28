@@ -1276,7 +1276,7 @@ export function MarketplaceScreen({
         quantity: Number(o.quantity) || 1, unitPrice: Number(o.unitPrice) || 0, currency: String(o.currency || "GHC"),
         status: String(o.status || "created") as MarketplaceOrder["status"], createdAt: Number(o.createdAt) || Date.now(), updatedAt: Number(o.updatedAt) || Date.now(),
         confirmedAt: Number(o.confirmedAt) || undefined, fulfilledAt: Number(o.fulfilledAt) || undefined, completedAt: Number(o.completedAt) || undefined, cancelledAt: Number(o.cancelledAt) || undefined,
-        paymentStatus: String(o.paymentStatus || "none") as MarketplaceOrder["paymentStatus"], paymentMethod: String(o.paymentMethod || "none") as MarketplaceOrder["paymentMethod"], serverOrderId: String(o.id || ""),
+        paymentStatus: String(o.paymentStatus || "none") as MarketplaceOrder["paymentStatus"], deliveryStatus: typeof o.deliveryStatus === "string" ? o.deliveryStatus as MarketplaceOrder["deliveryStatus"] : "not_started", paymentMethod: String(o.paymentMethod || "none") as MarketplaceOrder["paymentMethod"], serverOrderId: String(o.id || ""),
       })))
     } catch { setDurableOrders([]) } finally { setOrdersLoading(false) }
   }, [])
@@ -2198,7 +2198,7 @@ export function MarketplaceScreen({
                       {!isSeller && ["created","payment_pending"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"cancel_unpaid")} className="min-h-9 rounded-full border border-border px-3 text-xs font-bold">Cancel</button> : null}
                       {isSeller && status === "confirmed" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_fulfill")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Start fulfillment</button> : null}
                       {isSeller && status === "fulfilling" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark delivered</button> : null}
-                      {!isSeller && ["confirmed","fulfilling"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"buyer_confirm")} className="min-h-9 rounded-full bg-emerald-600 px-3 text-xs font-bold text-white">Confirm received</button> : null}
+                      {!isSeller && status === "fulfilling" && ["delivered","service_active"].includes(String(o.deliveryStatus || "")) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"buyer_confirm")} className="min-h-9 rounded-full bg-emerald-600 px-3 text-xs font-bold text-white">Confirm received</button> : null}
                       {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
                     </div>
                     <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>

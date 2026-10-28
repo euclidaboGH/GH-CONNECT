@@ -114,6 +114,11 @@ export async function GET(
     }
     transactions = rows
     const reqs = await rpcListTransferRequests(userId, "all")
+    if (!reqs) {
+      return jsonErr("SERVER_UNAVAILABLE", "Failed to load transfer requests", 503, {
+        requestId: reqCtx.requestId,
+      })
+    }
     transferRequests = normalizeTransferRequests(reqs, userId)
   } else if (allowMemoryServer()) {
     transactions = getProcessGhcStore().listTransactions(userId)

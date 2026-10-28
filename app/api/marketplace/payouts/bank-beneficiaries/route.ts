@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
@@ -34,10 +35,13 @@ export async function POST(request: Request) {
   if (!paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
   const fingerprintKey = String(process.env.GHC_BENEFICIARY_FINGERPRINT_KEY || "").trim()
   if (fingerprintKey.length < 32) return reply({ ok: false, error: "BENEFICIARY_FINGERPRINT_KEY_NOT_CONFIGURED" }, 503)
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null
-  const accountNumber = String(body?.accountNumber || "").trim()
-  const bankCode = String(body?.bankCode || "").trim()
-  const accountName = String(body?.accountName || "").trim().replace(/\s+/g, " ")
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value
+  if (typeof body.accountNumber !== "string" || typeof body.bankCode !== "string" || typeof body.accountName !== "string") return reply({ ok: false, error: "INVALID_BANK_DETAILS" }, 400)
+  const accountNumber = body.accountNumber.trim()
+  const bankCode = body.bankCode.trim()
+  const accountName = body.accountName.trim().replace(/\s+/g, " ")
   if (!/^\d{10}$/.test(accountNumber) || !/^[A-Za-z0-9_-]{2,20}$/.test(bankCode) || accountName.length < 2 || accountName.length > 120) return reply({ ok: false, error: "INVALID_BANK_DETAILS" }, 400)
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)
@@ -79,8 +83,10 @@ export async function DELETE(request: Request) {
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
   const rl = checkRateLimit(`payout-bank-beneficiary-disable:${auth.userId}`, 5, 60 * 60_000)
   if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null
-  const beneficiaryId = String(body?.beneficiaryId || "").trim()
+  const parsedBody = await readBoundedJson(request, 4 * 1024)
+  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value
+  const beneficiaryId = typeof body.beneficiaryId === "string" ? body.beneficiaryId.trim() : ""
   if (!/^gbn_[a-f0-9]{32}$/i.test(beneficiaryId)) return reply({ ok: false, error: "INVALID_BENEFICIARY_ID" }, 400)
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)

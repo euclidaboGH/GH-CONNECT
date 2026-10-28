@@ -11,6 +11,7 @@ import {
 } from "@/lib/server/payments/intent-store"
 import { piGetPayment, amountsMatch } from "@/lib/server/payments/pi-api"
 import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -101,11 +102,10 @@ export async function POST(
     })
   }
 
-  const body = await request.json().catch(() => ({}))
-  const paymentId =
-    (typeof body.paymentId === "string" && body.paymentId.trim()) ||
-    intent.providerPaymentId ||
-    ""
+  const parsedBody = await readBoundedJson(request, 4 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
+  const paymentId = (typeof body.paymentId === "string" && body.paymentId.trim()) || intent.providerPaymentId || ""
 
   if (!paymentId) {
     return NextResponse.json(

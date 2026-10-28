@@ -17,6 +17,8 @@ import {
 } from "@/lib/server/economy/store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 
+const MAX_REWARD_CLAIM_BODY_BYTES = 4_096
+
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
@@ -27,9 +29,21 @@ export async function POST(request: Request) {
     return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
   }
 
+  const declaredLength = Number(request.headers.get("content-length") || 0)
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REWARD_CLAIM_BODY_BYTES) {
+    return jsonErr("REQUEST_TOO_LARGE", "Reward claim request body is too large", 413)
+  }
+  const rawBody = await request.text().catch(() => "")
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_REWARD_CLAIM_BODY_BYTES) {
+    return jsonErr("REQUEST_TOO_LARGE", "Reward claim request body is too large", 413)
+  }
   let body: Record<string, unknown>
   try {
-    body = await request.json()
+    const parsed: unknown = JSON.parse(rawBody)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return jsonErr("INVALID_INPUT", "Reward claim request must be a JSON object", 400)
+    }
+    body = parsed as Record<string, unknown>
   } catch {
     return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
   }
@@ -39,6 +53,7 @@ export async function POST(request: Request) {
   void body.balance
   const holdId = String(body.holdId || body.rewardId || "").trim()
   if (!holdId) return jsonErr("INVALID_INPUT", "holdId required", 400)
+  if (holdId.length > 160 || /[\r\n]/.test(holdId)) return jsonErr("INVALID_INPUT", "holdId is invalid", 400)
 
   if (isDatabaseConfigured()) {
     const result = await rpcClaimPending(auth.userId, holdId)

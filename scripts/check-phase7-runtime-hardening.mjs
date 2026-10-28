@@ -19,7 +19,7 @@ const curation = read('app/api/social/posts/[id]/curation/route.ts')
 const checks = [
   ['package and lockfile versions agree', pkg.version === lock.version && lock.packages?.['']?.version === pkg.version],
   ['release metadata matches package version', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 7 report exists', exists('PHASE-7-RUNTIME-INTEGRATION-HARDENING.md')],
+  ['Phase 7 report exists', exists('docs/archive/phase-notes/PHASE-7-RUNTIME-INTEGRATION-HARDENING.md')],
   ['Phase 7 operator smoke script exists', exists('scripts/operator-phase7-runtime-hardening.mjs')],
   ['Paystack webhook caps raw payload size before parsing', webhook.indexOf('raw.length > 256_000') >= 0 && webhook.indexOf('raw.length > 256_000') < webhook.indexOf('JSON.parse(raw)')],
   ['Paystack webhook verifies signature before processing event', webhook.indexOf('verifyPaystackSignature(raw') >= 0 && webhook.indexOf('verifyPaystackSignature(raw') < webhook.indexOf('JSON.parse(raw)')],

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   getConversationPresence,
   isMessagingStoreDurable,
@@ -41,8 +42,12 @@ export async function POST(request: Request, ctx: Ctx) {
     if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
     const { conversationId } = await ctx.params
     if (!validConversationId(conversationId)) return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: noStore })
-    const body = await request.json().catch(() => ({}))
-    const action = body?.action
+    const parsed = await readBoundedJson(request, 2 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: noStore })
+    }
+    const action = parsed.value.action
     if (action !== "heartbeat" && action !== "typing" && action !== "stop_typing") {
       return NextResponse.json({ ok: false, error: "INVALID_ACTION" }, { status: 400, headers: noStore })
     }

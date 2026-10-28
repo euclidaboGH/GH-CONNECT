@@ -181,7 +181,8 @@ if (json) {
   }
   console.log(`\n${recoveryOk ? "PASS" : "FAIL"}  payment/reservation recovery wiring: ${recoveryNote}`)
   console.log(`\nMigrations on disk: ${presentFiles.length}`)
-  console.log(`Critical checks: ${CRITICAL.length - failed + (recoveryOk ? 0 : 0)}/${CRITICAL.length + 1} logical groups`)
+  const criticalPassed = results.filter((r) => r.ok).length
+  console.log(`Critical checks: ${criticalPassed + (recoveryOk ? 1 : 0)}/${CRITICAL.length + 1} logical groups`)
   if (failed) {
     console.log(`\nSTAGE 2 SOURCE GATES: ${failed} issue(s) — fix source before disposable PG`)
     process.exit(1)

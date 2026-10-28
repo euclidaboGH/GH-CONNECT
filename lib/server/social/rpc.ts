@@ -9,6 +9,8 @@
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
+const SOCIAL_UPSTREAM_TIMEOUT_MS = 12_000
+
 export function socialDbConfigured(): boolean {
   const env = readGhcServerEnv()
   return Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
@@ -87,6 +89,9 @@ async function socialRpcOnce(
         },
         body: JSON.stringify(body),
         cache: "no-store",
+        // Bound upstream latency so a stalled PostgREST request cannot pin a
+        // serverless invocation indefinitely. Callers receive the existing fail-closed result.
+        signal: AbortSignal.timeout(SOCIAL_UPSTREAM_TIMEOUT_MS),
       }
     )
     const text = await res.text()
@@ -115,10 +120,11 @@ async function socialRpcOnce(
       fn,
     }
   } catch (e) {
+    const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
     return {
       ok: false,
       data: null,
-      error: e instanceof Error ? e.message : "RPC_NETWORK",
+      error: timedOut ? "RPC_TIMEOUT" : "RPC_NETWORK",
       status: 503,
       fn,
     }
@@ -168,6 +174,8 @@ export async function socialRest<T = unknown>(
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
         cache: "no-store",
+        // Keep direct table reads within the same upstream latency budget as RPCs.
+        signal: AbortSignal.timeout(SOCIAL_UPSTREAM_TIMEOUT_MS),
       }
     )
     const text = await res.text()
@@ -189,10 +197,11 @@ export async function socialRest<T = unknown>(
     }
     return { ok: true, data, status: 200 }
   } catch (e) {
+    const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
     return {
       ok: false,
       data: null,
-      error: e instanceof Error ? e.message : "REST_NETWORK",
+      error: timedOut ? "REST_TIMEOUT" : "REST_NETWORK",
       status: 503,
     }
   }

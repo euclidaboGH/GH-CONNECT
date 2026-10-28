@@ -1,155 +1,96 @@
 /**
- * Step 5 — production verification pack (automated gates only).
- * Does NOT deploy, does NOT apply migrations, does NOT touch .env.
+ * GreenHaven production verification pack.
+ *
+ * Discovers the source-contract checks actually present in scripts/ so this
+ * gate cannot silently pass because a stale hard-coded test list is missing.
+ * This is source-only verification: it never deploys, applies migrations,
+ * mutates .env files, or claims live provider/database verification.
  *
  * Usage: node scripts/verify-production-release.mjs
  */
-import { spawnSync } from "child_process"
-import { existsSync, readFileSync, writeFileSync } from "fs"
-import { join, dirname } from "path"
-import { fileURLToPath } from "url"
+import { spawnSync } from "node:child_process"
+import { existsSync, readdirSync, writeFileSync } from "node:fs"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+const scriptsDir = join(root, "scripts")
 const node = process.execPath
+const excluded = new Set([
+  "verify-production-release.mjs", // this orchestrator
+  "check-node-runtime.mjs", // run separately under the required Node 24 runtime
+  "verify-database-backup-artifact.mjs", // operator utility; requires an explicit dump artifact argument
+])
+const discovered = readdirSync(scriptsDir)
+  .filter((name) => /^(check|verify)-.*\.mjs$/.test(name) && !excluded.has(name) && existsSync(join(scriptsDir, name)))
+  .sort()
 
-const SUITES = [
-  ["scripts/scan-production-safety.mjs", "safety-scan"],
-  ["scripts/test-authority-map-50.mjs", "authority-map"],
-  ["scripts/test-community-authority-step1.mjs", "community-authority"],
-  ["scripts/test-trust-authority-step2.mjs", "trust-authority"],
-  ["scripts/test-governance-durability-step3.mjs", "governance-durability"],
-  ["scripts/test-context-strangler-50-1.mjs", "context-strangler-50.1"],
-  ["scripts/test-context-strangler-step4.mjs", "context-strangler-step4"],
-  ["scripts/test-domain-contracts.mjs", "domain-contracts"],
-  ["scripts/test-discovery-connections.mjs", "discovery-connections"],
-  ["scripts/test-unified-connections.mjs", "unified-connections"],
-  ["scripts/test-connection-inbox.mjs", "connection-inbox"],
-  ["scripts/test-connection-ux.mjs", "connection-ux"],
-  ["scripts/test-universal-search-intent.mjs", "universal-search"],
-  ["scripts/test-communities.mjs", "communities"],
-  ["scripts/test-community-belonging.mjs", "community-belonging"],
-  ["scripts/test-community-hub.mjs", "community-hub"],
-  ["scripts/test-community-governance.mjs", "community-governance"],
-  ["scripts/test-community-health-safety.mjs", "community-health"],
-  ["scripts/test-community-lifecycle-discovery.mjs", "community-lifecycle"],
-  ["scripts/test-community-moderation-digest.mjs", "community-moderation"],
-  ["scripts/test-community-onboarding.mjs", "community-onboarding"],
-  ["scripts/test-community-participation-bridge.mjs", "community-participation-bridge"],
-  ["scripts/test-community-participation-depth.mjs", "community-participation-depth"],
-  ["scripts/test-community-participation.mjs", "community-participation"],
-  ["scripts/test-community-feed-search.mjs", "community-feed-search"],
-  ["scripts/test-home-os-audit.mjs", "home-os-audit"],
-  ["scripts/test-social-experience-upgrade.mjs", "social-experience"],
-  ["scripts/test-engagement-roster-security.mjs", "engagement-roster-security"],
-  ["scripts/test-social-os-foundation.mjs", "social-os-foundation"],
-  ["scripts/test-economy-v12.mjs", "economy-v12"],
-  ["scripts/test-pi-payment-durable.mjs", "pi-payment-durable"],
-  ["scripts/test-ghc-curation-reward.mjs", "ghc-curation-reward"],
-  ["scripts/test-like-curation-separation.mjs", "like-curation-separation"],
-  ["scripts/test-notification-attention.mjs", "notification-attention"],
-  ["scripts/test-social-visibility.mjs", "social-visibility"],
-  ["scripts/test-feed-card-layout.mjs", "feed-card-layout"],
-  ["scripts/test-rewards-reliability.mjs", "rewards-reliability"],
-  ["scripts/test-engagement-roster-security.mjs", "engagement-roster-security"],
-  ["scripts/test-story-creator.mjs", "story-creator"],
-  ["scripts/test-post-composer.mjs", "post-composer"],
-  ["scripts/test-social-messaging-upgrade.mjs", "social-messaging-upgrade"],
-  ["scripts/test-messaging-reliability.mjs", "messaging-reliability"],
-]
+if (discovered.length === 0) {
+  console.error("FAIL: no source verification scripts were discovered.")
+  process.exit(1)
+}
 
 function run(script) {
-  const path = join(root, script)
-  if (!existsSync(path)) {
-    return { ok: false, code: 127, skipped: true, ms: 0 }
-  }
-  const t0 = Date.now()
-  const res = spawnSync(node, [path], {
-    cwd: root,
-    encoding: "utf8",
-    env: process.env,
-    maxBuffer: 12 * 1024 * 1024,
+  const started = Date.now()
+  const result = spawnSync(node, [join(scriptsDir, script)], {
+    cwd: root, encoding: "utf8", env: process.env,
+    maxBuffer: 12 * 1024 * 1024, timeout: 120_000,
   })
   return {
-    ok: res.status === 0,
-    code: res.status ?? 1,
-    skipped: false,
-    ms: Date.now() - t0,
-    stderr: (res.stderr || "").slice(-400),
+    ok: result.status === 0,
+    code: result.status ?? 1,
+    ms: Date.now() - started,
+    stdout: (result.stdout || "").slice(-1200),
+    stderr: (result.stderr || "").slice(-1200),
+    timedOut: result.error?.code === "ETIMEDOUT",
   }
 }
 
 console.log("\n╔══════════════════════════════════════════════════════════╗")
-console.log("║  GH-CONNECT — STEP 5 PRODUCTION VERIFICATION PACK      ║")
-console.log("╚══════════════════════════════════════════════════════════╝\n")
+console.log("║  GREENHAVEN — SOURCE VERIFICATION PACK                 ║")
+console.log("╚══════════════════════════════════════════════════════════╝")
+console.log(`Discovered ${discovered.length} check scripts; missing scripts cannot be silently skipped.\n`)
 
 const results = []
-let failCount = 0
-let passCount = 0
-let skipCount = 0
-
-for (const [script, name] of SUITES) {
-  process.stdout.write(`→ ${name} ... `)
-  const r = run(script)
-  if (r.skipped) {
-    skipCount++
-    console.log("SKIP (missing)")
-    results.push({ name, status: "SKIP", ms: 0 })
-    continue
+for (const script of discovered) {
+  process.stdout.write(`→ ${script} ... `)
+  const result = run(script)
+  const status = result.ok ? "PASS" : "FAIL"
+  console.log(`${status} (${result.ms}ms)`)
+  if (!result.ok) {
+    if (result.stdout) console.log(result.stdout)
+    if (result.stderr) console.log(result.stderr)
   }
-  if (r.ok) {
-    passCount++
-    console.log(`PASS (${r.ms}ms)`)
-    results.push({ name, status: "PASS", ms: r.ms })
-  } else {
-    failCount++
-    console.log(`FAIL (code ${r.code}, ${r.ms}ms)`)
-    if (r.stderr) console.log(r.stderr)
-    results.push({ name, status: "FAIL", ms: r.ms, code: r.code })
-  }
+  results.push({ name: script, status, code: result.code, ms: result.ms, timedOut: result.timedOut,
+    ...(result.ok ? {} : { stdout: result.stdout, stderr: result.stderr }) })
 }
 
-// Operator gates — never claim executed here
+const passCount = results.filter((r) => r.status === "PASS").length
+const failCount = results.length - passCount
+const runtime = {
+  version: process.version,
+  supported: /^v24\.(1[5-9]|[2-9]\d|[1-9]\d{2,})\./.test(process.version),
+}
 const operatorGates = [
-  { name: "npm install --legacy-peer-deps", status: "OPERATOR REQUIRED" },
-  { name: "npm run typecheck", status: "OPERATOR REQUIRED" },
-  { name: "npm run lint", status: "OPERATOR REQUIRED" },
-  { name: "npm run build", status: "OPERATOR REQUIRED" },
-  { name: "Supabase migration reconcile (prod)", status: "OPERATOR REQUIRED" },
-  { name: "Live Test-Pi E2E in Pi Browser", status: "OPERATOR REQUIRED" },
-  { name: "Multi-instance concurrency smoke", status: "OPERATOR REQUIRED" },
+  { name: "Locked dependency install on supported Node.js 24", status: "REQUIRED" },
+  { name: "TypeScript typecheck", status: "REQUIRED" },
+  { name: "ESLint", status: "REQUIRED" },
+  { name: "Next.js production build", status: "REQUIRED" },
+  { name: "Browser E2E and responsive visual review", status: "REQUIRED" },
+  { name: "Supabase migration reconciliation and restore rehearsal", status: "REQUIRED" },
+  { name: "Live Testnet/provider and multi-instance concurrency tests", status: "REQUIRED" },
+  { name: "Security review of live authorization, RLS, storage and secrets", status: "REQUIRED" },
 ]
-
-console.log("\n--- Automated suites ---")
-console.log(`PASS: ${passCount}  FAIL: ${failCount}  SKIP: ${skipCount}`)
-
-console.log("\n--- Operator gates (not executed in this environment) ---")
-for (const g of operatorGates) {
-  console.log(`  • ${g.name}: ${g.status}`)
-}
-
 const report = {
   generatedAt: new Date().toISOString(),
-  step: "5",
-  automated: results,
-  passCount,
-  failCount,
-  skipCount,
-  operatorGates,
-  decision:
-    failCount === 0
-      ? "AUTOMATED_GATES_PASS — OPERATOR VERIFICATION STILL REQUIRED"
-      : "AUTOMATED_GATES_FAIL",
+  scope: "source-only verification; not production approval",
+  runtime, discoveredCount: discovered.length, passCount, failCount, results, operatorGates,
+  decision: failCount === 0 ? "SOURCE_CHECKS_PASS — BUILD_AND_OPERATOR_VERIFICATION_STILL_REQUIRED" : "SOURCE_CHECKS_FAIL",
 }
-
 const outPath = join(root, "docs/architecture/PRODUCTION_VERIFICATION_REPORT.json")
-try {
-  writeFileSync(outPath, JSON.stringify(report, null, 2))
-  console.log("\nWrote", outPath)
-} catch (e) {
-  console.warn("Could not write report JSON:", e.message)
-}
-
-console.log("\n=== DECISION ===")
-console.log(report.decision)
+writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n")
+console.log(`\nPASS: ${passCount}  FAIL: ${failCount}`)
+console.log(`Runtime: ${runtime.version} (${runtime.supported ? "supported" : "unsupported; use Node.js ^24.15.0 for build checks"})`)
+console.log(`Wrote ${outPath}`)
+console.log(`Decision: ${report.decision}`)
 if (failCount) process.exit(1)
-console.log("")

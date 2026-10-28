@@ -778,9 +778,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           </div>
           {!feedBootstrapped ? (
             <FeedSkeleton />
+          ) : displayPosts.length === 0 && feedError ? (
+            <section className="mx-3 my-4 rounded-2xl border border-destructive/25 bg-destructive/[0.04] p-5 text-center" role="alert" aria-live="polite">
+              <p className="text-sm font-bold text-foreground">{isOffline ? "You're offline" : "Your feed couldn't load"}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{isOffline ? "Reconnect to refresh posts. Any feed data already available is preserved." : "This is a loading error, not an empty feed. Try again without losing your current filters."}</p>
+              <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing || isOffline} className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                {isRefreshing ? "Retrying…" : "Retry feed"}
+              </button>
+            </section>
           ) : displayPosts.length === 0 ? (
             <EmptyState
-              title={searchQuery.trim() ? "No matching posts" : "Your feed is getting ready"}
+              title={searchQuery.trim() ? "No matching posts" : "Your feed is quiet"}
               description={searchQuery.trim() ? "Try another keyword or hashtag." : hasRealPosts ? "No posts match this filter yet. Try another feed filter." : "Follow people or explore communities to bring relevant posts into your feed."}
               action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
             />

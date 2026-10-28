@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
@@ -32,7 +33,9 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   const rl = checkRateLimit(`unified-notifications:${auth.userId}`, 60, 60_000)
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } })
-  const body = (await request.json().catch(() => ({}))) as { ids?: unknown; markAll?: boolean; action?: string }
+  const parsedBody = await readBoundedJson(request, 16 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value as { ids?: unknown; markAll?: boolean; action?: string }
   const all = body.markAll === true || body.action === "mark_all_read"
   const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 100) : undefined
   if (!all && !ids?.length) return NextResponse.json({ ok: false, error: "INVALID_ACTION" }, { status: 400 })

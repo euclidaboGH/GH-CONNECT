@@ -4,6 +4,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,10 +19,9 @@ export async function POST(request: Request) {
   const rl = checkRateLimit(`account-lifecycle:${auth.userId}`, 5, 60 * 60_000)
   if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
 
-  const parsedBody = await request.json().catch(() => ({})) as unknown
-  const body = parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
-    ? parsedBody as Record<string, unknown>
-    : {}
+  const parsedBody = await readBoundedJson(request, 4 * 1024)
+  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value
   const requestType = typeof body.requestType === "string" ? body.requestType : ""
   const idempotencyKey = String(request.headers.get("Idempotency-Key") || body.idempotencyKey || "").trim()
   if (!["export", "deletion"].includes(requestType)) return reply({ ok: false, error: "INVALID_REQUEST_TYPE" }, 400)

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const forwarded = forwardedParts.length ? forwardedParts[forwardedParts.length - 1] : ""
     const clientIp = request.headers.get("x-real-ip")?.trim() || forwarded || "unknown"
     const correlationId = requestCorrelationId(request)
-    const rate = await checkDurableRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000)
+    const rate = await checkDurableRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000, { onUnavailable: "deny" })
     if (!rate.ok) {
       void appendSecurityEvent({ eventType: "auth.pi.rate_limited", outcome: "blocked", reasonCode: "RATE_LIMITED", correlationId })
       return NextResponse.json(

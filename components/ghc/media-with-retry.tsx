@@ -21,6 +21,8 @@ export function MediaWithRetry({
     return (
       <div
         className={`flex items-center justify-center bg-muted/40 text-[11px] text-muted-foreground ${className}`}
+        role="img"
+        aria-label={alt ? `${alt} — media unavailable` : "Media unavailable"}
       >
         Media unavailable
       </div>
@@ -35,6 +37,7 @@ export function MediaWithRetry({
           setFailed(false)
           setNonce((n) => n + 1)
         }}
+        aria-label={alt ? `Retry loading ${alt}` : "Retry loading media"}
       >
         <RefreshCw size={16} aria-hidden />
         Tap to retry image
@@ -52,6 +55,7 @@ export function MediaWithRetry({
       loading="lazy"
       decoding="async"
       fetchPriority="low"
+      style={{ backgroundColor: "var(--muted, rgba(128,128,128,.08))" }}
     />
   )
 }

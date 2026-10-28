@@ -1,4 +1,5 @@
 /**
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/utility — purchase a catalog utility sink with GHC.
  * Body: { purpose, targetId?, clientRequestId? }
  * Amount always from server catalog. Idempotent on referenceId.
@@ -43,12 +44,15 @@ export async function POST(request: Request) {
     return jsonErr("RATE_LIMITED", `Too many utility purchases; retry in ${rl.retryAfterSec}s`, 429)
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("INVALID_INPUT", "Invalid JSON", 400)
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid utility request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
 
   void body.amount
   void body.balance

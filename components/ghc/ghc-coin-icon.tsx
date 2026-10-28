@@ -6,13 +6,14 @@
  */
 
 import { useState } from "react"
+import { brandAssets } from "@/lib/design-system"
 
 /** Public paths for the official GHC coin (transparent PNG) */
 export const GHC_COIN_ASSET = {
-  full: "/ghc-coin-logo.png",
-  lg: "/ghc-coin-logo.png",
-  md: "/ghc-coin-64.png",
-  sm: "/ghc-coin-32.png",
+  full: brandAssets.ghcCoinLogo,
+  lg: brandAssets.ghcCoinLarge,
+  md: brandAssets.ghcCoinMedium,
+  sm: brandAssets.ghcCoinSmall,
 } as const
 
 export type GhcCoinSize = "xs" | "sm" | "md" | "lg" | "xl" | number

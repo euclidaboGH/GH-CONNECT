@@ -1,4 +1,5 @@
 /**
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/ledger/spend
  * Server-authoritative GHC debit (membership, boosts, catalog spends).
  * Amount from spend-catalog — client amount cannot inflate charge.
@@ -84,12 +85,15 @@ export async function POST(request: Request) {
     return jsonErr("RATE_LIMITED", `Too many spend attempts; retry in ${rl.retryAfterSec}s`, 429)
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid spend request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
 
   // Buyer is ONLY auth.userId — ignore client identity/balance/price claims
   void body.userId

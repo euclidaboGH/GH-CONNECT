@@ -22,6 +22,10 @@ const proposals = new Set([
 ])
 const requiresApproval = new Set(['20261022010015_connection_request_intents.sql'])
 const reviewRequired = new Set([
+  '20261027010002_gh_media_asset_create_immutable_identity.sql',
+  '20261027010003_gh_media_upload_finalize_identity.sql',
+  '20261027010004_ghc_transfer_request_idempotency_intent.sql',
+  '20261027010005_ghc_transfer_request_rpc_acl_hardening.sql',
   '20261022010072_gh_curation_pipeline_atomic.sql',
   '20261022010073_reputation_event_integrity.sql',
   '20261022010074_curation_self_vote_guard.sql',
@@ -57,12 +61,19 @@ const reviewRequired = new Set([
   '20261022010098_gh_social_engagement_write_integrity.sql',
   '20261025010001_gh_community_create_idempotency_guard.sql',
   '20261025090001_backfill_daily_claim_48h_metadata.sql',
+  '20261028010001_ghc_canonical_identity_state_and_race_hardening.sql',
+  '20261028160000_marketplace_buyer_confirmation_delivery_gate.sql',
 ])
 
 const notes = {
   '20261022010015_connection_request_intents.sql': 'Product/security review; do not auto-apply.',
   '20261025010001_gh_community_create_idempotency_guard.sql': 'Review community ID-conflict behavior and verify same-owner retries plus cross-owner rejection on disposable PostgreSQL/Testnet before applying; reconcile remote migration history first.',
+  '20261027010003_gh_media_upload_finalize_identity.sql': 'Review upload-session finalization against concurrent retries and media asset lifecycle on disposable PostgreSQL; verify asset/session identity matching and service-role ACL before applying.',
+  '20261027010004_ghc_transfer_request_idempotency_intent.sql': 'Verify idempotency conflict behavior and unique-key race handling on disposable PostgreSQL before deployment.',
+  '20261027010005_ghc_transfer_request_rpc_acl_hardening.sql': 'Verify function ACL and search_path on disposable PostgreSQL; confirm service_role-only execution and no unexpected inherited grants before deployment.',
   '20261025090001_backfill_daily_claim_48h_metadata.sql': 'Review exact pending DAILY_CLAIM_V12 rows and metadata before applying on Testnet. Backfill does not change amounts/status, but unlocks strict claim RPC eligibility after the original 48-hour timestamp; reconcile remote history first.',
+  '20261028010001_ghc_canonical_identity_state_and_race_hardening.sql': 'Phase 2 identity lifecycle and concurrency hardening. Review existing identity rows, verify status semantics and advisory-lock behavior on disposable PostgreSQL, then validate create/retry/suspend/delete/resolve cases on Testnet before applying.',
+  '20261028160000_marketplace_buyer_confirmation_delivery_gate.sql': 'Phase 10 delivery/completion lifecycle gate. Review existing commerce RPC signature and transition policy, then test delivered/service-active, premature confirmation, duplicate confirmation, dispute, and concurrent buyer/seller actions on disposable PostgreSQL and Testnet before applying; reconcile target migration history first.',
   '20261022010016_community_join_reasons_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010017_community_governance_log_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010027_gh_messaging_durable.sql': 'Durable messaging; flag remains off until two-user authorization gate passes.',

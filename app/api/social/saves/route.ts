@@ -8,6 +8,7 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
 export const runtime = "nodejs"
@@ -74,8 +75,10 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
-  const body = await request.json().catch(() => ({}))
-  const postId = String(body.postId || "").trim()
+  const parsedBody = await readBoundedJson(request, 4096)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
+  const postId = (typeof body.postId === "string" ? body.postId : "").trim()
   if (!postId || postId.length > 128) {
     return NextResponse.json({ ok: false, error: "POST_REQUIRED" }, { status: 400 })
   }

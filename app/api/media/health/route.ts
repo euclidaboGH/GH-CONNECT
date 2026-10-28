@@ -5,13 +5,21 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
+  // This diagnostic endpoint uses privileged storage credentials. Reject anonymous
+  // callers before reading configuration or making any upstream request.
   const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json(
+      { ok: false, error: "AUTH_REQUIRED" },
+      { status: 401, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+
   const env = readGhcServerEnv()
   const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"
   const hasUrl = Boolean(env.supabaseUrl)
@@ -19,40 +27,34 @@ export async function GET(request: Request) {
 
   let bucketReachable: boolean | null = null
   let bucketError: string | null = null
-  let bucketEnsured: boolean | null = null
   let bucketPublic: boolean | null = null
   let fileSizeLimit: number | null = null
 
   if (hasUrl && hasKey) {
     try {
-      const ensured = await ensureMediaBucket(storageBucket)
-      bucketEnsured = ensured.ok
-      if (!ensured.ok) {
-        bucketReachable = false
-        bucketError = ensured.error || "ENSURE_FAILED"
+      // Health checks are read-only: never create or mutate infrastructure from GET.
+      const res = await fetch(
+        `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/bucket/${encodeURIComponent(storageBucket)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+            apikey: env.supabaseServiceRoleKey!,
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(8_000),
+        }
+      )
+      bucketReachable = res.ok
+      if (!res.ok) {
+        bucketError = `HTTP_${res.status}`
       } else {
-        const res = await fetch(
-          `${env.supabaseUrl!.replace(/\/$/, "")}/storage/v1/bucket/${encodeURIComponent(storageBucket)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-              apikey: env.supabaseServiceRoleKey!,
-            },
-            cache: "no-store",
-          }
-        )
-        bucketReachable = res.ok
-        if (!res.ok) {
-          bucketError = `HTTP_${res.status}`
-        } else {
-          const info = (await res.json().catch(() => null)) as {
-            public?: boolean
-            file_size_limit?: number
-          } | null
-          if (info) {
-            bucketPublic = Boolean(info.public)
-            fileSizeLimit = typeof info.file_size_limit === "number" ? info.file_size_limit : null
-          }
+        const info = (await res.json().catch(() => null)) as {
+          public?: boolean
+          file_size_limit?: number
+        } | null
+        if (info) {
+          bucketPublic = Boolean(info.public)
+          fileSizeLimit = typeof info.file_size_limit === "number" ? info.file_size_limit : null
         }
       }
     } catch {
@@ -104,8 +106,7 @@ export async function GET(request: Request) {
     signProbe = { attempted: true, ok: false, error: "PROBE_EXCEPTION" }
   }
 
-  const ready =
-    Boolean(auth) && hasUrl && hasKey && bucketReachable === true && bucketEnsured !== false
+  const ready = hasUrl && hasKey && bucketReachable === true
 
   return NextResponse.json(
     {
@@ -117,7 +118,9 @@ export async function GET(request: Request) {
       bucket: storageBucket,
       bucketReachable,
       bucketError,
-      bucketEnsured,
+      // Kept null for response-shape compatibility; GET intentionally does not provision buckets.
+      bucketEnsured: null,
+      bucketProvisioning: "read-only",
       /** Operator expects private=true for GreenHaven. Public buckets still work via signed facade. */
       bucketPublic,
       fileSizeLimitBytes: fileSizeLimit,

@@ -9,6 +9,7 @@
  * require order.paymentStatus === "verified" from persisted order state.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { loadOrder, transitionOrder } from "@/lib/server/marketplace/order-store"
 
@@ -43,7 +44,12 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsed = await readBoundedJson(request, 8 * 1024)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+  }
+  const body = parsed.value
   // Ignore client payment/identity spoofing — session + durable order only
   void body.paymentStatus
   void body.paid
@@ -54,7 +60,26 @@ export async function POST(
   void body.sellerId
   void body.userId
 
-  const to = String(body.to || "").toLowerCase()
+  const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : ""
+  if (!to || to.length > 32 || /[\u0000-\u001f\u007f]/.test(to)) {
+    return NextResponse.json({ ok: false, error: "INVALID_TRANSITION" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+
+  // Payment, refund and fulfilment state changes must use their authoritative
+  // payment/commerce flows; this generic endpoint cannot mint financial outcomes.
+  if (to === "refunded") {
+    return NextResponse.json(
+      { ok: false, error: "REFUND_TRANSITION_FORBIDDEN", message: "A refund status can only be recorded by an authoritative refund and ledger reconciliation flow." },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+
+  if (["confirmed", "fulfilling", "completed", "disputed"].includes(to)) {
+    return NextResponse.json(
+      { ok: false, error: "COMMERCE_TRANSITION_REQUIRED", message: "Use the authorized marketplace commerce action for this lifecycle transition." },
+      { status: 409, headers: { "Cache-Control": "no-store" } }
+    )
+  }
 
   // payment_verified is established only by POST .../pay after settlement
   if (to === "payment_verified") {
@@ -65,7 +90,7 @@ export async function POST(
         message:
           "payment_verified is set only by the authoritative pay route after settlement.",
       },
-      { status: 403 }
+      { status: 403, headers: { "Cache-Control": "no-store" } }
     )
   }
 
@@ -80,7 +105,7 @@ export async function POST(
         paymentStatus: order.paymentStatus || "none",
         status: order.status,
       },
-      { status: 402 }
+      { status: 402, headers: { "Cache-Control": "no-store" } }
     )
   }
 
@@ -93,7 +118,7 @@ export async function POST(
         message:
           "Paid orders cannot be cancelled through this API; no authoritative refund path is implemented.",
       },
-      { status: 409 }
+      { status: 409, headers: { "Cache-Control": "no-store" } }
     )
   }
 
@@ -116,5 +141,5 @@ export async function POST(
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 })
   }
 
-  return NextResponse.json({ ok: true, order: result.order })
+  return NextResponse.json({ ok: true, order: result.order }, { headers: { "Cache-Control": "no-store" } })
 }

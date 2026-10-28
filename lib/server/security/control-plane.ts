@@ -28,7 +28,12 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<unknown
   } catch { return null }
 }
 
-export async function checkDurableRateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
+export async function checkDurableRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+  options: { onUnavailable?: "local" | "deny" } = {},
+): Promise<RateLimitResult> {
   const result = await rpc("gh_security_rate_limit_consume", {
     p_bucket_key: hashKey(key), p_limit: limit, p_window_ms: windowMs,
   }) as DurableRateLimit | null
@@ -36,6 +41,12 @@ export async function checkDurableRateLimit(key: string, limit: number, windowMs
     return result.ok
       ? { ok: true, remaining: Number(result.remaining || 0) }
       : { ok: false, retryAfterSec: Math.max(1, Number(result.retryAfterSec || 1)) }
+  }
+  // Authentication and other abuse-sensitive entry points can opt into a
+  // fail-closed policy. A local fallback is not equivalent to a durable limit
+  // in a multi-instance deployment and must never be presented as such.
+  if (options.onUnavailable === "deny") {
+    return { ok: false, retryAfterSec: 5 }
   }
   return localRateLimit(key, limit, windowMs)
 }

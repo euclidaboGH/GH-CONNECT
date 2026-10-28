@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,8 +13,10 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const body = await request.json().catch(() => ({}))
-  const targetUserId = String(body.targetUserId || "").trim()
+  const parsedBody = await readBoundedJson(request, 4096)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
+  const targetUserId = (typeof body.targetUserId === "string" ? body.targetUserId : "").trim()
   if (!targetUserId || targetUserId === auth.userId) {
     return NextResponse.json({ ok: false, error: "INVALID_TARGET" }, { status: 400 })
   }

@@ -11,7 +11,7 @@ const release = read('lib/app-release.ts')
 const manifest = read('VERIFIED_MANIFEST.txt')
 const checks = [
   ['release/package/lock/manifest versions agree', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && manifest.includes(`project_version=${pkg.version}`)],
-  ['Phase 15 report exists', fs.existsSync(path.join(process.cwd(), 'PHASE-15-PAYMENT-RECOVERY.md'))],
+  ['Phase 15 report exists', fs.existsSync(path.join(process.cwd(), 'docs/archive/phase-notes/PHASE-15-PAYMENT-RECOVERY.md'))],
   ['Pi history offers a manual read-only refresh', /aria-label="Refresh Pi payment history"/.test(wallet) && /onClick=\{\(\) => setTick\(\(n\) => n \+ 1\)\}/.test(wallet) && /Refresh checks the latest stored records; it does not retry or charge a payment/.test(wallet)],
   ['support summary uses persisted intent and diagnostic identifiers', /Payment intent ID: \$\{intent\.id\}/.test(detail) && /Diagnostic code: \$\{finding\?\.code/.test(detail) && /Reference ID: \$\{intent\.referenceId/.test(detail)],
   ['support summary is generated locally as a user-triggered download', /downloadSupportSummary/.test(detail) && /URL\.createObjectURL/.test(detail) && /greenhaven-payment-support-/.test(detail) && !/fetch\([^\n]*method:\s*["'](POST|PUT|PATCH|DELETE)/.test(detail)],

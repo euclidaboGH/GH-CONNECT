@@ -1,4 +1,5 @@
 /**
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/rewards/daily
  *
  * ECONOMY_VERSION 1.2 — atomic Daily Claim path:
@@ -88,12 +89,15 @@ export async function POST(request: Request) {
     return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
   }
 
-  let body: Record<string, unknown> = {}
-  try {
-    body = await request.json()
-  } catch {
-    body = {}
+  const parsedBody = await readBoundedJson(request, 4096)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid daily claim request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
   // Explicitly ignore client-dictated economic values
   void body.amount
   void body.ghc

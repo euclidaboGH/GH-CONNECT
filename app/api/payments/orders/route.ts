@@ -3,6 +3,7 @@
  * GET  /api/payments/orders — list orders for authenticated user.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { getProduct } from "@/lib/gh-pay/catalog"
 import { genOrderId, saveOrder, listOrdersForUser, getOrder } from "@/lib/gh-pay/order-store"
@@ -17,7 +18,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+    if (!parsedBody.ok) {
+      const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json(
+        { ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST_BODY" },
+        { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const body = parsedBody.value
   const productId = String(body.productId || "").trim()
   const product = getProduct(productId)
   if (!product || product.direction !== "u2a") {

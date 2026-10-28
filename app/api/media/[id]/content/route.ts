@@ -25,9 +25,26 @@ function reply(status: number, error: string) {
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   if (!/^media_[a-z0-9]+_[a-z0-9]+$/i.test(id) || id.length > 100) return reply(400, "INVALID_MEDIA_ID")
-  const origin = new URL(request.url).origin
+  // Never derive an authenticated server-side fetch destination from the incoming
+  // Host/Forwarded headers. Use the deployment's configured canonical origin so
+  // a spoofed host cannot receive forwarded session cookies or Authorization.
+  const configuredAppUrl = String(process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || "").trim()
+  const normalizedAppUrl = configuredAppUrl
+    ? (/^https?:\/\//i.test(configuredAppUrl) ? configuredAppUrl : `https://${configuredAppUrl}`)
+    : (process.env.NODE_ENV !== "production" ? "http://localhost:3000" : "")
+  let appOrigin = ""
   try {
-    const signedResponse = await fetch(`${origin}/api/media/${encodeURIComponent(id)}/signed-url`, {
+    const configured = normalizedAppUrl ? new URL(normalizedAppUrl) : null
+    if (configured && (configured.protocol === "https:" || (process.env.NODE_ENV !== "production" && configured.protocol === "http:" && ["localhost", "127.0.0.1"].includes(configured.hostname)))) {
+      appOrigin = configured.origin
+    }
+  } catch {
+    appOrigin = ""
+  }
+  if (!appOrigin) return reply(503, "APP_ORIGIN_NOT_CONFIGURED")
+
+  try {
+    const signedResponse = await fetch(`${appOrigin}/api/media/${encodeURIComponent(id)}/signed-url`, {
       method: "GET",
       headers: {
         ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie")! } : {}),

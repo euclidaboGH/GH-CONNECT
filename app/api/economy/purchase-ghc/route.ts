@@ -1,4 +1,5 @@
 /**
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * Phase 3 — Pi-funded GHC pack acquisition (governed product).
  * POST: credit after completed Pi intent matches catalog.
  * GET: list packs + limits + enabled flag.
@@ -118,12 +119,15 @@ export async function POST(request: Request) {
     )
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid purchase request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
 
   const intentId = String(body.intentId || "").trim()
   const paymentId = String(body.paymentId || "").trim()

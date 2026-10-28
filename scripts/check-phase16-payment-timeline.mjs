@@ -10,8 +10,8 @@ const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
 const manifest = read('VERIFIED_MANIFEST.txt')
 const checks = [
-  ['release/package/lock/manifest versions agree', pkg.version === '0.105.0' && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && manifest.includes(`project_version=${pkg.version}`)],
-  ['Phase 16 report exists', fs.existsSync(path.join(process.cwd(), 'PHASE-16-PAYMENT-LIFECYCLE-OBSERVABILITY.md'))],
+  ['release/package/lock/manifest versions agree', pkg.version === lock.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && manifest.includes(`project_version=${pkg.version}`)],
+  ['Phase 16 report exists', fs.existsSync(path.join(process.cwd(), 'docs/archive/phase-notes/PHASE-16-PAYMENT-LIFECYCLE-OBSERVABILITY.md'))],
   ['timeline endpoint requires authenticated user', /resolveAuthenticatedUser\(request\.headers\)/.test(route) && /AUTH_REQUIRED/.test(route)],
   ['timeline endpoint enforces intent ownership before returning data', /intent\.userId !== auth\.userId/.test(route) && /FORBIDDEN/.test(route)],
   ['timeline endpoint is read-only and no-store', /readOnly: true/.test(route) && /Cache-Control.*no-store/.test(route) && !/method:\s*["'](POST|PUT|PATCH|DELETE)/.test(route)],

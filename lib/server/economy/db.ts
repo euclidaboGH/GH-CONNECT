@@ -63,13 +63,15 @@ export async function rpcExecuteTransfer(
   env: GhcServerEnv = readGhcServerEnv()
 ): Promise<GhcTransferResult> {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return {
-      ok: false,
-      error: mapTransferFailure(
-        "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required for RPC",
-        "SERVER_UNAVAILABLE"
-      ),
-    }
+    return { ok: false, error: mapTransferFailure("SERVER_UNAVAILABLE", "SERVER_UNAVAILABLE") }
+  }
+  // Defend every caller of this privileged RPC, not only the HTTP route.
+  if (!input.senderId?.trim() || !input.toUserId?.trim() || input.senderId === input.toUserId ||
+      !Number.isFinite(input.amount) || input.amount <= 0 ||
+      !input.referenceId?.trim() || input.referenceId.length > 160 || /[\r\n\u0000-\u001f\u007f]/.test(input.referenceId) ||
+      (input.note != null && (typeof input.note !== "string" || input.note.length > 500)) ||
+      (input.requestId != null && (typeof input.requestId !== "string" || input.requestId.length > 160 || /[\r\n\u0000-\u001f\u007f]/.test(input.requestId)))) {
+    return { ok: false, error: mapTransferFailure("INVALID_TRANSFER_INPUT", "TRANSFER_FAILED") }
   }
 
   const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_execute_transfer`
@@ -90,17 +92,15 @@ export async function rpcExecuteTransfer(
         p_note: input.note ?? null,
         p_request_id: input.requestId ?? null,
       }),
+      signal: AbortSignal.timeout(12_000),
     })
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "")
-      // Never forward raw SQL / internal text to clients in production mapping
+      // HTTP error bodies may contain SQL, schema, or provider internals; never
+      // surface them through the domain error mapper. Domain errors are JSONB.
       return {
         ok: false,
-        error: mapTransferFailure(
-          res.status >= 500 ? "SERVER_UNAVAILABLE" : text || `HTTP ${res.status}`,
-          res.status >= 500 ? "SERVER_UNAVAILABLE" : "TRANSFER_FAILED"
-        ),
+        error: mapTransferFailure(res.status >= 500 ? "SERVER_UNAVAILABLE" : "TRANSFER_FAILED", res.status >= 500 ? "SERVER_UNAVAILABLE" : "TRANSFER_FAILED"),
       }
     }
 
@@ -109,10 +109,12 @@ export async function rpcExecuteTransfer(
     const payload = Array.isArray(data) ? data[0] : data
     return mapRpcJson(payload)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "network"
+    // A timeout can happen after the database committed. Preserve the same
+    // referenceId on retries and reconcile before issuing a fresh transfer.
+    const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
     return {
       ok: false,
-      error: mapTransferFailure(msg, "SERVER_UNAVAILABLE"),
+      error: mapTransferFailure(timedOut ? "NETWORK_TIMEOUT" : "SERVER_UNAVAILABLE", timedOut ? "NETWORK_TIMEOUT" : "SERVER_UNAVAILABLE"),
     }
   }
 }
@@ -131,9 +133,13 @@ export async function rpcListTransactions(
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<Record<string, unknown>>
+    if (!Array.isArray(rows) || rows.length > 500 || rows.some((r) => !r || typeof r !== "object" ||
+        !Number.isFinite(Number(r.amount)) || !Number.isFinite(new Date(String(r.created_at)).getTime()) ||
+        !String(r.id || "").trim() || String(r.user_id || "") !== userId)) return null
     return rows.map((r) => ({
       id: String(r.id),
       userId: String(r.user_id),
@@ -167,7 +173,7 @@ export async function rpcWalletSnapshot(
   lifetimePurchased: number
   updatedAt: number
 } | null> {
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !userId?.trim() || userId.length > 160) return null
   const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_wallet_snapshot`
   try {
     const res = await fetch(url, {
@@ -178,21 +184,27 @@ export async function rpcWalletSnapshot(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ p_user_id: userId }),
-      signal: AbortSignal.timeout?.(12_000),
+      signal: AbortSignal.timeout(12_000),
     })
     if (!res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
-    if (!data || typeof data !== "object") return null
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    // A malformed snapshot must never be rendered as a legitimate zero balance.
+    const numeric = ["balance", "ledgerBalance", "locked", "pending", "lifetimeEarned", "lifetimeSpent", "lifetimePurchased"] as const
+    const values = Object.fromEntries(numeric.map((key) => [key, Number(data[key] ?? (key === "ledgerBalance" ? data.balance : undefined))])) as Record<(typeof numeric)[number], number>
+    if (numeric.some((key) => !Number.isFinite(values[key])) || values.balance < 0 || values.ledgerBalance < 0 ||
+        values.locked < 0 || values.pending < 0 || values.lifetimeEarned < 0 || values.lifetimeSpent < 0 || values.lifetimePurchased < 0 ||
+        (data.userId != null && String(data.userId) !== userId)) return null
     return {
-      userId: String(data.userId || userId),
-      balance: Number(data.balance) || 0,
-      ledgerBalance: Number(data.ledgerBalance ?? data.balance) || 0,
-      locked: Math.max(0, Number(data.locked) || 0),
-      pending: Number(data.pending) || 0,
-      lifetimeEarned: Number(data.lifetimeEarned) || 0,
-      lifetimeSpent: Number(data.lifetimeSpent) || 0,
-      lifetimePurchased: Number(data.lifetimePurchased) || 0,
-      updatedAt: Number(data.updatedAt) || Date.now(),
+      userId,
+      balance: values.balance,
+      ledgerBalance: values.ledgerBalance,
+      locked: values.locked,
+      pending: values.pending,
+      lifetimeEarned: values.lifetimeEarned,
+      lifetimeSpent: values.lifetimeSpent,
+      lifetimePurchased: values.lifetimePurchased,
+      updatedAt: Number.isFinite(Number(data.updatedAt)) && Number(data.updatedAt) > 0 ? Number(data.updatedAt) : Date.now(),
     }
   } catch {
     return null
@@ -203,20 +215,25 @@ export async function rpcFindTransferByReference(
   referenceId: string,
   env: GhcServerEnv = readGhcServerEnv()
 ): Promise<{ debit?: GhcTransaction; credit?: GhcTransaction } | null> {
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !referenceId?.trim() || referenceId.length > 160 || /[\r\n\u0000-\u001f\u007f]/.test(referenceId)) return null
   const url =
     `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_transactions` +
     `?reference_id=eq.${encodeURIComponent(referenceId)}&status=eq.posted` +
-    `&kind=in.(transfer_out,transfer_in)`
+    `&kind=in.(transfer_out,transfer_in)&limit=3`
   try {
     const res = await fetch(url, {
       headers: {
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<Record<string, unknown>>
+    if (!Array.isArray(rows) || rows.length > 3 || rows.some((r) => !r || typeof r !== "object" ||
+        String(r.reference_id || "") !== referenceId || r.status !== "posted" ||
+        !["transfer_out", "transfer_in"].includes(String(r.kind)) || !Number.isFinite(Number(r.amount)) ||
+        !String(r.id || "").trim() || !String(r.user_id || "").trim())) return null
     const mapped = rows.map((r) => ({
       id: String(r.id),
       userId: String(r.user_id),
@@ -228,10 +245,11 @@ export async function rpcFindTransferByReference(
       referenceId: String(r.reference_id || ""),
       createdAt: r.created_at ? new Date(String(r.created_at)).getTime() : Date.now(),
     }))
-    return {
-      debit: mapped.find((t) => t.kind === "transfer_out"),
-      credit: mapped.find((t) => t.kind === "transfer_in"),
-    }
+    const debit = mapped.filter((t) => t.kind === "transfer_out")
+    const credit = mapped.filter((t) => t.kind === "transfer_in")
+    // Duplicate ledger sides are ambiguous; never choose an arbitrary row.
+    if (debit.length > 1 || credit.length > 1) return null
+    return { debit: debit[0], credit: credit[0] }
   } catch {
     return null
   }
@@ -257,6 +275,7 @@ async function rpcJson(
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
     return (await res.json()) as Record<string, unknown>
@@ -334,6 +353,7 @@ export async function rpcListTransferRequests(
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
     return (await res.json()) as Array<Record<string, unknown>>
@@ -364,6 +384,7 @@ export async function rpcEnsureAccountCreatedAt(
         p_user_id: userId,
         p_hint: hintMs != null ? new Date(hintMs).toISOString() : null,
       }),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) {
       return { ok: false, error: "SERVER_UNAVAILABLE" }
@@ -451,6 +472,7 @@ export async function rpcStagePending(
           ? String(input.targetId).trim() || null
           : null,
       }),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => null)
@@ -508,7 +530,7 @@ export async function rpcListMaturedDailyClaimHolds(
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       cache: "no-store",
-      signal: AbortSignal.timeout?.(12_000),
+      signal: AbortSignal.timeout(12_000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<Record<string, unknown>>
@@ -614,6 +636,7 @@ export async function rpcActivityStageReward(
             : null,
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => null)
@@ -687,6 +710,7 @@ export async function rpcClaimPending(
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       body: JSON.stringify({ p_user_id: userId, p_hold_id: holdId }),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) {
       return { ok: false, error: "SERVER_UNAVAILABLE" }
@@ -748,6 +772,7 @@ export async function rpcEconomicPopulationStats(
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       body: JSON.stringify({}),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return fallback
     const data = (await res.json()) as Record<string, unknown>
@@ -811,15 +836,17 @@ export async function rpcGetClaimStreak(
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
       body: JSON.stringify({ p_user_id: userId }),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return empty
     const data = (await res.json()) as Record<string, unknown>
     if (!data || data.ok === false) {
       return { ...empty, error: String(data?.error || "FAILED") }
     }
+    if (data.userId != null && String(data.userId) !== userId) return empty
     return {
       ok: true,
-      userId: String(data.userId || userId),
+      userId: userId,
       cycleDay: Math.max(0, Math.floor(Number(data.cycleDay) || 0)),
       completedCycles: Math.max(0, Math.floor(Number(data.completedCycles) || 0)),
       lastClaimDayKey:
@@ -880,6 +907,7 @@ export async function rpcCommitClaimDay(
         p_idempotency_key: input.idempotencyKey,
         p_economic_version: input.economicVersion || "1.2",
       }),
+      signal: AbortSignal.timeout(12_000),
     })
     if (!res.ok) return { ok: false, error: "SERVER_UNAVAILABLE" }
     const data = (await res.json()) as Record<string, unknown>
@@ -975,6 +1003,7 @@ export async function rpcExecuteDailyClaimV12(
         p_economic_version: input.economicVersion || "1.2",
         p_missed_day_reset: Boolean(input.missedDayReset),
       }),
+      signal: AbortSignal.timeout(12_000),
     })
     if (!res.ok) {
       const text = await res.text().catch(() => "")
@@ -1047,6 +1076,7 @@ export async function listOrphanTransferOuts(
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
         body: JSON.stringify({ p_limit: limit }),
+        signal: AbortSignal.timeout(8_000),
       }
     )
     const data = await res.json().catch(() => null)
@@ -1085,6 +1115,7 @@ export async function completeOrphanTransferIn(
           p_reference_id: referenceId,
           p_operator_note: operatorNote.slice(0, 160),
         }),
+        signal: AbortSignal.timeout(8_000),
       }
     )
     const data = await res.json().catch(() => null)

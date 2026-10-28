@@ -13,6 +13,7 @@ import {
 import { createPaymentIntent, assertDurableWrite, loadPaymentIntent } from "@/lib/server/payments/intent-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,21 +29,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
 
-  let body: {
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { ok: false, error: parsedBody.error },
+      { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 },
+    )
+  }
+  const body = parsedBody.value as {
     contentId?: string
     recipientUserId?: string
     currency?: string
-    amount?: number
+    amount?: number | string
     note?: string
     idempotencyKey?: string
-  } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    body = {}
   }
-
-  const currency = String(body.currency || "PI").toUpperCase()
+  for (const field of ["contentId", "recipientUserId", "currency", "note", "idempotencyKey"] as const) {
+    if (body[field] !== undefined && typeof body[field] !== "string") {
+      return NextResponse.json({ ok: false, error: "INVALID_TIP_REQUEST" }, { status: 400 })
+    }
+  }
+  if (body.note && body.note.length > 280) {
+    return NextResponse.json({ ok: false, error: "TIP_NOTE_TOO_LONG" }, { status: 400 })
+  }
+  const currency = (body.currency || "PI").toUpperCase()
   if (currency !== "PI" && currency !== "GHC") {
     return NextResponse.json({ ok: false, error: "UNSUPPORTED_TIP_CURRENCY" }, { status: 400 })
   }
@@ -51,7 +61,11 @@ export async function POST(request: Request) {
   if (currency === "GHC" && process.env.GHC_TIPS_ENABLED !== "true") {
     return NextResponse.json({ ok: false, error: "GHC_TIP_RAIL_NOT_ENABLED", message: "GHC tips remain disabled until the atomic transfer migration is applied and verified on Testnet. No GHC balance was changed." }, { status: 409 })
   }
-  const amount = Number(body.amount)
+  const amountInput = body.amount
+  const amountSyntaxValid = typeof amountInput === "number"
+    ? Number.isFinite(amountInput)
+    : typeof amountInput === "string" && /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amountInput.trim())
+  const amount = amountSyntaxValid ? Number(amountInput) : Number.NaN
   const precision = currency === "GHC" ? 1e4 : 1e8
   if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000 || Math.round(amount * precision) !== amount * precision) {
     return NextResponse.json({ ok: false, error: currency === "GHC" ? "VALID_GHC_TIP_AMOUNT_REQUIRED" : "VALID_PI_TIP_AMOUNT_REQUIRED" }, { status: 400 })

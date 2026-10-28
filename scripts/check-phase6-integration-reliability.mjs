@@ -27,10 +27,10 @@ const messaging = read('app/api/messaging/conversations/[conversationId]/message
 const checks = [
   ['package, lock root, and lock version agree', pkg.version === lock.version && lock.packages?.['']?.version === pkg.version],
   ['app release metadata matches package version', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 6 integration release note exists', exists('PHASE-6-CROSS-FEATURE-INTEGRATION-RELIABILITY.md')],
+  ['Phase 6 integration release note exists', exists('docs/archive/phase-notes/PHASE-6-CROSS-FEATURE-INTEGRATION-RELIABILITY.md')],
   ['shared public identity hydration uses a narrow public-field allowlist', /select:\s*"gh_user_id,display_name,username,photos"/.test(identity)],
   ['public identity hydration uses no-store reads', /cache:\s*"no-store"/.test(identity)],
-  ['referral ID resolution uses canonical public identity directory', /resolvePublicIdentity\(normalized\)/.test(referral) && !/from\("gh_profiles"\)/.test(referral)],
+  ['referral ID resolution uses canonical public identity directory', /resolvePublicIdentity\(asGh\)/.test(referral) && !/from\("gh_profiles"\)/.test(referral)],
   ['referral attribution authenticates actor and blocks self-referral', /resolveAuthenticatedUser\(request\.headers\)/.test(referral) && /SELF_REFERRAL/.test(referral)],
   ['main feed hydrates canonical author identity', /hydratePublicProfileIdentity/.test(feed)],
   ['search hydrates identity across result types', ['hydratedPeople','hydratedPosts','hydratedVideos','hydratedCreators'].every((x) => search.includes(x))],

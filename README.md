@@ -1,4 +1,91 @@
-## v0.105.0 Phase 16 — payment lifecycle observability
+## v0.157.15 — Phase 1–12 connection, moderation and financial request hardening
+
+This increment adds bounded streaming JSON parsing to connection requests, user/community report intake, matching signals, creator tips, and bank beneficiary creation/disable. It rejects malformed/non-object payloads before route business logic, requires string identifiers for matching/report/bank-beneficiary fields, validates connection note/source lengths, and prevents boolean/object or exponent-style coercion in tip amounts. The shared bounded JSON parser now has a dedicated runtime test covering valid JSON, declared and streamed size limits, malformed JSON, non-object bodies, invalid UTF-8, invalid limits and bodyless requests. Static checks and runtime helper tests do not replace a full Next.js build or live integration tests. See `docs/UPGRADE-WORKLOG-0.157.15.md`.
+
+## v0.157.14 — Phase 1–12 financial, identity and social request hardening
+
+This cross-phase increment adds streaming JSON byte limits to twelve additional high-impact write routes: seller and bank payout intake, membership activation, GHC pack payment intents, Pi step-up authentication, ad verification signals, social block/restrict/mute/follow/save mutations, and payment recovery. The payout amount parser no longer accepts booleans or malformed values through JavaScript coercion, and follow target IDs must be strings. Requests that exceed limits receive HTTP 413; malformed/non-object JSON receives HTTP 400 before route business logic. The existing v0.157.13 body-boundary work remains included. No remote systems are contacted and no production state is mutated. Source checks are not production approval. See `docs/UPGRADE-WORKLOG-0.157.15.md`.
+
+## v0.157.11 — Phase 11 wallet cross-feature reconciliation integrity
+
+Read-only payment reconciliation resolves only canonical or explicitly prefixed marketplace order references and rejects matches with conflicting intent/provider identifiers, verifies the stored Pi rail and amount before counting a purchase as matched, and requires the order and intent to agree on refund/cancellation terminal states. Membership matching prioritizes the canonical payment-intent ID and only uses a provider-payment reference or `pi:<intent-id>` fallback when no intent ID is stored, avoiding false matches against reusable product references. The 100-record history cap is now exported by the payment-intent store and reused by reconciliation, with returned and reconciled counts disclosed. No financial records are written. Source-level checks do not establish live database, provider, or production acceptance. See `docs/UPGRADE-WORKLOG-0.157.11.md`.
+
+## v0.157.10 — Phase 10 marketplace delivery and lifecycle integrity
+
+The Phase 10 follow-up closes two order-lifecycle gaps: public generic order transitions can no longer mark an order refunded or directly mutate commerce-controlled fulfilment/completion/dispute states, and buyer confirmation is gated on the authoritative seller delivery/service activation state in both the marketplace UI and the database RPC. The generic transition API now rejects non-string target states without coercion. Added forward migration `20261028160000_marketplace_buyer_confirmation_delivery_gate.sql`. Source-level checks do not establish migration application, live concurrency, provider settlement, or production readiness. See `docs/UPGRADE-WORKLOG-0.157.10.md`.
+
+## v0.157.9 — Phase 10 marketplace order integrity hardening
+
+Marketplace order mutations now use streaming bounded JSON parsing, reject malformed or oversized bodies, enforce strict integer quantities (1–99) without coercing invalid values to a default purchase, bound listing identifiers, and avoid coercing commerce action/note payloads. Order payment, transition, and commerce mutation responses use explicit no-store headers. Server-derived price/seller/currency, durable reservation RPCs, idempotency, buyer/seller authorization, payment verification, and separate fulfilment transitions remain authoritative. Runtime, concurrency, and live database acceptance remain open. See `docs/UPGRADE-WORKLOG-0.157.9.md`.
+
+Pi transaction history now rejects missing, non-positive, malformed, coerced, or over-precision amounts; bounds transaction identifiers and labels; and does not present implausibly future timestamps as valid history. Payment-intent creation validates decimal amount input and rejects malformed metadata and control characters in references/idempotency keys. Reconciliation remains authenticated, user-scoped, read-only, and explicitly bounded. Runtime and live integration acceptance remain open. See `docs/UPGRADE-WORKLOG-0.157.9.md`.
+
+## v0.157.7 — Phase 8 wallet and financial UX hardening
+
+Wallet snapshot validation now requires a bounded user identity, safe integer pending count, plausible server timestamp, and an allowlisted escrow rail. The wallet summary API consistently disables caching on success and error responses. Financial writes remain server-authoritative; live integration acceptance remains a separate release gate. See `docs/UPGRADE-WORKLOG-0.157.7.md`.
+
+## v0.157.5 — Phase 6 application shell and navigation hardening
+
+Navigation now fails safely outside browser runtime, rejects control-character payloads, validates settings destinations at runtime, and makes the explicit not-found back action recover to Home when no prior history entry exists. Phase 6 contract checks cover these cases. Browser journeys and supported-runtime build acceptance remain open. See `docs/UPGRADE-WORKLOG-0.157.5.md`.
+
+## v0.157.4 — Phase 5 brand-safe design system hardening
+
+Official GreenHaven and GHC logo assets remain unchanged and are now guarded by SHA-256 regression checks. Shared logo components use centralized asset-path constants. Responsive gutters respect device safe areas, and semantic status/focus feedback is stronger in high-contrast and forced-colors modes. Visual/browser accessibility acceptance and supported Node 24 build checks remain open.
+
+## v0.157.3 — Phase 4 recovery and identity integration hardening
+
+- Restore evidence is opened through a file descriptor with no-follow protection where supported, then verified with `fstat` against the preflight file identity before reading. This reduces symlink and path-swap risks in the evidence validator.
+- Evidence size is checked against the opened file descriptor before JSON parsing, and the descriptor closes on every path.
+- Expanded Phase 4 regression contracts to verify secure evidence reads, bounded child-process timeouts, identity integration registration, and source-only versus operational gate separation.
+- These controls validate evidence structure, not the truth of an operator's claims. A real disposable PostgreSQL restore drill and independent review remain mandatory; no live database was contacted.
+
+## v0.157.2 — Phase 3 public identity hydration hardening
+
+- Public profile hydration now traverses bounded nested comment/reply trees in a shared batch.
+- Existing avatar fallbacks are validated through the same public URL policy as hydrated profile photos.
+- Identity enrichment remains best-effort and bounded by row count, depth, response bytes, and upstream timeout.
+- Runtime and live database verification remain release gates; see `docs/PHASE-03-PUBLIC-PROFILE-IDENTITY.md`.
+
+## v0.157.2 — Phase 1–12 audit-truth and release-contract hardening
+
+- Canonical public identity RPCs now use bounded network timeouts and strict response validation.
+- Added explicit active/suspended/deleted identity lifecycle semantics and same-user ensure serialization in a new additive migration.
+- Inactive identities do not resolve and cannot be silently recreated through the ensure API.
+- The migration is not applied to any live database; see `docs/PHASE-02-CANONICAL-IDENTITY-HARDENING.md` for deployment gates.
+
+## v0.150.9 Phase 11 — wallet cross-feature reconciliation
+
+Reconciliation now discloses the 100-intent store limit and warns when a report may be truncated, preventing a capped sample from being mistaken for a complete lifetime audit. The endpoint remains authenticated, user-scoped, read-only, and keeps GHC and Pi rails separate. Run `npm run check:phase11-wallet-reconciliation`. See `docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md`.
+
+## v0.150.8 Phase 10 — marketplace, orders and fulfilment integrity
+
+- Durable order state drives transitions; persisted timestamps normalize safely; order cache changes only after durable writes.
+- Regression contract: `npm run check:phase10-marketplace-integrity`.
+
+## v0.150.8 Phase 10 — marketplace, orders and fulfilment integrity
+
+- Durable marketplace order reads are authoritative whenever Supabase is configured; stale process-local snapshots cannot drive lifecycle transitions.
+- Persisted timestamps accept epoch milliseconds/seconds and ISO timestamps; missing timestamps remain unknown rather than being fabricated as the current time.
+- Marketplace order cache updates happen only after durable writes succeed.
+- Buyer/seller authorization, payment verification, inventory reservation, and payment/fulfilment separation remain enforced.
+
+## v0.150.8 Phase 9 — canonical transaction integration
+
+Pi payment history now uses a shared strict projection for stable identifiers, explicit PI currency, safe numeric-string amounts, product metadata, purpose labels, provider references, and honest timestamp handling. Mixed rails and malformed rows are rejected rather than coerced. Feature reconciliation remains authenticated, user-scoped, read-only, concurrency-bounded, and requires authoritative ownership/link checks where mappings exist. It does not mutate balances, payments, orders, entitlements, or fulfilment. Run `npm run check:phase9-wallet-transactions`; browser, provider Testnet, database concurrency, and supported Node 24 build acceptance remain open. See `docs/PHASE-09-WALLET-TRANSACTION-INTEGRATION.md`.
+
+## v0.150.8 Phase 8 — wallet and financial UX reliability
+
+The GHC wallet read path validates server snapshot currency, finite non-negative amounts, category fields, holds and reconciliation metadata before presenting them. Concurrent refresh responses are sequenced so an older response cannot overwrite newer wallet state. A transient read failure preserves the last server-confirmed snapshot but explicitly marks it stale instead of replacing it with local session data. Pi payment history and its read-only reconciliation now filter to the Pi provider and PI currency on the server; malformed history responses are errors, not fabricated empty histories. No balances, payments, orders, entitlements, or ledger rows are mutated. Run `npm run check:phase8-wallet-history`; browser, live database, concurrency, and supported Node 24 build acceptance remain open.
+
+## v0.150.5 Phase 7 — social experience reliability
+
+Feed mute filtering now fails closed when authoritative mute state is unavailable, preventing privacy controls from being bypassed during a database failure. Story creation uses the shared streaming JSON reader with a hard 1 MiB request limit even when Content-Length is absent or inaccurate. Existing visibility, identity, audience, and expiry authority are preserved. Run `npm run check:phase7-social-experience`; live DB/browser acceptance remains open. See `docs/PHASE-07-SOCIAL-EXPERIENCE-RELIABILITY.md`.
+
+## v0.150.4 Phase 6 — app shell, navigation and onboarding
+
+Deep links now resolve through the canonical destination catalogue, including overlay destinations, while preserving unrelated URL state. Unknown routes present explicit, keyboard-accessible recovery rather than silently redirecting. Existing onboarding and session-lock authority are preserved. Run `npm run check:phase6-shell-navigation`; full browser journey acceptance remains open.
+
+## GreenHaven v0.150.8 — source baseline and production-readiness programme
 
 Phase 16 adds an authenticated, user-scoped read-only endpoint for persisted payment-intent audit events and a user-triggered history view in payment details. It sorts recorded events by their stored timestamps, returns only selected audit fields, and never invents missing events. This is not a complete Pi provider or blockchain event feed. No payment, fulfilment, order, entitlement, or balance mutation is added.
 
@@ -19,6 +106,12 @@ See `PHASE-6-CROSS-FEATURE-INTEGRATION-RELIABILITY.md`. The static release suite
 ## v0.94.0 Phase 5 — curation intelligence reliability
 
 Supabase/PostgREST intelligence RPC failures are normalized into bounded diagnostic identifiers; curation logs can distinguish database configuration, network, invalid payload, and relevant schema/dependency failures without exposing raw database messages. Durable server-owned intelligence remains mandatory; no formula fallback or economy bypass was added. No migration was added, and live Testnet verification is still required. Run `npm run check:phase5-reliability` alongside the static and safety suites. See `PHASE-5-CURATION-RELIABILITY.md`.
+
+## Recovery workstream Phase 4 — operational release gate
+
+CI now explicitly runs the Phase 3 recovery contracts, restore-evidence regression suite, Phase 4 recovery source gate, and existing Phase 4 identity-integration checks under Node.js 24.15.0. These source checks do not replace a real isolated PostgreSQL restore rehearsal; release remains blocked until redacted operational evidence passes the strict gate.
+
+Added an offline orchestrator for Phase 3 recovery contracts and a strict release gate requiring redacted evidence from a real disposable PostgreSQL restore rehearsal. Evidence symlinks are rejected and child checks have bounded timeouts. Source checks do not claim a restore happened; see `docs/PHASE-04-RECOVERY-RELEASE-GATE.md`.
 
 ## v0.93.0 Phase 4 — cross-feature identity integration
 
@@ -55,7 +148,9 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 # GreenHaven — GH Connect
 
-**Current source version:** `0.105.0`
+**Current source version:** `0.157.15`
+
+Phase 6 navigation implementation notes: `docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md`. Phase 5 design-system notes remain in `docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md`. Source checks do not substitute for browser journey and accessibility acceptance.
 
 GH Connect is the GreenHaven social, matching, community, messaging, marketplace, and GHC utility platform.
 
@@ -110,3 +205,6 @@ The notification bell is inline with Marketplace and Ecosystem in the compact sh
 - Persisted server-owned curation intelligence remains mandatory; no formula fallback, client authority, or economy bypass was introduced.
 - No database migration was added. Live Testnet verification remains an operator step.
 - Run `node scripts/check-phase5-reliability.mjs` alongside the Phase 3/4 identity checks, release hygiene, lock integrity, safety scan, and static verification suite.
+
+
+Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.15.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.

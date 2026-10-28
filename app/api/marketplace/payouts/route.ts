@@ -4,6 +4,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,10 +19,14 @@ export async function POST(request: Request) {
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
   const rl = checkRateLimit(`seller-payout:${auth.userId}`, 3, 60 * 60_000)
   if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
-  const body = await request.json().catch(() => ({})) as Record<string, unknown>
-  const currency = String(body.currency || "").toUpperCase()
-  const amount = Number(body.amount)
-  const idempotencyKey = String(request.headers.get("Idempotency-Key") || body.idempotencyKey || "").trim()
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value
+  const currency = typeof body.currency === "string" ? body.currency.toUpperCase() : ""
+  const amountInput = body.amount
+  const amount = typeof amountInput === "number" ? amountInput : typeof amountInput === "string" && /^\d+(?:\.\d+)?$/.test(amountInput.trim()) ? Number(amountInput) : Number.NaN
+  const headerIdempotencyKey = request.headers.get("Idempotency-Key")
+  const idempotencyKey = (headerIdempotencyKey ?? (typeof body.idempotencyKey === "string" ? body.idempotencyKey : "")).trim()
   if (["BANK", "NGN", "USD", "EUR"].includes(currency)) {
     return reply({ ok: false, error: "UNSUPPORTED_PAYOUT_RAIL", message: "Bank and fiat payouts remain unavailable until a verified banking adapter and reconciliation workflow are implemented." }, 409)
   }

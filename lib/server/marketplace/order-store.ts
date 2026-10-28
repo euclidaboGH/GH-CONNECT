@@ -138,6 +138,22 @@ function orderToRow(order: ServerMarketOrder): Record<string, unknown> {
   }
 }
 
+
+/** Accept database epoch milliseconds/seconds and ISO timestamps without
+ * silently replacing valid persisted history with the current wall clock. */
+function timestampMs(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 0 && value < 100_000_000_000 ? Math.trunc(value * 1000) : Math.trunc(value)
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return timestampMs(numeric, fallback)
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
 function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
   return {
     id: String(data.id || ""),
@@ -156,17 +172,17 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     paymentId: data.paymentId ? String(data.paymentId) : undefined,
     txid: data.txid ? String(data.txid) : undefined,
     ghcSpendRef: data.ghcSpendRef ? String(data.ghcSpendRef) : undefined,
-    reservationExpiresAt: data.reservationExpiresAt != null ? Number(data.reservationExpiresAt) : undefined,
+    reservationExpiresAt: data.reservationExpiresAt != null ? timestampMs(data.reservationExpiresAt) : undefined,
     escrowStatus: data.escrowStatus as ServerMarketOrder["escrowStatus"], deliveryStatus: data.deliveryStatus as ServerMarketOrder["deliveryStatus"],
     disputeReason: data.disputeReason ? String(data.disputeReason) : undefined, cancellationReason: data.cancellationReason ? String(data.cancellationReason) : undefined,
     buyerNote: data.buyerNote ? String(data.buyerNote) : undefined, sellerNote: data.sellerNote ? String(data.sellerNote) : undefined,
-    deliveredAt: data.deliveredAt != null ? Number(data.deliveredAt) : undefined, buyerConfirmedAt: data.buyerConfirmedAt != null ? Number(data.buyerConfirmedAt) : undefined, sellerConfirmedAt: data.sellerConfirmedAt != null ? Number(data.sellerConfirmedAt) : undefined,
-    createdAt: Number(data.createdAt) || Date.now(),
-    updatedAt: Number(data.updatedAt) || Date.now(),
-    confirmedAt: data.confirmedAt != null ? Number(data.confirmedAt) : undefined,
-    fulfilledAt: data.fulfilledAt != null ? Number(data.fulfilledAt) : undefined,
-    completedAt: data.completedAt != null ? Number(data.completedAt) : undefined,
-    cancelledAt: data.cancelledAt != null ? Number(data.cancelledAt) : undefined,
+    deliveredAt: data.deliveredAt != null ? timestampMs(data.deliveredAt) : undefined, buyerConfirmedAt: data.buyerConfirmedAt != null ? timestampMs(data.buyerConfirmedAt) : undefined, sellerConfirmedAt: data.sellerConfirmedAt != null ? timestampMs(data.sellerConfirmedAt) : undefined,
+    createdAt: timestampMs(data.createdAt, 0),
+    updatedAt: timestampMs(data.updatedAt, 0),
+    confirmedAt: data.confirmedAt != null ? timestampMs(data.confirmedAt) : undefined,
+    fulfilledAt: data.fulfilledAt != null ? timestampMs(data.fulfilledAt) : undefined,
+    completedAt: data.completedAt != null ? timestampMs(data.completedAt) : undefined,
+    cancelledAt: data.cancelledAt != null ? timestampMs(data.cancelledAt) : undefined,
     audit: Array.isArray(data.audit) ? (data.audit as ServerMarketOrder["audit"]) : [],
   }
 }
@@ -262,7 +278,6 @@ export async function releaseOrderPaymentClaim(
 export async function saveOrder(
   order: ServerMarketOrder
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  map().set(order.id, order)
   if (!dbConfigured()) {
     if (isProd()) {
       return {
@@ -270,6 +285,7 @@ export async function saveOrder(
         error: "DURABLE_REQUIRED: production requires Supabase marketplace orders schema",
       }
     }
+    map().set(order.id, order)
     return { ok: true }
   }
   const res = await rpcJson("gh_marketplace_order_upsert", { p_row: orderToRow(order) })
@@ -278,6 +294,7 @@ export async function saveOrder(
       return { ok: false, error: "DURABLE_WRITE_FAILED: gh_marketplace_order_upsert" }
     }
   }
+  map().set(order.id, order)
   return { ok: true }
 }
 
@@ -324,10 +341,9 @@ export async function transitionOrder(
   actor: string,
   detail?: string
 ): Promise<{ ok: true; order: ServerMarketOrder } | { ok: false; error: string }> {
-  let order = map().get(orderId) || null
-  if (!order && dbConfigured()) {
-    order = await loadOrder(orderId)
-  }
+  // Durable state is authoritative whenever configured: never transition from a
+  // process-local snapshot that may predate another instance’s payment/fulfilment.
+  let order = dbConfigured() ? await loadOrder(orderId) : (map().get(orderId) || null)
   if (!order) return { ok: false, error: "NOT_FOUND" }
   if (order.status === to) return { ok: true, order }
 

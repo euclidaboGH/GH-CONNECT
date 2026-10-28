@@ -63,6 +63,7 @@ import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 import { PaymentRecoveryBanner } from "@/components/ghc/payment-recovery-banner"
 import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
+import { normalizePiTransactionIntent, paymentPurposeLabel } from "@/lib/domains/pi-transaction-normalizer"
 
 const formatGhc = formatGhcShared
 
@@ -273,7 +274,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [selectedPiIntent, setSelectedPiIntent] = useState<PiIntentRow | null>(null)
   const [piIntentsLoading, setPiIntentsLoading] = useState(false)
   const [piIntentsError, setPiIntentsError] = useState<string | null>(null)
-  const [serverReconciliation, setServerReconciliation] = useState<{ generatedAt?: string; counts: { matched: number; attention_required: number; unverified: number; not_applicable: number }; findings: Array<{ intentId: string; purpose: string; reconciliation: string; code: string; message: string }> } | null>(null)
+  const [serverReconciliation, setServerReconciliation] = useState<{ generatedAt?: string; coverage?: { recordLimit: number; potentiallyTruncated: boolean; scopeDescription: string }; counts: { matched: number; attention_required: number; unverified: number; not_applicable: number }; findings: Array<{ intentId: string; purpose: string; reconciliation: string; code: string; message: string }> } | null>(null)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [query, setQuery] = useState("")
   const [showPendingSheet, setShowPendingSheet] = useState(false)
@@ -395,48 +396,19 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           ? data.intents
           : Array.isArray(data?.items)
             ? data.items
-            : []
+            : null
+        if (!list) {
+          if (!cancelled) setPiIntentsError("Payment history response was invalid. Your records have not been changed; retry to reload authoritative history.")
+          return
+        }
         if (!cancelled) {
           setPiIntents(
             list
-              .map((raw: Record<string, unknown>): PiIntentRow => ({
-                id: String(raw.id || raw.intentId || ""),
-                status: String(raw.status || ""),
-                amountPi: (() => {
-                  const value = raw.amountPi ?? raw.amount
-                  if (value === null || value === undefined || value === "") return undefined
-                  const amount = Number(value)
-                  return Number.isFinite(amount) && amount >= 0 ? amount : undefined
-                })(),
-                currency: String(raw.currency || "PI").toUpperCase(),
-                purpose: String(raw.purpose || raw.category || ""),
-                productId: String(
-                  raw.productId ||
-                    (typeof raw.metadata === "object" &&
-                    raw.metadata &&
-                    "productId" in raw.metadata
-                      ? (raw.metadata as { productId?: string }).productId
-                      : "") ||
-                    ""
-                ),
-                productLabel: String(
-                  raw.productLabel || raw.title ||
-                  (typeof raw.metadata === "object" && raw.metadata && "productLabel" in raw.metadata
-                    ? (raw.metadata as { productLabel?: string }).productLabel : "") || ""
-                ),
-                referenceId: String(raw.referenceId || raw.reference_id || ""),
-                createdAt: (() => {
-                  const value = raw.createdAt ?? raw.created_at
-                  if (typeof value === "number" && Number.isFinite(value)) return value
-                  if (typeof value === "string" && value.trim()) {
-                    const parsed = Date.parse(value)
-                    return Number.isFinite(parsed) ? parsed : undefined
-                  }
-                  return undefined
-                })(),
-                paymentId: String(raw.providerPaymentId || raw.paymentId || raw.piPaymentId || ""),
-              }))
-              .filter((x: PiIntentRow) => Boolean(x.id))
+              .filter((raw: unknown) => Boolean(raw) && typeof raw === "object" && !Array.isArray(raw))
+              .map((raw: unknown) => normalizePiTransactionIntent(raw))
+              .filter((x): x is PiIntentRow => x !== null)
+              // This endpoint is Pi history: never coerce unknown/mixed rails into π.
+              .filter((x: PiIntentRow) => Boolean(x.id) && x.currency === "PI")
           )
         }
         // The server performs user-scoped read-only checks against feature stores.
@@ -449,7 +421,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
         const reconciliationData = await reconciliationRes.json().catch(() => ({}))
         if (!cancelled && reconciliationRes.ok && reconciliationData?.ok === true
           && reconciliationData.counts && Array.isArray(reconciliationData.findings)) {
-          setServerReconciliation({ generatedAt: typeof reconciliationData.generatedAt === "string" ? reconciliationData.generatedAt : undefined, counts: reconciliationData.counts, findings: reconciliationData.findings })
+          setServerReconciliation({ generatedAt: typeof reconciliationData.generatedAt === "string" ? reconciliationData.generatedAt : undefined, coverage: reconciliationData.coverage && typeof reconciliationData.coverage.potentiallyTruncated === "boolean" && Number.isSafeInteger(reconciliationData.coverage.recordLimit) ? reconciliationData.coverage : undefined, counts: reconciliationData.counts, findings: reconciliationData.findings })
         } else if (!cancelled) {
           setServerReconciliation(null)
         }
@@ -1168,7 +1140,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [refresh])
 
 const lowBalance = balance === 0 && displayPending === 0
-  const showAuthorityBanner = offline || refreshFailed
+  const walletSnapshotStale = authoritativeWallet.status === "error" || authoritativeWallet.status === "unavailable"
+  const showAuthorityBanner = offline || refreshFailed || walletSnapshotStale
   const socialFunding = socialEconomy?.curation
   const claimableToday = Boolean(socialEconomy?.claim && (socialEconomy.claim as { claimable?: boolean }).claimable)
 
@@ -1219,7 +1192,9 @@ const lowBalance = balance === 0 && displayPending === 0
               <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-100">
                 {offline
                   ? "You're offline. Showing your last available wallet information. Refresh when you're back online."
-                  : "Couldn’t refresh your wallet. Showing the last available information."}
+                  : walletSnapshotStale
+                    ? (authoritativeWallet.message || "Authoritative wallet refresh failed. Any displayed previous values may be stale; server checks still govern financial actions.")
+                    : "Couldn’t refresh your wallet. Showing the last available information."}
               </p>
               {!offline && (
                 <button
@@ -1688,6 +1663,11 @@ const lowBalance = balance === 0 && displayPending === 0
                         <p className="text-xs font-semibold text-foreground">Feature reconciliation</p>
                         <span className="text-right text-[10px] text-muted-foreground">Server · read-only{serverReconciliation.generatedAt && Number.isFinite(Date.parse(serverReconciliation.generatedAt)) ? ` · ${new Date(serverReconciliation.generatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
                       </div>
+                      {serverReconciliation.coverage?.potentiallyTruncated && (
+                        <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                          This report may cover only the newest {serverReconciliation.coverage.recordLimit} stored intents. It is not a complete lifetime reconciliation.
+                        </p>
+                      )}
                       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.matched}</p><p className="text-[10px] text-muted-foreground">Matched</p></div>
                         <div className="rounded-xl bg-muted/50 p-2"><p className="text-lg font-bold tabular-nums">{serverReconciliation.counts.attention_required}</p><p className="text-[10px] text-muted-foreground">Needs attention</p></div>
@@ -1761,22 +1741,7 @@ const lowBalance = balance === 0 && displayPending === 0
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground">
-                              {intent.productLabel || intent.productId || ({
-                                membership: "Membership payment",
-                                marketplace: "Marketplace purchase",
-                                boost: "Boost payment",
-                                donation: "Donation",
-                                sponsored_listing: "Sponsored listing",
-                                digital_product: "Digital product purchase",
-                                premium_feature: "Premium feature",
-                                service: "Service payment",
-                                verification: "Verification payment",
-                                seller_payout: "Seller payout",
-                                creator_earning: "Creator earnings",
-                                refund: "Refund",
-                                reward_payout: "Reward payout",
-                                other: "π payment",
-                              } as Record<string, string>)[String(intent.purpose || "other").toLowerCase()] || "π payment"}
+                              {intent.productLabel || intent.productId || paymentPurposeLabel(intent.purpose)}
                             </p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">
                               {typeof intent.createdAt === "number" && intent.createdAt > 0

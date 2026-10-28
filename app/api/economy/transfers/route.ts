@@ -4,6 +4,7 @@
  * Notifications recorded only after authoritative success (deduped by referenceId).
  */
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   executeAuthoritativeTransfer,
   getProcessGhcStore,
@@ -22,6 +23,10 @@ import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
 import { isValidGreenHavenIdFormat, normalizeGreenHavenId } from "@/lib/domains/greenhaven-id"
 
+const MAX_TRANSFER_BODY_CHARS = 16_384
+const MAX_TRANSFER_REFERENCE_CHARS = 200
+const MAX_TRANSFER_REQUEST_ID_CHARS = 128
+
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
@@ -38,12 +43,15 @@ export async function POST(request: Request) {
     return jsonErr("RATE_LIMITED", `Too many transfers; retry in ${rl.retryAfterSec}s`, 429)
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("TRANSFER_FAILED", "Invalid JSON body", 400)
+  // Enforce the limit while streaming. Content-Length alone is not trustworthy
+  // and buffering first can consume excessive memory before a size check runs.
+  const parsedBody = await readBoundedJson(request, MAX_TRANSFER_BODY_CHARS)
+  if (!parsedBody.ok) {
+    const status = parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    const code = parsedBody.error === "INVALID_JSON" ? "INVALID_JSON" : parsedBody.error
+    return jsonErr(code, code === "REQUEST_TOO_LARGE" ? "Transfer request body is too large" : "Invalid transfer request body", status)
   }
+  const body = parsedBody.value
 
   // Sender is ONLY auth.userId — ignore client-supplied sender/user fields
   void body.senderId
@@ -55,14 +63,20 @@ export async function POST(request: Request) {
     body.toGreenHavenId || body.recipientGreenHavenId || body.toUserId || ""
   ).trim()
   const referenceId = String(body.referenceId || "").trim()
-  const note = body.note != null ? String(body.note).slice(0, 120) : undefined
-  const requestId = body.requestId != null ? String(body.requestId) : undefined
+  const note = body.note != null ? String(body.note).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 120) : undefined
+  const requestId = body.requestId != null ? String(body.requestId).trim() : undefined
 
   if (!rawGreenHavenId) return jsonErr("GREENHAVEN_ID_REQUIRED", "Recipient GreenHaven ID required", 400)
   if (!isValidGreenHavenIdFormat(rawGreenHavenId)) {
     return jsonErr("GREENHAVEN_ID_REQUIRED", "Enter a valid recipient GreenHaven ID (GH-XXXXXX)", 400)
   }
   if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
+  if (referenceId.length > MAX_TRANSFER_REFERENCE_CHARS || /[\r\n]/.test(referenceId)) {
+    return jsonErr("INVALID_REFERENCE_ID", "Transfer reference is invalid", 400)
+  }
+  if (requestId && (requestId.length > MAX_TRANSFER_REQUEST_ID_CHARS || /[\r\n]/.test(requestId))) {
+    return jsonErr("INVALID_REQUEST_ID", "Request ID is invalid", 400)
+  }
 
   // Resolve the recipient using the durable public directory. Never trust an internal
   // account key or display name supplied by the client as the transfer destination.
@@ -99,7 +113,7 @@ export async function POST(request: Request) {
           ? 401
           : result.error.code === "INSUFFICIENT_BALANCE"
             ? 402
-            : result.error.code === "SERVER_UNAVAILABLE"
+            : result.error.code === "SERVER_UNAVAILABLE" || result.error.code === "NETWORK_TIMEOUT"
               ? 503
               : 400
       return jsonErr(result.error.code, result.error.message, status)
@@ -113,7 +127,7 @@ export async function POST(request: Request) {
       await notifyTransferCompleted({
         senderId: auth.userId,
         recipientId: toUserId,
-        amount: Math.abs(amount),
+        amount,
         referenceId: result.referenceId || referenceId,
         recipientName: toUserName,
       })
@@ -161,7 +175,7 @@ export async function POST(request: Request) {
     await notifyTransferCompleted({
       senderId: auth.userId,
       recipientId: toUserId,
-      amount: Math.abs(amount),
+      amount,
       referenceId: result.referenceId || referenceId,
       recipientName: toUserName,
     })

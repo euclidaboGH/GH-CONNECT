@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcWalletSnapshot } from "@/lib/server/economy/db"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   createWithdrawalRequest,
   fetchLockedGhc,
@@ -75,7 +76,17 @@ export async function POST(request: Request) {
       { status: 503 }
     )
   }
-  const body = await request.json().catch(() => ({}))
+  // Withdrawal requests are financial operations: enforce a hard streaming limit
+  // before JSON parsing so oversized bodies cannot consume unbounded memory.
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    const status = parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json(
+      { ok: false, error: parsedBody.error, message: parsedBody.error === "REQUEST_TOO_LARGE" ? "Withdrawal request body is too large" : "Invalid withdrawal request body" },
+      { status, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+  const body = parsedBody.value
   const ghcAmount = Number(body.ghcAmount)
   const piWalletAddress = String(body.piWalletAddress || body.walletAddress || "").trim()
   // Require stable client key — Date.now() fallback would allow accidental duplicate requests

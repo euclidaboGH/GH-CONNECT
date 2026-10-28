@@ -8,6 +8,7 @@ import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
 import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
 import { ASSET_POLICY } from "@/lib/asset-separation"
+import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,38 +30,99 @@ const PURPOSES = new Set([
   "other",
 ])
 
+const MAX_INTENT_BODY_CHARS = 16_384
+const MAX_METADATA_CHARS = 8_192
+const MAX_REFERENCE_ID_CHARS = 200
+const MAX_IDEMPOTENCY_KEY_CHARS = 128
+const NO_STORE = { "Cache-Control": "no-store, no-cache, must-revalidate" }
+
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: NO_STORE })
   }
 
-  const body = await request.json().catch(() => ({}))
+  pruneRateLimitBuckets()
+  const limit = checkRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000)
+  if (!limit.ok) {
+    return NextResponse.json(
+      { ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec },
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(limit.retryAfterSec) } },
+    )
+  }
+
+  // Bound request parsing before JSON decoding to avoid unnecessarily large payloads.
+  const rawBody = await request.text().catch(() => "")
+  if (rawBody.length > MAX_INTENT_BODY_CHARS) {
+    return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: NO_STORE })
+  }
+  let body: Record<string, unknown>
+  try {
+    const parsed: unknown = JSON.parse(rawBody)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_BODY")
+    body = parsed as Record<string, unknown>
+  } catch {
+    return NextResponse.json({ ok: false, error: "INVALID_JSON_BODY" }, { status: 400, headers: NO_STORE })
+  }
+
   const purpose = String(body.purpose || "other") as PaymentPurpose
   if (!PURPOSES.has(purpose)) {
-    return NextResponse.json({ ok: false, error: "Invalid purpose" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "INVALID_PURPOSE" }, { status: 400, headers: NO_STORE })
   }
 
-  const amount = Number(body.amount)
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000) {
-    return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
+  // JSON booleans/null and blank strings must not become numeric amounts via
+  // JavaScript coercion. Keep the accepted representation decimal and bounded.
+  const rawAmount = body.amount
+  const amountString = typeof rawAmount === "string" ? rawAmount.trim() : ""
+  const amountFormatValid = typeof rawAmount === "number"
+    ? Number.isFinite(rawAmount)
+    : typeof rawAmount === "string" && /^(?:0|[1-9]\d*)(?:\.\d{1,8})?$/.test(amountString)
+  const amount = typeof rawAmount === "number" ? rawAmount : amountFormatValid ? Number(amountString) : Number.NaN
+  if (!amountFormatValid || !Number.isFinite(amount) || amount <= 0 || amount > 10_000 || Number(amount.toFixed(8)) !== amount) {
+    return NextResponse.json({ ok: false, error: "INVALID_AMOUNT" }, { status: 400, headers: NO_STORE })
   }
 
-  const metadata = typeof body.metadata === "object" && body.metadata && !Array.isArray(body.metadata)
+  if (body.metadata !== undefined && (!body.metadata || typeof body.metadata !== "object" || Array.isArray(body.metadata))) {
+    return NextResponse.json({ ok: false, error: "INVALID_METADATA" }, { status: 400, headers: NO_STORE })
+  }
+  const metadata = typeof body.metadata === "object" && body.metadata
     ? body.metadata as Record<string, unknown>
     : {}
+  let metadataSize = 0
+  try {
+    metadataSize = JSON.stringify(metadata).length
+  } catch {
+    return NextResponse.json({ ok: false, error: "INVALID_METADATA" }, { status: 400, headers: NO_STORE })
+  }
+  if (metadataSize > MAX_METADATA_CHARS) {
+    return NextResponse.json({ ok: false, error: "METADATA_TOO_LARGE" }, { status: 400, headers: NO_STORE })
+  }
   // GHC pack intents carry reserved server-side catalog bindings and must be
   // created through /api/economy/packs/intent, which derives price and amount.
   if (purpose === "digital_product" && String(metadata.kind || "") === "ghc_pack") {
     return NextResponse.json(
       { ok: false, error: "USE_GHC_PACK_INTENT_ROUTE", message: "GHC pack intents must use the server-owned pack catalog." },
-      { status: 400, headers: { "Cache-Control": "no-store" } },
+      { status: 400, headers: NO_STORE },
     )
   }
 
-  const referenceId = String(body.referenceId || body.orderId || "").trim()
+  const rawReferenceId = body.referenceId ?? body.orderId
+  if (typeof rawReferenceId !== "string") {
+    return NextResponse.json({ ok: false, error: "INVALID_REFERENCE_ID" }, { status: 400, headers: NO_STORE })
+  }
+  const referenceId = rawReferenceId.trim()
   if (!referenceId) {
-    return NextResponse.json({ ok: false, error: "referenceId required" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "INVALID_REFERENCE_ID" }, { status: 400, headers: NO_STORE })
+  }
+  if (/[\u0000-\u001f\u007f]/.test(referenceId)) {
+    return NextResponse.json({ ok: false, error: "INVALID_REFERENCE_ID" }, { status: 400, headers: NO_STORE })
+  }
+  if (referenceId.length > MAX_REFERENCE_ID_CHARS) {
+    return NextResponse.json({ ok: false, error: "REFERENCE_ID_TOO_LONG" }, { status: 400, headers: NO_STORE })
+  }
+  const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : undefined
+  if (idempotencyKey && (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_CHARS || /[\u0000-\u001f\u007f]/.test(idempotencyKey))) {
+    return NextResponse.json({ ok: false, error: "INVALID_IDEMPOTENCY_KEY" }, { status: 400, headers: NO_STORE })
   }
 
   // This route creates Pi-provider intents only. Reject other rails explicitly
@@ -73,13 +135,13 @@ export async function POST(request: Request) {
         error: "GHC_NOT_ON_PI_RAILS",
         message: ASSET_POLICY.payCopy,
       },
-      { status: 400, headers: { "Cache-Control": "no-store" } }
+      { status: 400, headers: NO_STORE }
     )
   }
   if (requestedCurrency !== "PI") {
     return NextResponse.json(
       { ok: false, error: "UNSUPPORTED_PAYMENT_CURRENCY", supported: ["PI"] },
-      { status: 400, headers: { "Cache-Control": "no-store" } },
+      { status: 400, headers: NO_STORE },
     )
   }
 
@@ -90,8 +152,7 @@ export async function POST(request: Request) {
     currency: "PI",
     referenceId,
     metadata,
-    idempotencyKey:
-      typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : undefined,
+    idempotencyKey,
     provider: "pi",
   })
 
@@ -124,15 +185,27 @@ export async function GET(request: Request) {
       { status: 401, headers: { "x-request-id": reqCtx.requestId } }
     )
   }
+  pruneRateLimitBuckets()
+  const limit = checkRateLimit(`payment-intent:list:${auth.userId}`, 60, 60_000)
+  if (!limit.ok) {
+    return NextResponse.json(
+      { ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec },
+      { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec), "x-request-id": reqCtx.requestId } },
+    )
+  }
+
   // Durable when Supabase configured — survives Vercel cold start / multi-instance
   // Scoped to authenticated user only — never accept client userId override
   try {
-    const intents = await listIntentsForUserAsync(auth.userId)
+    const allUserIntents = await listIntentsForUserAsync(auth.userId)
+    // This endpoint powers the Pi payment-history rail only. Internal GHC and
+    // manual/provider records must never leak into the Pi transaction timeline.
+    const intents = allUserIntents.filter((intent) => intent.provider === "pi" && intent.currency === "PI")
     return NextResponse.json(
-      { ok: true, intents },
+      { ok: true, rail: "PI", intents },
       {
         headers: {
-          "Cache-Control": "no-store",
+          ...NO_STORE,
           "x-request-id": reqCtx.requestId,
         },
       }
@@ -145,7 +218,7 @@ export async function GET(request: Request) {
       {
         status: 503,
         headers: {
-          "Cache-Control": "no-store",
+          ...NO_STORE,
           "x-request-id": reqCtx.requestId,
         },
       }

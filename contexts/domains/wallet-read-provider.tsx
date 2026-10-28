@@ -11,6 +11,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -38,9 +39,12 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     const empty = emptyWalletV2()
     return { ...local, categories: empty.categories, ledgerBalance: null, escrowLocked: 0, reconciliation: empty.reconciliation }
   })
+  const requestSequence = useRef(0)
   const refresh = useCallback(() => {
+    const sequence = ++requestSequence.current
     const local = readWalletSnapshot()
     void fetchWalletV2().then((wallet) => {
+      if (sequence !== requestSequence.current) return
       setSnapshot({
         status: "ready",
         availableGhc: wallet.available,
@@ -48,7 +52,7 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
         lockedGhc: wallet.locked,
         currency: "GHC",
         membershipTier: local.membershipTier,
-        source: "session",
+        source: "server",
         updatedAt: wallet.updatedAt,
         categories: wallet.categories,
         ledgerBalance: wallet.ledgerBalance,
@@ -56,7 +60,23 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
         reconciliation: wallet.reconciliation,
       })
     }).catch(() => {
-      setSnapshot({ ...local, categories: emptyWalletV2().categories, ledgerBalance: null, escrowLocked: 0, reconciliation: emptyWalletV2().reconciliation })
+      if (sequence !== requestSequence.current) return
+      setSnapshot((previous) => {
+        // Preserve the last server-confirmed values on transient failure, but
+        // mark them stale. Never replace a known server snapshot with local cache.
+        if (previous.source === "server") {
+          return { ...previous, status: "error", message: "Wallet refresh failed; showing the last server-confirmed snapshot." }
+        }
+        return {
+          ...local,
+          status: "error",
+          message: "Authoritative wallet is unavailable; displayed values are not freshly server-confirmed.",
+          categories: emptyWalletV2().categories,
+          ledgerBalance: null,
+          escrowLocked: 0,
+          reconciliation: emptyWalletV2().reconciliation,
+        }
+      })
     })
   }, [])
 

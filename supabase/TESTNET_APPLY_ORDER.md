@@ -156,3 +156,9 @@ These additions are source-only and have **not** been applied to any Supabase pr
 3. Review both migrations together with `supabase/tests/PHASE5_PAYMENT_INTENT_POST_MIGRATION_ASSERTIONS.sql` and execute the scenarios in `supabase/tests/PHASE5_PAYMENT_INTENT_CONCURRENCY_TEST_PLAN.md` on disposable PostgreSQL before applying to the empty Testnet project.
 
 **Do not deploy callers of these RPCs before both migrations are reviewed and applied to the intended Testnet database.** If an RPC is missing, payment binding/transitions now fail closed; this is intentional and must be included in rollout planning. No Mainnet migration or deployment is authorized by this source change.
+
+## Phase 2 canonical identity lifecycle hardening — review separately
+
+- `20261028010001_ghc_canonical_identity_state_and_race_hardening.sql` adds explicit active/suspended/deleted states, fail-closed inactive identity resolution, and same-user ensure serialization.
+- This migration is source-only until an operator reconciles the target's migration history. Validate ensure/retry, cross-user ID collision, active resolution, suspended/deleted non-resolution, RPC ACLs, and downstream referral/transfer behavior on disposable PostgreSQL and Testnet.
+- Do not bulk-apply this migration or assume it is already applied. Existing identity rows default to `active`; no identity is automatically suspended or deleted.

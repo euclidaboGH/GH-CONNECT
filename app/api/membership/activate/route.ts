@@ -21,6 +21,7 @@ import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/ht
 import { readGhcServerEnv as readEnv } from "@/lib/server/economy/env"
 import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { z } from "zod"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice, membershipPeriodForPaidMonths, paidMonthsForMembershipPeriod, type PaidMembershipMonths } from "@/lib/membership-pricing"
 import { queueReferralReward } from "@/lib/server/referral/referral-service"
 
@@ -74,7 +75,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "x-request-id": reqCtx.requestId } })
   }
 
-  const raw = await request.json().catch(() => ({}))
+  const boundedBody = await readBoundedJson(request, 8 * 1024)
+  if (!boundedBody.ok) {
+    return NextResponse.json({ ok: false, error: boundedBody.error }, { status: boundedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "x-request-id": reqCtx.requestId, "Cache-Control": "no-store" } })
+  }
+  const raw = boundedBody.value
   const schema = z.object({
     tier: z.enum(["vip", "vvip"]),
     period: z.enum(["monthly", "four_months", "eight_months", "yearly"]).optional(),

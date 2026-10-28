@@ -18,7 +18,7 @@ const checks = [
   ['stored intelligence remains mandatory; no formula fallback', /if \(!intelligence\)\s*\{\s*throw new Error\("CURATION_INTELLIGENCE_UNAVAILABLE"\)/.test(voteWeight)],
   ['client-supplied curation authority remains stripped', /stripClientAuthority\(body\)/.test(curation)],
   ['no new database migration added for diagnostics', !fs.readdirSync(path.join(root, 'supabase/migrations')).some(n => /phase5.*diagnostic/i.test(n))],
-  ['Phase 5 documentation exists', fs.existsSync(path.join(root, 'PHASE-5-CURATION-RELIABILITY.md'))],
+  ['Phase 5 documentation exists', fs.existsSync(path.join(root, 'docs/archive/phase-notes/PHASE-5-CURATION-RELIABILITY.md'))],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   operatorSetWithdrawalStatus,
   type WithdrawalStatus,
@@ -27,10 +28,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsed = await readBoundedJson(request, 4 * 1024)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json({ ok: false, error: parsed.error }, { status })
+  }
+  const body = parsed.value
   const id = String(body.id || body.withdrawalId || "").trim()
   const status = String(body.status || "").trim() as WithdrawalStatus
-  if (!id || !status) {
+  const settlementRef = body.settlementRef == null ? "" : String(body.settlementRef).trim()
+  const rejectReason = body.rejectReason == null ? "" : String(body.rejectReason).trim()
+  if (!/^[A-Za-z0-9_-]{8,180}$/.test(id) || !status || status.length > 32 ||
+      settlementRef.length > 180 || rejectReason.length > 500 ||
+      /[\u0000-\u001f\u007f]/.test(settlementRef + rejectReason)) {
     return NextResponse.json({ ok: false, error: "INVALID_INPUT" }, { status: 400 })
   }
 
@@ -38,8 +48,8 @@ export async function POST(request: Request) {
     id,
     operatorId: auth.userId,
     status,
-    settlementRef: body.settlementRef ? String(body.settlementRef) : undefined,
-    rejectReason: body.rejectReason ? String(body.rejectReason) : undefined,
+    settlementRef: settlementRef || undefined,
+    rejectReason: rejectReason || undefined,
   })
   if (!result.ok) {
     return NextResponse.json(

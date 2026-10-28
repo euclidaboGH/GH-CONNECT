@@ -3,11 +3,12 @@
  * After the browser PUTs bytes to a signed storage URL, finalize the media asset record.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { createMediaAssetRecord } from "@/lib/server/media/asset-store"
-import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
+import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, maxMediaBytesForMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -35,7 +36,14 @@ export async function POST(request: Request) {
   }
   if (!isSafeMediaBucket(storageBucket)) return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_CONFIGURATION_INVALID" }, { status: 503 })
 
-  const body = (await request.json().catch(() => ({}))) as {
+  const maxBodyBytes = 8 * 1024
+  const parsed = await readBoundedJson(request, maxBodyBytes)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return jsonNoStore({ ok: false, error: parsed.error }, { status })
+  }
+  const parsedBody = parsed.value
+  const body = parsedBody as {
     objectPath?: string
     bucket?: string
     mimeType?: string
@@ -82,7 +90,7 @@ export async function POST(request: Request) {
   const isAudio = allowedAudio.has(mime)
   const isFile = allowedFiles.has(mime)
   const byteSize = Number(body.byteSize)
-  const maxBytes = isImage ? 25 * 1024 * 1024 : isVideo ? 40 * 1024 * 1024 : isAudio || isFile ? 25 * 1024 * 1024 : 0
+  const maxBytes = maxMediaBytesForMime(mime)
   const category = parsedPath.category
   const expectedCategory = category === "avatars" && isImage ? "avatars" : isAudio ? "audio" : isFile ? "documents" : isVideo ? "videos" : isImage ? "images" : ""
   const kind = isVideo ? "video" : isImage ? "image" : "file"

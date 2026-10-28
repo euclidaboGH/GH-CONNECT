@@ -562,6 +562,8 @@ export function listIntentsForUser(userId: string): PaymentIntent[] {
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 
+export const PAYMENT_INTENT_HISTORY_LIMIT = 100
+
 /**
  * List intents for a user from durable store when configured.
  * Falls back to process memory (studio) so cold starts still work offline.
@@ -586,7 +588,7 @@ export async function listIntentsForUserAsync(userId: string): Promise<PaymentIn
     const params = new URLSearchParams()
     params.set("user_id", `eq.${uid}`)
     params.set("order", "created_at.desc")
-    params.set("limit", "100")
+    params.set("limit", String(PAYMENT_INTENT_HISTORY_LIMIT))
     params.set(
       "select",
       "id,user_id,provider,provider_payment_id,purpose,amount,currency,status,reference_id,metadata,txid,last_error,idempotency_key,audit,created_at,approved_at,submitted_at,completed_at,fulfilled_at,cancelled_at,refunded_at"

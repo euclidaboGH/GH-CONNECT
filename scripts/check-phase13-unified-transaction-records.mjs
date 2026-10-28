@@ -10,7 +10,7 @@ const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
 const checks = [
   ['release/package/lock versions agree', /^0\.\d+\.\d+$/.test(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 13 report exists', fs.existsSync(path.join(process.cwd(), 'PHASE-13-UNIFIED-TRANSACTION-RECORDS.md'))],
+  ['Phase 13 report exists', fs.existsSync(path.join(process.cwd(), 'docs/archive/phase-notes/PHASE-13-UNIFIED-TRANSACTION-RECORDS.md'))],
   ['GHC export uses persisted ledger transaction', /if \(!tx\) return/.test(ghc) && /Transaction ID: \${tx.id}/.test(ghc)],
   ['GHC export includes status and timestamps without inventing posted time', /Status: \${tx.status}/.test(ghc) && /tx\.postedAt \? formatWhen\(tx\.postedAt\) : "Not recorded"/.test(ghc)],
   ['GHC export includes stable references and source event', /Reference ID: \${tx\.referenceId \|\| "Not provided"}/.test(ghc) && /Source event:/.test(ghc)],

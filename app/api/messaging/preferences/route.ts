@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { getMessagingPreference, isMessagingStoreDurable, setMessagingPreference, type MessagingAudience, type OnlineStatusAudience } from "@/lib/server/messaging/message-store"
 
 export const runtime = "nodejs"
@@ -30,11 +31,12 @@ export async function PATCH(request: Request) {
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
     const rl = checkRateLimit(`messaging-preference-write:${auth.userId}`, 20, 60_000)
     if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
-    const contentLength = request.headers.get("content-length")
-    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 4096)) {
-      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: noStore })
+    const parsed = await readBoundedJson(request, 4 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: noStore })
     }
-    const body = await request.json().catch(() => ({}))
+    const body = parsed.value
     const hasWho = body?.whoCanMessage !== undefined
     const hasOnline = body?.onlineStatus !== undefined
     if ((!hasWho && !hasOnline) || (hasWho && !validAudience(body.whoCanMessage)) || (hasOnline && !validOnlineAudience(body.onlineStatus))) {

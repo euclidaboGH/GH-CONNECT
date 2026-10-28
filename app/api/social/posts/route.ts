@@ -13,6 +13,7 @@ import { resolveMediaAssets } from "@/lib/server/media/asset-store"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -81,7 +82,9 @@ export async function POST(request: Request) {
     )
   }
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+  const parsedBody = await readBoundedJson(request, 12 * 1024 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
   const content = String(body.content || "").trim()
   const rawImages = Array.isArray(body.images) ? body.images.map(String).slice(0, 10) : []
   const images = rawImages.filter(isSafeImageRef)

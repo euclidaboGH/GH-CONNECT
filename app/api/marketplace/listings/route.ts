@@ -23,6 +23,7 @@ import {
 } from "@/lib/server/marketplace/listing-fee"
 import { verifyListingFeePayment } from "@/lib/server/marketplace/verify-listing-fee-payment"
 import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -55,7 +56,9 @@ export async function POST(request: Request) {
     )
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 12 * 1024 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
 
   // Never trust client identity or fee fields
   void body.sellerId

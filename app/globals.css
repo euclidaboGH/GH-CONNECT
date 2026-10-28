@@ -88,12 +88,11 @@
   --gh-bottom-content-inset: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   --gh-nav-height: 3.5rem;
   --gh-screen-bottom-inset: calc(var(--gh-nav-height) + env(safe-area-inset-bottom, 0px) + 1.25rem);
-  --gh-content-max: 28rem;
   --gh-header-slim: 3rem;
   /* Legacy alias for overlays that still sit above a fixed nav */
   --gh-fixed-nav-content-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem);
   /* Content column — wider than classic max-w-md on phones */
-  --gh-content-max: 28rem; /* 448px — between md and lg */
+  /* canonical content width is declared above */
   
   /* Sidebar */
   --sidebar: oklch(0.98 0 0);
@@ -887,11 +886,36 @@ body {
   --gh-card-shadow: 0 1px 2px rgb(16 24 20 / 0.035), 0 6px 20px rgb(16 24 20 / 0.045);
   --gh-card-shadow-lg: 0 8px 28px rgb(16 24 20 / 0.075), 0 2px 6px rgb(16 24 20 / 0.035);
   --gh-focus-ring: 0 0 0 3px color-mix(in oklab, var(--primary) 24%, transparent);
+  /* Semantic design tokens: use these instead of one-off component colors. */
+  --gh-success: #15803d;
+  --gh-success-bg: #f0fdf4;
+  --gh-warning: #a16207;
+  --gh-warning-bg: #fefce8;
+  --gh-danger: #b91c1c;
+  --gh-danger-bg: #fef2f2;
+  --gh-info: #0369a1;
+  --gh-info-bg: #f0f9ff;
+  --gh-overlay: rgb(10 15 13 / 0.56);
+  --gh-control-height: 2.75rem;
+  --gh-content-gutter: clamp(0.875rem, 4vw, 1.25rem);
+  --gh-motion-fast: 120ms;
+  --gh-motion-normal: 180ms;
+  --gh-motion-slow: 260ms;
+  --gh-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
   --gh-card-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 6px 20px rgb(0 0 0 / 0.14);
   --gh-card-shadow-lg: 0 8px 28px rgb(0 0 0 / 0.24), 0 2px 6px rgb(0 0 0 / 0.16);
+  --gh-success: #86efac;
+  --gh-success-bg: #14291c;
+  --gh-warning: #fde047;
+  --gh-warning-bg: #302811;
+  --gh-danger: #fca5a5;
+  --gh-danger-bg: #35191b;
+  --gh-info: #7dd3fc;
+  --gh-info-bg: #102b3a;
+  --gh-overlay: rgb(0 0 0 / 0.68);
 }
 
 .gh-app-shell {
@@ -2814,3 +2838,76 @@ body { overflow-x: clip; }
 .gh-app-shell[data-nav-hidden="true"] {
   --gh-toast-bottom-inset: calc(0.85rem + env(safe-area-inset-bottom, 0px));
 }
+
+/* Phase 5 — semantic states and reusable feedback primitives. */
+.gh-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  border: 1px solid currentColor;
+  border-radius: 9999px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.gh-status-success { color: var(--gh-success); background: var(--gh-success-bg); border-color: color-mix(in oklab, var(--gh-success) 24%, transparent); }
+.gh-status-warning { color: var(--gh-warning); background: var(--gh-warning-bg); border-color: color-mix(in oklab, var(--gh-warning) 24%, transparent); }
+.gh-status-danger { color: var(--gh-danger); background: var(--gh-danger-bg); border-color: color-mix(in oklab, var(--gh-danger) 24%, transparent); }
+.gh-status-info { color: var(--gh-info); background: var(--gh-info-bg); border-color: color-mix(in oklab, var(--gh-info) 24%, transparent); }
+.gh-empty-state {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.625rem;
+  min-height: 10rem;
+  padding: clamp(1.25rem, 5vw, 2rem);
+  text-align: center;
+  color: var(--muted-foreground);
+}
+.gh-empty-state > :where(h1, h2, h3, [data-empty-title]) { color: var(--foreground); }
+.gh-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--gh-radius-sm);
+  background: color-mix(in oklab, var(--muted) 88%, var(--foreground) 4%);
+  color: transparent;
+  user-select: none;
+}
+.gh-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 7%, transparent), transparent);
+  animation: gh-skeleton-shimmer 1.4s var(--gh-ease-standard) infinite;
+}
+@keyframes gh-skeleton-shimmer { to { transform: translateX(100%); } }
+.gh-page-gutter {
+  padding-inline: max(var(--gh-content-gutter), env(safe-area-inset-left, 0px)) max(var(--gh-content-gutter), env(safe-area-inset-right, 0px));
+}
+.gh-content-width { width: min(100%, var(--gh-content-max)); min-width: 0; margin-inline: auto; }
+.gh-btn { min-height: var(--gh-control-height); }
+.gh-btn:focus-visible, .gh-icon-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  box-shadow: var(--gh-focus-ring);
+}
+/* Status must remain distinguishable when color perception or color printing is limited. */
+@media (prefers-contrast: more) {
+  .gh-status { border-width: 2px; font-weight: 750; }
+  .gh-empty-state { color: var(--foreground); }
+  .gh-skeleton { outline: 1px solid currentColor; outline-offset: -1px; }
+}
+@media (forced-colors: active) {
+  .gh-status { border: 1px solid CanvasText; color: CanvasText; background: Canvas; }
+  .gh-btn:focus-visible, .gh-icon-btn:focus-visible { outline: 2px solid Highlight; box-shadow: none; }
+  .gh-skeleton { border: 1px solid GrayText; background: Canvas; }
+  .gh-skeleton::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-skeleton::after { animation: none; }
+  .gh-btn, .gh-icon-btn, .gh-chip, .gh-list-row, .gh-soft-panel { transition-duration: 0.01ms !important; }
+}
+

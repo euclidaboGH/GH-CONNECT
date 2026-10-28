@@ -159,7 +159,7 @@ export async function executeAuthoritativeTransfer(
   }
 ): Promise<GhcTransferResult> {
   const limits = input.limits || getServerEconomyLimits()
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   const ref = (input.referenceId || "").trim()
   const toUserId = (input.toUserId || "").trim()
   const senderId = (input.senderId || "").trim()
@@ -332,7 +332,7 @@ export async function createTransferRequest(
   }
 ): Promise<{ ok: true; request: GhcTransferRequest } | { ok: false; error: string; code: string }> {
   const limits = input.limits || getServerEconomyLimits()
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!input.requesterId) return { ok: false, error: "Authentication required", code: "AUTH_REQUIRED" }
   if (input.requesterId === input.payerId) {
     return { ok: false, error: "Cannot request from yourself", code: "SELF_TRANSFER" }
@@ -571,7 +571,7 @@ export async function executeAuthoritativePackPurchase(
     intentId?: string
   }
 ): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
@@ -639,7 +639,7 @@ export async function executeAuthoritativePending(
   if (sourceEvent !== "DAILY_CLAIM_V12") {
     return { ok: false, error: "GHC_ISSUANCE_POLICY_LOCKED" }
   }
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
@@ -772,7 +772,7 @@ export async function executeAuthoritativeSpend(
     kind?: GhcLedgerRow["kind"]
   }
 ): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
@@ -819,7 +819,7 @@ export async function executeDurableGhcSpend(input: {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
   }
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }

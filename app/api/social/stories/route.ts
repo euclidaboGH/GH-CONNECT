@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -130,14 +131,14 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
   }
-  const contentLength = request.headers.get("content-length")
-  if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 1024 * 1024)) {
-    return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+  // Enforce a hard streaming limit even when Content-Length is absent or false.
+  // Story media is URL-based or a deliberately small compressed inline image.
+  const parsedBody = await readBoundedJson(request, 1024 * 1024)
+  if (!parsedBody.ok) {
+    const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
+    return NextResponse.json({ ok: false, error: parsedBody.error }, { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   }
-  const body = await request.json().catch(() => null) as StoryRequestBody | null
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ ok: false, error: "INVALID_BODY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
-  }
+  const body = parsedBody.value as StoryRequestBody
   const text = typeof body.text === "string" ? body.text.trim() : ""
   if (text.length > 2000) {
     return NextResponse.json({ ok: false, error: "STORY_TOO_LONG" }, { status: 400, headers: { "Cache-Control": "no-store" } })

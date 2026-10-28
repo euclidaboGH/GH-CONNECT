@@ -25,7 +25,7 @@ export interface WalletReadSnapshot {
   membershipTier: string | null
   /** Opaque message for UI when unavailable/error */
   message?: string
-  source: "session" | "empty" | "error"
+  source: "session" | "server" | "empty" | "error"
   updatedAt: number
   categories: WalletV2Categories
   ledgerBalance: number | null

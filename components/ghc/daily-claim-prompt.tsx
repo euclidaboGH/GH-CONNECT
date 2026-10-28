@@ -41,10 +41,6 @@ function formatRedeemable(iso?: string) {
   }
 }
 
-function autoOpenKey(dayKey: string | undefined) {
-  return `ghc.dailyClaimAutoOpen.${dayKey || "unknown"}`
-}
-
 export function DailyClaimPrompt() {
   const { profile } = useGHCProfile()
   const { isLocked } = useSessionLock()
@@ -108,8 +104,16 @@ export function DailyClaimPrompt() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !claiming) close()
     }
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target
+      if (target instanceof Node && !sheetRef.current?.contains(target) && !claiming) close()
+    }
     document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.removeEventListener("pointerdown", onPointerDown)
+    }
   }, [open, close, claiming])
 
   const claim = useCallback(async () => {
@@ -213,11 +217,10 @@ export function DailyClaimPrompt() {
     <>
       {showFab ? (
         <div
-          className="gh-daily-claim-root pointer-events-none fixed z-[9999] flex flex-col items-end gap-2"
+          className="gh-daily-claim-root pointer-events-none fixed z-[150] flex flex-col items-end gap-2"
           style={{
             right: "max(0.75rem, env(safe-area-inset-right))",
-            top: "42%",
-            transform: "translateY(-50%)",
+            bottom: "calc(var(--gh-bottom-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 1rem)",
           }}
           data-testid="gh-daily-claim-fab-root"
         >
@@ -255,21 +258,15 @@ export function DailyClaimPrompt() {
       ) : null}
 
       {open && !isLocked ? (
-        <div
-          className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 sm:items-center"
-          role="presentation"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !claiming) close()
-          }}
-        >
           <section
             ref={(node) => {
               sheetRef.current = node
             }}
             role="dialog"
-            aria-modal="true"
+            aria-modal="false"
             aria-labelledby="gh-daily-claim-title"
-            className="gh-daily-claim-popover w-full max-w-md overflow-hidden rounded-[1.35rem] border border-amber-500/25 bg-card text-foreground shadow-2xl"
+            className="gh-daily-claim-popover pointer-events-auto fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[calc(var(--gh-bottom-nav-height,4.5rem)+env(safe-area-inset-bottom)+1rem)] z-[151] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto overscroll-contain rounded-[1.35rem] border border-amber-500/25 bg-card text-foreground shadow-2xl"
+            style={{ maxHeight: "min(72dvh, 38rem)" }}
           >
             <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3.5">
               <div className="min-w-0">
@@ -279,7 +276,7 @@ export function DailyClaimPrompt() {
                 <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                   {done
                     ? "Recorded on the durable ledger. Pending balance follows the maturity schedule."
-                    : "One claim per Lagos day. The server sets the amount — nothing is minted in the browser."}
+                    : "Check in every day to collect your GHC reward and keep your streak going. One claim per Lagos day; the server sets the amount, and pending rewards follow the 48-hour maturity schedule."}
                 </p>
               </div>
               <button
@@ -376,7 +373,6 @@ export function DailyClaimPrompt() {
               )}
             </div>
           </section>
-        </div>
       ) : null}
     </>
   )

@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   listConversationsForUser,
   createDirectConversation,
@@ -66,11 +67,12 @@ export async function POST(request: Request) {
     if (!rl.ok) {
       return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
     }
-    const contentLength = request.headers.get("content-length")
-    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > 16 * 1024)) {
-      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    const parsed = await readBoundedJson(request, 16 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
     }
-    const body = await request.json().catch(() => ({}))
+    const body = parsed.value
     const otherUserId =
       typeof body?.otherUserId === "string" ? body.otherUserId.trim() : ""
     if (!otherUserId || otherUserId.length > 180 || /[\u0000-\u001f\u007f]/.test(otherUserId) || otherUserId === auth.userId) {

@@ -10,6 +10,7 @@ import { normalizeIntents } from "@/lib/connection-intents"
 import { validateConnectionIntents } from "@/lib/domains/adapters/unified-connection-request"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,15 +21,31 @@ export async function POST(req: Request) {
     if (!auth?.userId) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
-    const body = (await req.json().catch(() => ({}))) as {
+    const parsedBody = await readBoundedJson(req, 8 * 1024)
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { ok: false, error: parsedBody.error },
+        { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 },
+      )
+    }
+    const body = parsedBody.value as {
       toUserId?: string
       intents?: string[]
       note?: string
       source?: string
     }
-    const toUserId = String(body.toUserId || "").trim()
+    if (typeof body.toUserId !== "string") {
+      return NextResponse.json({ ok: false, error: "INVALID_PAIR" }, { status: 400 })
+    }
+    const toUserId = body.toUserId.trim()
     if (!toUserId || toUserId === auth.userId) {
       return NextResponse.json({ ok: false, error: "INVALID_PAIR" }, { status: 400 })
+    }
+    if (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 500)) {
+      return NextResponse.json({ ok: false, error: "INVALID_NOTE" }, { status: 400 })
+    }
+    if (body.source !== undefined && (typeof body.source !== "string" || body.source.length > 80)) {
+      return NextResponse.json({ ok: false, error: "INVALID_SOURCE" }, { status: 400 })
     }
     const validated = validateConnectionIntents(body.intents || [])
     if (!validated.ok) {

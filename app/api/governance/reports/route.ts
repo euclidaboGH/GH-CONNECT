@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,8 +25,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}))
-    const report = body?.report
+    const parsed = await readBoundedJson(req, 12 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status })
+    }
+    const report = parsed.value.report
     if (!report?.communityId || !report?.id) {
       return NextResponse.json({ ok: false, error: "invalid_report" }, { status: 400 })
     }

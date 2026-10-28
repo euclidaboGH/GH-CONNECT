@@ -6,6 +6,7 @@
  * Amount = durable order.totalAmount only (never client).
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   loadOrder,
@@ -157,8 +158,13 @@ export async function POST(
     )
   }
 
-  const body = await request.json().catch(() => ({}))
-  const method = String(body.method || "").toLowerCase()
+  const parsed = await readBoundedJson(request, 8 * 1024)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+  }
+  const body = parsed.value
+  const method = typeof body.method === "string" ? body.method.toLowerCase() : ""
   const orderCurrency = String(order.currency || "GHC").toUpperCase()
   if (!(["GHC", "PI"].includes(orderCurrency)) || method !== orderCurrency.toLowerCase()) {
     return NextResponse.json(

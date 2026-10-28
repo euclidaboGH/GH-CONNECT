@@ -5,11 +5,12 @@
  */
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
-import { buildOwnedMediaPath, isSafeMediaBucket } from "@/lib/server/media/path-policy.mjs"
+import { buildOwnedMediaPath, isSafeMediaBucket, maxMediaBytesForMime } from "@/lib/server/media/path-policy.mjs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,10 +19,6 @@ const ALLOWED_IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/g
 const ALLOWED_VIDEO = new Set(["video/mp4", "video/webm", "video/quicktime"])
 const ALLOWED_FILE = new Set(["application/pdf"])
 const ALLOWED_AUDIO = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm", "audio/flac"])
-const MAX_IMAGE_BYTES = 50 * 1024 * 1024
-const MAX_VIDEO_BYTES = 40 * 1024 * 1024
-const MAX_FILE_BYTES = 50 * 1024 * 1024
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 function jsonNoStore(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers)
@@ -48,15 +45,18 @@ export async function POST(request: Request) {
     return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_CONFIGURATION_INVALID" }, { status: 503 })
   }
 
-  const ensured = await ensureMediaBucket(storageBucket)
-  if (!ensured.ok && process.env.NODE_ENV === "production") {
-    // still attempt signed URL; health reports ensure failure
-  }
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return jsonNoStore({ ok: false, error: "MEDIA_STORAGE_UNAVAILABLE" }, { status: 501 })
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
+  const maxBodyBytes = 8 * 1024
+  const parsed = await readBoundedJson(request, maxBodyBytes)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return jsonNoStore({ ok: false, error: parsed.error }, { status })
+  }
+  const parsedBody = parsed.value
+  const body = parsedBody as {
     mimeType?: string
     byteSize?: number
     fileName?: string
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   if (!isImage && !isVideo && !isFile && !isAudio) {
     return jsonNoStore({ ok: false, error: "UNSUPPORTED_TYPE" }, { status: 400 })
   }
-  const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : isAudio ? MAX_AUDIO_BYTES : MAX_FILE_BYTES
+  const maxBytes = maxMediaBytesForMime(mime)
   if (byteSize > maxBytes) {
     return jsonNoStore(
       {
@@ -86,6 +86,10 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+
+  // Only attempt bucket provisioning after the authenticated request is bounded and valid.
+  // The diagnostic GET endpoint is read-only and never provisions infrastructure.
+  await ensureMediaBucket(storageBucket)
 
   const ext = isAudio
     ? (mime === "audio/mpeg" ? "mp3" : mime === "audio/mp4" ? "m4a" : mime === "audio/aac" ? "aac" : mime === "audio/ogg" ? "ogg" : mime === "audio/wav" ? "wav" : mime === "audio/flac" ? "flac" : "webm")
