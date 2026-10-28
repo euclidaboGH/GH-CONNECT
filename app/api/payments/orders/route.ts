@@ -27,19 +27,28 @@ export async function POST(request: Request) {
       )
     }
     const body = parsedBody.value
-  const productId = String(body.productId || "").trim()
+  const productId = typeof body.productId === "string" ? body.productId.trim() : ""
   const product = getProduct(productId)
   if (!product || product.direction !== "u2a") {
     return NextResponse.json({ ok: false, error: "Invalid product" }, { status: 400 })
   }
 
-  const orderId = String(body.orderId || genOrderId()).trim()
+  const orderId = typeof body.orderId === "string" && body.orderId.trim()
+    ? body.orderId.trim()
+    : genOrderId()
+  if (orderId.length > 160) {
+    return NextResponse.json({ ok: false, error: "Invalid order ID" }, { status: 400 })
+  }
 
   // Server catalog is authoritative for non-donation products. Client amountPi
   // is ignored except for donations (bounded). Never trust body.userId.
   let amountPi = product.amountPi
   if (product.category === "donation" && body.amountPi != null) {
-    const proposed = Number(body.amountPi)
+    const rawAmount = body.amountPi
+    const validAmountType = typeof rawAmount === "number"
+      ? Number.isFinite(rawAmount)
+      : typeof rawAmount === "string" && /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(rawAmount.trim())
+    const proposed = validAmountType ? Number(rawAmount) : Number.NaN
     if (!Number.isFinite(proposed) || proposed <= 0 || proposed > 10_000) {
       return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 })
     }
@@ -58,18 +67,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, order: existing, idempotent: true })
   }
 
+  const metadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+    ? body.metadata as Record<string, unknown>
+    : undefined
+  if (body.metadata !== undefined && metadata === undefined) {
+    return NextResponse.json({ ok: false, error: "Invalid metadata" }, { status: 400 })
+  }
+  const memo = typeof body.memo === "string" ? body.memo.trim() : product.memo
+  if (memo.length > 500) {
+    return NextResponse.json({ ok: false, error: "Invalid memo" }, { status: 400 })
+  }
+
   const order: GhPayOrder = {
     orderId,
     direction: "u2a",
     productId: product.id,
     category: product.category,
     amountPi,
-    memo: String(body.memo || product.memo),
+    memo: memo || product.memo,
     userId: auth.userId,
     status: "created",
     // Fulfillment comes from catalog only — client cannot redefine entitlement shape.
     fulfillment: product.fulfillment,
-    metadata: body.metadata && typeof body.metadata === "object" ? body.metadata : undefined,
+    metadata,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }

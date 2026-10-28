@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const steps = [
   ["check-phase1-platform-foundation.mjs", "Phase 1 platform foundation and architecture baseline"],
-  ["check-phase1-12-consolidation.mjs", "Phase 1–12 system-wide consolidation audit"],
+  ["check-phase1-12-consolidation.mjs",
+  "check-build-type-regressions.mjs", "Phase 1–12 system-wide consolidation audit"],
   ["check-phase1-12-hardening-upgrade.mjs", "Phase 1–12 hardening regression audit"],
   ["check-phase1-12-systematic-upgrade.mjs", "Phase 1–12 systematic upgrade regression audit"],
   ["check-phase1-12-cross-system-hardening.mjs", "Phase 1–12 cross-system bounded request hardening"],

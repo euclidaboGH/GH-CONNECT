@@ -392,10 +392,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           setPiIntentsError("Payment history is temporarily unavailable. Please retry shortly.")
           return
         }
-        const list = Array.isArray(data?.intents)
-          ? data.intents
+        const list: unknown[] | null = Array.isArray(data?.intents)
+          ? data.intents as unknown[]
           : Array.isArray(data?.items)
-            ? data.items
+            ? data.items as unknown[]
             : null
         if (!list) {
           if (!cancelled) setPiIntentsError("Payment history response was invalid. Your records have not been changed; retry to reload authoritative history.")
