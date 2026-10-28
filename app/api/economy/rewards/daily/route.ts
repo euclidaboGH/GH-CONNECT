@@ -1,5 +1,4 @@
 /**
-import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/rewards/daily
  *
  * ECONOMY_VERSION 1.2 — atomic Daily Claim path:
@@ -8,6 +7,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  *
  * Client amounts are ignored. Double-submit returns existing success (idempotent).
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { computeDailyClaim, lagosDayKey, lagosYesterdayKey, loadClaimStreakState } from "@/lib/server/economy/claim-engine"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"

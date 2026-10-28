@@ -1,3 +1,7 @@
+## v0.157.17 — API bounded-JSON import regression prevention
+
+The v0.157.16 deployment exposed imports accidentally placed inside leading documentation comments. This release fixes the `readBoundedJson` imports in the GHC purchase, utility purchase, and daily-reward routes, and adds a prebuild scan that checks all API routes using the helper for a real executable import. Dependency audit and npm environment warnings are documented separately; they are not falsely marked resolved. See `docs/UPGRADE-WORKLOG-0.157.17.md`.
+
 ## v0.157.16 — Phase 1–12 connection, moderation and financial request hardening
 
 This increment adds bounded streaming JSON parsing to connection requests, user/community report intake, matching signals, creator tips, and bank beneficiary creation/disable. It rejects malformed/non-object payloads before route business logic, requires string identifiers for matching/report/bank-beneficiary fields, validates connection note/source lengths, and prevents boolean/object or exponent-style coercion in tip amounts. The shared bounded JSON parser now has a dedicated runtime test covering valid JSON, declared and streamed size limits, malformed JSON, non-object bodies, invalid UTF-8, invalid limits and bodyless requests. Static checks and runtime helper tests do not replace a full Next.js build or live integration tests. See `docs/UPGRADE-WORKLOG-0.157.16.md`.
@@ -148,7 +152,7 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 # GreenHaven — GH Connect
 
-**Current source version:** `0.157.16`
+**Current source version:** `0.157.17`
 
 Phase 6 navigation implementation notes: `docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md`. Phase 5 design-system notes remain in `docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md`. Source checks do not substitute for browser journey and accessibility acceptance.
 
@@ -207,4 +211,4 @@ The notification bell is inline with Marketplace and Ecosystem in the compact sh
 - Run `node scripts/check-phase5-reliability.mjs` alongside the Phase 3/4 identity checks, release hygiene, lock integrity, safety scan, and static verification suite.
 
 
-Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.16.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.
+Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.17.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.

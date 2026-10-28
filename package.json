@@ -1,8 +1,8 @@
 {
   "name": "gh-connect",
-  "version": "0.157.16",
+  "version": "0.157.17",
   "private": true,
-  "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
+  "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
     "dev": "next dev",
     "build": "ESLINT_USE_FLAT_CONFIG=false next build",
@@ -10,7 +10,7 @@
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --max-warnings 9999",
     "typecheck": "tsc --noEmit",
     "vercel-build": "npm run build",
-    "prebuild": "node scripts/check-node-runtime.mjs && node scripts/check-jsx-safety.mjs",
+    "prebuild": "node scripts/check-node-runtime.mjs && node scripts/check-jsx-safety.mjs && node scripts/check-bounded-json-imports.mjs",
     "pretypecheck": "node scripts/check-node-runtime.mjs",
     "prelint": "node scripts/check-node-runtime.mjs",
     "check:jsx": "node scripts/check-jsx-safety.mjs",
@@ -96,7 +96,8 @@
     "check:phase1-12-request-boundary-expansion": "node scripts/check-phase1-12-request-boundary-expansion.mjs",
     "check:phase1-12-request-boundary-followup": "node scripts/check-phase1-12-request-boundary-followup.mjs",
     "test:bounded-json-runtime": "node --experimental-strip-types scripts/test-bounded-json-runtime.mjs",
-    "check:spend-bounded-json-import": "node scripts/check-spend-bounded-json-import.mjs"
+    "check:spend-bounded-json-import": "node scripts/check-spend-bounded-json-import.mjs",
+    "check:bounded-json-imports": "node scripts/check-bounded-json-imports.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

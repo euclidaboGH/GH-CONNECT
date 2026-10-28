@@ -1,9 +1,9 @@
 /**
-import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * Phase 3 — Pi-funded GHC pack acquisition (governed product).
  * POST: credit after completed Pi intent matches catalog.
  * GET: list packs + limits + enabled flag.
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { loadPaymentIntent } from "@/lib/server/payments/intent-store"

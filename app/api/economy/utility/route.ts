@@ -1,9 +1,9 @@
 /**
-import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
  * POST /api/economy/utility — purchase a catalog utility sink with GHC.
  * Body: { purpose, targetId?, clientRequestId? }
  * Amount always from server catalog. Idempotent on referenceId.
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { createHash } from "node:crypto"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
