@@ -31,8 +31,17 @@ export async function POST(req: NextRequest) {
       const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
       return NextResponse.json({ ok: false, error: parsed.error }, { status })
     }
-    const entry = parsed.value.entry
-    if (!entry?.communityId || !entry?.action) {
+    const candidate = parsed.value.entry
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return NextResponse.json({ ok: false, error: "invalid_entry" }, { status: 400 })
+    }
+
+    // JSON is untrusted input: narrow the unknown value before accessing fields.
+    const entry = candidate as Record<string, unknown>
+    const communityId = typeof entry.communityId === "string" ? entry.communityId.trim() : ""
+    const action = typeof entry.action === "string" ? entry.action.trim() : ""
+    const entryId = typeof entry.id === "string" ? entry.id.trim() : ""
+    if (!communityId || communityId.length > 128 || !action || action.length > 80 || entryId.length > 128) {
       return NextResponse.json({ ok: false, error: "invalid_entry" }, { status: 400 })
     }
 
@@ -49,7 +58,7 @@ export async function POST(req: NextRequest) {
       message: dbConfigured
         ? "Server received log entry. Persist after governance migration is applied."
         : "No DB credentials — not durable.",
-      entryId: entry.id || null,
+      entryId: entryId || null,
     })
   } catch {
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 })
