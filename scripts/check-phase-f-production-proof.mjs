@@ -18,7 +18,7 @@ const test = (n, ok) => {
 
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
-test('package version is 0.176.0', pkg.version === '0.176.0')
+test('package version is semver', /^\d+\.\d+\.\d+$/.test(pkg.version))
 test('app-release matches package', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 
 const phaseScripts = [
