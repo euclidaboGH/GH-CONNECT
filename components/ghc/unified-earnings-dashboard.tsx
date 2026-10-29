@@ -69,8 +69,8 @@ function atomicToDisplay(value: unknown): string {
     const s = String(value ?? "")
     if (/^\d{1,38}$/.test(s)) {
       const atomic = BigInt(s)
-      const whole = atomic / 10_000_000n
-      const frac = (atomic % 10_000_000n).toString().padStart(7, "0").replace(/0+$/, "") || "0"
+      const whole = atomic / BigInt(10000000)
+      const frac = (atomic % BigInt(10000000)).toString().padStart(7, "0").replace(/0+$/, "") || "0"
       return `${whole.toLocaleString()}.${frac} π`
     }
   } catch {

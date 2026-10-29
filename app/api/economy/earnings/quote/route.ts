@@ -61,10 +61,10 @@ export async function POST(request: Request) {
   }
 
   return reply({
-    ok: true,
     ...quote,
     // Explicit: recipient is never taken from the request body
     recipientSource: "gh_pi_identities",
     feePolicy: "3% of gross withdrawal (fee_bps=300)",
+    ok: true,
   })
 }

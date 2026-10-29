@@ -65,8 +65,8 @@ export async function GET(request: Request) {
 
     const withdrawalConfigured = process.env.PI_A2U_ENABLED === "true" && process.env.PI_A2U_TESTNET_ONLY === "true" && resolvePiSandbox() && process.env.PI_ENV === "production" && Boolean(String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()) && /^S[A-Z2-7]{55}$/.test(String(process.env.PI_WALLET_PRIVATE_SEED || "").trim())
     let payouts: Array<{ entitlement_id?: string; amount_atomic?: string | number; status?: string; provider_payment_id?: string | null; txid?: string | null; paid_at?: string | null; created_at?: string }> = []
-    let reservedAtomic = 0n
-    let payoutReviewAtomic = 0n
+    let reservedAtomic = BigInt(0)
+    let payoutReviewAtomic = BigInt(0)
     // Preserve read-only cashback statements when the Testnet payout feature is not configured.
     // If operators enable payout flags, missing migration/status RPC must fail closed.
     if (withdrawalConfigured) {
@@ -81,8 +81,8 @@ export async function GET(request: Request) {
         return NextResponse.json({ ok: false, featureAvailable: false, error: "CASHBACK_PAYOUT_STATUS_UNAVAILABLE" }, { status: 503, headers: noStore })
       }
       payouts = payoutStatus.items
-      reservedAtomic = typeof payoutStatus.reservedAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reservedAtomic) ? BigInt(payoutStatus.reservedAtomic) : 0n
-      payoutReviewAtomic = typeof payoutStatus.reviewAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reviewAtomic) ? BigInt(payoutStatus.reviewAtomic) : 0n
+      reservedAtomic = typeof payoutStatus.reservedAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reservedAtomic) ? BigInt(payoutStatus.reservedAtomic) : BigInt(0)
+      payoutReviewAtomic = typeof payoutStatus.reviewAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reviewAtomic) ? BigInt(payoutStatus.reviewAtomic) : BigInt(0)
     }
 
     const calculatedText = typeof payload.calculatedAtomic === "string" && /^\d{1,38}$/.test(payload.calculatedAtomic) ? payload.calculatedAtomic : "0"
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
       atomicUnitsPerPi: 10_000_000,
       calculatedAtomic,
       needsReviewAtomic: (() => {
-        const base = typeof payload.needsReviewAtomic === "string" && /^\d{1,38}$/.test(payload.needsReviewAtomic) ? BigInt(payload.needsReviewAtomic) : 0n
+        const base = typeof payload.needsReviewAtomic === "string" && /^\d{1,38}$/.test(payload.needsReviewAtomic) ? BigInt(payload.needsReviewAtomic) : BigInt(0)
         return (base + payoutReviewAtomic).toString()
       })(),
       withdrawalEnabled,

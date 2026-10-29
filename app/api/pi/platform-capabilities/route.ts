@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 export async function GET() {
   const matrix = buildPlatformCapabilities()
   return NextResponse.json(
-    { ok: true, ...matrix, ts: new Date().toISOString() },
+    { ...matrix, ok: true, ts: new Date().toISOString() },
     { headers: { "Cache-Control": "no-store" } },
   )
 }

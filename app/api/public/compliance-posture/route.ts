@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 export async function GET() {
   const posture = buildListingCompliancePosture()
   return NextResponse.json(
-    { ok: true, ...posture, ts: new Date().toISOString() },
+    { ...posture, ok: true, ts: new Date().toISOString() },
     { headers: { "Cache-Control": "no-store" } },
   )
 }

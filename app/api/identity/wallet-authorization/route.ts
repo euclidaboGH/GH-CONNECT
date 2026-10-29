@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   if (!status.ok && status.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
     return reply({ ok: false, error: "WALLET_AUTHORIZATION_UNAVAILABLE" }, 503)
   }
-  return reply({ ok: true, ...status })
+  return reply({ ...status, ok: true })
 }
 
 export async function POST(request: Request) {

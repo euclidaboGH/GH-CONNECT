@@ -27,8 +27,8 @@ function formatPiAtomic(value: string | undefined): string {
   if (!value || !/^\d{1,38}$/.test(value)) return "0.0000000 π"
   try {
     const atomic = BigInt(value)
-    const whole = atomic / 10_000_000n
-    const fraction = (atomic % 10_000_000n).toString().padStart(7, "0")
+    const whole = atomic / BigInt(10000000)
+    const fraction = (atomic % BigInt(10000000)).toString().padStart(7, "0")
     return `${whole.toLocaleString()}\u002e${fraction} π`
   } catch {
     return "0.0000000 π"
@@ -85,7 +85,7 @@ export function PiCashbackSummary() {
   }, [refresh])
 
   const claimCashback = useCallback(async () => {
-    if (claiming || !payload?.withdrawalEnabled || !payload.calculatedAtomic || !/^\d+$/.test(payload.calculatedAtomic) || BigInt(payload.calculatedAtomic) <= 0n) return
+    if (claiming || !payload?.withdrawalEnabled || !payload.calculatedAtomic || !/^\d+$/.test(payload.calculatedAtomic) || BigInt(payload.calculatedAtomic) <= BigInt(0)) return
     setClaiming(true)
     setClaimMessage(null)
     try {
@@ -149,7 +149,7 @@ export function PiCashbackSummary() {
         </div>
       </div>
 
-      {payload?.withdrawalEnabled && payload.calculatedAtomic && /^\d+$/.test(payload.calculatedAtomic) && BigInt(payload.calculatedAtomic) > 0n ? (
+      {payload?.withdrawalEnabled && payload.calculatedAtomic && /^\d+$/.test(payload.calculatedAtomic) && BigInt(payload.calculatedAtomic) > BigInt(0) ? (
         <div className="mt-3 space-y-2">
           <button type="button" onClick={() => void claimCashback()} disabled={claiming || loading} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
             {claiming ? <RefreshCw size={14} className="animate-spin" aria-hidden /> : <ShieldCheck size={14} aria-hidden />}

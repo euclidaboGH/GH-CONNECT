@@ -31,5 +31,5 @@ export async function GET(request: Request) {
   if (!summary?.ok) {
     return reply({ ok: false, error: summary?.error || "PLATFORM_SUMMARY_UNAVAILABLE" }, 503)
   }
-  return reply({ ok: true, ...summary })
+  return reply({ ...summary, ok: true })
 }

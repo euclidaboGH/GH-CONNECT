@@ -311,6 +311,7 @@ export function CommunitiesScreen() {
   const [directory, setDirectory] = useState<DirectoryTab>("discover")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
+  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "request" | "invite">("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
   const [createSubmitError, setCreateSubmitError] = useState<string | null>(null)

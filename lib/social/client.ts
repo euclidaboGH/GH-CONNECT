@@ -892,6 +892,7 @@ export async function socialCreateMarketplaceListing(input: {
   kind?: string
   media?: string[]
   location?: string
+  shippingInfo?: string
   category?: string
   condition?: string
   tags?: string[]

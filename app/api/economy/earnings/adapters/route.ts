@@ -84,7 +84,7 @@ export async function POST(request: Request) {
   })
 
   if (decision.outcome === "denied") {
-    return reply({ ok: false, ...decision }, decision.denyReason === "ADAPTERS_DISABLED" ? 403 : 409)
+    return reply({ ...decision, ok: false }, decision.denyReason === "ADAPTERS_DISABLED" ? 403 : 409)
   }
-  return reply({ ok: true, ...decision })
+  return reply({ ...decision, ok: true })
 }

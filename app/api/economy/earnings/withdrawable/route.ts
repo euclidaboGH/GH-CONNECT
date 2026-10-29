@@ -27,7 +27,6 @@ export async function GET(request: Request) {
   }
   return NextResponse.json(
     {
-      ok: true,
       ...snapshot,
       policy: {
         rounding: "floor_atomic",
@@ -36,6 +35,7 @@ export async function GET(request: Request) {
         concurrentReserves: "pg_advisory_xact_lock per user",
         authority: "gh_earnings_ledger_entries",
       },
+      ok: true,
     },
     { headers: noStore },
   )

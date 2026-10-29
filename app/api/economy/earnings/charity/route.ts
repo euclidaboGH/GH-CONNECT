@@ -81,9 +81,9 @@ export async function POST(request: Request) {
     return reply({ ok: false, error: result.error }, 409)
   }
   return reply({
-    ok: true,
     ...result,
     withdrawable: false,
     message: "Charity recorded. This does not increase your available earnings balance.",
+    ok: true,
   })
 }
