@@ -90,6 +90,7 @@ export type CommunityHubTab =
   | "events"
   | "members"
   | "about"
+  | "mod"
 
 type CommunitySummary = {
   id: string
@@ -129,6 +130,7 @@ const HUB_TABS: { id: CommunityHubTab; label: string; icon: React.ReactNode; boa
   { id: "chat", label: "Chat", icon: <MessageSquare size={14} /> },
   { id: "members", label: "Members", icon: <Users size={14} /> },
   { id: "about", label: "About", icon: <Shield size={14} /> },
+  { id: "mod", label: "Mod", icon: <Settings2 size={14} /> },
 ]
 
 const DEFAULT_RULES = [
@@ -158,6 +160,7 @@ export function PremiumCommunityHub({
   onCreateEvent,
   onRsvp,
   onApproveRequest,
+  onRejectRequest,
   onDeclineRequest,
   onInviteMember,
   onSetRole,
@@ -195,6 +198,7 @@ export function PremiumCommunityHub({
   onCreateEvent?: (input: { title: string; startsAt: number; location?: string; isOnline?: boolean }) => void
   onRsvp?: (eventId: string) => void
   onApproveRequest?: (userId: string) => void
+  onRejectRequest?: (userId: string) => void
   onDeclineRequest?: (userId: string) => void
   onInviteMember?: (userId: string) => void
   onSetRole?: (userId: string, role: "admin" | "moderator" | "member") => void
@@ -623,7 +627,7 @@ export function PremiumCommunityHub({
             setTab(target.id)
           }}
         >
-          {HUB_TABS.map((t) => {
+          {(isMod ? HUB_TABS : HUB_TABS.filter((t) => t.id !== "mod")).map((t) => {
             const selected = tab === t.id
             const isChat = t.id === "chat"
             return (
@@ -1595,6 +1599,118 @@ export function PremiumCommunityHub({
           </div>
         )}
 
+
+        {tab === "mod" && isMod && (
+          <div className="space-y-4" aria-label="Moderation console">
+            <section className="rounded-2xl border border-emerald-600/20 bg-gradient-to-br from-emerald-50/90 to-card p-4 dark:from-emerald-950/30">
+              <h2 className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+                <Settings2 size={16} /> Moderation console
+              </h2>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Join requests, safety reports, and action log. Changes follow community governance durability — not a demo toggle.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold">
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Role: {formatCommunityRole(community.role)}
+                </span>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Pending joins: {pendingJoinRequests.length}
+                </span>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Open reports: {allReports.filter((r) => r.status === "open").length}
+                </span>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h3 className="text-xs font-bold text-foreground">Join queue</h3>
+              {pendingJoinRequests.length === 0 ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">No pending join requests.</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {pendingJoinRequests.map((uid) => (
+                    <li key={uid} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-3 py-2">
+                      <span className="truncate text-[12px] font-medium text-foreground">{uid.slice(0, 16)}</span>
+                      <div className="flex shrink-0 gap-1.5">
+                        {onApproveRequest ? (
+                          <button
+                            type="button"
+                            onClick={() => onApproveRequest(uid)}
+                            className="rounded-full bg-emerald-700 px-3 py-1 text-[10px] font-bold text-white"
+                          >
+                            Approve
+                          </button>
+                        ) : null}
+                        {(onDeclineRequest || onRejectRequest) ? (
+                          <button
+                            type="button"
+                            onClick={() => (onDeclineRequest || onRejectRequest)?.(uid)}
+                            className="rounded-full border border-border px-3 py-1 text-[10px] font-bold text-muted-foreground"
+                          >
+                            Decline
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h3 className="text-xs font-bold text-foreground">Quick actions</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTab("announcements")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Post update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("members")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Manage members
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("about")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Rules & about
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("board")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Review board
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Moderation log">
+              <h3 className="text-xs font-bold text-foreground">Recent moderation log</h3>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
+              {moderationLog.length === 0 ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">No moderation actions yet.</p>
+              ) : (
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-[11px]">
+                  {moderationLog.slice(0, 30).map((e) => (
+                    <li key={e.id} className="rounded-lg bg-muted/40 px-2 py-1.5">
+                      <span className="font-semibold capitalize">{e.action}</span>
+                      {" · "}
+                      {e.targetType} {String(e.targetId || "").slice(0, 12)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+
         {tab === "about" && (
           <div className="space-y-4">
             <section className="rounded-2xl border border-border bg-card p-4">
@@ -2008,10 +2124,11 @@ export function PremiumCommunityHub({
             {isMod && (
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-xs font-bold text-foreground"
+                onClick={() => setTab("mod")}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-600/30 bg-emerald-50 py-2.5 text-xs font-bold text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
               >
                 <Settings2 size={14} />
-                Moderation tools
+                Open moderation console
               </button>
             )}
           </div>

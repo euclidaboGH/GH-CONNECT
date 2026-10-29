@@ -1,3 +1,33 @@
+## v0.157.27 — Marketplace payment reconciliation recovery
+
+- Verified Pi payments are not reported as fully reconciled when the cashback revenue journal append fails.
+- The pay endpoint returns an explicit retryable reconciliation state, with no-store and Retry-After headers; retries reuse the already-completed payment intent.
+- Recovery repairs interrupted marketplace order transitions where safe, without submitting another provider payment.
+- Revenue-journal network calls have a bounded five-second timeout per attempt so upstream stalls become explicit retryable reconciliation states.
+- Static regression contract: `scripts/check-marketplace-revenue-reconciliation.mjs`.
+
+## v0.157.25 — Cashback period close reconciliation safety
+
+- Adds a service-role-only wrapper around the existing four-month cashback close RPC.
+- Enforces a seven-day reconciliation grace after each period ends so delayed verified revenue events and recovery retries have time to arrive before the immutable snapshot is calculated.
+- Preserves the original four-month UTC earning window; the grace period delays calculation but does not add spending days to the period.
+- Revokes direct API-role execution of the renamed underlying close function and exposes only the guarded wrapper.
+- Adds a dedicated regression contract to `prebuild` and the full static suite.
+- The migration is `REVIEW_REQUIRED`, unapplied, and requires disposable PostgreSQL ACL/concurrency testing plus target migration-history reconciliation. This does not enable withdrawals or A2U payouts.
+
+## v0.157.24 — Pi cashback statement in Rewards Center and Wallet
+
+- Adds a review-gated SQL foundation for canonical paying-user attribution on verified company revenue events, with cashback eligibility opt-in and service-role-only append RPC.
+- Adds fixed four-month UTC period records and unique per-user entitlements calculated at 3% of attributable net eligible PI revenue using integer 10^-7 PI atomic units.
+- Extends the server-only revenue adapter to pass payer attribution to the attributed RPC without changing existing un-attributed callers.
+- Adds a dedicated cashback ledger regression contract and migration review classification.
+- Documents source eligibility and remaining integrations in `docs/PI-CASHBACK-SOURCE-ATTRIBUTION-AUDIT.md`.
+- Does **not** wire payment producers, add a user payout route/UI, apply migrations, or activate A2U. Source attribution producers, disposable PostgreSQL/Testnet validation and Pi Mainnet permission remain gates.
+
+## v0.157.21 — Notification, feed hydration, daily-claim and vote reliability
+
+This release corrects four user-visible reliability failures and adjacent race conditions: notification unread badges are derived from unique visible rows instead of summed overlapping counters; read-all waits for durable write attempts and refreshes are queued rather than dropped; the feed hydrates from the canonical server endpoint on first entry and retries superseded initial requests; daily claims use synchronous in-flight guards; and upvote/downvote taps now submit a server-authoritative vote directly rather than opening a reaction-picker overlay. Long-press voter rosters remain available. A 16-check regression contract is registered in `prebuild`. This is a source-level correction, not a claim of live Supabase/Vercel verification.
+
 ## v0.157.20 — Pi wallet history type-predicate correction
 
 This release fixes the Pi wallet history type predicate that blocked the v0.157.19 Vercel build, and updates the regression guard to require the canonical `PiTransactionProjection` type. It retains the previous wallet, payment-order, governance, bounded-JSON and CI runtime hardening. Dependency audit and npm environment warnings are documented separately; they are not falsely marked resolved. See `docs/UPGRADE-WORKLOG-0.157.20.md`.
@@ -152,7 +182,11 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 # GreenHaven — GH Connect
 
-**Current source version:** `0.157.20`
+## v0.157.27 — Testnet Pi cashback A2U payout path
+
+Added an authenticated, Testnet-only cashback withdrawal endpoint that derives payout amounts from finalized server-side entitlements and the recipient from the linked Pi identity. It shares the global Pi app-wallet sequence lease with seller A2U, records a separate entitlement-bound payout ledger, verifies the provider payment/recipient/amount/network/transaction, and only records `paid` after verified developer completion and durable reconciliation. Rewards Center exposes the withdrawal action only when the Testnet flags and server-side Pi credentials are present. Mainnet remains disabled. The new migration is REVIEW_REQUIRED and must be validated on disposable PostgreSQL and Pi Testnet before users can receive real Testnet credits. Configure the required Testnet flags and server-only Pi credentials only on the Preview deployment; fund the Testnet app wallet and ensure testers have finalized positive cashback entitlements and linked Pi identities. See `docs/PI-A2U-EARNINGS-AND-CASHBACK-ROADMAP.md`.
+
+**Current source version:** `0.169.0`
 
 Phase 6 navigation implementation notes: `docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md`. Phase 5 design-system notes remain in `docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md`. Source checks do not substitute for browser journey and accessibility acceptance.
 
@@ -211,4 +245,4 @@ The notification bell is inline with Marketplace and Ecosystem in the compact sh
 - Run `node scripts/check-phase5-reliability.mjs` alongside the Phase 3/4 identity checks, release hygiene, lock integrity, safety scan, and static verification suite.
 
 
-Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.20.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.
+Latest source audit worklog: `docs/UPGRADE-WORKLOG-0.157.27.md`. Source-level checks do not establish production readiness; see the release acceptance boundaries before deployment.

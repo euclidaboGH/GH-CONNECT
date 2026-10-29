@@ -49,6 +49,7 @@ export function DailyClaimPrompt() {
   const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [claiming, setClaiming] = useState(false)
+  const claimInFlightRef = useRef(false)
   const [done, setDone] = useState<DoneState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState(false)
@@ -117,7 +118,8 @@ export function DailyClaimPrompt() {
   }, [open, close, claiming])
 
   const claim = useCallback(async () => {
-    if (claiming || !canAttemptClaim) return
+    if (claimInFlightRef.current || claiming || !canAttemptClaim) return
+    claimInFlightRef.current = true
     setClaiming(true)
     setError(null)
     try {
@@ -185,6 +187,7 @@ export function DailyClaimPrompt() {
     } catch {
       setError("Could not claim. Try again when online.")
     } finally {
+      claimInFlightRef.current = false
       setClaiming(false)
     }
   }, [canAttemptClaim, claiming, refresh, userId])
@@ -293,7 +296,7 @@ export function DailyClaimPrompt() {
             <div className="space-y-3 px-4 py-4">
               {!done ? (
                 <>
-                  <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent p-3">
+                  <div className="flex items-center gap-3 rounded-[1.75rem] border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent p-3.5">
                     <div className="gh-daily-lightning-fab h-12 w-12 shrink-0 !shadow-md" aria-hidden>
                       <Zap size={11} fill="currentColor" className="gh-daily-lightning-fab-bolt gh-daily-lightning-fab-bolt-1" />
                       <span className="gh-daily-lightning-fab-coin">
@@ -310,10 +313,10 @@ export function DailyClaimPrompt() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-border bg-muted/30 p-3">
+                  <div className="rounded-2xl border border-border/70 bg-muted/25 px-3.5 py-3">
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       <Shield size={14} className="shrink-0 text-emerald-600" />
-                      <span>Ledger-backed claim · not pay-to-win · not convertible to π here</span>
+                      <span>GHC daily utility · not Pi cashback · ledger-backed</span>
                     </div>
                     <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                       <Clock size={14} className="shrink-0" />

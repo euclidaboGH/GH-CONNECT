@@ -14,6 +14,7 @@ import {
   Heart,
   Inbox,
   Search,
+  Package,
   type LucideIcon,
 } from "lucide-react"
 
@@ -29,6 +30,7 @@ export type EmptyVariant =
   | "posts"
   | "wallet"
   | "notifications"
+  | "marketplace"
   | "generic"
 
 const PRESETS: Record<
@@ -102,6 +104,12 @@ const PRESETS: Record<
     title: "You're all caught up",
     description: "Likes, messages, account activity, and other updates will appear here.",
     gradient: "from-slate-500 to-slate-600",
+  },
+  marketplace: {
+    icon: Package,
+    title: "Marketplace is open",
+    description: "Browse listings from real sellers, or publish your own with a clear delivery mode.",
+    gradient: "from-emerald-600 to-teal-600",
   },
   generic: {
     icon: Inbox,

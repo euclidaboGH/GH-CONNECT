@@ -33,6 +33,26 @@ import {
   type MarketplaceOrder,
 } from "@/lib/domains/marketplace-domain"
 import { messageListingSeller, openPayForListing } from "@/lib/marketplace/commerce-actions"
+import {
+  ORDER_LIFECYCLE_STEPS,
+  orderLifecycleIndex,
+  orderStatusLabel,
+  orderNextActionHint,
+  sortMarketplaceListings,
+  type BrowseSort,
+} from "@/lib/marketplace/order-lifecycle"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
+import { emitSectionRefresh } from "@/lib/client/section-refresh"
+import {
+  DELIVERY_MODE_LABELS,
+  encodeShippingInfo,
+  formatDeliveryLine,
+  formatRating,
+  parseDeliveryMode,
+  queueListingReport,
+  type DeliveryMode,
+  type ListingReportReason,
+} from "@/lib/marketplace/trust"
 import { openCommunity } from "@/lib/navigation/navigate"
 import { EmptyState } from "./empty-state"
 import { LazyImage } from "./lazy-image"
@@ -193,23 +213,7 @@ function ListingCard({
 }) {
   const chip = statusChip(listing.status)
   const media = listing.media?.[0]
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") {
-        try { window.dispatchEvent(new CustomEvent("ghc:marketplace-refresh")) } catch { /* */ }
-      }
-    }
-    document.addEventListener("visibilitychange", onVis)
-    return () => document.removeEventListener("visibilitychange", onVis)
-  }, [])
-
-  useEffect(() => {
-    const onOnline = () => {
-      try { window.dispatchEvent(new CustomEvent("ghc:marketplace-refresh")) } catch { /* */ }
-    }
-    window.addEventListener("online", onOnline)
-    return () => window.removeEventListener("online", onOnline)
-  }, [])
+  // Refresh is owned by MarketplaceScreen (single soft-refresh gate) — not per card.
 
   return (
     <button
@@ -245,6 +249,11 @@ function ListingCard({
         <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-muted-foreground">
           {listing.title}
         </p>
+        {listing.shippingInfo || listing.location ? (
+          <p className="line-clamp-1 text-[10px] font-medium text-muted-foreground">
+            {formatDeliveryLine(listing.shippingInfo, listing.location)}
+          </p>
+        ) : null}
         {listing.location ? (
           <p className="mt-0.5 flex items-center gap-0.5 truncate text-[11px] text-muted-foreground">
             <MapPin size={11} className="shrink-0 opacity-70" aria-hidden />
@@ -446,6 +455,24 @@ function ListingDetail({
   const communitySuggestions = useMemo(() => suggestedCommunitiesFor(listing, 5), [listing])
   const when = listedWhen(listing.createdAt)
   const locationLine = [listing.location, when].filter(Boolean).join(" · ")
+  const domainTrust = getMarketplaceDomain()
+  const sellerTrust = useMemo(() => {
+    try {
+      return domainTrust?.getSellerProfile?.(listing.sellerId) || null
+    } catch {
+      return null
+    }
+  }, [domainTrust, listing.sellerId])
+  const sellerReviews = useMemo(() => {
+    try {
+      return domainTrust?.getReviewsForSeller?.(listing.sellerId)?.slice(0, 5) || []
+    } catch {
+      return []
+    }
+  }, [domainTrust, listing.sellerId])
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState<ListingReportReason>("misleading")
+  const [reportNote, setReportNote] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -731,20 +758,48 @@ function ListingDetail({
           </div>
         </section>
 
-        {/* Seller information */}
+        {/* Delivery & fulfillment */}
+        <section className="border-b border-border/50 px-4 py-4">
+          <h3 className="text-[15px] font-bold text-foreground">Delivery</h3>
+          <p className="mt-2 text-[13px] text-muted-foreground">
+            {formatDeliveryLine(listing.shippingInfo, listing.location)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Mode is set by the seller. Confirm details in Messages before paying large amounts.
+          </p>
+        </section>
+
+        {/* Seller information + trust */}
         <section className="border-b border-border/50 px-4 py-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[15px] font-bold text-foreground">Seller information</h3>
+            {!isOwner ? (
+              <button
+                type="button"
+                onClick={() => setReportOpen((v) => !v)}
+                className="text-[11px] font-bold text-amber-800 dark:text-amber-300"
+              >
+                Report listing
+              </button>
+            ) : null}
           </div>
           <div className="mt-3 flex items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200">
               <Store size={20} aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[14px] font-bold text-foreground">Seller on GreenHaven</p>
-              <p className="truncate text-[12px] text-muted-foreground">
-                ID · {listing.sellerId ? `${listing.sellerId.slice(0, 8)}…` : "—"}
+              <p className="truncate text-[14px] font-bold text-foreground">
+                {sellerTrust?.displayName || "Seller on GreenHaven"}
               </p>
+              <p className="truncate text-[12px] text-muted-foreground">
+                {formatRating(Number(sellerTrust?.averageRating) || 0, Number(sellerTrust?.reviewCount) || 0)}
+                {sellerTrust?.completedOrders ? ` · ${sellerTrust.completedOrders} completed` : ""}
+              </p>
+              {sellerTrust?.identityVerified ? (
+                <p className="mt-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Identity signals present</p>
+              ) : (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Verify details before high-value trades</p>
+              )}
             </div>
             <button
               type="button"
@@ -754,6 +809,67 @@ function ListingDetail({
               Message
             </button>
           </div>
+          {sellerReviews.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {sellerReviews.map((r) => (
+                <li key={r.id} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+                  <p className="text-[11px] font-bold text-foreground">{r.rating}/5</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{r.text}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-[11px] text-muted-foreground">No completed-order reviews yet.</p>
+          )}
+          {reportOpen ? (
+            <div className="mt-3 space-y-2 rounded-xl border border-amber-500/30 bg-amber-50/50 p-3 dark:bg-amber-950/20">
+              <p className="text-[11px] font-semibold text-foreground">Report this listing</p>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value as ListingReportReason)}
+                className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[12px]"
+              >
+                <option value="scam">Suspected scam</option>
+                <option value="prohibited">Prohibited item</option>
+                <option value="misleading">Misleading description</option>
+                <option value="counterfeit">Counterfeit</option>
+                <option value="other">Other</option>
+              </select>
+              <textarea
+                value={reportNote}
+                onChange={(e) => setReportNote(e.target.value)}
+                placeholder="Optional details"
+                rows={2}
+                className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[12px]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const row = queueListingReport({
+                    listingId: listing.id,
+                    sellerId: listing.sellerId,
+                    reason: reportReason,
+                    note: reportNote,
+                  })
+                  setReportOpen(false)
+                  setReportNote("")
+                  window.dispatchEvent(
+                    new CustomEvent("ghc:toast", {
+                      detail: {
+                        message: row
+                          ? "Report queued for review. Thanks for helping keep the market safe."
+                          : "Could not queue report",
+                        type: row ? "success" : "error",
+                      },
+                    }),
+                  )
+                }}
+                className="w-full rounded-full bg-amber-700 py-2 text-[12px] font-bold text-white"
+              >
+                Submit report
+              </button>
+            </div>
+          ) : null}
           {listing.location ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-border/50 bg-muted/30 px-3 py-4">
               <p className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
@@ -889,6 +1005,10 @@ function SellListingForm({
   setCategory,
   location,
   setLocation,
+  deliveryMode,
+  setDeliveryMode,
+  deliveryNotes,
+  setDeliveryNotes,
   mediaUrls,
   setMediaUrls,
   feeRail,
@@ -912,6 +1032,10 @@ function SellListingForm({
   setCategory: (v: string) => void
   location: string
   setLocation: (v: string) => void
+  deliveryMode: DeliveryMode
+  setDeliveryMode: (v: DeliveryMode) => void
+  deliveryNotes: string
+  setDeliveryNotes: (v: string) => void
   mediaUrls: string[]
   setMediaUrls: (v: string[]) => void
   feeRail: ListingFeeRail
@@ -1063,6 +1187,31 @@ function SellListingForm({
           placeholder="City or area"
         />
       </label>
+      <div className="block">
+        <span className="text-[12px] font-bold text-muted-foreground">Delivery mode</span>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {(Object.keys(DELIVERY_MODE_LABELS) as DeliveryMode[]).map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setDeliveryMode(id)}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${
+                deliveryMode === id
+                  ? "bg-emerald-700 text-white"
+                  : "border border-border/70 bg-card text-muted-foreground"
+              }`}
+            >
+              {DELIVERY_MODE_LABELS[id]}
+            </button>
+          ))}
+        </div>
+        <input
+          value={deliveryNotes}
+          onChange={(e) => setDeliveryNotes(e.target.value.slice(0, 200))}
+          className="mt-2 w-full rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="Optional notes (e.g. ships in 2 days, meetup at park)"
+        />
+      </div>
       <label className="block">
         <span className="text-[12px] font-bold text-muted-foreground">Description</span>
         <textarea
@@ -1128,6 +1277,8 @@ function SellListingForm({
 }
 
 function emitMarketplaceEconomyRefresh(reason: string) {
+  emitSectionRefresh("marketplace", { reason })
+  emitSectionRefresh("wallet", { reason })
   try {
     window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason } }))
     window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason } }))
@@ -1159,6 +1310,8 @@ export function MarketplaceScreen({
   const [sellDesc, setSellDesc] = useState("")
   const [sellCategory, setSellCategory] = useState<string>(MARKETPLACE_CATEGORIES[0] || "Goods")
   const [sellLocation, setSellLocation] = useState("")
+  const [sellDeliveryMode, setSellDeliveryMode] = useState<DeliveryMode>("meetup")
+  const [sellDeliveryNotes, setSellDeliveryNotes] = useState("")
   const [sellMedia, setSellMedia] = useState<string[]>([])
   const [sellFeeRail, setSellFeeRail] = useState<ListingFeeRail>("GHC")
   // Preserve identity/intent across retries so a successful fee payment can be reconciled
@@ -1173,6 +1326,12 @@ export function MarketplaceScreen({
   const [durableOrders, setDurableOrders] = useState<MarketplaceOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [orderBusy, setOrderBusy] = useState<string | null>(null)
+  const [orderRoleFilter, setOrderRoleFilter] = useState<"all" | "buying" | "selling">("all")
+  const [reviewDraftOrderId, setReviewDraftOrderId] = useState<string | null>(null)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewText, setReviewText] = useState("")
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [browseSort, setBrowseSort] = useState<BrowseSort>("newest")
 
   const refresh = useCallback(() => setTick((n) => n + 1), [])
 
@@ -1289,6 +1448,28 @@ export function MarketplaceScreen({
     return () => window.removeEventListener("ghc:marketplace-order-changed", handler)
   }, [bucket, loadDurableOrders])
 
+  // Screen-level soft refresh (focus / visible / online / marketplace-refresh event).
+  // Replaces former per-ListingCard visibility listeners that stampeded the event bus.
+  useSectionRefresh(
+    "marketplace",
+    (reason) => {
+      try {
+        refresh?.()
+      } catch { /* */ }
+      if (bucket === "orders" || reason === "manual" || reason === "event-forced") {
+        void loadDurableOrders()
+      }
+      if (bucket === "saved") {
+        void loadSavedListings?.()
+      }
+      if (bucket === "mine") {
+        void loadMineListings?.()
+      }
+    },
+    { minIntervalMs: 12_000 },
+  )
+
+
   const openOrderConversation = useCallback(async (orderId: string) => {
     try {
       const res = await fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/conversation`, {
@@ -1382,21 +1563,32 @@ export function MarketplaceScreen({
     }
   }, [])
 
-  const listings = useMemo(() => {
+    const listings = useMemo(() => {
     void tick
     if (!domain?.listListings) return [] as MarketplaceListing[]
-    return domain.listListings({
+    const raw = domain.listListings({
+      status: "active",
       category: category || undefined,
       query: query.trim() || undefined,
-    })
-  }, [domain, category, query, tick])
+    }) || []
+    return sortMarketplaceListings(raw, browseSort)
+  }, [domain, category, query, tick, browseSort])
 
-  const orders = useMemo(() => {
+    const orders = useMemo(() => {
     void tick
-    if (durableOrders.length) return durableOrders
-    if (!domain?.getOrders) return [] as MarketplaceOrder[]
-    try { return domain.getOrders?.() || [] } catch { return [] }
-  }, [domain, tick, durableOrders])
+    let list: MarketplaceOrder[] = []
+    if (durableOrders.length) list = durableOrders
+    else if (domain?.getOrders) {
+      try { list = domain.getOrders?.() || [] } catch { list = [] }
+    }
+    const viewerId = IdentityService.getCurrentUserId() || ""
+    if (orderRoleFilter === "buying") {
+      list = list.filter((o) => o.buyerId === viewerId)
+    } else if (orderRoleFilter === "selling") {
+      list = list.filter((o) => o.sellerId === viewerId)
+    }
+    return [...list].sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
+  }, [domain, tick, durableOrders, orderRoleFilter])
 
   const [remoteSelected, setRemoteSelected] = useState<MarketplaceListing | null>(null)
 
@@ -1494,6 +1686,8 @@ export function MarketplaceScreen({
           setSellDesc(listing.description || "")
           setSellCategory(listing.category || MARKETPLACE_CATEGORIES[0] || "Goods")
           setSellLocation(listing.location || "")
+          setSellDeliveryMode(parseDeliveryMode(listing.shippingInfo) || "meetup")
+          setSellDeliveryNotes(String(listing.shippingInfo || "").replace(/^(meetup|shipping|digital|service)\s*:\s*/i, ""))
           setSellMedia(Array.isArray(listing.media) ? listing.media.filter(Boolean).map(String) : [])
           setSelectedId(null)
           setBucket("sell")
@@ -1812,6 +2006,10 @@ export function MarketplaceScreen({
             setCategory={setSellCategory}
             location={sellLocation}
             setLocation={setSellLocation}
+            deliveryMode={sellDeliveryMode}
+            setDeliveryMode={setSellDeliveryMode}
+            deliveryNotes={sellDeliveryNotes}
+            setDeliveryNotes={setSellDeliveryNotes}
             mediaUrls={sellMedia}
             setMediaUrls={setSellMedia}
             feeRail={sellFeeRail}
@@ -1850,6 +2048,7 @@ export function MarketplaceScreen({
                     availability: 1,
                     media: sellMedia.slice(0, 6),
                     location: sellLocation.trim() || undefined,
+                    shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
                     category: sellCategory,
                   })
                   if (!remote.ok) {
@@ -1864,6 +2063,7 @@ export function MarketplaceScreen({
                       price: priceNum,
                       currency: sellCurrency,
                       location: sellLocation.trim() || undefined,
+                      shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
                       media: sellMedia.slice(0, 6),
                       status: "active",
                     })
@@ -1954,6 +2154,7 @@ export function MarketplaceScreen({
                     price: priceNum,
                     currency: sellCurrency,
                     location: sellLocation.trim() || undefined,
+                    shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
                     media: sellMedia.slice(0, 6),
                     status: "active",
                     kind: "product",
@@ -2012,6 +2213,7 @@ export function MarketplaceScreen({
                         kind: "product",
                         availability: 1,
                         location: sellLocation.trim() || undefined,
+                        shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
                         category: sellCategory,
                         media: sellMedia.slice(0, 6),
                       },
@@ -2061,6 +2263,7 @@ export function MarketplaceScreen({
                       availability: 1,
                       media: sellMedia.slice(0, 6),
                       location: sellLocation.trim() || undefined,
+                      shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
                       category: sellCategory,
                       feeCurrency: sellFeeRail,
                     })
@@ -2132,7 +2335,38 @@ export function MarketplaceScreen({
             }}
           />
         ) : bucket === "orders" ? (
-          ordersLoading && orders.length === 0 ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([
+                ["all", "All"],
+                ["buying", "Buying"],
+                ["selling", "Selling"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setOrderRoleFilter(id)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
+                    orderRoleFilter === id
+                      ? "bg-emerald-700 text-white"
+                      : "border border-border/70 bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => void loadDurableOrders()}
+                className="ml-auto text-[11px] font-bold text-emerald-700 dark:text-emerald-300"
+              >
+                Refresh
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Track pay → fulfill → deliver → complete. Message opens the order thread when available.
+            </p>
+          {ordersLoading && orders.length === 0 ? (
             <div className="rounded-2xl border border-border/50 p-6 text-center text-sm text-muted-foreground">Loading durable orders…</div>
           ) : orders.length === 0 ? (
             <EmptyState variant="transactions" title="No orders yet" description="Purchases and sales appear here from the durable Marketplace order authority." icon={Package} />
@@ -2143,12 +2377,58 @@ export function MarketplaceScreen({
                 const isSeller = viewerId === o.sellerId
                 const status = String(o.status || "created")
                 const busy = Boolean(orderBusy)
+                const stepIdx = orderLifecycleIndex({
+                  status,
+                  paymentStatus: o.paymentStatus,
+                  deliveryStatus: o.deliveryStatus,
+                })
+                const nextHint = orderNextActionHint({
+                  status,
+                  paymentStatus: o.paymentStatus,
+                  deliveryStatus: o.deliveryStatus,
+                  isSeller,
+                })
                 return (
                   <li key={o.id} className="rounded-[1.5rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0"><p className="truncate text-sm font-semibold">Marketplace order</p><p className="mt-0.5 text-[12px] text-muted-foreground">{o.quantity} × {o.unitPrice} {o.currency} · {isSeller ? "Seller" : "Buyer"}</p></div>
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">{status.replace(/_/g," ")}</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          {isSeller ? "Sale" : "Purchase"} · {o.currency} {Number(o.unitPrice).toLocaleString()}
+                        </p>
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          Qty {o.quantity} · {isSeller ? "You are seller" : "You are buyer"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                        {orderStatusLabel(status)}
+                      </span>
                     </div>
+                    <ol className="mt-3 flex items-center gap-1" aria-label="Order progress">
+                      {ORDER_LIFECYCLE_STEPS.map((step, i) => {
+                        const done = i <= stepIdx
+                        return (
+                          <li key={step.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                            <span
+                              className={`h-1.5 w-full rounded-full ${done ? "bg-emerald-600" : "bg-muted"}`}
+                              aria-hidden
+                            />
+                            <span className={`text-[9px] font-semibold ${done ? "text-emerald-800 dark:text-emerald-300" : "text-muted-foreground"}`}>
+                              {step.label}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                    {(o.paymentStatus || o.deliveryStatus) ? (
+                      <p className="mt-2 text-[10px] text-muted-foreground">
+                        Payment: {String(o.paymentStatus || "—").replace(/_/g, " ")}
+                        {" · "}
+                        Delivery: {String(o.deliveryStatus || "—").replace(/_/g, " ")}
+                      </p>
+                    ) : null}
+                    {nextHint ? (
+                      <p className="mt-1.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">{nextHint}</p>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button type="button" disabled={busy} onClick={() => void openOrderConversation(o.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-bold">
                         <MessageCircle className="h-3.5 w-3.5" /> Chat
@@ -2199,14 +2479,101 @@ export function MarketplaceScreen({
                       {isSeller && status === "confirmed" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_fulfill")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Start fulfillment</button> : null}
                       {isSeller && status === "fulfilling" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark delivered</button> : null}
                       {!isSeller && status === "fulfilling" && ["delivered","service_active"].includes(String(o.deliveryStatus || "")) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"buyer_confirm")} className="min-h-9 rounded-full bg-emerald-600 px-3 text-xs font-bold text-white">Confirm received</button> : null}
+                      {!isSeller && status === "completed" ? (
+                        <button
+                          type="button"
+                          disabled={busy || reviewBusy}
+                          onClick={() => {
+                            setReviewDraftOrderId(o.id)
+                            setReviewRating(5)
+                            setReviewText("")
+                          }}
+                          className="min-h-9 rounded-full border border-emerald-600/40 px-3 text-xs font-bold text-emerald-800 dark:text-emerald-300"
+                        >
+                          Leave review
+                        </button>
+                      ) : null}
                       {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
                     </div>
                     <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>
+                    {reviewDraftOrderId === o.id ? (
+                      <div className="mt-3 space-y-2 rounded-xl border border-emerald-600/25 bg-emerald-50/40 p-3 dark:bg-emerald-950/20">
+                        <p className="text-[11px] font-bold text-foreground">Rate this completed order</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setReviewRating(n)}
+                              className={`h-8 w-8 rounded-full text-[12px] font-bold ${
+                                reviewRating === n
+                                  ? "bg-emerald-700 text-white"
+                                  : "border border-border bg-card text-muted-foreground"
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          value={reviewText}
+                          onChange={(e) => setReviewText(e.target.value.slice(0, 2000))}
+                          rows={3}
+                          placeholder="What went well? (min 3 characters)"
+                          className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={reviewBusy}
+                            onClick={() => {
+                              void (async () => {
+                                if (reviewText.trim().length < 3) {
+                                  window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Review needs at least 3 characters", type: "error" } }))
+                                  return
+                                }
+                                setReviewBusy(true)
+                                try {
+                                  const domain = getMarketplaceDomain()
+                                  const res = await domain?.submitReview?.({
+                                    orderId: o.id,
+                                    rating: reviewRating,
+                                    text: reviewText.trim(),
+                                  })
+                                  if (!res || res.ok === false) {
+                                    throw new Error((res as { error?: string } | null)?.error || "Review failed")
+                                  }
+                                  setReviewDraftOrderId(null)
+                                  setReviewText("")
+                                  window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Review submitted", type: "success" } }))
+                                } catch (e) {
+                                  window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: e instanceof Error ? e.message : "Review failed", type: "error" } }))
+                                } finally {
+                                  setReviewBusy(false)
+                                }
+                              })()
+                            }}
+                            className="min-h-9 flex-1 rounded-full bg-emerald-700 text-[12px] font-bold text-white disabled:opacity-60"
+                          >
+                            {reviewBusy ? "Submitting…" : "Submit review"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={reviewBusy}
+                            onClick={() => setReviewDraftOrderId(null)}
+                            className="min-h-9 rounded-full border border-border px-3 text-[12px] font-bold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </li>
                 )
               })}
             </ul>
           )
+          </div>
         ) : listings.length === 0 ? (
           <div className="flex flex-col items-center px-2 pt-6">
             <EmptyState
@@ -2229,7 +2596,7 @@ export function MarketplaceScreen({
           </div>
         ) : (
           <>
-            <div className="mb-3 flex items-end justify-between gap-2">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-[15px] font-bold text-foreground">Today&apos;s picks</h2>
                 <p className="text-[11px] text-muted-foreground">
@@ -2238,9 +2605,22 @@ export function MarketplaceScreen({
                   {query.trim() ? ` · “${query.trim()}”` : ""}
                 </p>
               </div>
-              <button type="button" onClick={refresh} className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
-                Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                <label className="sr-only" htmlFor="gh-market-sort">Sort listings</label>
+                <select
+                  id="gh-market-sort"
+                  value={browseSort}
+                  onChange={(e) => setBrowseSort(e.target.value as BrowseSort)}
+                  className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-foreground"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="price_asc">Price · low to high</option>
+                  <option value="price_desc">Price · high to low</option>
+                </select>
+                <button type="button" onClick={refresh} className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
+                  Refresh
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[960px]:grid-cols-4">
               {listings.map((l) => (

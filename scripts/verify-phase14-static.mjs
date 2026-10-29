@@ -8,8 +8,15 @@ import { fileURLToPath } from "node:url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const steps = [
   ["check-phase1-platform-foundation.mjs", "Phase 1 platform foundation and architecture baseline"],
-  ["check-phase1-12-consolidation.mjs",
-  "check-build-type-regressions.mjs", "Phase 1–12 system-wide consolidation audit"],
+  ["check-a2u-earnings-roadmap.mjs", "Pi A2U earnings and four-month cashback roadmap contract"],
+  ["check-pi-cashback-ledger.mjs", "Pi cashback attribution and period-ledger contract"],
+  ["check-pi-cashback-statement.mjs", "Authenticated Pi cashback statement and Rewards/Wallet integration"],
+  ["check-pi-cashback-period-grace.mjs", "Pi cashback late-revenue reconciliation grace and close safety"],
+  ["check-pi-cashback-a2u.mjs", "Testnet-only user cashback A2U payout and reconciliation"],
+  ["check-marketplace-revenue-reconciliation.mjs", "Marketplace verified payment and revenue-journal recovery"],
+  ["check-phase1-12-consolidation.mjs", "Phase 1–12 system-wide consolidation audit"],
+  ["check-build-type-regressions.mjs", "Build type-regression guard"],
+  ["check-phase1-12-engagement-reliability.mjs", "Notification, feed, daily-claim and vote reliability"],
   ["check-phase1-12-hardening-upgrade.mjs", "Phase 1–12 hardening regression audit"],
   ["check-phase1-12-systematic-upgrade.mjs", "Phase 1–12 systematic upgrade regression audit"],
   ["check-phase1-12-cross-system-hardening.mjs", "Phase 1–12 cross-system bounded request hardening"],

@@ -7,6 +7,7 @@
  */
 
 import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"

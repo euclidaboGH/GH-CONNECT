@@ -4,7 +4,7 @@
  *
  * Important: do not count CREATE TABLE text inside SQL comments. The source
  * intentionally contains proposal/note migrations whose examples are comments.
- * The live canonical database currently has 99 executable GreenHaven tables.
+ * This is a source inventory count only; it is not a claim about any remote database.
  */
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -67,7 +67,7 @@ const missing = expectedRequired.filter(n => !tables.has(n))
 const proposalAccidentallyExecutable = proposalOnly.filter(n => tables.has(n))
 
 if (files.length < 133) throw new Error(`Expected at least 133 clean migrations, found ${files.length}`)
-if (tables.size !== 114) throw new Error(`Expected 114 executable GreenHaven tables, found ${tables.size}`)
+if (tables.size !== 117) throw new Error(`Expected 117 executable GreenHaven tables in source, found ${tables.size}`)
 if (missing.length) throw new Error(`Missing required executable GreenHaven tables: ${missing.join(', ')}`)
 if (proposalAccidentallyExecutable.length) throw new Error(`Proposal-only tables became executable: ${proposalAccidentallyExecutable.join(', ')}`)
 

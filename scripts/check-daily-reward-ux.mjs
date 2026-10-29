@@ -19,7 +19,7 @@ const checks = [
   ["floating lightning action stays available while status is unknown", /loadingStatus/.test(prompt) && /fixed z-\[150\]/.test(prompt)],
   ["unknown status still gives an actionable server-verified claim path", /canAttemptClaim/.test(prompt) && /Claim daily GHC/.test(prompt)],
   ["failed claim retains retryable error state", /setError\(res\.error \|\|/.test(prompt) && /role="alert"/.test(prompt)],
-  ["duplicate taps are guarded while claim is in flight", /if \(claiming \|\| !canAttemptClaim\) return/.test(prompt) && /setClaiming\(true\)/.test(prompt)],
+  ["duplicate taps are synchronously guarded while claim is in flight", /claimInFlightRef = useRef\(false\)/.test(prompt) && /if \(claimInFlightRef\.current \|\| claiming \|\| !canAttemptClaim\) return/.test(prompt) && /claimInFlightRef\.current = true/.test(prompt) && /claimInFlightRef\.current = false/.test(prompt)],
   ["popover close control is disabled while a claim is in flight", /disabled=\{claiming\}/.test(prompt) && /aria-label="Close"/.test(prompt)],
   ["daily claim uses canonical server endpoint and no client amount", /fetch\("\/api\/economy\/rewards\/daily"/.test(client) && /body: JSON\.stringify\(\{\}\)/.test(client)],
   ["server rejects unauthenticated claim requests", /resolveAuthenticatedUser\(request\.headers\)/.test(route) && /AUTH_REQUIRED/.test(route)],

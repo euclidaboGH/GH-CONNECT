@@ -63,6 +63,10 @@ const reviewRequired = new Set([
   '20261025090001_backfill_daily_claim_48h_metadata.sql',
   '20261028010001_ghc_canonical_identity_state_and_race_hardening.sql',
   '20261028160000_marketplace_buyer_confirmation_delivery_gate.sql',
+  '20261029010001_pi_cashback_attribution_and_period_ledger.sql',
+  '20261029010002_pi_cashback_user_statement_rpc.sql',
+  '20261029010003_pi_cashback_period_reconciliation_grace.sql',
+  '20261029010004_pi_cashback_testnet_a2u_payouts.sql',
 ])
 
 const notes = {
@@ -74,6 +78,10 @@ const notes = {
   '20261025090001_backfill_daily_claim_48h_metadata.sql': 'Review exact pending DAILY_CLAIM_V12 rows and metadata before applying on Testnet. Backfill does not change amounts/status, but unlocks strict claim RPC eligibility after the original 48-hour timestamp; reconcile remote history first.',
   '20261028010001_ghc_canonical_identity_state_and_race_hardening.sql': 'Phase 2 identity lifecycle and concurrency hardening. Review existing identity rows, verify status semantics and advisory-lock behavior on disposable PostgreSQL, then validate create/retry/suspend/delete/resolve cases on Testnet before applying.',
   '20261028160000_marketplace_buyer_confirmation_delivery_gate.sql': 'Phase 10 delivery/completion lifecycle gate. Review existing commerce RPC signature and transition policy, then test delivered/service-active, premature confirmation, duplicate confirmation, dispute, and concurrent buyer/seller actions on disposable PostgreSQL and Testnet before applying; reconcile target migration history first.',
+  '20261029010001_pi_cashback_attribution_and_period_ledger.sql': 'Financially critical cashback foundation. Validate the additive paying-user attribution, service-role-only RPC ACLs, exact PI atomic-unit math, fixed four-month UTC windows, refund/chargeback attribution, concurrent close retries and entitlement uniqueness on disposable PostgreSQL. This does not integrate payment producers or enable A2U payouts; reconcile target migration history first.',
+  '20261029010002_pi_cashback_user_statement_rpc.sql': 'Financially critical user-scoped statement RPC. Validate user isolation, service_role-only execution, no direct table grants, response bounds and compatibility with the period-ledger migration on disposable PostgreSQL; this is read-only and does not enable withdrawals. Reconcile target migration history first.',
+  '20261029010003_pi_cashback_period_reconciliation_grace.sql': 'Financially critical period-close wrapper. Validate SECURITY DEFINER ownership, renamed function privileges, seven-day late-revenue reconciliation grace, idempotent close retries and boundary timestamps on disposable PostgreSQL. Reconcile target project migration history before applying; never auto-apply.',
+  '20261029010004_pi_cashback_testnet_a2u_payouts.sql': 'Financially critical Testnet-only user cashback A2U payout ledger. Validate service-role-only RPCs, shared global sequence lease, entitlement reservation uniqueness, recipient binding, provider evidence, retry after timeout and no duplicate transfer on disposable PostgreSQL and Pi Testnet. Requires explicit server secrets and funded Testnet app wallet; never enables Mainnet and must not be auto-applied.',
   '20261022010016_community_join_reasons_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010017_community_governance_log_proposal.sql': 'Proposal only; do not apply without explicit approval.',
   '20261022010027_gh_messaging_durable.sql': 'Durable messaging; flag remains off until two-user authorization gate passes.',

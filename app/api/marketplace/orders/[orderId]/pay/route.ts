@@ -36,18 +36,18 @@ async function recordPlatformCommission(order: {
   totalAmount: number
   currency: string
   paymentMethod: string
+  buyerId: string
+  paymentIntentId?: string
+  verifiedAt?: string
 }) {
   try {
-    const split = splitMarketplaceCommission({
-      grossAmount: order.totalAmount,
-      currency: order.currency,
-    })
-    if ("error" in split) return null
+    const split = splitMarketplaceCommission({ grossAmount: order.totalAmount, currency: order.currency })
+    if ("error" in split) return { reconciliationRequired: true, error: split.error }
     const fee = split.platformFeeMinor
     if (!(fee > 0)) return split
-    // Revenue journal only when fee is in PI (company revenue). GHC fees stay utility.
-    if (String(order.currency).toUpperCase() === "PI" || order.paymentMethod === "pi") {
-      await appendVerifiedCompanyRevenueEvent({
+    // Only verified PI company revenue is journaled; GHC utility fees are not PI revenue.
+    if (String(order.currency).toUpperCase() === "PI" && order.paymentMethod === "pi") {
+      const revenueJournal = await appendVerifiedCompanyRevenueEvent({
         idempotencyKey: `mkt_fee:${order.id}`,
         sourceProvider: "pi",
         sourceEventId: order.id,
@@ -56,14 +56,37 @@ async function recordPlatformCommission(order: {
         grossAmountMinor: Math.round(split.grossMinor * 1e7),
         companyRevenueMinor: Math.round(fee * 1e7),
         sourceReference: `order:${order.id}`,
-        verifiedAt: new Date().toISOString(),
-        metadata: { order_id: order.id },
+        verifiedAt: order.verifiedAt || "",
+        payingUserId: order.buyerId,
+        cashbackEligible: true,
+        metadata: { order_id: order.id, payment_intent_id: order.paymentIntentId || "" },
       })
+      return { ...split, revenueJournal, reconciliationRequired: !revenueJournal.ok }
     }
     return split
   } catch {
-    return null
+    // Payment is already verified: never make a journal outage trigger a second payment.
+    return { reconciliationRequired: true, error: "REVENUE_RECONCILIATION_UNAVAILABLE" }
   }
+}
+
+function isRevenueReconciliationPending(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" &&
+    (value as { reconciliationRequired?: unknown }).reconciliationRequired === true)
+}
+
+function reconciliationPendingResponse(order: unknown, commission: unknown) {
+  return NextResponse.json({
+    ok: false,
+    error: "REVENUE_RECONCILIATION_PENDING",
+    paymentVerified: true,
+    paymentActionRequired: false,
+    reconciliationPending: true,
+    retryable: true,
+    order,
+    commission,
+    message: "Payment is verified. Retry this order endpoint to reconcile the revenue journal; do not submit a new payment.",
+  }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } })
 }
 
 async function rpcGhcSpend(input: {
@@ -149,6 +172,51 @@ export async function POST(
       order.status === "completed")
   ) {
     return NextResponse.json({ ok: true, order, idempotent: true, recovered: true })
+  }
+
+  // A Pi payment may already be verified while the revenue journal write failed or timed out.
+  // Re-run the idempotent journal append before returning NOT_PAYABLE; this never submits a new payment.
+  if (
+    order.paymentStatus === "verified" && order.paymentMethod === "pi" && order.paymentIntentId
+  ) {
+    const priorIntent = await loadPaymentIntent(order.paymentIntentId)
+    if (
+      priorIntent && priorIntent.userId === auth.userId && priorIntent.provider === "pi" &&
+      priorIntent.currency === "PI" && (priorIntent.status === "COMPLETED" || priorIntent.status === "FULFILLED") &&
+      priorIntent.purpose === "marketplace" &&
+      [order.id, `market_order_${order.id}`].includes(String(priorIntent.referenceId || "")) &&
+      Math.abs(priorIntent.amount - order.totalAmount) <= 0.001
+    ) {
+      // Repair an interrupted order transition using only the existing state machine.
+      // This recovery path never submits a new provider payment.
+      if (["created", "payment_pending"].includes(order.status)) {
+        if (order.status === "created") {
+          const pending = await transitionOrder(order.id, "payment_pending", auth.userId, "pi_recovery")
+          if (!pending.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+        }
+        const verified = await transitionOrder(order.id, "payment_verified", auth.userId, "pi_recovery")
+        if (!verified.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      }
+      if (order.status === "payment_verified" || ["created", "payment_pending"].includes(order.status)) {
+        const confirmed = await transitionOrder(order.id, "confirmed", "system", "pi_recovery")
+        if (!confirmed.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      } else if (!["confirmed", "fulfilling", "completed"].includes(order.status)) {
+        return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_REQUIRED", paymentVerified: true, retryable: false }, { status: 409, headers: { "Cache-Control": "no-store" } })
+      }
+      const commission = await recordPlatformCommission({
+        id: order.id,
+        totalAmount: order.totalAmount,
+        currency: "PI",
+        paymentMethod: "pi",
+        buyerId: order.buyerId,
+        paymentIntentId: priorIntent.id,
+        verifiedAt: priorIntent.completedAt ? new Date(priorIntent.completedAt).toISOString() : "",
+      })
+      const refreshedOrder = await loadOrder(order.id)
+      if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
+      return NextResponse.json({ ok: true, order: refreshedOrder || order, idempotent: true, recovered: true, commission, durableOrders: marketplaceOrdersDurable() }, { headers: { "Cache-Control": "no-store" } })
+    }
+    return NextResponse.json({ ok: false, error: "PAYMENT_VERIFIED_RECONCILIATION_REQUIRED", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
 
   if (order.status !== "payment_pending" && order.status !== "created") {
@@ -285,6 +353,7 @@ export async function POST(
       totalAmount: order.totalAmount,
       currency: String(order.currency || "GHC"),
       paymentMethod: "ghc",
+      buyerId: order.buyerId,
     })
     return NextResponse.json({
       ok: true,
@@ -369,21 +438,32 @@ export async function POST(
       )
     }
 
-    await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
-    await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
+    const verifiedTransition = await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
+    if (!verifiedTransition.ok) {
+      return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
+    const confirmedTransition = await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
+    if (!confirmedTransition.ok) {
+      return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
 
     const commission = await recordPlatformCommission({
       id: order.id,
       totalAmount: order.totalAmount,
       currency: String(order.currency || "PI"),
       paymentMethod: "pi",
+      buyerId: order.buyerId,
+      paymentIntentId: intent.id,
+      verifiedAt: intent.completedAt ? new Date(intent.completedAt).toISOString() : "",
     })
+    const refreshedOrder = await loadOrder(order.id)
+    if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
     return NextResponse.json({
       ok: true,
-      order: await loadOrder(order.id),
+      order: refreshedOrder || order,
       commission,
       durableOrders: marketplaceOrdersDurable(),
-    })
+    }, { headers: { "Cache-Control": "no-store" } })
   }
 
   return NextResponse.json({ ok: false, error: "INVALID_METHOD" }, { status: 400 })

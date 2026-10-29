@@ -184,16 +184,25 @@ function ScreenBoundary({ children, label, onReset, onDismiss }: { children: Rea
 
 // Memoized toast component (Quick Win: prevent unnecessary re-renders)
 const Toast = memo(({ message, type }: { message: string; type: string }) => {
-  const bgClass =
-    type === "success"
-      ? "bg-[var(--gh-green)]"
-      : type === "error"
-        ? "bg-destructive"
-        : "bg-sky-600"
+  const isError = type === "error"
+  const isSuccess = type === "success"
+  const shell =
+    isSuccess
+      ? "border-emerald-200/80 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-50"
+      : isError
+        ? "border-destructive/30 bg-destructive text-destructive-foreground"
+        : "border-sky-200/80 bg-sky-50 text-sky-950 dark:border-sky-800 dark:bg-sky-950/90 dark:text-sky-50"
+  const dot =
+    isSuccess ? "bg-emerald-500" : isError ? "bg-white/90" : "bg-sky-500"
 
   return (
-    <div role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} className={`${bgClass} text-white px-4 py-2 rounded-full text-[14px] font-bold`}>
-      {message}
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      className={`pointer-events-auto flex max-w-full items-start gap-2.5 rounded-2xl border px-3.5 py-2.5 text-left shadow-lg shadow-black/10 backdrop-blur-md ${shell}`}
+    >
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <p className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{message}</p>
     </div>
   )
 })
@@ -1104,7 +1113,7 @@ export function GHConnectApp() {
       >
         {/* Content fills the flex area above the nav. Modest pb only for last-item breathing room. */}
         {visitedTabs.has("home") && (
-        <div aria-hidden={activeTab !== "home"} className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
@@ -1115,7 +1124,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("discover") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Discover" onReset={() => resetScreen("discover")}>
               <Suspense fallback={<TabScreenFallback label="Find" />}>
@@ -1126,7 +1135,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("matches") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1140,7 +1149,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("communities") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1154,7 +1163,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("messages") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Messages" onReset={() => resetScreen("messages")}>
               <Suspense fallback={<TabScreenFallback label="Messages" />}>
@@ -1165,7 +1174,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("profile") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full min-h-0 touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1394,7 +1403,10 @@ export function GHConnectApp() {
       <CreatorStudioOverlay />
       <ProfileStorySection creatorHost />
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[90] mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3 pb-1">
+      <div
+        className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3 pb-1"
+        aria-live="polite"
+      >
         <NetworkStatusStrip />
         {visibleToasts.map((toast) => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />

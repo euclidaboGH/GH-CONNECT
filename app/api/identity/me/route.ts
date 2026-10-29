@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { getByGhUserId } from "@/lib/server/identity/pi-identity-store"
+import { getWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 import { ensurePublicIdentity } from "@/lib/server/economy/public-id"
 import { deriveGreenHavenId } from "@/lib/domains/greenhaven-id"
 import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
       verifiedAt: pi?.verifiedAt || null,
       onboardingCompleted: pi?.onboardingCompleted === true,
       /** Pi-only fee posture — informational for UI copy */
+      walletAuthorization: await getWalletAuthorization(auth.userId),
       piOnlyCommerce: isPiOnlyCommerceEnabled(),
       /** Explicit separation: GHC is not a payment rail when pi-only commerce is on */
       ghcPaymentRailEnabled: !isPiOnlyCommerceEnabled(),

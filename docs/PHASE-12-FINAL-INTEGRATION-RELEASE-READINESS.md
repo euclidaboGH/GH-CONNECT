@@ -1,6 +1,6 @@
 # Phase 12 — Final integration and release readiness
 
-Release: `0.157.20` (2026-10-28)
+Release: `0.157.27` (2026-10-29)
 
 ## Delivered in v0.157.12
 
@@ -36,3 +36,23 @@ The subsequent cross-phase hardening increment added streaming bounded JSON pars
 ## Cross-phase follow-up — v0.157.16
 
 Added bounded streaming JSON parsing and stricter input types to connection request, moderation report, matching signal, creator tip, and bank-beneficiary mutation routes. Added a runtime test for the shared bounded JSON reader. This does not prove the full Next.js application builds or that provider/database integrations pass. Production remains NOT APPROVED until the supported Node.js 24.15.0 locked install, TypeScript/lint/build, browser journeys, database restore/concurrency tests, migration history reconciliation, and Pi Testnet checks are completed.
+
+
+## v0.157.24 boundary
+
+The read-only Pi cashback statement is wired into Rewards Center and Wallet. It is not a payout flow. The two cashback migrations remain REVIEW_REQUIRED and unapplied; full build, live database and Pi A2U validation remain required.
+
+
+## v0.157.25 boundary
+
+Cashback period close now has a seven-day reconciliation grace wrapper in source. The new migration is not applied, and this source-only safeguard does not establish cashback payout readiness. Full Node 24 install/typecheck/lint/build, disposable PostgreSQL validation, remote migration-history reconciliation, and Pi Testnet payout verification remain required.
+
+
+## v0.157.27 boundary
+
+Marketplace Pi payment reconciliation failures are now surfaced as retryable states separate from payment verification, and revenue-journal upstream calls are bounded to five seconds per attempt, with static contracts in the release suite. No provider payment is resubmitted by the recovery path. This is source-level hardening only; release remains NOT APPROVED for production pending supported-runtime build and operator validation.
+
+
+## v0.157.27 boundary
+
+The Testnet cashback A2U source path is implemented, but the migration is not applied and a funded Pi Testnet wallet transfer has not been verified. Do not tell testers that wallet credits are ready until the new migration is individually reviewed/applied to Testnet, Testnet A2U credentials and funding are configured, and an end-to-end transfer plus retry/reconciliation tests pass. Mainnet remains disabled.

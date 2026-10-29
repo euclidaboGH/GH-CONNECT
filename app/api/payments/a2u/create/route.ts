@@ -10,6 +10,8 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
+import { findMatchingIncompleteA2u, enqueueA2uReview } from "@/lib/server/payments/a2u-orchestration"
 import { resolvePiSandbox } from "@/lib/pi-env"
 import type { PiBackendPayment } from "pi-backend"
 
@@ -100,6 +102,13 @@ export async function POST(request: Request) {
   const recipientUid = Array.isArray(identities) ? String(identities[0]?.pi_app_uid || "").trim() : ""
   if (!recipientUid) return reply({ ok: false, error: "VERIFIED_PI_RECIPIENT_REQUIRED" }, 409)
 
+  const walletAuth = await assertPayoutWalletAuthorization({ ghUserId: payout.seller_id, recipientUid })
+  if (!walletAuth.ok) {
+    const err = String(walletAuth.error || "WALLET_AUTHORIZATION_REQUIRED")
+    const status = err === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : 409
+    return reply({ ok: false, error: err }, status)
+  }
+
   const leaseToken = randomUUID()
   type BeginResult = { ok?: boolean; error?: string; executionId?: string; state?: string; paymentId?: string | null; txid?: string | null; recipientUid?: string; amount?: number; network?: string }
   const begin: BeginResult | null = await rpc<BeginResult>(base, key, "gh_pi_a2u_begin_execution", {
@@ -136,11 +145,21 @@ export async function POST(request: Request) {
       // Recover a payment created just before a process crash. Never create a second payment
       // while any unrelated server-side A2U payment is incomplete: the SDK has one sequence lane.
       const incomplete = await sdk.getIncompleteServerPayments()
-      const matching = incomplete.find((candidate) => String(candidate.metadata?.payoutRequestId || "") === requestId &&
-        String(candidate.metadata?.direction || "") === "a2u" && candidate.user_uid === recipientUid && amountMatches(Number(payout.amount), candidate.amount))
-      if (matching?.identifier) {
-        providerPaymentId = matching.identifier
+      const matched = findMatchingIncompleteA2u(incomplete, {
+        requestId,
+        recipientUid,
+        amount: Number(payout.amount),
+      })
+      if (matched?.identifier) {
+        providerPaymentId = matched.identifier
       } else if (incomplete.length > 0) {
+        await enqueueA2uReview({
+          sourceKind: "seller_marketplace",
+          sourceRequestId: requestId,
+          userId: payout.seller_id,
+          reasonCode: "UNRELATED_INCOMPLETE_A2U_PAYMENT",
+          detail: `incomplete_count=${incomplete.length}`,
+        }).catch(() => null)
         return reply({ ok: false, error: "UNRELATED_INCOMPLETE_A2U_PAYMENT_REQUIRES_REVIEW", retryable: false, message: "An existing incomplete app-wallet payment must be reconciled before creating another A2U transaction." }, 409)
       } else {
         providerPaymentId = await sdk.createPayment({

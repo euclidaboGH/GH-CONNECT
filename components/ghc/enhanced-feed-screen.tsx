@@ -9,6 +9,7 @@ import type { Post, FeedFilter, PostDraft, SavedPost } from "@/lib/ghc-types"
 import { listPostDrafts, removePostDraft } from "@/lib/creator/post-drafts"
 import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
+import { emitSectionRefresh } from "@/lib/client/section-refresh"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { socialGetPost, socialRecordAttention } from "@/lib/social/client"
@@ -135,6 +136,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [pullDistance, setPullDistance] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [feedBootstrapped, setFeedBootstrapped] = useState(false)
+  const [initialFeedLoadSettled, setInitialFeedLoadSettled] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
@@ -219,6 +221,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   useEffect(() => {
     let cancelled = false
+    setInitialFeedLoadSettled(false)
+    setFeedError(null)
     void (async () => {
       try {
         const { socialListSaves } = await import("@/lib/social/client")
@@ -408,6 +412,34 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
   }, [])
 
+  // Always hydrate the canonical server feed on first mount. A focus event is not
+  // guaranteed to fire after this component subscribes (especially in Pi Browser),
+  // which previously left an empty local array looking like a genuine empty feed.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        let result = await refreshFeed()
+        if (!cancelled && !result.ok && result.error === "FEED_REQUEST_SUPERSEDED") {
+          // Focus/visibility revalidation can race the mount request; retry once
+          // instead of declaring initial hydration complete on a cancelled request.
+          result = await refreshFeed()
+        }
+        if (cancelled) return
+        if (!result.ok && result.error !== "FEED_REQUEST_SUPERSEDED") {
+          setFeedError(new Error(result.error || "Could not load feed"))
+        } else if (result.ok) {
+          setFeedError(null)
+        }
+      } catch (error) {
+        if (!cancelled) setFeedError(error instanceof Error ? error : new Error("Could not load feed"))
+      } finally {
+        if (!cancelled) setInitialFeedLoadSettled(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [refreshFeed, profile?.id])
+
   useEffect(() => {
     if (typeof window === "undefined") return
     let last = 0
@@ -432,6 +464,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const handleRefresh = async () => {
     try {
+      emitSectionRefresh("feed", { reason: "manual" }, { minIntervalMs: 0 })
       setIsRefreshing(true)
       setFeedStatusMsg("Refreshing feed…")
       setFeedError(null)
@@ -776,7 +809,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           <div className="px-2 pt-2">
             <ProfileStorySection scope="feed" />
           </div>
-          {!feedBootstrapped ? (
+          {!feedBootstrapped || !initialFeedLoadSettled ? (
             <FeedSkeleton />
           ) : displayPosts.length === 0 && feedError ? (
             <section className="mx-3 my-4 rounded-2xl border border-destructive/25 bg-destructive/[0.04] p-5 text-center" role="alert" aria-live="polite">
@@ -788,8 +821,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             </section>
           ) : displayPosts.length === 0 ? (
             <EmptyState
-              title={searchQuery.trim() ? "No matching posts" : "Your feed is quiet"}
-              description={searchQuery.trim() ? "Try another keyword or hashtag." : hasRealPosts ? "No posts match this filter yet. Try another feed filter." : "Follow people or explore communities to bring relevant posts into your feed."}
+              variant="feed"
+              title={searchQuery.trim() ? "No matching posts" : undefined}
+              description={searchQuery.trim() ? "Try another keyword or hashtag." : hasRealPosts ? "No posts match this filter yet. Try another feed filter." : undefined}
               action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
             />
           ) : (

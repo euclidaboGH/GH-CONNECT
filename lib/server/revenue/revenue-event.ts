@@ -10,6 +10,7 @@ export type CompanyRevenueEventType =
   | "membership_revenue"
   | "promotion_revenue"
   | "digital_service_revenue"
+  | "creator_tip_revenue"
   | "refund"
   | "chargeback"
   | "adjustment"
@@ -28,6 +29,12 @@ export interface CompanyRevenueEventInput {
   taxMinor?: number
   sourceReference: string
   verifiedAt: string
+  /** Canonical GreenHaven account ID from trusted server-side payment ownership. */
+  payingUserId?: string
+  /** Original verified PI source event for an eligible refund/chargeback. */
+  relatedSourceEventId?: string
+  /** Explicitly set only for finance-approved, verified PI revenue/refund events. */
+  cashbackEligible?: boolean
   metadata?: Record<string, unknown>
 }
 
@@ -68,6 +75,7 @@ const REVENUE_EVENT_TYPES = new Set<CompanyRevenueEventType>([
   "membership_revenue",
   "promotion_revenue",
   "digital_service_revenue",
+  "creator_tip_revenue",
   "refund",
   "chargeback",
   "adjustment",
@@ -82,12 +90,19 @@ export function validateCompanyRevenueEvent(input: CompanyRevenueEventInput): st
   if (!boundedText(input.idempotencyKey, 200) || input.idempotencyKey.trim().length > 200) return "INVALID_IDEMPOTENCY_KEY"
   if (!boundedText(input.sourceEventId, 240) || input.sourceEventId.trim().length > 240) return "INVALID_SOURCE_EVENT_ID"
   if (!boundedText(input.sourceReference, 500) || input.sourceReference.trim().length > 500) return "INVALID_SOURCE_REFERENCE"
-  if (!/^[A-Z]{3}$/.test(String(input.currency || "").toUpperCase())) return "INVALID_CURRENCY"
+  if (typeof input.currency !== "string" || !/^[A-Z]{3}$/.test(input.currency.toUpperCase())) return "INVALID_CURRENCY"
   if (![input.grossAmountMinor, input.companyRevenueMinor, input.providerFeeMinor ?? 0, input.taxMinor ?? 0].every(Number.isSafeInteger)) return "AMOUNTS_MUST_BE_SAFE_INTEGER_MINOR_UNITS"
   const values = [input.grossAmountMinor, input.companyRevenueMinor, input.providerFeeMinor ?? 0, input.taxMinor ?? 0]
   if (values.every((value) => value === 0)) return "ZERO_VALUE_EVENT"
+  if (!(["refund", "chargeback", "adjustment"] as CompanyRevenueEventType[]).includes(input.eventType) && ((input.providerFeeMinor ?? 0) < 0 || (input.taxMinor ?? 0) < 0)) return "INVALID_REVENUE_COSTS"
   if ((input.eventType === "refund" || input.eventType === "chargeback") && (input.grossAmountMinor > 0 || input.companyRevenueMinor > 0)) return "REVENUE_DIRECTION_MISMATCH"
   if (!(["refund", "chargeback", "adjustment"].includes(input.eventType)) && (input.grossAmountMinor < 0 || input.companyRevenueMinor < 0)) return "REVENUE_DIRECTION_MISMATCH"
+  const payingUserId = typeof input.payingUserId === "string" ? input.payingUserId.trim() : ""
+  if (input.cashbackEligible === true && (!payingUserId || input.sourceProvider !== "pi" || input.currency.toUpperCase() !== "PI")) return "CASHBACK_ATTRIBUTION_REQUIRED"
+  if (payingUserId.length > 160) return "INVALID_PAYING_USER_ID"
+  if (input.relatedSourceEventId !== undefined && (typeof input.relatedSourceEventId !== "string" || input.relatedSourceEventId.trim().length < 1 || input.relatedSourceEventId.trim().length > 240)) return "INVALID_RELATED_SOURCE_EVENT_ID"
+  if (input.cashbackEligible === true && ["refund", "chargeback"].includes(input.eventType) && !input.relatedSourceEventId?.trim()) return "CASHBACK_COMPENSATION_SOURCE_REQUIRED"
+  if (input.cashbackEligible !== undefined && typeof input.cashbackEligible !== "boolean") return "INVALID_CASHBACK_ELIGIBILITY"
   const verifiedAt = Date.parse(input.verifiedAt)
   if (!Number.isFinite(verifiedAt) || verifiedAt > Date.now() + 5 * 60_000) return "VERIFIED_SOURCE_REQUIRED"
   return null
@@ -104,7 +119,9 @@ export async function appendVerifiedCompanyRevenueEvent(
 
   try {
     const baseUrl = env.supabaseUrl.endsWith("/") ? env.supabaseUrl.slice(0, -1) : env.supabaseUrl
-    const endpoint = `${baseUrl}/rest/v1/rpc/gh_company_revenue_event_append`
+    const hasAttribution = Boolean(input.payingUserId?.trim()) || input.cashbackEligible === true || Boolean(input.relatedSourceEventId?.trim())
+    if (input.cashbackEligible === true && !input.payingUserId?.trim()) return { ok: false, error: "CASHBACK_ATTRIBUTION_REQUIRED" }
+    const endpoint = `${baseUrl}/rest/v1/rpc/${hasAttribution ? "gh_company_revenue_event_append_attributed" : "gh_company_revenue_event_append"}`
     const body = JSON.stringify({
       p_idempotency_key: input.idempotencyKey.trim(),
       p_source_provider: input.sourceProvider,
@@ -117,6 +134,7 @@ export async function appendVerifiedCompanyRevenueEvent(
       p_tax_minor: input.taxMinor ?? 0,
       p_source_reference: input.sourceReference.trim(),
       p_verified_at: input.verifiedAt,
+      ...(hasAttribution ? { p_paying_user_id: input.payingUserId?.trim() || null, p_related_source_event_id: input.relatedSourceEventId?.trim() || null, p_cashback_eligible: input.cashbackEligible === true } : {}),
       p_metadata: safeMetadata(input.metadata),
     })
 
@@ -132,6 +150,9 @@ export async function appendVerifiedCompanyRevenueEvent(
         },
         body,
         cache: "no-store",
+        // Bound upstream latency so reconciliation can fail visibly and be retried;
+        // do not leave a serverless payment request hanging indefinitely.
+        signal: AbortSignal.timeout(5_000),
       })
       const data = await response.json().catch(() => null) as CompanyRevenueAppendResult | null
       if (response.ok && data?.ok === true) {

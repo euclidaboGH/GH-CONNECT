@@ -12,6 +12,7 @@ import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/doma
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import {
   Plus,
   Search,
@@ -29,6 +30,12 @@ import { navigateTo } from "@/lib/navigation/navigate"
 import { GroupCard } from "./group-card"
 import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
 import { privacyJoinHint, formatCommunityRole } from "@/lib/community/role-labels"
+import {
+  matchesPrivacyFilter,
+  privacyFilterLabel,
+  sortCommunityRows,
+  type CommunityPrivacyFilter,
+} from "@/lib/community/discovery"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -349,6 +356,7 @@ export function CommunitiesScreen() {
   const [directoryError, setDirectoryError] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [directoryTick, setDirectoryTick] = useState(0)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -362,15 +370,13 @@ export function CommunitiesScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") {
-        try { window.dispatchEvent(new CustomEvent("ghc:communities-refresh")) } catch { /* */ }
-      }
-    }
-    document.addEventListener("visibilitychange", onVis)
-    return () => document.removeEventListener("visibilitychange", onVis)
+  const reloadDirectory = useCallback(() => {
+    setDirectoryTick((n) => n + 1)
   }, [])
+
+  useSectionRefresh("communities", () => {
+    reloadDirectory()
+  }, { minIntervalMs: 15_000 })
 
   useEffect(() => {
     let cancelled = false
@@ -439,7 +445,7 @@ export function CommunitiesScreen() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [directoryTick])
 
   useEffect(() => {
     if (!communityLocalCacheAllowed()) return
@@ -587,8 +593,9 @@ export function CommunitiesScreen() {
     return pool
       .filter((c) => {
         if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
+        if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
         if (!q) return true
-        const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""}`.toLowerCase()
+        const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""} ${c.privacy || ""}`.toLowerCase()
         return hay.includes(q)
       })
       .sort((a, b) => {
@@ -597,7 +604,7 @@ export function CommunitiesScreen() {
         if (sortBy === "active") return (b.members?.length || 0) - (a.members?.length || 0)
         return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
       })
-  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, sortBy])
+  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, privacyFilter, sortBy])
 
   const selected = selectedCommunityId
     ? (() => {
@@ -1187,6 +1194,22 @@ export function CommunitiesScreen() {
                 </select>
               </label>
             </div>
+            <div className="mt-1.5 flex items-center gap-2 overflow-x-auto scrollbar-hide" aria-label="Access filter">
+              {(["all", "public", "request", "invite"] as CommunityPrivacyFilter[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPrivacyFilter(id)}
+                  className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold transition ${
+                    privacyFilter === id
+                      ? "bg-sky-700 text-white"
+                      : "border border-border/70 bg-card text-muted-foreground"
+                  }`}
+                >
+                  {privacyFilterLabel(id)}
+                </button>
+              ))}
+            </div>
           </>
         }
       />
@@ -1413,7 +1436,7 @@ export function CommunitiesScreen() {
           ) : directory === "discover" ? (
             <EmptyState
               variant="communities"
-              title={searchQuery ? "No communities match" : "Find or start a community"}
+              title={searchQuery || privacyFilter !== "all" || categoryFilter !== "all" ? "No communities match" : "Find or start a community"}
               description={
                 searchQuery
                   ? `No results for “${searchQuery}”. Try another keyword — or create a community.`

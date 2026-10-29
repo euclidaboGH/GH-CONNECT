@@ -32,6 +32,8 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
+import { PiCashbackSummary } from "./pi-cashback-summary"
+import { UnifiedEarningsDashboard } from "./unified-earnings-dashboard"
 import { EconomyProgramStatus } from "./economy-program-status"
 import { ReferralShareCard } from "./referral-share-card"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
@@ -479,6 +481,14 @@ export function RewardsCentreScreen({
           userId={userId}
           onOpenWallet={onOpenWallet}
         />
+
+        <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="font-semibold text-foreground">Two different rewards</p>
+          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
+          <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
+        </div>
+        <UnifiedEarningsDashboard />
+        <PiCashbackSummary />
 
         <div className="mx-3 mt-3">
           <EconomyProgramStatus />

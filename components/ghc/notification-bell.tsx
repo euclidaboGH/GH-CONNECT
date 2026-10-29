@@ -146,6 +146,7 @@ export function NotificationBell({
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [threadKey, setThreadKey] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
+  const refreshQueuedRef = useRef(false)
   const ghc = useGHC() as { blockedUsers?: string[]; mutedUsers?: string[] }
   const blockedKey = Array.isArray(ghc.blockedUsers) ? ghc.blockedUsers.join("|") : ""
   const mutedKey = Array.isArray(ghc.mutedUsers) ? ghc.mutedUsers.join("|") : ""
@@ -181,12 +182,15 @@ export function NotificationBell({
     // Merge both durable notification stores (social activity + GHC economy).
     // The old implementation replaced the unread count with the social count,
     // hiding local rewards and durable GHC events from the bell.
-    if (refreshInFlightRef.current) return
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true
+      return
+    }
     refreshInFlightRef.current = true
     void (async () => {
       setListLoading(true)
       try {
-        const [unifiedRes, economyRes, socialRes, socialCountRes, unifiedCountRes, economyCountRes, announcementsRes] = await Promise.all([
+        const [unifiedRes, economyRes, socialRes, announcementsRes] = await Promise.all([
           fetch("/api/notifications?limit=80", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
@@ -196,34 +200,19 @@ export function NotificationBell({
           fetch("/api/social/notifications?limit=80", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
-          fetch("/api/social/notifications?countOnly=1", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
-          }).catch(() => null),
-          fetch("/api/notifications?countOnly=1", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
-          }).catch(() => null),
-          fetch("/api/economy/notifications/unread-count", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
-          }).catch(() => null),
           fetch("/api/system/announcements?limit=25", {
             credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
           }).catch(() => null),
         ])
-        const [unifiedData, economyData, socialData, socialCountData, unifiedCountData, economyCountData, announcementsData] = await Promise.all([
+        const [unifiedData, economyData, socialData, announcementsData] = await Promise.all([
           unifiedRes?.json().catch(() => ({})) || {},
           economyRes?.json().catch(() => ({})) || {},
           socialRes?.json().catch(() => ({})) || {},
-          socialCountRes?.json().catch(() => ({})) || {},
-          unifiedCountRes?.json().catch(() => ({})) || {},
-          economyCountRes?.json().catch(() => ({})) || {},
           announcementsRes?.json().catch(() => ({})) || {},
         ]) as [
           { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null }> },
           { ok?: boolean; items?: Array<{ id?: string; eventType?: string; title?: string; body?: string; createdAt?: number; readAt?: number | string | null; referenceId?: string; requestId?: string; metadata?: Record<string, unknown> }> },
           { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string | number; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null; entityType?: string; entityId?: string; requestId?: string }> },
-          { ok?: boolean; unreadCount?: number },
-          { ok?: boolean; durable?: boolean; unreadCount?: number },
-          { ok?: boolean; count?: number },
           { ok?: boolean; announcements?: Array<{ id?: string; title?: string; body?: string; severity?: string; actionPath?: string | null; publishedAt?: number; read?: boolean }>; unreadCount?: number },
         ]
 
@@ -408,22 +397,31 @@ export function NotificationBell({
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         })
 
-        const localUnread = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers).filter((n) => !n.read).length
-        const unifiedUnread = unifiedRes?.ok && unifiedCountData.ok && typeof unifiedCountData.unreadCount === "number"
-          ? Math.max(0, unifiedCountData.unreadCount) : mappedUnified.filter((n) => !n.read).length
-        const socialUnread = socialRes?.ok && socialCountData.ok && typeof socialCountData.unreadCount === "number"
-          ? Math.max(0, socialCountData.unreadCount) : mappedSocial.filter((n) => !n.read).length
-        const economyUnread = economyRes?.ok && economyCountData.ok && typeof economyCountData.count === "number"
-          ? Math.max(0, economyCountData.count) : mappedEconomy.filter((n) => !n.read).length
-        const announcementUnread = announcementsRes?.ok && announcementsData.ok && typeof announcementsData.unreadCount === "number"
-          ? Math.max(0, announcementsData.unreadCount) : mappedAnnouncements.filter((n) => !n.read).length
-        setUnread(localUnread + unifiedUnread + socialUnread + economyUnread + announcementUnread)
+        // The count-only endpoints overlap the unified/social inboxes and can lag
+        // behind a just-completed mark-read operation. Count the same deduplicated
+        // rows the user can actually see instead of summing independent counters.
+        const durableById = new Map<string, Notification>()
+        for (const item of [...mappedUnified, ...durableSocialVisible, ...durableEconomyVisible, ...mappedAnnouncements]) {
+          if (!item.id || durableById.has(item.id)) continue
+          let deleted = false
+          try { deleted = Boolean(notificationSystem.isDeleted?.(item.id)) } catch { /* */ }
+          if (!deleted) durableById.set(item.id, item)
+        }
+        const durableUnread = Array.from(durableById.values()).filter((item) => !item.read).length
+        const durableIds = new Set(durableById.keys())
+        const localUnreadOnly = notificationSystem.getVisibleNotifications(blockedUsers, mutedUsers)
+          .filter((item) => !item.read && !durableIds.has(item.id)).length
+        setUnread(durableUnread + localUnreadOnly)
       } catch {
         setDurableOk(false)
         /* Local-only notifications remain visible if a server store is unavailable. */
       } finally {
         refreshInFlightRef.current = false
         setListLoading(false)
+        if (refreshQueuedRef.current) {
+          refreshQueuedRef.current = false
+          window.setTimeout(() => refresh(), 0)
+        }
       }
     })()
   }, [blockedUsers, mutedUsers])
@@ -592,21 +590,20 @@ export function NotificationBell({
       notificationData.source === "social"
     if (looksSocial && n.id) {
       // Social durable inbox (recipient session-bound)
-      void fetch("/api/social/notifications", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
-      })
-        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
-        .catch(() => null)
-      // Unified inbox path when present
-      void fetch("/api/notifications", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
-      }).catch(() => null)
+      void Promise.all([
+        fetch("/api/social/notifications", {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+        }).catch(() => null),
+        // Unified inbox path when present. Wait for both write attempts before
+        // notifying listeners, otherwise a fast refresh can restore the old badge.
+        fetch("/api/notifications", {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
+        }).catch(() => null),
+      ]).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
     } else if (notificationData.durableAnnouncement && notificationData.announcementId) {
       void fetch("/api/system/announcements", {
         method: "POST",
@@ -675,13 +672,11 @@ export function NotificationBell({
     window.setTimeout(() => refresh(), 300)
   }
 
-  const markAll = () => {
-    try {
-      notificationSystem.markAllAsRead?.()
-    } catch {
-      /* */
-    }
-    void Promise.all([
+  const markAll = async () => {
+    try { notificationSystem.markAllAsRead?.() } catch { /* */ }
+    setItems((prev) => prev.map((x) => ({ ...x, read: true })))
+    setUnread(0)
+    const results = await Promise.all([
       fetch("/api/social/notifications", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAll: true }),
@@ -697,13 +692,15 @@ export function NotificationBell({
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAll: true }),
       }).catch(() => null),
-    ]).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
-    setItems((prev) => prev.map((x) => ({ ...x, read: true })))
-    setUnread(0)
-    setStatusMsg("Marked all as read")
-    window.setTimeout(() => setStatusMsg(null), 2000)
-    window.setTimeout(() => refresh(), 400)
+    ])
+    const failed = results.some((response) => !response || !response.ok)
+    window.dispatchEvent(new CustomEvent("ghc:notifications-read"))
+    setStatusMsg(failed ? "Some alerts could not be marked read. Please retry." : "Marked all as read")
+    window.setTimeout(() => setStatusMsg(null), 2500)
+    // refresh() queues behind an active poll and runs again after that poll settles.
+    refresh()
   }
+
 
   return (
     <div className="relative">

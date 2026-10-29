@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.157.20
+project_version=0.169.0
 manifest_format_version=1
-canonical_migrations=140
+canonical_migrations=144
 classification_required=98
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=39
+classification_review_required=43
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -162,3 +162,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=1241 path=supabase/migrations/20261027010005_ghc_transfer_request_rpc_acl_hardening.sql
 [REVIEW_REQUIRED] size=4804 path=supabase/migrations/20261028010001_ghc_canonical_identity_state_and_race_hardening.sql
 [REVIEW_REQUIRED] size=5695 path=supabase/migrations/20261028160000_marketplace_buyer_confirmation_delivery_gate.sql
+[REVIEW_REQUIRED] size=18164 path=supabase/migrations/20261029010001_pi_cashback_attribution_and_period_ledger.sql
+[REVIEW_REQUIRED] size=2650 path=supabase/migrations/20261029010002_pi_cashback_user_statement_rpc.sql
+[REVIEW_REQUIRED] size=2537 path=supabase/migrations/20261029010003_pi_cashback_period_reconciliation_grace.sql
+[REVIEW_REQUIRED] size=12745 path=supabase/migrations/20261029010004_pi_cashback_testnet_a2u_payouts.sql

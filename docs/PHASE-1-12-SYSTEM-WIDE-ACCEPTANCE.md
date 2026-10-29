@@ -2,11 +2,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.157.20` (2026-10-28). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.157.27` (2026-10-29). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.157.20)
+## Current audit status (v0.157.27)
 
 - The v0.157.0 uploaded baseline passed the network/database-independent static suite: 43/43 checks.
 - The v0.157.1 patch synchronized release-truth metadata. The v0.157.2 patch strengthens Phase 3 public identity hydration with bounded nested comment/reply traversal and safe avatar fallback validation. The v0.157.3 patch hardens restore-evidence reads against symlink/path-swap races and expands Phase 4 recovery/identity regression contracts. The v0.157.4 patch centralizes approved brand asset paths, guards logo files with SHA-256 checks, and strengthens safe-area and high-contrast UI behavior. The v0.157.5 patch hardens browser navigation runtime guards, validates settings-section payloads, rejects control characters in navigation strings, and provides a Home fallback for direct-entry not-found recovery. The v0.157.6 patch fails closed when feed posts lack canonical author identifiers, preventing malformed feed rows from bypassing mute enforcement, and adds the Phase 7 social contract to consolidated static verification. The v0.157.7 patch strengthens wallet snapshot validation and no-store responses. The v0.157.8 Phase 9 increment tightens Pi transaction projection and payment-intent input validation while preserving read-only, user-scoped reconciliation. The v0.157.9 Phase 10 increment adds streaming body bounds to marketplace order creation, payment, transition and commerce mutations; strict quantity validation; bounded listing identifiers; non-coercive commerce payload handling; and no-store mutation responses. The v0.157.10 follow-up prevents generic public transitions from asserting refunds or commerce lifecycle outcomes, and requires durable seller delivery/service activation before buyer confirmation. The v0.157.11 Phase 11 increment validates marketplace intent/order identifiers, amount and rail agreement, refund/cancellation terminal-state consistency, avoids reusable membership-reference false matches, and centralizes the payment-intent history cap.
@@ -14,7 +14,7 @@
 - The v0.157.13 cross-phase hardening increment applied streaming byte limits to seven previously unbounded JSON write routes across account lifecycle, social, notifications, communities, and marketplace features.
 - The v0.157.14 follow-up adds streaming byte limits to twelve further high-impact financial, identity, and social write routes, tightens payout amount type validation, and makes social follow target identifiers string-only. The v0.157.16 follow-up extends this to connection requests, reports, matching signals, creator tips, and bank-beneficiary mutations, with runtime tests for the bounded JSON parser. These are source-level safeguards and isolated helper tests, not full application or live-system acceptance.
 - The available audit container runs Node.js 22.16.0, while the project requires Node.js 24.15.0; `node_modules` is absent. TypeScript, lint, production build and browser E2E have therefore not been run here.
-- The repository contains 140 migration files (98 REQUIRED, 1 REQUIRES_APPROVAL, 2 PROPOSAL, 39 REVIEW_REQUIRED). This is a source inventory only; each target's remote migration history must be reconciled independently.
+- The repository contains 143 migration files (98 REQUIRED, 1 REQUIRES_APPROVAL, 2 PROPOSAL, 42 REVIEW_REQUIRED). This is a source inventory only; each target's remote migration history must be reconciled independently.
 - No live Supabase/Pi/Vercel operation, database migration, restore drill, or financial mutation was performed.
 
 ## Improvements made
@@ -46,3 +46,28 @@ Before deployment, use Node.js 24.15.0, install strictly from the lockfile, run 
 - Expanded Phase 3, Phase 6, and Phase 9 regression checks.
 - The network/DB-independent static suite was rerun on this source tree: 35/35 checks passed.
 - Runtime TypeScript/lint/build, browser journeys, and operational database/Testnet checks remain separate acceptance requirements.
+
+
+## v0.157.23 cashback foundation note
+
+The source baseline adds a review-gated PI cashback attribution and four-month period-ledger migration, wires the marketplace PI commission source to the authenticated buyer, and registers dedicated regression checks. This remains source-only until disposable PostgreSQL/Testnet validation, migration-history reconciliation, all eligible source integrations, payout execution and Mainnet A2U authorization are proven.
+
+
+## v0.157.24 cashback statement boundary
+
+A private, read-only cashback statement is available in source through existing Rewards Center and Wallet screens. The feature hides rather than invents zero balances when the backend migration/service is unavailable. Cashback is not withdrawable until the separate A2U payout execution and funding gates are completed.
+
+
+## v0.157.25 cashback period-close safety boundary
+
+The source adds a service-role-only close wrapper that enforces a seven-day reconciliation grace after the four-month UTC earning window ends. This reduces the chance that late verified revenue journaling is omitted from an immutable cashback snapshot. Migration `20261029010003_pi_cashback_period_reconciliation_grace.sql` remains REVIEW_REQUIRED and unapplied; its ACL, ownership and concurrency semantics must be validated on disposable PostgreSQL before any target migration is considered.
+
+
+## v0.157.27 marketplace payment/revenue reconciliation recovery
+
+The Pi marketplace payment route now distinguishes completed payment verification from cashback revenue-journal reconciliation. Revenue-journal upstream calls are bounded to five seconds per attempt. If the journal append fails, the API reports a retryable reconciliation state without asking the buyer to pay again. The retry path validates and reuses the original completed intent and repairs eligible interrupted order transitions through the existing state machine. This remains source-level evidence only.
+
+
+## v0.157.27 boundary — Testnet cashback A2U
+
+Added a separate cashback A2U payout domain, authenticated claim route, shared global A2U sequence lease, provider verification, and UI gating. The new migration is review-required and unapplied. Static source contracts are not evidence of a real Pi wallet credit. Supported-runtime typecheck/lint/build, disposable PostgreSQL validation, target migration reconciliation, funded Pi Testnet transfer, retry/recovery, and browser verification remain release gates.

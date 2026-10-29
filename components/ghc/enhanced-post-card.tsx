@@ -183,18 +183,35 @@ function EnhancedPostCardInner({
   const [curationBusy, setCurationBusy] = useState(false)
   const [rewardPercentage, setRewardPercentage] = useState(100)
   const lastCurationAtRef = useRef(0)
-  const curationLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const curationLongPressTriggeredRef = useRef(false)
+  const curationRosterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const curationRosterLongPressRef = useRef(false)
   useEffect(() => () => {
-    if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
+    if (curationRosterTimerRef.current) clearTimeout(curationRosterTimerRef.current)
   }, [])
+  const startCurationRosterLongPress = (kind: "upvotes" | "downvotes") => {
+    if (curationRosterTimerRef.current) clearTimeout(curationRosterTimerRef.current)
+    curationRosterLongPressRef.current = false
+    curationRosterTimerRef.current = setTimeout(() => {
+      curationRosterTimerRef.current = null
+      curationRosterLongPressRef.current = true
+      openRoster(kind)
+    }, 650)
+  }
+  const endCurationRosterLongPress = (cancelled = false) => {
+    const wasPending = curationRosterTimerRef.current !== null
+    if (curationRosterTimerRef.current) {
+      clearTimeout(curationRosterTimerRef.current)
+      curationRosterTimerRef.current = null
+    }
+    if (cancelled && wasPending) curationRosterLongPressRef.current = false
+  }
   const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
   const propViewerChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
   useEffect(() => {
-    if (typeof propUp === "number" && Number.isFinite(propUp)) setUpvoteCount(Math.max(0, propUp))
-    if (typeof propDown === "number" && Number.isFinite(propDown)) setDownvoteCount(Math.max(0, propDown))
-    if (propViewerChoice === "upvote" || propViewerChoice === "downvote") setCurationChoice(propViewerChoice)
+    setUpvoteCount(typeof propUp === "number" && Number.isFinite(propUp) ? Math.max(0, propUp) : 0)
+    setDownvoteCount(typeof propDown === "number" && Number.isFinite(propDown) ? Math.max(0, propDown) : 0)
+    setCurationChoice(propViewerChoice === "upvote" || propViewerChoice === "downvote" ? propViewerChoice : "neutral")
   }, [post.id, propUp, propDown, propViewerChoice])
   const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
   const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
@@ -206,26 +223,6 @@ function EnhancedPostCardInner({
   // Community review status is loaded only on its dedicated detail surface.
   // Fetching it once per feed card caused an N+1 request storm and the value
   // was not rendered here; keep feed cards lean and defer that request.
-
-  // Deliberate curation requires a sustained press. A normal tap only opens
-  // the compact reaction picker and can never move GHC.
-  const startCurationLongPress = (choice: "upvote" | "downvote") => {
-    if (curationLongPressTimerRef.current) clearTimeout(curationLongPressTimerRef.current)
-    curationLongPressTriggeredRef.current = false
-    curationLongPressTimerRef.current = setTimeout(() => {
-      curationLongPressTimerRef.current = null
-      curationLongPressTriggeredRef.current = true
-      void handleCuration(choice)
-    }, 1200)
-  }
-
-  const endCurationLongPress = (cancelled = false) => {
-    if (curationLongPressTimerRef.current) {
-      clearTimeout(curationLongPressTimerRef.current)
-      curationLongPressTimerRef.current = null
-    }
-    if (cancelled) curationLongPressTriggeredRef.current = false
-  }
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return
@@ -991,23 +988,24 @@ function EnhancedPostCardInner({
             <button
               type="button"
               disabled={curationBusy}
-              aria-label="Hold for 1.2 seconds to vote and curate this post. Tap for reaction options."
+              aria-label={curationChoice === "upvote" ? "Change vote to upvote" : "Upvote this post"}
               aria-pressed={curationChoice === "upvote"}
               onClick={(e) => {
                 e.preventDefault()
-                if (curationLongPressTriggeredRef.current) {
-                  curationLongPressTriggeredRef.current = false
+                e.stopPropagation()
+                if (curationRosterLongPressRef.current) {
+                  curationRosterLongPressRef.current = false
                   return
                 }
-                setCurationReactionKind("positive")
-                setShowReactions((visible) => !visible)
+                setShowReactions(false)
+                void handleCuration("upvote")
               }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("upvotes") }}
+              onPointerUp={() => endCurationRosterLongPress()}
+              onPointerCancel={() => endCurationRosterLongPress(true)}
+              onPointerLeave={() => endCurationRosterLongPress(true)}
               onContextMenu={(e) => { e.preventDefault(); openRoster("upvotes") }}
-              onPointerDown={(e) => { if (e.button === 0) startCurationLongPress("upvote") }}
-              onPointerUp={() => endCurationLongPress()}
-              onPointerCancel={() => endCurationLongPress(true)}
-              onPointerLeave={() => endCurationLongPress(true)}
-              title="Hold for 1.2 seconds to vote and curate. Tap to choose a reaction. GHC changes only after server confirmation."
+              title="Upvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
               className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
                 curationChoice === "upvote"
                   ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
@@ -1020,23 +1018,24 @@ function EnhancedPostCardInner({
             <button
               type="button"
               disabled={curationBusy}
-              aria-label="Hold for 1.2 seconds to downvote and curate this post. Tap for reaction options."
+              aria-label={curationChoice === "downvote" ? "Change vote to downvote" : "Downvote this post"}
               aria-pressed={curationChoice === "downvote"}
               onClick={(e) => {
                 e.preventDefault()
-                if (curationLongPressTriggeredRef.current) {
-                  curationLongPressTriggeredRef.current = false
+                e.stopPropagation()
+                if (curationRosterLongPressRef.current) {
+                  curationRosterLongPressRef.current = false
                   return
                 }
-                setCurationReactionKind("negative")
-                setShowReactions((visible) => !visible)
+                setShowReactions(false)
+                void handleCuration("downvote")
               }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("downvotes") }}
+              onPointerUp={() => endCurationRosterLongPress()}
+              onPointerCancel={() => endCurationRosterLongPress(true)}
+              onPointerLeave={() => endCurationRosterLongPress(true)}
               onContextMenu={(e) => { e.preventDefault(); openRoster("downvotes") }}
-              onPointerDown={(e) => { if (e.button === 0) startCurationLongPress("downvote") }}
-              onPointerUp={() => endCurationLongPress()}
-              onPointerCancel={() => endCurationLongPress(true)}
-              onPointerLeave={() => endCurationLongPress(true)}
-              title="Hold for 1.2 seconds to downvote and curate. Tap to choose a reaction."
+              title="Downvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
               className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition active:scale-[0.97] sm:h-10 sm:px-3 sm:text-sm ${
                 curationChoice === "downvote"
                   ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
