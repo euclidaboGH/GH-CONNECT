@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
+import { RegistrationBonusCard } from "./registration-bonus-card"
 import {
   AlertCircle,
   CheckCircle2,

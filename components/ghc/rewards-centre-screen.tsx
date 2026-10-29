@@ -34,6 +34,7 @@ import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "./unified-earnings-dashboard"
+import { RegistrationBonusCard } from "./registration-bonus-card"
 import { EconomyProgramStatus } from "./economy-program-status"
 import { ReferralShareCard } from "./referral-share-card"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
@@ -487,6 +488,7 @@ export function RewardsCentreScreen({
           <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
           <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
         </div>
+        <RegistrationBonusCard />
         <UnifiedEarningsDashboard />
         <PiCashbackSummary />
 

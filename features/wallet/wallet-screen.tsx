@@ -65,6 +65,7 @@ import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
+import { RegistrationBonusCard } from "@/components/ghc/registration-bonus-card"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 
 const formatGhc = formatGhcShared
@@ -1264,6 +1265,7 @@ const lowBalance = balance === 0 && displayPending === 0
           <PaymentRecoveryBanner />
           <div className="mt-3"><PaymentRecoveryPanel /></div>
           <div className="mt-3"><PiPaymentUtilityStatus /></div>
+          <RegistrationBonusCard />
           <UnifiedEarningsDashboard />
           <PiCashbackSummary />
           <div className="gh-premium-wallet-metrics mt-3 grid grid-cols-3 gap-2" aria-label="GHC wallet state">
