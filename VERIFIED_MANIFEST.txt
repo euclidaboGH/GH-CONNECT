@@ -2,9 +2,9 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.178.1
+project_version=0.178.2
 manifest_format_version=1
-canonical_migrations=144
+canonical_migrations=153
 classification_required=98
 classification_requires_approval=1
 classification_proposal=2

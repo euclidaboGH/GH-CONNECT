@@ -94,7 +94,7 @@ Referral attribution uses the shared server-side `ghc_public_identities` resolve
 
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.169.0`
+**Current source version:** `0.178.2`
 
 This document describes the checked-in archive only. It does not establish that any remote deployment, database migration, payment provider, Pi Platform integration, or account-security flow is live or verified.
 

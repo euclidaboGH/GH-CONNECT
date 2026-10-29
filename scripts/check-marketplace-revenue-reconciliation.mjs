@@ -17,7 +17,7 @@ const checks = [
   ['reconciliation responses disable caching', /"Cache-Control": "no-store"/.test(route)],
   ['revenue journal upstream calls have a bounded timeout', /signal: AbortSignal\.timeout\(5_000\)/.test(revenue) && /cache: "no-store"/.test(revenue)],
   ['contract is registered in full static verification', suite.includes('check-marketplace-revenue-reconciliation.mjs')],
-  ['release version is synchronized', packageJson.version === '0.157.27' && read('lib/app-release.ts').includes('0.157.27')],
+  ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(packageJson.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${packageJson.version}"`)],
 ]
 let failed = 0
 for (const [name, pass] of checks) { console.log((pass ? 'PASS ' : 'FAIL ') + name); if (!pass) failed++ }
