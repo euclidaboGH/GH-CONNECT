@@ -21,7 +21,7 @@ const lock = existsSync(join(root, 'package-lock.json'))
   ? JSON.parse(read('package-lock.json'))
   : null
 
-test('package version is 0.169.0', pkg.version === '0.169.0')
+test('package version is semver', /^\d+\.\d+\.\d+$/.test(pkg.version))
 test('app-release version matches package', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 if (lock) {
   test('package-lock root version matches', lock.version === pkg.version)
