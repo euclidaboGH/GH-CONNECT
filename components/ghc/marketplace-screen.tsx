@@ -2572,7 +2572,7 @@ export function MarketplaceScreen({
                 )
               })}
             </ul>
-          )
+          )}
           </div>
         ) : listings.length === 0 ? (
           <div className="flex flex-col items-center px-2 pt-6">

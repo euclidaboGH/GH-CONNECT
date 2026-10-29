@@ -42,6 +42,7 @@ const serviceManagedWithoutClientPolicy = new Set([
   'gh_verification_requests', 'ghc_account_flags', 'ghc_community_moderation_log',
   'ghc_community_reports', 'ghc_connection_contexts', 'ghc_connection_requests',
   'ghc_match_signals', 'ghc_user_blocks',
+  'gh_pi_cashback_periods', 'gh_pi_cashback_entitlements',
 ])
 const missingRls = [...created].filter((table) => !enabled.has(table)).sort()
 const unreviewedNoPolicy = [...created].filter((table) => !policyTables.has(table) && !serviceManagedWithoutClientPolicy.has(table)).sort()
