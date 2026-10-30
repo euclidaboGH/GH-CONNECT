@@ -24,7 +24,7 @@ export type PrimaryTab = (typeof PRIMARY_TABS)[number]
 
 /**
  * Visible bottom-bar destinations (Create is an overlay, not a PRIMARY_TAB).
- * Must remain exactly these five product destinations.
+ * Primary visible bar: Home · Cart · Wallet · Profile.
  */
 export const BOTTOM_NAV_IDS = ["home", "cart", "wallet", "profile"] as const
 
@@ -36,6 +36,7 @@ export type OverlayDestination =
   | "help"
   | "ecosystem"
   | "marketplace"
+  | "cart"
   | "create"
 
 export type DestinationId = PrimaryTab | OverlayDestination
