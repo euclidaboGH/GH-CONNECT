@@ -111,7 +111,6 @@ export const DESTINATION_ALIASES: Record<string, DestinationId> = {
   eco: "ecosystem",
   marketplace: "marketplace",
   cart: "cart",
-  shop: "cart",
   store: "marketplace",
   market: "marketplace",
   shop: "marketplace",

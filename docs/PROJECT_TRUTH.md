@@ -94,7 +94,7 @@ Referral attribution uses the shared server-side `ghc_public_identities` resolve
 
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.214.4`
+**Current source version:** `0.214.5`
 
 Phase 3 unified wallet continuation: PI earnings refresh is time-bounded and sequenced so stale overlapping responses cannot overwrite the latest snapshot. Payout eligibility and linked Pi identity status come from the server response. Static checks do not establish live Testnet behavior; supported-runtime build, browser acceptance, database reconciliation, and payout lifecycle verification remain release gates. See `docs/PHASE3_UNIFIED_WALLET_CARD_0.182.0.md`.
 
