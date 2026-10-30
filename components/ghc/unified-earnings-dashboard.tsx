@@ -123,6 +123,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [failed, setFailed] = useState(false)
   const [quoteMsg, setQuoteMsg] = useState<string | null>(null)
   const [quoting, setQuoting] = useState(false)
+  const [requestingPayout, setRequestingPayout] = useState(false)
+  const [payoutMsg, setPayoutMsg] = useState<string | null>(null)
   const [charityTotal, setCharityTotal] = useState<string | null>(null)
   const [charityCount, setCharityCount] = useState(0)
   const [crossFindings, setCrossFindings] = useState<string[]>([])
@@ -237,6 +239,65 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     quoteController.current?.abort()
     quoteSequence.current += 1
   }, [])
+
+
+  const onRequestPayout = async () => {
+    if (requestingPayout) return
+    if (snap?.eligible !== true || snap.piWalletLinked !== true) {
+      setPayoutMsg("Withdrawal is not available until the server confirms eligibility and a linked Pi identity.")
+      return
+    }
+    if (typeof snap.withdrawable !== "number" || !Number.isFinite(snap.withdrawable) || snap.withdrawable <= 0) {
+      setPayoutMsg("No withdrawable PI balance to request.")
+      return
+    }
+    // Convert PI decimal to atomic using server scale 1e7 (floor)
+    const amountAtomic = Math.floor(snap.withdrawable * 10_000_000 + 1e-12)
+    if (!Number.isSafeInteger(amountAtomic) || amountAtomic <= 0) {
+      setPayoutMsg("Amount could not be converted to valid atomic units.")
+      return
+    }
+    setRequestingPayout(true)
+    setPayoutMsg(null)
+    try {
+      const idempotencyKey = `ui-payout:${Date.now()}:${amountAtomic}`
+      const res = await fetch("/api/economy/earnings/withdrawals", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ amountAtomic, idempotencyKey }),
+        cache: "no-store",
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        error?: string
+        message?: string
+        requestId?: string
+        status?: string
+      } | null
+      if (res.status === 503 || body?.error === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
+        setPayoutMsg(
+          "PI withdrawal requests are not enabled on this deployment yet. The operator must set PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true on Pi Testnet after migrations and funded A2U readiness. No transfer was started.",
+        )
+        return
+      }
+      if (!res.ok || !body?.ok) {
+        setPayoutMsg(body?.message || body?.error || "Could not create a payout request. No transfer was started.")
+        return
+      }
+      setPayoutMsg(
+        body.message ||
+          `Payout request recorded (${body.requestId || "queued"}). This does not send Pi until the server execution worker completes a verified A2U transfer.`,
+      )
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "payout-request" } }))
+      } catch { /* */ }
+    } catch {
+      setPayoutMsg("Network error while creating payout request. No transfer was started.")
+    } finally {
+      setRequestingPayout(false)
+    }
+  }
 
   const onPreviewFee = async () => {
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
@@ -456,6 +517,22 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           >
             {quoting ? "Quoting…" : "Preview 3% fee"}
           </button>
+          <button
+            type="button"
+            onClick={() => void onRequestPayout()}
+            disabled={requestingPayout || snap.eligible !== true || snap.piWalletLinked !== true}
+            className="inline-flex items-center gap-1 rounded-full bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {requestingPayout ? "Submitting request…" : "Request PI withdrawal"}
+          </button>
+          {payoutMsg ? (
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-700" role="status">{payoutMsg}</p>
+          ) : (
+            <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+              Creates a server-side payout request only. Pi A2U transfers are server-initiated (Testnet), require operator enablement, and never invent a paid result on the client.
+            </p>
+          )}
+
         </div>
         {quoteMsg ? <p className="pb-2 text-[11px] text-slate-600">{quoteMsg}</p> : null}
       </div>

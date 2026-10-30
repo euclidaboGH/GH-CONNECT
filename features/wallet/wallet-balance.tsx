@@ -187,7 +187,7 @@ export function WalletBalanceCard({
             {piLoading ? "Loading…" : piSnapshot ? maskPi(piSnapshot.available) : "Unavailable"}
           </p>
           <p className="mt-1 text-[10px] text-violet-800/80 dark:text-violet-200/80">
-            {piLoading ? "Checking authoritative ledger" : piSnapshot ? `${maskPi(piSnapshot.withdrawable)} withdrawable · fees and eligibility apply` : piFailed ? "Could not verify PI earnings." : "No verified PI earnings snapshot."}
+            {piLoading ? "Checking authoritative ledger" : piSnapshot ? `${maskPi(piSnapshot.withdrawable)} withdrawable · fees and eligibility apply` : piFailed ? "PI ledger snapshot temporarily unavailable — see detailed earnings below." : "No verified PI earnings snapshot."}
           </p>
           {piSnapshot ? (
             <p className="mt-1 text-[10px] font-semibold text-violet-800 dark:text-violet-200">

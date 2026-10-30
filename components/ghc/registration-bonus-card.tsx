@@ -151,17 +151,9 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
     )
   }
 
+  // Avoid duplicate noisy banners — wallet/dashboard already surface ledger health.
   if (status?.error === "EARNINGS_LEDGER_UNAVAILABLE" || status?.error === "UNAVAILABLE") {
-    return (
-      <section className={`rounded-2xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900/40 dark:bg-amber-950/20 ${compact ? "mx-0" : "mx-3 mt-3"}`}>
-        <div className="flex items-start gap-2">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-          <p className="text-[12px] text-amber-900 dark:text-amber-100">
-            {status.message || "Could not load the server earnings ledger. No balances were invented."}
-          </p>
-        </div>
-      </section>
-    )
+    return null
   }
 
   const amount = status?.amountPi ?? 3
@@ -178,13 +170,15 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-bold text-foreground">Registration bonus</p>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            One-time <span className="font-semibold text-emerald-800 dark:text-emerald-300">{amount} π</span> registration bonus. Existing recipients are reconciled automatically for the remaining amount. Credited to your PI earnings ledger (withdraw to your linked Pi wallet when
-            eligible).
+            Policy total: <span className="font-semibold text-emerald-800 dark:text-emerald-300">3 π</span> one-time registration bonus.
+            {status?.legacyClaimed && !status?.claimed
+              ? " You already received 0.05 π — claim the remaining 2.95 π to complete the 3 π total."
+              : " Credited to your PI earnings ledger (withdraw to your linked Pi wallet when eligible)."}
           </p>
 
           {status?.claimed ? (
             <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-700/10 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Claimed
+              <CheckCircle2 className="h-3.5 w-3.5" /> Claimed (3 π total)
             </div>
           ) : status?.claimable ? (
             <button
@@ -194,7 +188,11 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
               className="mt-2.5 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-emerald-700 px-4 text-[12px] font-bold text-white disabled:opacity-60"
             >
               {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
-              {claiming ? (status?.legacyClaimed ? "Reconciling…" : "Claiming…") : `Claim ${amount} π`}
+              {claiming
+                ? (status?.legacyClaimed ? "Reconciling…" : "Claiming…")
+                : status?.legacyClaimed
+                  ? `Claim remaining ${amount} π`
+                  : `Claim ${amount} π`}
             </button>
           ) : (
             <p className="mt-2 text-[11px] text-muted-foreground">

@@ -489,8 +489,10 @@ export function RewardsCentreScreen({
           <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
         </div>
         <RegistrationBonusCard />
-        <UnifiedEarningsDashboard />
+        {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
+            Compact cashback summary only; full ledger + A2U request on Wallet. */}
         <PiCashbackSummary />
+        <UnifiedEarningsDashboard compact />
 
         <div className="mx-3 mt-3">
           <EconomyProgramStatus />
