@@ -1214,13 +1214,13 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id === "wallet" ? walletOpen : id === "cart" ? marketplaceOpen : id !== "create" && activeTab === id
+            const isActive = id === "wallet" ? walletOpen : id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
                 key={id}
                 type="button"
                 onPointerDown={() => {
-                  if (id === "create" || !isPrimaryTab(id)) return
+                  if (id === "cart" || id === "wallet" || !isPrimaryTab(id as any)) return
                   try {
                     window.dispatchEvent(new CustomEvent("ghc:prefetch-tab", { detail: id }))
                   } catch { /* */ }
@@ -1233,10 +1233,6 @@ export function GHConnectApp() {
                   }
                   if (id === "wallet") {
                     openWallet()
-                    return
-                  }
-                  if (id === "create") {
-                    setShowCreateHub(true)
                     return
                   }
                   if (isActive) {
@@ -1266,7 +1262,7 @@ export function GHConnectApp() {
                 />
                 <span
                   className={
-                    id === "create"
+                    (id as string) === "create"
                       ? "gh-create-fab flex h-12 w-12 -translate-y-2 items-center justify-center rounded-full text-white"
                       : `flex h-8 w-10 items-center justify-center rounded-lg transition-colors ${
                           isActive ? "bg-primary/10" : "bg-transparent"
@@ -1275,11 +1271,11 @@ export function GHConnectApp() {
                 >
                   <span className="relative inline-flex">
                     <Icon
-                      size={id === "create" ? 22 : 20}
-                      strokeWidth={id === "create" ? 2.5 : isActive ? 2.5 : 2}
+                      size={(id as string) === "create" ? 22 : 20}
+                      strokeWidth={(id as string) === "create" ? 2.5 : isActive ? 2.5 : 2}
                       fill="none"
                       aria-hidden="true"
-                      className={id === "create" ? "text-white" : undefined}
+                      className={(id as string) === "create" ? "text-white" : undefined}
                     />
                     {((id === "home" && socialAttentionCount > 0) ||
                       (id === "messages" && unreadMessageCount > 0) ||
