@@ -2,11 +2,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.217.0` (2026-10-30). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.217.1` (2026-10-30). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.217.0)
+## Current audit status (v0.217.1)
 
 - The v0.194.0 CI-hardening increment adds explicit CI visibility for RLS source coverage, SECURITY DEFINER ACL source inspection, production safety, Phase 15 payment recovery, Phase 16 payment lifecycle and Phase 7 treasury completion. These remain source-level checks, not deployed-database or provider acceptance.
 

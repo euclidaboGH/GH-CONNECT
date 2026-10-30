@@ -22,7 +22,12 @@ test('claims use privileged database-side reconciliation RPCs', /claimRegistrati
 test('never trusts client amount', /Body ignored|server-derived/.test(route))
 test('GET and POST routes exist', /export async function GET/.test(route) && /export async function POST/.test(route))
 test('claim UI on rewards', /RegistrationBonusCard/.test(read('components/ghc/rewards-centre-screen.tsx')))
-test('claim UI on wallet feature', /RegistrationBonusCard/.test(read('features/wallet/wallet-screen.tsx')))
+test('claim UI stays on rewards (not wallet)', (() => {
+  const rewards = /RegistrationBonusCard/.test(read('components/ghc/rewards-centre-screen.tsx'))
+  const walletHasCard = /RegistrationBonusCard/.test(read('features/wallet/wallet-screen.tsx'))
+  // Wallet must not host claim UI; Rewards is the sole claim surface for registration bonus.
+  return rewards && !walletHasCard
+})())
 test('flag documented in env example', /GHC_REGISTRATION_BONUS_ENABLED/.test(env))
 test('bonus fails closed unless explicitly enabled and Pi sandbox is true', /GHC_REGISTRATION_BONUS_ENABLED \?\? \"0\"/.test(mod) && /sandbox === \"true\"/.test(mod) && /GHC_REGISTRATION_BONUS_ENABLED=0/.test(env))
 test('status lookup is direct and not limited to statement pagination', /gh_earnings_registration_bonus_status/.test(ledger) && /gh_earnings_registration_bonus_status/.test(migration))
