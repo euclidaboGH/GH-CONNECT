@@ -19,6 +19,9 @@ test('Does not invent balances on failure', /No balances were invented/.test(das
 test('Wired into wallet screen', /UnifiedEarningsDashboard/.test(wallet))
 test('Wired into rewards centre', /UnifiedEarningsDashboard/.test(rewards))
 test('Ledger history with statuses', /Recent ledger/.test(dash) && /statusTone/.test(dash))
+test('Atomic ledger amounts use atomic-unit conversion for numeric and string payloads', /function atomicToDisplay/.test(dash) && /BigInt\(raw\)/.test(dash) && /amount_atomic/.test(dash))
+test('Invalid financial values never fall back to a fabricated zero', /return "Unavailable"/.test(dash) && !/return "0 π"/.test(dash))
+test('Quote requires server eligibility and linked Pi identity', /snap\?\.eligible !== true/.test(dash) && /snap\.piWalletLinked !== true/.test(dash))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 8 earnings dashboard: ${checks.length - failed}/${checks.length} passed`)

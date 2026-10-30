@@ -63,6 +63,7 @@ const steps = [
   ["check-phase5-design-system.mjs", "Phase 5 design system contracts"],
   ["check-phase10-marketplace-integrity.mjs", "Phase 10 marketplace order integrity"],
   ["check-phase12-final-release-readiness.mjs", "Phase 12 final integration and release readiness"],
+  ["check-phase7-treasury-operations.mjs", "Phase 7 treasury operations and financial exception visibility"],
 ]
 
 console.log("\n=== GreenHaven static verification (network/DB independent) ===\n")

@@ -11,8 +11,17 @@ import {
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
 /** Explicitly supported cashback revenue sources (Phase 5). */
+/**
+ * Only sources with a verified, authenticated payer + company-revenue producer
+ * are eligible today. Do not advertise planned source types as eligible: doing
+ * so would create cashback liabilities without a complete settlement/refund path.
+ */
 export const CASHBACK_SUPPORTED_SOURCES: readonly CompanyRevenueEventType[] = [
   "marketplace_fee",
+] as const
+
+/** Explicitly not eligible until their provider settlement and compensation paths are wired. */
+export const CASHBACK_PENDING_SOURCES: readonly CompanyRevenueEventType[] = [
   "membership_revenue",
   "promotion_revenue",
   "digital_service_revenue",
@@ -144,10 +153,12 @@ export function getCashbackAttributionPolicy() {
     currency: "PI",
     provider: "pi",
     supportedSources: [...CASHBACK_SUPPORTED_SOURCES],
+    pendingSources: [...CASHBACK_PENDING_SOURCES],
     rules: [
       "cashback_eligible defaults false; only trusted server integrations may set true",
       "paying_user_id required for eligible events",
-      "refund/chargeback require related eligible positive revenue event",
+      "only marketplace_fee is currently source-enabled; other categories are pending audited settlement wiring",
+      "refund/chargeback are excluded until an authenticated original-event compensation producer is deployed",
       "period close is quarterly (UTC) with 7-day reconciliation grace",
       "0.5% of eligible PI user spend; withdrawable only after quarterly entitlement + A2U path",
     ],

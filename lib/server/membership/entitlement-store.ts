@@ -305,12 +305,14 @@ export async function grantEntitlement(input: {
     return prev
   }
   const accessMonths = ACCESS_MONTHS[input.billingPeriod] || ACCESS_MONTHS.monthly
+  const isRenewal = prev.tier === input.tier && prev.active && Boolean(prev.expiresAt && prev.expiresAt > now)
+  const effectiveStartAt = isRenewal && prev.expiresAt ? prev.expiresAt : now
   const next: ServerMembershipEntitlement = {
     userId: input.userId,
     tier: input.tier,
     active: true,
-    startedAt: now,
-    expiresAt: input.billingPeriod === "comp" ? undefined : addCalendarMonths(now, accessMonths),
+    startedAt: isRenewal ? prev.startedAt : now,
+    expiresAt: input.billingPeriod === "comp" ? undefined : addCalendarMonths(effectiveStartAt, accessMonths),
     billingPeriod: input.billingPeriod,
     source: input.source,
     purchaseRef: input.purchaseRef,
@@ -320,7 +322,7 @@ export async function grantEntitlement(input: {
       ...(prev.audit || []),
       {
         at: now,
-        action: "GRANT",
+        action: isRenewal ? "RENEW" : "GRANT",
         detail: `${input.tier}/${input.billingPeriod}/${input.source}`,
       },
     ].slice(-40),

@@ -1,6 +1,6 @@
 # Phase 12 — Final integration and release readiness
 
-Release: `0.179.0` (2026-10-29)
+Release: `0.202.0` (2026-10-30)
 
 ## Delivered in v0.157.12
 
@@ -8,6 +8,10 @@ Release: `0.179.0` (2026-10-29)
 - Strengthened the Phase 12 final gate to verify release version consistency, current-baseline documentation, phase-gate registration, canonical migration inventory/classification counts, unique migration versions, and explicit operational acceptance boundaries.
 - Updated the Phase 1–12 acceptance report, project-truth record, README, package/lock/app release version, and verified migration manifest to identify the current source baseline.
 - Added a worklog that records checks run and their actual limits.
+
+## v0.183.0 PI earnings payout request foundation
+
+The source now includes a Testnet-only, feature-flagged request endpoint and an additive request/reservation migration. It is not a transfer execution path. Provider receipt verification, settlement, and safe release/recovery remain incomplete and must pass disposable PostgreSQL failure/concurrency tests and authenticated Testnet lifecycle tests before payout execution is enabled.
 
 ## Release gates
 
@@ -56,3 +60,70 @@ Marketplace Pi payment reconciliation failures are now surfaced as retryable sta
 ## v0.157.27 boundary
 
 The Testnet cashback A2U source path is implemented, but the migration is not applied and a funded Pi Testnet wallet transfer has not been verified. Do not tell testers that wallet credits are ready until the new migration is individually reviewed/applied to Testnet, Testnet A2U credentials and funding are configured, and an end-to-end transfer plus retry/reconciliation tests pass. Mainnet remains disabled.
+
+## v0.184.0 PI earnings settlement/recovery foundation
+
+Added an additive, REVIEW_REQUIRED migration for privileged settlement after exact verified Testnet receipt binding, plus cancellation/no-transaction-only reservation release. This is database lifecycle logic, not a complete provider execution worker. PostgreSQL failure-injection/concurrency, Node 24 build and full Pi Testnet lifecycle remain unverified. Mainnet remains disabled.
+
+
+## v0.187.0 Phase 4 receipt and lease fencing
+
+The latest source adds database-side JSON receipt validation and atomic lease heartbeat fencing. The route checks lease ownership immediately before provider mutations and settlement. The source test covers these invariants; it does not substitute for actual PostgreSQL concurrency/failure injection or funded Pi Testnet E2E. Production remains NOT APPROVED until supported-runtime build and operator gates pass.
+
+
+## v0.188.0 Phase 5 shared A2U coordination
+
+The general earnings A2U worker now uses the same durable Pi app-wallet sequence lease as seller and cashback payouts. The migration is review-required; validate simultaneous requests across all three domains and stale-token fencing on disposable PostgreSQL. Cashback source eligibility is restricted to verified marketplace PI fees until other sources have complete settlement and refund attribution. No live database or Pi provider action was performed.
+
+
+## v0.189.0 Phase 6 financial reconciliation
+
+Phase 6 compares PI ledger and withdrawable snapshots, validates atomic-unit values, probes cashback from its authoritative statement RPC, and surfaces health state to the wallet dashboard. It is read-only and introduces no migration. Node 24, PostgreSQL/Testnet and browser acceptance remain required; release remains NOT APPROVED for production.
+
+
+## v0.194.0 Phase 7 treasury visibility
+
+Added a read-only operator snapshot composing authoritative PI cashback reconciliation and A2U exception queues. Seller payables, general earnings reservations, bank settlements and GHC utility balances are explicitly excluded pending verified aggregate sources. Static source checks are integrated; Node 24 build and live database/Testnet/browser validation remain required.
+
+## v0.194.0 CI governance increment
+
+CI now verifies its own runtime, permissions, lockfile-install order, required security and commerce gates, and separate typecheck/lint/build steps. Marketplace integrity, cross-feature wallet reconciliation, and expanded request-boundary checks are explicit workflow steps. External acceptance remains outstanding.
+
+
+## v0.195.0 marketplace payment evidence binding
+
+Phase 18 now requires marketplace PI intents to be server-authoritative and bound to the PI provider, PI currency, marketplace purpose, exact order reference, authenticated buyer, completed status and durable order amount. Client-supplied payment IDs and transaction hashes are ignored as evidence. This source-level hardening does not establish successful provider checkout; authenticated Pi Testnet tests remain required.
+
+
+## v0.196.0 marketplace durable RPC transport hardening
+
+The marketplace order-store and GHC spend PostgREST calls now use bounded 10-second timeouts and explicit no-store behavior. Non-empty malformed JSON responses fail closed rather than being treated as successful mutations; empty PostgREST void responses remain supported. Phase 19 source-contract checks run in prebuild, static verification and CI. This remains source-only until disposable PostgreSQL, supported Node 24 runtime, and authenticated Testnet acceptance are complete.
+
+
+## v0.198.0 Phase 20 marketplace seller-net foundation
+
+The source adds immutable per-order proceeds snapshots and seller-net-based payout eligibility. The migration is REVIEW_REQUIRED and unapplied; confirm the 500-bps policy, reconcile historical gross allocations, and pass disposable PostgreSQL concurrency plus Pi/GHC Testnet evidence before activation.
+
+
+## v0.198.0 Phase 21 marketplace lifecycle audit journal
+
+Added immutable database-authored marketplace lifecycle events. The migration remains REVIEW_REQUIRED and unapplied; static checks do not prove PostgreSQL or Testnet acceptance.
+
+
+## v0.200.0 Phase 22 marketplace adjustments and payout fencing
+
+Added immutable order adjustment records for refund/chargeback/dispute accounting, idempotent service-role intake, and seller-net payout reservation after adjustments with shared seller/currency locking. Migration `20261030010011_phase22_marketplace_adjustments_and_payout_fencing.sql` remains REVIEW_REQUIRED and unapplied. Provider refund execution, operator dispute adjudication, historical payout remediation, automatic membership renewal charging, and PostgreSQL/Testnet acceptance remain outstanding. See `docs/UPGRADE-WORKLOG-0.200.0.md`.
+
+
+## v0.200.0 Phase 23 treasury and community reconciliation
+
+The treasury report wraps the Phase 7 base report and adds marketplace gross, commission, seller net, adjustments, outstanding payout allocations, paid settlements, missing proceeds snapshots, and legacy allocation discrepancy counts. Community membership events are append-only and link to canonical payment intent IDs; completed payment reconciliation is read-only and currency-separated. Migration `20261030010012_phase23_treasury_community_reconciliation.sql` remains REVIEW_REQUIRED and unapplied. No historical payout or membership rows are rewritten. PostgreSQL concurrency validation and Testnet payment/renewal acceptance remain outstanding. See `docs/UPGRADE-WORKLOG-0.200.0.md`.
+
+
+## v0.202.0 Phase 25 operational workflow foundations
+
+Phase 25 remains review-required and unapplied. Static contracts do not replace PostgreSQL execution, provider verification, concurrency tests, or Testnet acceptance.
+
+## v0.201.0 Phase 24 financial exception detail
+
+Adds read-only per-allocation payout reconciliation details and community payment-to-entitlement exception details. It does not perform automatic historical corrections, provider refunds, membership grants or renewals. Migration remains REVIEW_REQUIRED; PostgreSQL concurrency and authenticated Testnet acceptance remain outstanding.

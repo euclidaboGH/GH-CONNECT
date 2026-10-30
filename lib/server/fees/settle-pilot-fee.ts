@@ -93,6 +93,18 @@ async function settlePi(input: SettlePilotFeeInput): Promise<SettlePilotFeeResul
   if (intent.userId !== input.userId) {
     return { ok: false, error: "FEE_PAYMENT_NOT_OWNED" }
   }
+  // A client-supplied intent ID is only a lookup key, never proof. Require the
+  // authoritative server record to identify the Pi provider and PI currency.
+  if (intent.provider !== "pi") {
+    return { ok: false, error: "FEE_PAYMENT_PROVIDER_MISMATCH" }
+  }
+  if (String(intent.currency || "").toUpperCase() !== "PI") {
+    return { ok: false, error: "FEE_CURRENCY_MISMATCH" }
+  }
+  if (input.sourceEvent === "COMMUNITY_CREATE_FEE" &&
+    (intent.purpose !== "other" || String(intent.metadata?.kind || "") !== "community_create_fee")) {
+    return { ok: false, error: "FEE_PAYMENT_PURPOSE_MISMATCH" }
+  }
   if (String(intent.status || "").toUpperCase() !== "COMPLETED") {
     return { ok: false, error: "FEE_PAYMENT_NOT_COMPLETED" }
   }
@@ -102,20 +114,15 @@ async function settlePi(input: SettlePilotFeeInput): Promise<SettlePilotFeeResul
     return { ok: false, error: "FEE_AMOUNT_MISMATCH" }
   }
 
-  const cur = String(intent.currency || intent.metadata?.currency || "PI").toUpperCase()
-  if (cur !== "PI" && cur !== "π") {
-    return { ok: false, error: "FEE_CURRENCY_MISMATCH" }
-  }
-
-  const refId = String(intent.referenceId || intent.metadata?.referenceId || "")
+  const refId = String(intent.referenceId || "")
   const metaBind =
     input.bindKey && intent.metadata
       ? String((intent.metadata as Record<string, unknown>)[input.bindKey] || "")
       : ""
-  if (input.referenceId && refId && refId !== input.referenceId) {
-    if (metaBind !== (input.bindValue || "")) {
-      return { ok: false, error: "FEE_REFERENCE_MISMATCH" }
-    }
+  const referenceMatches = Boolean(input.referenceId && refId === input.referenceId)
+  const metadataBindingMatches = Boolean(input.bindKey && input.bindValue && metaBind === input.bindValue)
+  if (!referenceMatches && !metadataBindingMatches) {
+    return { ok: false, error: "FEE_REFERENCE_MISMATCH" }
   }
 
   return { ok: true, method: "pi", intentId: intent.id }

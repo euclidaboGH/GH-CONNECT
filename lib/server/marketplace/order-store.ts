@@ -87,18 +87,23 @@ async function rpcJson(fn: string, body: Record<string, unknown>): Promise<unkno
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Cache-Control": "no-store",
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify(body),
     })
     if (!res.ok) return null
     const text = await res.text()
-    if (!text) return { ok: true }
+    // PostgREST void RPCs may legitimately return an empty body. A non-empty,
+    // malformed body is never evidence that a financial/order mutation succeeded.
+    if (!text.trim()) return { ok: true }
     try {
       return JSON.parse(text)
     } catch {
-      return { ok: true }
+      return null
     }
   } catch {
     return null

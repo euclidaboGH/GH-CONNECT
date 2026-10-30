@@ -107,9 +107,12 @@ async function rpcGhcSpend(input: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           apikey: env.supabaseServiceRoleKey,
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           p_user_id: input.userId,
           p_amount: input.amount,
@@ -367,8 +370,8 @@ export async function POST(
 
   if (method === "pi") {
     const intentId = String(body.intentId || "").trim()
-    const paymentId = String(body.paymentId || "").trim()
-    const txid = String(body.txid || "").trim()
+    // Provider identifiers supplied by the browser are untrusted metadata. The
+    // completed server-side intent is the only accepted source of payment IDs.
 
     if (!intentId) {
       return NextResponse.json(
@@ -384,6 +387,8 @@ export async function POST(
     // A completed intent is not sufficient by itself: bind it to this marketplace
     // order so one same-user/same-amount intent cannot pay for multiple orders.
     if (
+      intent.provider !== "pi" ||
+      intent.currency !== "PI" ||
       intent.purpose !== "marketplace" ||
       ![order.id, `market_order_${order.id}`].includes(String(intent.referenceId || ""))
     ) {
@@ -398,7 +403,8 @@ export async function POST(
         { status: 409 }
       )
     }
-    if (Math.abs(intent.amount - order.totalAmount) > 0.001 && order.currency === "PI") {
+    if (orderCurrency !== "PI" || !Number.isFinite(intent.amount) ||
+      Math.abs(intent.amount - order.totalAmount) > 0.001) {
       return NextResponse.json(
         {
           ok: false,
@@ -423,8 +429,8 @@ export async function POST(
     order.paymentMethod = "pi"
     order.paymentStatus = "verified"
     order.paymentIntentId = intentId
-    order.paymentId = intent.providerPaymentId || paymentId
-    order.txid = intent.txid || txid
+    order.paymentId = intent.providerPaymentId || undefined
+    order.txid = intent.txid || undefined
     order.updatedAt = Date.now()
     order.audit = [
       ...(order.audit || []),

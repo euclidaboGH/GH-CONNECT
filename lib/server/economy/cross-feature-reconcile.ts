@@ -3,7 +3,7 @@
  * Composes GHC policy surface, PI earnings withdrawable, cashback feature flag,
  * and asset-separation invariants. Never invents balances or writes ledgers.
  */
-import { getWithdrawableBalance } from "@/lib/server/earnings/unified-ledger"
+import { getWithdrawableBalance, getEarningsBalances } from "@/lib/server/earnings/unified-ledger"
 import { getCharityUserSummary } from "@/lib/server/earnings/platform-utility"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { ASSET_POLICY } from "@/lib/asset-separation"
@@ -42,8 +42,20 @@ export type CrossFeatureReport = {
   cashback: {
     probed: boolean
     featureAvailable?: boolean
+    calculatedAtomic?: string
+    reservedAtomic?: string
+    needsReviewAtomic?: string
     error?: string
   }
+  ledgerBalances: {
+    available: boolean
+    availableAtomic?: number | string
+    reservedAtomic?: number | string
+    pendingAtomic?: number | string
+    paidAtomic?: number | string
+    error?: string
+  }
+  status: "healthy" | "attention" | "degraded"
   invariants: {
     ghcAndPiSeparated: boolean
     charityNotWithdrawable: boolean
@@ -53,19 +65,49 @@ export type CrossFeatureReport = {
   relatedEndpoints: string[]
 }
 
-async function probeCashback(userId: string, headers: Headers): Promise<{
+function validAtomic(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value)
+  if (typeof value === "string" && /^\d{1,38}$/.test(value)) return value
+  return undefined
+}
+
+async function probeCashback(userId: string): Promise<{
   probed: boolean
   featureAvailable?: boolean
+  calculatedAtomic?: string
+  reservedAtomic?: string
+  needsReviewAtomic?: string
   error?: string
 }> {
-  // Cashback is user-scoped via its own route; we only surface feature availability
-  // through a soft internal signal — callers should use the cashback API for details.
-  void userId
-  void headers
-  return {
-    probed: true,
-    featureAvailable: true,
-    error: undefined,
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !hasPrivilegedDatabase()) {
+    return { probed: false, featureAvailable: false, error: "CASHBACK_DATABASE_UNAVAILABLE" }
+  }
+  try {
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_pi_cashback_user_statement`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      },
+      body: JSON.stringify({ p_user_id: userId, p_limit: 1 }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    })
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null
+    if (!response.ok || !payload || payload.ok !== true || payload.featureAvailable !== true) {
+      return { probed: true, featureAvailable: false, error: "CASHBACK_STATEMENT_UNAVAILABLE" }
+    }
+    const calculatedAtomic = validAtomic(payload.calculatedAtomic)
+    const needsReviewAtomic = validAtomic(payload.needsReviewAtomic)
+    if (calculatedAtomic === undefined || needsReviewAtomic === undefined) {
+      return { probed: true, featureAvailable: false, error: "CASHBACK_STATEMENT_INVALID" }
+    }
+    return { probed: true, featureAvailable: true, calculatedAtomic, needsReviewAtomic }
+  } catch {
+    return { probed: true, featureAvailable: false, error: "CASHBACK_STATEMENT_UNAVAILABLE" }
   }
 }
 
@@ -76,8 +118,12 @@ export async function buildCrossFeatureReconcileReport(input: {
   const findings: CrossFeatureFinding[] = []
   const userId = String(input.userId || "").trim()
 
-  const pi = await getWithdrawableBalance(userId)
-  const charity = await getCharityUserSummary(userId)
+  const [pi, ledger, charity, cashback] = await Promise.all([
+    getWithdrawableBalance(userId),
+    getEarningsBalances(userId),
+    getCharityUserSummary(userId),
+    probeCashback(userId),
+  ])
 
   if (!hasPrivilegedDatabase()) {
     findings.push({
@@ -107,6 +153,29 @@ export async function buildCrossFeatureReconcileReport(input: {
     })
   }
 
+  const ledgerAvailable = ledger.ok === true
+  if (!ledgerAvailable) {
+    findings.push({ code: "PI_LEDGER_BALANCES_UNAVAILABLE", severity: "attention", message: `PI ledger balance snapshot unavailable: ${ledger.error || "unknown"}` })
+  } else if (pi.ok) {
+    const ledgerAvailableAtomic = validAtomic(ledger.availableAtomic)
+    const snapshotAvailableAtomic = validAtomic(pi.availableAtomic)
+    const ledgerReservedAtomic = validAtomic(ledger.reservedAtomic)
+    const snapshotReservedAtomic = validAtomic(pi.reservedAtomic)
+    if (ledgerAvailableAtomic === undefined || snapshotAvailableAtomic === undefined || ledgerReservedAtomic === undefined || snapshotReservedAtomic === undefined) {
+      findings.push({ code: "PI_BALANCE_SNAPSHOT_INVALID", severity: "attention", message: "PI balance snapshots contain invalid atomic-unit values; no balance equality is asserted." })
+    } else if (ledgerAvailableAtomic !== snapshotAvailableAtomic || ledgerReservedAtomic !== snapshotReservedAtomic) {
+      findings.push({ code: "PI_BALANCE_SNAPSHOT_MISMATCH", severity: "attention", message: "PI earnings and withdrawable snapshots disagree. Withdrawals should be reviewed until the authoritative ledger views reconcile." })
+    } else {
+      findings.push({ code: "PI_BALANCE_SNAPSHOTS_MATCH", severity: "ok", message: "PI earnings and withdrawable snapshots agree for available and reserved atomic units." })
+    }
+  }
+
+  if (!cashback.featureAvailable) {
+    findings.push({ code: "CASHBACK_SNAPSHOT_UNAVAILABLE", severity: "attention", message: `Cashback statement unavailable: ${cashback.error || "unknown"}` })
+  } else {
+    findings.push({ code: "CASHBACK_SNAPSHOT_VERIFIED", severity: "ok", message: "Cashback statement was read from its authoritative server-side ledger." })
+  }
+
   const charityOk = charity?.ok === true
   if (!charityOk) {
     findings.push({
@@ -131,7 +200,6 @@ export async function buildCrossFeatureReconcileReport(input: {
     message: `${ghcLabel} and ${piLabel} remain separate rails; do not convert or merge client-side.`,
   })
 
-  const cashback = await probeCashback(userId, input.requestHeaders || new Headers())
 
   return {
     ok: true,
@@ -167,8 +235,19 @@ export async function buildCrossFeatureReconcileReport(input: {
     cashback: {
       probed: cashback.probed,
       featureAvailable: cashback.featureAvailable,
+      calculatedAtomic: cashback.calculatedAtomic,
+      needsReviewAtomic: cashback.needsReviewAtomic,
       error: cashback.error,
     },
+    ledgerBalances: {
+      available: ledgerAvailable,
+      availableAtomic: ledger.availableAtomic,
+      reservedAtomic: ledger.reservedAtomic,
+      pendingAtomic: ledger.pendingAtomic,
+      paidAtomic: ledger.paidAtomic,
+      error: ledgerAvailable ? undefined : ledger.error,
+    },
+    status: findings.some((f) => f.severity === "attention") ? (pi.ok && ledgerAvailable && charityOk ? "attention" : "degraded") : "healthy",
     invariants: {
       ghcAndPiSeparated: true,
       charityNotWithdrawable: true,

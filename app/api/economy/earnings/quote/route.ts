@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   quoteWithdrawal,
   piToAtomic,
@@ -24,18 +25,21 @@ export async function POST(request: Request) {
   const rate = checkRateLimit(`earnings-quote:${auth.userId}`, 30, 60_000)
   if (!rate.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
 
-  let body: { amountPi?: number; amountAtomic?: number } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    return reply({ ok: false, error: "INVALID_JSON" }, 400)
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    return reply(
+      { ok: false, error: parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_JSON" },
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value as { amountPi?: unknown; amountAtomic?: unknown }
 
   let grossAtomic = 0
-  if (typeof body.amountAtomic === "number" && Number.isInteger(body.amountAtomic) && body.amountAtomic > 0) {
+  if (typeof body.amountAtomic === "number" && Number.isSafeInteger(body.amountAtomic) && body.amountAtomic > 0) {
     grossAtomic = body.amountAtomic
-  } else if (typeof body.amountPi === "number" && body.amountPi > 0) {
+  } else if (typeof body.amountPi === "number" && Number.isFinite(body.amountPi) && body.amountPi > 0) {
     grossAtomic = floorPiToAtomic(body.amountPi)
+    if (!Number.isSafeInteger(grossAtomic) || grossAtomic <= 0) grossAtomic = 0
   } else {
     return reply({ ok: false, error: "AMOUNT_REQUIRED" }, 400)
   }

@@ -67,7 +67,7 @@ const missing = expectedRequired.filter(n => !tables.has(n))
 const proposalAccidentallyExecutable = proposalOnly.filter(n => tables.has(n))
 
 if (files.length < 150) throw new Error(`Expected at least 150 clean migrations, found ${files.length}`)
-if (tables.size !== 125) throw new Error(`Expected 125 executable GreenHaven tables in source, found ${tables.size}`)
+if (tables.size !== 136) throw new Error(`Expected 136 executable GreenHaven tables in source, found ${tables.size}`)
 if (missing.length) throw new Error(`Missing required executable GreenHaven tables: ${missing.join(', ')}`)
 if (proposalAccidentallyExecutable.length) throw new Error(`Proposal-only tables became executable: ${proposalAccidentallyExecutable.join(', ')}`)
 

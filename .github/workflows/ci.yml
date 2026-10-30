@@ -28,12 +28,38 @@ jobs:
         run: npm ci --legacy-peer-deps --no-audit
       - name: JSX safety
         run: npm run check:jsx
+      - name: Bounded JSON runtime regression tests
+        run: npm run test:bounded-json-runtime
+      - name: Phase 17 CI governance contract
+        run: npm run check:phase17-ci-governance
+      - name: Phase 18 marketplace payment evidence binding
+        run: npm run check:phase18-marketplace-payment-binding
+      - name: Phase 19 marketplace RPC transport hardening
+        run: npm run check:phase19-marketplace-rpc-transport
+      - name: Marketplace integrity source contracts
+        run: node scripts/check-phase10-marketplace-integrity.mjs
+      - name: Cross-feature wallet reconciliation source contracts
+        run: node scripts/check-phase11-wallet-cross-feature-reconciliation.mjs
+      - name: Request boundary follow-up source contracts
+        run: node scripts/check-phase1-12-request-boundary-followup.mjs
       - name: Release hygiene
         run: npm run check:release-hygiene
       - name: Deployment security headers
         run: npm run check:security-headers
       - name: API CSRF contract
         run: npm run check:api-csrf
+      - name: Database RLS source coverage
+        run: node scripts/check-database-rls-coverage.mjs
+      - name: SECURITY DEFINER ACL source audit
+        run: node scripts/check-security-definer-acl.mjs
+      - name: Production safety scan
+        run: npm run test:safety
+      - name: Phase 15 payment recovery contracts
+        run: npm run check:phase15-payment-recovery
+      - name: Phase 16 payment lifecycle contracts
+        run: npm run check:phase16-payment-timeline
+      - name: Phase 7 treasury completion contracts
+        run: node scripts/check-phase7-treasury-completion.mjs
       - name: Project truth
         run: npm run check:project-truth
       - name: Pi backend lock

@@ -94,7 +94,9 @@ Referral attribution uses the shared server-side `ghc_public_identities` resolve
 
 # GreenHaven project truth and release authority
 
-**Current source version:** `0.179.0`
+**Current source version:** `0.203.0`
+
+Phase 3 unified wallet continuation: PI earnings refresh is time-bounded and sequenced so stale overlapping responses cannot overwrite the latest snapshot. Payout eligibility and linked Pi identity status come from the server response. Static checks do not establish live Testnet behavior; supported-runtime build, browser acceptance, database reconciliation, and payout lifecycle verification remain release gates. See `docs/PHASE3_UNIFIED_WALLET_CARD_0.182.0.md`.
 
 This document describes the checked-in archive only. It does not establish that any remote deployment, database migration, payment provider, Pi Platform integration, or account-security flow is live or verified.
 
@@ -191,3 +193,79 @@ The marketplace Pi payment route now treats verified payment state and revenue-j
 ## v0.157.27 Pi cashback A2U Testnet payout source
 
 The code now includes `app/api/economy/rewards/pi-cashback/claim/route.ts` and the review-required migration `20261029010004_pi_cashback_testnet_a2u_payouts.sql`. This is a distinct cashback payout ledger, not a reuse of seller payout rows. It shares the global A2U sequence lease, binds a single finalized entitlement to a recipient and provider payment, and only marks a payout paid after verified Pi Testnet transaction evidence. The UI remains gated by explicit Testnet flags and server-side credentials. This does not authorize Mainnet, guarantee wallet funding, or prove a real transfer until the migration is applied to a reconciled Testnet database and a funded-wallet end-to-end test succeeds.
+
+
+## PI earnings payout request foundation — 0.184.0
+
+A dedicated additive request/reservation migration and authenticated server request endpoint have been added. The endpoint is fail-closed unless `PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true` and `PI_NETWORK=testnet`; it creates a gross reservation only and explicitly reports `transferSubmitted=false`. Provider execution, independently verified receipt handling, settlement and recovery are not implemented/enabled in this release. Do not enable payout execution or Mainnet.
+
+
+## Phase 4 payout settlement/recovery — 0.184.0
+
+Added `20261030010003_pi_earnings_payout_settlement_recovery.sql`: privileged settlement requires a provider-verified Testnet payment bound to request recipient and exact net amount; it settles the gross reservation atomically with the payout request status. Reservation release requires provider-confirmed cancellation and no transaction. RPCs are service-role-only. Provider worker, database concurrency/failure-injection execution, Node 24 build, and full Testnet E2E remain release blockers.
+
+
+Phase 4 receipt and lease fencing (v0.189.0): provider-side mutations require a fresh worker lease check; lease heartbeat validates and locks the request and global lane in one transaction; PostgreSQL settlement/release RPCs validate the actual JSON receipt identity, metadata, network, recipient, amount, transaction verification and completion or cancellation evidence. These checks are not a substitute for live Pi Testnet and PostgreSQL concurrency testing. Mainnet remains disabled.
+
+
+Phase 5 shared Pi A2U coordination (v0.189.0): the general earnings worker now acquires the same durable `gh_pi_a2u_sequence_lease` used by seller and cashback payout domains, namespaced as `earnings:<request UUID>`. Begin, heartbeat, provider binding and release all fence against the shared token/request/expiry. Cashback source reporting is fail-closed to marketplace PI commission only; membership, promotions, digital services, creator tips and compensation events remain pending until each producer has verified payer, net company revenue, refund linkage and reconciliation coverage. Migration `20261030010007_pi_a2u_shared_sequence_lane.sql` is REVIEW_REQUIRED and unapplied. Validate mutual exclusion and lock ordering on disposable PostgreSQL before target application.
+
+
+Phase 6 financial reconciliation (v0.189.0): the authenticated read-only cross-feature report compares PI earnings ledger balances with the withdrawable snapshot using validated atomic units, probes cashback from its authoritative statement RPC (fail-closed), and exposes healthy/attention/degraded state to the wallet dashboard. Charity remains segregated and PI/GHC assets remain separate. No ledger writes or database migrations were introduced. Runtime correctness still requires Testnet database and browser acceptance checks.
+
+
+## Phase 7 — Financial operations and treasury visibility (0.191.0)
+
+Added the operator-only read-only endpoint `GET /api/admin/treasury/summary`. It defaults to the current UTC quarter, accepts only a bounded reporting window, and combines the authoritative cashback period reconciliation with the existing A2U open-review and stuck-job queues. It returns explicit `healthy`, `attention`, or `degraded` status and states which domains are not yet covered. PI and GHC remain separate; missing seller-payable, general-earnings, bank-settlement, or GHC utility data is labelled `not_included`, never represented as zero. No payout, ledger, entitlement, or reservation mutation and no database migration were added.
+
+The endpoint requires a 32-byte-minimum operator key and uses timing-safe comparison. Source checks cover access control, UTC window bounds, evidence sources, fail-closed status, asset separation and read-only behavior. This is an operator visibility foundation, not a complete treasury ledger or production financial close. PostgreSQL/Testnet and Node.js 24 build/typecheck/lint/browser validation remain outstanding.
+
+## Phase 7 — Treasury reporting and operator case history (0.191.0)
+- The treasury report reads existing authoritative revenue, seller payout, PI earnings payout, cashback entitlement/A2U, creator-tip settlement, and signed GHC transaction-ledger sources through a service-role-only aggregate RPC.
+- Revenue is grouped by source currency. Seller payout requests are grouped by PI/GHC. PI earnings expose gross, fee, and net amounts. Cashback distinguishes calculated, needs-review, reserved, paid, and outstanding amounts. Creator-tip payable is not represented as paid.
+- Operator case records and append-only case events retain investigation notes and status changes without mutating financial source records.
+- `/admin/treasury` is a protected operator dashboard; APIs require a 32-byte-minimum operator key and return no-store responses.
+- Migration `20261030010008_phase7_treasury_reporting_and_case_history.sql` is REVIEW_REQUIRED and unapplied. Its SQL, concurrency, grants, and aggregate semantics require disposable PostgreSQL validation before Testnet application.
+- This is an operational reconciliation view, not a fully balanced double-entry balance sheet: seller available balance by seller, complete marketplace commission derivation, GHC wallet supply/liability, external bank settlements, and cross-period payout funding still require source-specific audited contracts.
+
+
+## CI hardening (0.194.0)
+
+The source-integrity workflow now exposes database RLS coverage, SECURITY DEFINER ACL source inspection, production safety scanning, Phase 15 payment recovery, Phase 16 payment timeline, and Phase 7 treasury completion as named CI steps. These are source-level gates; they do not assert deployed database state or provider E2E acceptance.
+
+
+## CI request-body regression coverage (0.194.0)
+
+The primary CI workflow executes `npm run test:bounded-json-runtime` after JSX safety. The suite exercises nine parser boundaries, including actual streamed-byte enforcement, malformed and non-object JSON, invalid UTF-8, and bodyless requests. This is a CI/source-level gate, not a substitute for live API integration tests.
+
+## CI governance and commerce regression visibility (0.194.0)
+
+The CI workflow includes a source-only governance contract and separately reports marketplace order integrity, cross-feature wallet reconciliation, and request-boundary follow-up checks. CI continues to use Node 24.15.0, lockfile-based installation, read-only repository permissions, and distinct typecheck/lint/build gates. These source checks do not prove live database state, Pi provider behavior, or Testnet acceptance.
+
+
+## Marketplace payment evidence binding (0.197.0)
+
+The marketplace Pi checkout route validates provider=`pi`, currency=`PI`, purpose=`marketplace`, order-scoped reference, and a finite amount matching the durable order total before it confirms the order. Client-supplied payment IDs and transaction hashes are not accepted as evidence; identifiers are copied only from the server-side payment intent. The source-contract test is not a provider integration test; authenticated Pi Testnet acceptance remains required.
+
+## Marketplace lifecycle event journal (0.198.0)
+
+`gh_marketplace_order_events` is an additive, append-only audit projection of lifecycle transitions on canonical marketplace orders. It records payment, delivery, escrow, dispute and completion state changes. It is not an independent balance or payment authority, and it does not move funds. The migration remains REVIEW_REQUIRED and unapplied pending disposable PostgreSQL and Testnet validation.
+
+
+## Marketplace financial adjustments (0.199.0)
+
+Phase 22 adds an append-only, service-role-only order adjustment journal for verified refund, chargeback and dispute-related seller-net reductions, plus a payout reservation replacement that reserves adjusted seller net under a shared seller/currency lock. Migration `20261030010011_phase22_marketplace_adjustments_and_payout_fencing.sql` is REVIEW_REQUIRED and unapplied. The RPC records accounting evidence only; it does not execute provider refunds or external settlements. Historical payout allocations and treasury report integration remain open. See `docs/UPGRADE-WORKLOG-0.199.0.md`.
+
+
+## Treasury and community reconciliation (0.200.0)
+
+Phase 23 extends the existing read-only treasury RPC with marketplace verified gross, platform commission, seller net, immutable gross/net adjustments, payout reservations, paid settlements, and historical allocation discrepancy counts. It flags missing proceeds snapshots and legacy gross allocations without rewriting them. Community membership entitlement changes are journaled append-only and linked to payment-intent IDs; a read-only reconciliation RPC lists completed membership intents without a matching entitlement. Expiry counts are evaluated at report time; this migration does not silently grant, renew, revoke, or rewrite membership. Migration `20261030010012_phase23_treasury_community_reconciliation.sql` is REVIEW_REQUIRED and unapplied. Disposable PostgreSQL execution and concurrency testing remain required.
+
+
+## Operational workflow foundations (0.202.0)
+
+Phase 25 adds provider-refund outcome recording, dispute decision evidence, payout-correction approval evidence, and a transactional membership renewal RPC. These are workflow foundations only: provider execution, complete dispute/appeal APIs, approved historical allocation corrections, and live Testnet/database acceptance remain outstanding. Migration `20261030010014_phase25_operational_financial_workflows.sql` is REVIEW_REQUIRED and unapplied.
+
+## Financial exception detail (0.201.0)
+
+Phase 24 adds bounded, service-role-only read-only RPCs for detailed payout-allocation discrepancies and membership payment-to-entitlement exceptions. They do not mutate historical payouts, grant/renew membership, or establish provider settlement proof. Migration `20261030010013_phase24_financial_exception_detail.sql` is REVIEW_REQUIRED and unapplied.

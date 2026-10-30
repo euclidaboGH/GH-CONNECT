@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.179.0
+project_version=0.203.0
 manifest_format_version=1
-canonical_migrations=153
-classification_required=98
+canonical_migrations=168
+classification_required=109
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=52
+classification_review_required=56
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -166,12 +166,27 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=2650 path=supabase/migrations/20261029010002_pi_cashback_user_statement_rpc.sql
 [REVIEW_REQUIRED] size=2537 path=supabase/migrations/20261029010003_pi_cashback_period_reconciliation_grace.sql
 [REVIEW_REQUIRED] size=12745 path=supabase/migrations/20261029010004_pi_cashback_testnet_a2u_payouts.sql
-[REVIEW_REQUIRED] size=10564 path=supabase/migrations/20261029010005_pi_identity_wallet_authorization.sql
-[REVIEW_REQUIRED] size=14800 path=supabase/migrations/20261029010006_gh_unified_earnings_ledger.sql
-[REVIEW_REQUIRED] size=5932 path=supabase/migrations/20261029010007_gh_earnings_reward_adapters.sql
-[REVIEW_REQUIRED] size=11810 path=supabase/migrations/20261029010008_pi_cashback_phase5_attribution_reconcile.sql
-[REVIEW_REQUIRED] size=8847 path=supabase/migrations/20261029010009_pi_a2u_shared_orchestration.sql
-[REVIEW_REQUIRED] size=11894 path=supabase/migrations/20261029010010_gh_earnings_available_balance_phase6.sql
-[REVIEW_REQUIRED] size=8117 path=supabase/migrations/20261029010011_gh_earnings_withdrawal_fee_3pct.sql
-[REVIEW_REQUIRED] size=11655 path=supabase/migrations/20261029010012_gh_charity_utility_accounting.sql
-[REVIEW_REQUIRED] size=11719 path=supabase/migrations/20261029010013_pi_cashback_quarterly_0_5pct.sql
+[REQUIRED] size=10564 path=supabase/migrations/20261029010005_pi_identity_wallet_authorization.sql
+[REQUIRED] size=14800 path=supabase/migrations/20261029010006_gh_unified_earnings_ledger.sql
+[REQUIRED] size=5932 path=supabase/migrations/20261029010007_gh_earnings_reward_adapters.sql
+[REQUIRED] size=11810 path=supabase/migrations/20261029010008_pi_cashback_phase5_attribution_reconcile.sql
+[REQUIRED] size=8847 path=supabase/migrations/20261029010009_pi_a2u_shared_orchestration.sql
+[REQUIRED] size=11894 path=supabase/migrations/20261029010010_gh_earnings_available_balance_phase6.sql
+[REQUIRED] size=8117 path=supabase/migrations/20261029010011_gh_earnings_withdrawal_fee_3pct.sql
+[REQUIRED] size=11655 path=supabase/migrations/20261029010012_gh_charity_utility_accounting.sql
+[REQUIRED] size=11719 path=supabase/migrations/20261029010013_pi_cashback_quarterly_0_5pct.sql
+[REVIEW_REQUIRED] size=7525 path=supabase/migrations/20261030010001_registration_bonus_v2_reconciliation.sql
+[REVIEW_REQUIRED] size=8286 path=supabase/migrations/20261030010002_pi_earnings_payout_requests.sql
+[REVIEW_REQUIRED] size=6046 path=supabase/migrations/20261030010003_pi_earnings_payout_settlement_recovery.sql
+[REQUIRED] size=6804 path=supabase/migrations/20261030010004_pi_earnings_payout_execution_worker.sql
+[REQUIRED] size=3511 path=supabase/migrations/20261030010005_pi_earnings_payout_worker_lease_heartbeat.sql
+[REVIEW_REQUIRED] size=9558 path=supabase/migrations/20261030010006_pi_earnings_receipt_and_lease_fencing.sql
+[REVIEW_REQUIRED] size=8923 path=supabase/migrations/20261030010007_pi_a2u_shared_sequence_lane.sql
+[REVIEW_REQUIRED] size=20189 path=supabase/migrations/20261030010008_phase7_treasury_reporting_and_case_history.sql
+[REVIEW_REQUIRED] size=9693 path=supabase/migrations/20261030010009_phase20_marketplace_net_proceeds.sql
+[REVIEW_REQUIRED] size=5504 path=supabase/migrations/20261030010010_phase21_marketplace_case_event_journal.sql
+[REVIEW_REQUIRED] size=13742 path=supabase/migrations/20261030010011_phase22_marketplace_adjustments_and_payout_fencing.sql
+[REVIEW_REQUIRED] size=16869 path=supabase/migrations/20261030010012_phase23_treasury_community_reconciliation.sql
+[REVIEW_REQUIRED] size=5262 path=supabase/migrations/20261030010013_phase24_financial_exception_detail.sql
+[REVIEW_REQUIRED] size=15481 path=supabase/migrations/20261030010014_phase25_operational_financial_workflows.sql
+[REVIEW_REQUIRED] size=14936 path=supabase/migrations/20261030010015_phase26_operational_execution_paths.sql

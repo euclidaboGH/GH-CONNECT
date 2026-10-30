@@ -45,6 +45,52 @@ async function rpc<T extends Record<string, unknown>>(
   }
 }
 
+/** Direct registration-bonus status lookup; does not depend on a paginated statement. */
+export async function getRegistrationBonusPolicyStatus(userId: string): Promise<{
+  ok: boolean
+  error?: string
+  legacyClaimed?: boolean
+  claimed?: boolean
+  claimable?: boolean
+  amountAtomic?: number
+  amountPi?: number
+  uniqueRef?: string
+  message?: string
+}> {
+  const result = await rpc<{
+    ok?: boolean; error?: string; legacyClaimed?: boolean; claimed?: boolean
+    claimable?: boolean; amountAtomic?: number; amountPi?: number
+    uniqueRef?: string; message?: string
+  }>('gh_earnings_registration_bonus_status', { p_user_id: String(userId || '').trim() })
+  if (!result) return { ok: false, error: 'EARNINGS_LEDGER_UNAVAILABLE' }
+  if (result.ok !== true) return { ok: false, error: String(result.error || 'REGISTRATION_BONUS_STATUS_FAILED') }
+  return { ...result, ok: true }
+}
+
+/** Atomic, serialized, idempotent registration-bonus claim/reconciliation. */
+export async function claimRegistrationBonusPolicy(userId: string): Promise<{
+  ok: boolean
+  error?: string
+  duplicate?: boolean
+  entryId?: string
+  legacyClaimed?: boolean
+  claimed?: boolean
+  claimable?: boolean
+  amountAtomic?: number
+  amountPi?: number
+  uniqueRef?: string
+  message?: string
+}> {
+  const result = await rpc<{
+    ok?: boolean; error?: string; duplicate?: boolean; entryId?: string
+    legacyClaimed?: boolean; claimed?: boolean; claimable?: boolean
+    amountAtomic?: number; amountPi?: number; uniqueRef?: string; message?: string
+  }>('gh_earnings_registration_bonus_claim', { p_user_id: String(userId || '').trim() })
+  if (!result) return { ok: false, error: 'EARNINGS_LEDGER_UNAVAILABLE' }
+  if (result.ok !== true) return { ok: false, error: String(result.error || 'REGISTRATION_BONUS_CLAIM_FAILED') }
+  return { ...result, ok: true }
+}
+
 export type EarningsBalances = {
   ok: boolean
   error?: string
@@ -252,6 +298,43 @@ export async function quoteWithdrawal(input: {
   const result = await rpc<WithdrawalQuote>("gh_earnings_quote_withdrawal", {
     p_user_id: String(input.userId || "").trim(),
     p_gross_atomic: input.grossAtomic,
+  })
+  if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  return result
+}
+
+
+export type PiEarningsPayoutRequestResult = {
+  ok: boolean
+  error?: string
+  duplicate?: boolean
+  requestId?: string
+  status?: string
+  grossAtomic?: number
+  feeAtomic?: number
+  netAtomic?: number
+  recipientPiAppUid?: string
+  network?: string
+}
+
+/** Creates a durable payout request and gross reservation; does not execute a Pi transfer. */
+export async function createPiEarningsPayoutRequest(input: {
+  userId: string
+  idempotencyKey: string
+  requestFingerprint: string
+  grossAtomic: number
+  feeAtomic: number
+  netAtomic: number
+  network: "Pi Testnet"
+}): Promise<PiEarningsPayoutRequestResult> {
+  const result = await rpc<PiEarningsPayoutRequestResult>("gh_pi_earnings_payout_create", {
+    p_user_id: input.userId,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_fingerprint: input.requestFingerprint,
+    p_gross_atomic: input.grossAtomic,
+    p_fee_atomic: input.feeAtomic,
+    p_net_atomic: input.netAtomic,
+    p_network: input.network,
   })
   if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
   return result
