@@ -1240,7 +1240,7 @@ export function GHConnectApp() {
                     return
                   }
                   if (isActive) {
-                    if (id === "home" && connectionRequestBadge > 0) {
+                    if (id === "home" && socialAttentionCount > 0) {
                       try {
                         window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "connections" } }))
                       } catch { /* */ }
@@ -1286,7 +1286,7 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={(id as string) === "create" ? "text-white" : undefined}
                     />
-                    {((id === "home" && connectionRequestBadge > 0) ||
+                    {((id === "home" && socialAttentionCount > 0) ||
                       (id === "messages" && unreadMessageCount > 0) ||
                       (id === "communities" && unreadGroupCount > 0) ||
                       (id === "profile" && economyAttentionCount > 0)) ? (

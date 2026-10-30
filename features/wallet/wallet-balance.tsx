@@ -221,19 +221,21 @@ export function WalletBalanceCard({
             ) : piSnapshot ? (
               maskPi(piSnapshot.available)
             ) : piFailed ? (
-              "—"
+              "Unavailable"
             ) : (
-              "—"
+              "Unavailable"
             )}
           </p>
           <p className="text-[10px] text-muted-foreground">
             {piLoading
               ? "Loading ledger…"
               : piFailed
-                ? "Could not load PI"
+                ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
-                  ? "Wallet linked"
-                  : "Link PI wallet to withdraw"}
+                  ? piSnapshot.eligible
+                    ? "Pi identity linked · payout eligible"
+                    : "Pi identity linked · payout not currently eligible"
+                  : "Link your Pi identity to enable withdrawals"}
           </p>
           {piSelected ? (
             <span className="absolute right-2 top-2 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
@@ -294,11 +296,16 @@ export function WalletBalanceCard({
                 {piSnapshot ? maskPi(piSnapshot.pending) : "—"}
               </strong>
             </span>
-            {piFailed ? (
-              <button type="button" onClick={() => void refreshPi()} className="font-semibold text-violet-700 underline-offset-2 hover:underline">
-                Retry PI
-              </button>
-            ) : null}
+            <span>withdrawable · fees and eligibility apply</span>
+            <button
+              type="button"
+              onClick={() => void refreshPi()}
+              disabled={piLoading}
+              className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Refresh PI balance"
+            >
+              {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
+            </button>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
@@ -320,7 +327,8 @@ export function WalletBalanceCard({
       ) : null}
 
       <p className="sr-only">
-        {ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}
+        PI and GHC are never added together. GHC utility and PI earnings remain separate assets and separate ledgers.
+        {" "}{ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}
       </p>
     </section>
   )
