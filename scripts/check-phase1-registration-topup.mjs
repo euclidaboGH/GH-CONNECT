@@ -15,7 +15,7 @@ const checks = [
   ['policy top-up 2.95 PI', /REGISTRATION_BONUS_TOPUP_PI = 2\.95/.test(read('lib/server/earnings/registration-bonus.ts'))],
   ['claim fails closed without enable+sandbox', /isRegistrationBonusEnabled/.test(read('lib/server/earnings/registration-bonus.ts'))],
   ['API route ignores client amount', /Body ignored/.test(read('app/api/economy/earnings/registration-bonus/route.ts'))],
-  ['wallet mounts claim card', /RegistrationBonusCard/.test(read('features/wallet/wallet-screen.tsx'))],
+  ['wallet keeps registration claim in Rewards only', !/RegistrationBonusCard/.test(read('features/wallet/wallet-screen.tsx')) && /registration bonus[\s\S]{0,120}Rewards/i.test(read('features/wallet/wallet-screen.tsx'))],
   ['legacy auto-reconcile on load', /legacyClaimed/.test(read('components/ghc/registration-bonus-card.tsx')) && /autoReconcileStarted/.test(read('components/ghc/registration-bonus-card.tsx'))],
   ['migration-pending UI when ledger unavailable', /20261030010001_registration_bonus_v2_reconciliation/.test(read('components/ghc/registration-bonus-card.tsx'))],
   ['Testnet backfill script present', existsSync(join(root, 'scripts/ops/phase2-registration-bonus-backfill-testnet.sql'))],

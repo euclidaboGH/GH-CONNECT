@@ -24,15 +24,18 @@ export function prefetchStoryMediaUrls(urls: string[], limit = 6): void {
     }
   }
 
+  const scheduleFallback = () => globalThis.setTimeout(run, 400)
+
   try {
-    if ("requestIdleCallback" in window) {
-      ;(window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(run, {
-        timeout: 2500,
-      })
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+    }
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleWindow.requestIdleCallback(run, { timeout: 2500 })
     } else {
-      window.setTimeout(run, 400)
+      scheduleFallback()
     }
   } catch {
-    window.setTimeout(run, 400)
+    scheduleFallback()
   }
 }
