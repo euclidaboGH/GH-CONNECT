@@ -1277,10 +1277,10 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={(id as string) === "create" ? "text-white" : undefined}
                     />
-                    {((id === "home" && socialAttentionCount > 0) ||
-                      (id === "messages" && unreadMessageCount > 0) ||
-                      (id === "discover" && connectionRequestBadge > 0) ||
-                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0))) ? (
+                    {((id === "home" && (socialAttentionCount > 0 || unreadMessageCount > 0 || connectionRequestBadge > 0)) ||
+                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0)) ||
+                      (id === "wallet" && economyAttentionCount > 0) ||
+                      (id === "cart" && false)) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
                         aria-label="New activity"

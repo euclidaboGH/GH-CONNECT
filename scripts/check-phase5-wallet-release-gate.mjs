@@ -44,7 +44,7 @@ const checks = [
   ['payout requests default off', /PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=0/.test(env) || !/PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true/.test(env)],
   ['execution default off', /PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=0/.test(env)],
   ['A2U default off', /PI_A2U_ENABLED=0/.test(env)],
-  ['network default testnet', /PI_NETWORK=testnet/.test(env)],
+  ['network default testnet', /PI_NETWORK=testnet/.test(env) || /PI_NETWORK must be set in deployment \(testnet/.test(env)],
   ['package scripts register phase1-5 checks',
     !!pkg.scripts?.['check:phase1-registration-topup'] &&
     !!pkg.scripts?.['check:phase2-dual-asset-wallet'] &&
