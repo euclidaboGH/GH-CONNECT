@@ -23,7 +23,7 @@ import {
   RefreshCw,
   ChevronRight,
   Gift,
-  Crown,
+  
   Users,
   UserRound,
   AlertCircle,
@@ -64,8 +64,8 @@ import { PaymentRecoveryBanner } from "@/components/ghc/payment-recovery-banner"
 import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
+import { SurfaceIntro } from "@/components/ghc/ui/product-surface"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
-import { RegistrationBonusCard } from "@/components/ghc/registration-bonus-card"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 
 const formatGhc = formatGhcShared
@@ -1286,7 +1286,12 @@ const lowBalance = balance === 0 && displayPending === 0
           />
           </div>
           <PaymentRecoveryBanner />
-          <RegistrationBonusCard />
+          <SurfaceIntro
+            kicker="Balances"
+            title="PI & GHC in one wallet"
+            body="Send, receive, and open History here. Claims are in Rewards; membership is paid on Premium."
+            tone="default"
+          />
 
           {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
           {assetRail === "pi" ? (
@@ -1340,11 +1345,6 @@ const lowBalance = balance === 0 && displayPending === 0
               }}
             />
           )}
-          <QuickChip
-            icon={<Crown size={14} />}
-            label="Membership"
-            onClick={() => navigateSettingsSection("membership")}
-          />
           <QuickChip
             icon={<Filter size={14} />}
             label="Full statement"
@@ -1468,10 +1468,27 @@ const lowBalance = balance === 0 && displayPending === 0
         </p>
         </div>
 
-        {/* ZONE: ACTIVITY */}
+        {/* ZONE: ACTIVITY — full PI+GHC history only via History action (showFullHistory) */}
         <div id="ghc-wallet-activity" className="scroll-mt-3">
-        <p className="mx-3 mt-5 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-          Recent Transactions
+        <div className="mx-3 mt-5 mb-2 rounded-2xl border border-border/70 bg-card p-3 shadow-[var(--gh-card-shadow)]">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Ledger</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            PI and GHC transaction history opens from the <strong className="text-foreground">History</strong> action on your balance card — both rails, one professional statement view.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setHistoryRail(assetRail)
+              setShowFullHistory(true)
+              setTab("activity")
+            }}
+            className="mt-2.5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3 text-xs font-bold text-background transition hover:opacity-90"
+          >
+            Open History
+          </button>
+        </div>
+        <p className="mx-3 mt-4 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          Tools
         </p>
         <div
           className="mx-3 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]"
@@ -1926,9 +1943,11 @@ const lowBalance = balance === 0 && displayPending === 0
           ) : null}
 
           <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">Pay with π (Pi Browser)</p>
+            <p className="font-semibold text-foreground">Buy GHC with π</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pack purchases only. Membership, profile boosts, and other services are paid on their own screens (Membership / Settings → Account &amp; economy).
+            </p>
             <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
-            <p className="mt-0.5">{ASSET_POLICY.piRailsCopy}</p>
             <p className="mt-0.5 text-[10px] text-muted-foreground/90">
               GreenHaven device PIN only unlocks this app — Pi Wallet authorizes π charges.
             </p>
@@ -1957,10 +1976,23 @@ const lowBalance = balance === 0 && displayPending === 0
 
           {tab === "rewards" && (
             <>
+              <div className="mx-3 mb-3 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <p className="text-sm font-bold text-foreground">Claims live in Rewards</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Daily claim, registration bonus, cashback, and missions are claimed in Rewards — not here — so Wallet stays balances, transfers, and History only.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigateSettingsSection("rewards")}
+                  className="mt-2.5 inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
+                >
+                  Open Rewards
+                </button>
+              </div>
               {rewards.length === 0 ? (
                 <EmptyBlock
-                  title="No rewards yet — complete your profile to unlock your first GHC"
-                  body="Complete a challenge in Rewards to see activity here. Eligible activity can receive GHC under anti-abuse limits."
+                  title="No reward activity on this device"
+                  body="Open Rewards to claim. Wallet only shows settled ledger effects after a successful claim."
                 />
               ) : (
                 rewards.map((r) => (

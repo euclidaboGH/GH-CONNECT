@@ -55,6 +55,7 @@ import {
 } from "@/lib/marketplace/trust"
 import { openCommunity } from "@/lib/navigation/navigate"
 import { EmptyState } from "./empty-state"
+import { SurfaceIntro } from "./ui/product-surface"
 import { LazyImage } from "./lazy-image"
 import { downloadMedia } from "@/lib/media/download-media"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
@@ -558,6 +559,13 @@ function ListingDetail({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <SurfaceIntro
+          kicker="Commerce"
+          title="Buy & sell with confidence"
+          body="Browse listings, manage orders, and sell. Payments settle on the order flow — Wallet holds balances and History."
+          tone="emerald"
+        />
+
         {/* Hero media */}
         <div className="relative aspect-[4/3] w-full bg-muted/40">
           {media ? (
@@ -1866,7 +1874,14 @@ export function MarketplaceScreen({
           </button>
         </div>
 
-        {bucket === "browse" ? (
+        
+        <SurfaceIntro
+          kicker="Commerce"
+          title="Browse, sell, and track orders"
+          body="Orders and listing fees settle on this flow. Wallet keeps PI/GHC balances and History."
+          tone="emerald"
+        />
+{bucket === "browse" ? (
           <>
             <label className="relative block w-full">
               <span className="sr-only">Search listings</span>

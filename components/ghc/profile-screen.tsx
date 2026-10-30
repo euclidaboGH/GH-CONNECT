@@ -42,6 +42,7 @@ import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
 import { ProfileSectionTabs, type ProfileSectionTab } from "./profile-section-tabs"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
+import { EconomyActionStrip } from "./ui/product-surface"
 import ProfileStorySection from "./profile-story-section"
 import { UnifiedActivityCenter } from "./unified-activity-center"
 import { ProfileIdentityOverview } from "./profile-identity-overview"
@@ -663,6 +664,40 @@ export function ProfileScreen({
           You are offline. Changes stay on this device and sync when you reconnect.
         </div>
       ) : null}
+
+      <EconomyActionStrip
+        items={[
+          {
+            id: "wallet",
+            label: "Wallet",
+            hint: "PI · GHC",
+            accent: "emerald",
+            onClick: () => onOpenWallet?.(),
+          },
+          {
+            id: "rewards",
+            label: "Rewards",
+            hint: "Claims",
+            accent: "amber",
+            onClick: () => {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } }))
+              } catch { /* */ }
+            },
+          },
+          {
+            id: "membership",
+            label: "Premium",
+            hint: "VIP plans",
+            accent: "violet",
+            onClick: () => {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } }))
+              } catch { /* */ }
+            },
+          },
+        ]}
+      />
 
       <div
         className="gh-scroll-root gh-scroll-stable min-h-0 w-full flex-1 overflow-y-auto overscroll-contain"

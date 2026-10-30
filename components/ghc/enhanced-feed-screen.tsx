@@ -17,7 +17,7 @@ import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
-import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash } from "lucide-react"
+import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, Compass, Store } from "lucide-react"
 import { MOBILE_PAGE_SIZES, prefetchMediaFacades } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { GlobalSearchModal } from "./global-search"
@@ -39,6 +39,7 @@ import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
+import { FloatingCreateButton } from "./feed-components"
 import { BrandLogo } from "./brand-logo"
 import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
@@ -703,6 +704,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         compactLeading={<BrandLogo size="compact" className="object-left" />}
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                } catch { /* */ }
+                onCompose?.()
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              aria-label="Create a post"
+              title="Create post"
+            >
+              <Plus size={15} aria-hidden />
+              <span>Post</span>
+            </button>
             <PremiumSurfaceActions />
           </>
         }
@@ -746,6 +762,67 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         </div>
 
         {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">Offline — showing available feed data. New actions may require a connection.</div> : null}
+
+        {/* Secondary destinations — Messages, Discover, Communities (not on bottom nav) */}
+        <div className="gh-premium-feed-destinations border-b border-border/50 bg-gradient-to-b from-card/80 to-background px-3 py-2.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" role="navigation" aria-label="More destinations">
+            <button
+              type="button"
+              onClick={() => setTab("messages")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
+              aria-label="Open messages"
+            >
+              <MessageCircle size={14} aria-hidden />
+              Messages
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("discover")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
+              aria-label="Find friends and discover people"
+            >
+              <Compass size={14} aria-hidden />
+              Discover
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("communities")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
+              aria-label="Open communities and group chat"
+            >
+              <Hash size={14} aria-hidden />
+              Communities
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: {} }))
+                } catch { /* */ }
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
+              aria-label="Open marketplace"
+            >
+              <Store size={14} aria-hidden />
+              Market
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                } catch { /* */ }
+                onCompose?.()
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/50 bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:bg-emerald-700"
+              aria-label="Create a post from the feed"
+            >
+              <Plus size={14} aria-hidden />
+              Create post
+            </button>
+          </div>
+        </div>
+
 
         {draftPosts.length > 0 ? (
           <div className="mx-3 mt-2 rounded-xl border border-border/60 bg-card px-3 py-2" aria-label="Unpublished drafts">
@@ -836,7 +913,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                       onFindPeople={() => setTab("discover")}
                       onOpenMarketplace={() => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))}
                       onOpenCommunities={() => setTab("communities")}
-                      onCreate={() => onCompose?.()}
+                      onCreate={() => {
+                        try { window.dispatchEvent(new CustomEvent("ghc:open-create-hub")) } catch { /* */ }
+                        onCompose?.()
+                      }}
                     />
                   ) : null}
                   <PostErrorBoundary>

@@ -29,7 +29,7 @@ const checks = [
   ['not-found recovery supports keyboard focus and accessible title', notFound.includes('homeRef.current?.focus()') && notFound.includes('aria-labelledby="not-found-title"')],
   ['existing onboarding gate remains in place', app.includes('resolveUiOnboardingGate') && onboarding.includes('resolveUiOnboardingGate')],
   ['session lock continues preserving mounted app state', sessionLock.includes('Never unmount children') && sessionLock.includes('{children}')],
-  ['primary navigation is Home Cart Wallet Profile', destinations.includes('export const BOTTOM_NAV_IDS = ["home", "cart", "wallet", "profile"]')],
+  ['primary navigation is Home Market Profile', destinations.includes('export const BOTTOM_NAV_IDS = ["home", "cart", "profile"]')],
   ['Phase 6 documentation exists', fs.existsSync(path.join(root, 'docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md'))],
 ]
 let failed = 0

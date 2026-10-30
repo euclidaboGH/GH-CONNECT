@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startT
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
-import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users , ShoppingCart, Wallet} from "lucide-react"
+import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users, ShoppingBag, Wallet } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
@@ -213,8 +213,7 @@ Toast.displayName = "Toast"
 /** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "cart", icon: ShoppingCart, label: "Cart" },
-  { id: "wallet", icon: Wallet, label: "Wallet" },
+  { id: "cart", icon: ShoppingBag, label: "Market" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -1116,7 +1115,7 @@ export function GHConnectApp() {
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
-                <EnhancedFeedScreen key={screenResetKeys.home || 0} />
+                <EnhancedFeedScreen key={screenResetKeys.home || 0} onCompose={() => setShowCreateHub(true)} />
               </Suspense>
             </ScreenBoundary>
           </div>
@@ -1214,13 +1213,13 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id === "wallet" ? walletOpen : id === "cart" ? marketplaceOpen : activeTab === id
+            const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
                 key={id}
                 type="button"
                 onPointerDown={() => {
-                  if (id === "cart" || id === "wallet" || !isPrimaryTab(id as any)) return
+                  if (id === "cart" || !isPrimaryTab(id as any)) return
                   try {
                     window.dispatchEvent(new CustomEvent("ghc:prefetch-tab", { detail: id }))
                   } catch { /* */ }
@@ -1229,10 +1228,6 @@ export function GHConnectApp() {
                   // Phase 2B primary: Home | Cart | Wallet | Profile
                   if (id === "cart") {
                     setMarketplaceOpen(true)
-                    return
-                  }
-                  if (id === "wallet") {
-                    openWallet()
                     return
                   }
                   if (isActive) {
@@ -1278,9 +1273,7 @@ export function GHConnectApp() {
                       className={(id as string) === "create" ? "text-white" : undefined}
                     />
                     {((id === "home" && (socialAttentionCount > 0 || unreadMessageCount > 0 || connectionRequestBadge > 0)) ||
-                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0)) ||
-                      (id === "wallet" && economyAttentionCount > 0) ||
-                      (id === "cart" && false)) ? (
+                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0))) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
                         aria-label="New activity"

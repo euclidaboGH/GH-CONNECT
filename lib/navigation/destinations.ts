@@ -3,7 +3,7 @@
  * Single source of truth for tabs, overlays, and deep-link aliases.
  * Do not invent parallel routers — shell (app.tsx) owns presentation.
  *
- * Phase 2B visible bottom nav (4): Home · Cart · Wallet · Profile
+ * Phase 2B visible bottom nav (3): Home · Market · Profile — Wallet opens from Profile only
  * Discover / Messages / Communities remain reachable via Home, Profile, and deep-links.
  * PRIMARY_TABS still mounts matches + communities + messages for deep-links.
  */
@@ -24,9 +24,9 @@ export type PrimaryTab = (typeof PRIMARY_TABS)[number]
 
 /**
  * Visible bottom-bar destinations (Create is an overlay, not a PRIMARY_TAB).
- * Primary visible bar: Home · Cart · Wallet · Profile.
+ * Primary visible bar: Home · Market · Profile. Wallet is profile overlay only.
  */
-export const BOTTOM_NAV_IDS = ["home", "cart", "wallet", "profile"] as const
+export const BOTTOM_NAV_IDS = ["home", "cart", "profile"] as const
 
 export type OverlayDestination =
   | "wallet"

@@ -30,6 +30,7 @@ import {
 import { useGHC } from "@/contexts/ghc-context"
 import { isPiPaymentsAvailable } from "@/lib/gh-pay"
 import { runGhPayMembership } from "@/components/ghc/gh-pay-panel"
+import { SurfaceIntro } from "@/components/ghc/ui/product-surface"
 import { notificationSystem } from "@/lib/notifications"
 
 function emitMembershipActivated(tier: string, method: "pi" | "ghc") {
@@ -652,6 +653,13 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           )}
         </button>
       </header>
+      <SurfaceIntro
+        kicker="Premium"
+        title="Upgrade on this screen only"
+        body="Pay VIP / VVIP with π or GHC here — not from Wallet. Profile boosts and other tools live under Settings → Account & economy."
+        tone="violet"
+      />
+
 
       <div className="sr-only" role="status" aria-live="polite">
         {statusMsg || (refreshing ? "Refreshing membership status" : "")}
