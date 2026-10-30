@@ -15,7 +15,7 @@ const checks = [
  ['payout and order lifecycle changes share a seller/currency lock lane', /pg_advisory_xact_lock\(hashtext\(trim\(p_seller_id\)\),hashtext\('seller-payout:'\|\|upper\(p_currency\)\)\)/.test(sql) && /trg_gh_marketplace_order_finance_lock/.test(sql)],
  ['payout eligibility and allocations use seller net less immutable adjustments', /seller_net-COALESCE\(adj\.net_reduced,0\)/.test(sql) && /verified_order_net_less_immutable_adjustments/.test(sql)],
  ['external refunds and settlements are not falsely executed by the database RPC', /providerRefundExecuted',false/.test(sql) && /externalSettlementRequired',true/.test(sql)],
- ['release version is synchronized', pkg.version === '0.202.0' && read('lib/app-release.ts').includes('APP_RELEASE_VERSION = "0.202.0"')],
+ ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(pkg.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed=0
 for (const [name,ok] of checks) { console.log(`${ok?'PASS':'FAIL'} ${name}`); if(!ok) failed++ }

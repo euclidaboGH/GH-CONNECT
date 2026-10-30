@@ -13,7 +13,7 @@ const checks = [
   ['client access is denied by RLS', /ENABLE ROW LEVEL SECURITY/.test(migration) && /FOR ALL USING\(false\) WITH CHECK\(false\)/.test(migration)],
   ['event rows reject update and delete', /BEFORE UPDATE OR DELETE ON public\.gh_marketplace_order_events/.test(migration) && /MARKETPLACE_ORDER_EVENT_IMMUTABLE/.test(migration)],
   ['journal does not itself issue refunds or settle funds', /does not authorize refunds, move funds or resolve disputes/i.test(migration)],
-  ['release version is synchronized', pkg.version === '0.202.0' && read('lib/app-release.ts').includes('APP_RELEASE_VERSION = "0.202.0"')],
+  ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(pkg.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed = 0
 for (const [name, pass] of checks) { console.log((pass ? 'PASS ' : 'FAIL ') + name); if (!pass) failed++ }

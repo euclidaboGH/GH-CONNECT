@@ -21,7 +21,7 @@ const checks = [
  ['treasury summary fetches and exposes membership reconciliation', /getMembershipReconciliationReport/.test(summary) && /communityMembershipReconciliation/.test(summary)],
  ['treasury dashboard renders per-asset net proceeds, historical discrepancies and membership exceptions', /Marketplace net proceeds reconciliation/.test(dashboard) && /Historical payout reconciliation/.test(dashboard) && /Community membership payment reconciliation/.test(dashboard)],
  ['treasury adapter uses privileged bounded RPC transport', /treasuryRpc/.test(helper) && /AbortSignal\.timeout\(10_000\)/.test(helper)],
- ['release version is synchronized', pkg.version === '0.202.0' && read('lib/app-release.ts').includes('APP_RELEASE_VERSION = "0.202.0"')],
+ ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(pkg.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed=0; for (const [name,ok] of checks) { console.log(`${ok?'PASS':'FAIL'} ${name}`); if(!ok) failed++ }
 console.log(`\nPhase 23 treasury/community: ${checks.length-failed}/${checks.length} passed`)

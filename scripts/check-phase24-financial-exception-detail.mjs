@@ -13,7 +13,7 @@ const checks = [
  ['membership exception report checks user, purpose, product, completion and expiry', /ENTITLEMENT_USER_MISMATCH/.test(sql) && /PURPOSE_OR_PRODUCT_NOT_CANONICAL/.test(sql) && /PAYMENT_NOT_COMPLETED/.test(sql) && /PAID_ENTITLEMENT_EXPIRED/.test(sql)],
  ['membership diagnostics do not grant or renew access', /grantsAccess',false/.test(sql) && /Does not grant or renew access/.test(sql)],
  ['both reports are read-only bounded service-role RPCs', (sql.match(/SECURITY DEFINER SET search_path=pg_catalog,public/g)||[]).length===2 && (sql.match(/REVOKE ALL ON FUNCTION public\.(gh_treasury_payout_reconciliation_detail|ghc_membership_payment_exception_detail)\(integer\) FROM PUBLIC,anon,authenticated/g)||[]).length===2],
- ['release version is synchronized', pkg.version === '0.202.0' && read('lib/app-release.ts').includes('APP_RELEASE_VERSION = "0.202.0"')],
+ ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(pkg.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed=0; for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} ${name}`);if(!ok)failed++}
 console.log(`\nPhase 24 financial exception detail: ${checks.length-failed}/${checks.length} passed`)

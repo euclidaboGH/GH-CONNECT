@@ -16,7 +16,7 @@ const checks = [
   ['allocation total is checked against eligible net proceeds', /PAYOUT_NET_ALLOCATION_MISMATCH/.test(migration)],
   ['service role alone can request seller payouts', /REVOKE ALL ON FUNCTION public\.gh_seller_payout_request\(text,text,numeric,text\) FROM PUBLIC,anon,authenticated/.test(migration) && /GRANT EXECUTE ON FUNCTION public\.gh_seller_payout_request\(text,text,numeric,text\) TO service_role/.test(migration)],
   ['legacy gross-based payout behavior remains visible for migration review', /sum\(o\.total_amount\)/.test(payout)],
-  ['release version is synchronized', packageJson.version === '0.202.0' && read('lib/app-release.ts').includes('APP_RELEASE_VERSION = "0.202.0"')],
+  ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(packageJson.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${packageJson.version}"`)],
 ]
 let failed = 0
 for (const [name, pass] of checks) { console.log((pass ? 'PASS ' : 'FAIL ') + name); if (!pass) failed++ }
