@@ -42,8 +42,8 @@ import { compressImageFile } from "@/lib/media/compress-image"
 import { ProfileContentLibrary } from "./profile-content-library"
 import { ProfileSectionTabs, type ProfileSectionTab } from "./profile-section-tabs"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
-import { EconomyActionStrip } from "./ui/product-surface"
 import ProfileStorySection from "./profile-story-section"
+import { ComposerPromptBar } from "./composer-prompt-bar"
 import { UnifiedActivityCenter } from "./unified-activity-center"
 import { ProfileIdentityOverview } from "./profile-identity-overview"
 
@@ -664,42 +664,7 @@ export function ProfileScreen({
           You are offline. Changes stay on this device and sync when you reconnect.
         </div>
       ) : null}
-
-      <EconomyActionStrip
-        items={[
-          {
-            id: "wallet",
-            label: "Wallet",
-            hint: "PI · GHC",
-            accent: "emerald",
-            onClick: () => onOpenWallet?.(),
-          },
-          {
-            id: "rewards",
-            label: "Rewards",
-            hint: "Claims",
-            accent: "amber",
-            onClick: () => {
-              try {
-                window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } }))
-              } catch { /* */ }
-            },
-          },
-          {
-            id: "membership",
-            label: "Premium",
-            hint: "VIP plans",
-            accent: "violet",
-            onClick: () => {
-              try {
-                window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } }))
-              } catch { /* */ }
-            },
-          },
-        ]}
-      />
-
-      <div
+<div
         className="gh-scroll-root gh-scroll-stable min-h-0 w-full flex-1 overflow-y-auto overscroll-contain"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
@@ -1048,17 +1013,15 @@ export function ProfileScreen({
         </section>
 
         <section className="mt-3 w-full px-4" aria-label="Create a post">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))}
-            className="flex w-full items-center gap-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 text-left shadow-sm transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-sm font-bold text-emerald-700" aria-hidden="true">
-              {(name || "G").trim().slice(0, 1).toUpperCase()}
-            </span>
-            <span className="min-w-0 flex-1 rounded-full bg-muted/70 px-4 py-2.5 text-[13px] text-muted-foreground">What would you like to share with GreenHaven?</span>
-            <span className="shrink-0 rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Create</span>
-          </button>
+          <ComposerPromptBar
+            avatarLetter={name || "G"}
+            avatarUrl={photo || photos[0] || null}
+            onOpen={() => {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+              } catch { /* */ }
+            }}
+          />
         </section>
           </>
         ) : null}

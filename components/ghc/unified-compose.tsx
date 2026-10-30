@@ -14,6 +14,9 @@ import { validatePulseVideo } from "@/lib/media/video-inspection"
 import type { StoryItem } from "@/lib/ghc-types"
 import { piLocalGet, piLocalSet, piLocalRemove } from "@/lib/pi-local-storage"
 import { COMPOSE_LIMITS, textMaxForMode } from "@/lib/composer/compose-limits"
+import { a11y } from "@/lib/accessibility"
+import { prefersReducedMotion } from "@/lib/ui/prefers-reduced-motion"
+import { ComposeMediaStrip, ComposeUploadProgress, ComposeDraftBanner } from "./compose-media-strip"
 
 export type ComposeMode = "post" | "story"
 export type Audience = "public" | "followers" | "mutuals" | "private"
@@ -63,6 +66,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [audience, setAudience] = useState<Audience>("public")
   const [showAudience, setShowAudience] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
+  const [draftRestored, setDraftRestored] = useState(false)
   const [storyMode, setStoryMode] = useState<"social" | "professional">("social")
   const [storyAudience, setStoryAudience] = useState<"everyone" | "followers" | "friends" | "private">("followers")
   const [isPublishing, setIsPublishing] = useState(false)
@@ -93,6 +97,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     return () => {
       document.body.style.overflow = prev
     }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const root = document.querySelector(".gh-world-compose") as HTMLElement | null
+    if (!root) return
+    const release = a11y.createFocusTrap(root)
+    return () => release()
   }, [open])
 
   const activeDraftIdRef = useRef<string | null>(null)
@@ -192,7 +204,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           setText(saved?.content ?? pending.text ?? "")
           setSelectedImages(saved?.images?.filter(isDurableMediaUrl) ?? [])
           setSelectedVideo(saved?.video && isDurableMediaUrl(saved.video) ? saved.video : null)
-          if (saved) setAudience("public")
+          if (saved) {
+            setAudience("public")
+            setDraftRestored(true)
+          }
         } else {
           activeDraftIdRef.current = null
           void (async () => {
@@ -204,7 +219,10 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                   : null)
               if (raw) {
                 const d = JSON.parse(raw) as { text?: string; audience?: Audience }
-                if (d.text) setText(d.text)
+                if (d.text) {
+                  setText(d.text)
+                  setDraftRestored(true)
+                }
                 if (d.audience) setAudience(d.audience)
               }
             } catch {
@@ -248,6 +266,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     setSelectedDoc(null)
     setSelectedDocName(null)
     setStoryMedia(null)
+    setDraftRestored(false)
     setSelectedCommunityId("")
     setAudience("public")
     setShowAudience(false)
@@ -536,6 +555,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     }
     publishingRef.current = true
     setIsPublishing(true)
+    try { a11y.announce(mode === "post" ? "Publishing post" : "Sharing story", "polite") } catch { /* */ }
     // Phase 2 — never publish blob: media
     const dirtyImages = selectedImages.filter((u) => !isDurableMediaUrl(u))
     if (dirtyImages.length) {
@@ -649,7 +669,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   return (
     <div
-      className="gh-world-compose fixed inset-0 z-[70] flex flex-col bg-background text-foreground"
+      className={`gh-world-compose fixed inset-0 z-[70] flex flex-col bg-background text-foreground ${prefersReducedMotion() ? "" : "animate-in fade-in duration-200"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="unified-compose-title"
@@ -671,7 +691,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         >
           <X size={22} />
         </button>
-        <h1 id="unified-compose-title" className="flex-1 text-center text-base font-bold text-foreground">
+        <h1 id="unified-compose-title" className="flex-1 text-center text-[17px] font-extrabold tracking-tight text-foreground">
           {mode === "post" ? "New post" : "New story"}
         </h1>
         <button
@@ -684,6 +704,15 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {isPublishing ? (mode === "post" ? "Posting…" : "Sharing…") : mode === "post" ? "Post" : "Share"}
         </button>
       </header>
+
+      {isOffline ? (
+        <div
+          className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          You&apos;re offline — drafts save on this device. Publishing needs a connection; media will upload when you reconnect.
+        </div>
+      ) : null}
 
       {/* This composer is intentionally post-only. Stories have their own camera-first creator. */}
       {/* Scrollable body — long-form first-class */}
@@ -919,51 +948,34 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </div>
           )}
 
-          {uploadProgress && (
-            <p className="mb-2 text-[11px] font-medium text-primary" role="status">{uploadProgress}</p>
-          )}
-
-          {/* Media previews */}
-          {mode === "post" && selectedImages.length > 0 && (
-            <div className="mt-3">
-            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-              {selectedImages.length}/{COMPOSE_LIMITS.maxImagesPerPost} photos
-              {selectedImages.length >= COMPOSE_LIMITS.maxImagesPerPost ? " · limit reached" : ""}
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {selectedImages.map((src, i) => (
-                <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-                  <img src={src} alt={`Attached photo ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    className="absolute right-1.5 top-1.5 rounded-full bg-black/65 p-1.5 text-white"
-                    onClick={() => setSelectedImages((imgs) => imgs.filter((_, idx) => idx !== i))}
-                    aria-label="Remove photo"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            {selectedImages.length > 1 ? (
-              <button
-                type="button"
-                className="mt-1.5 text-[11px] font-bold text-rose-700"
-                onClick={() => setSelectedImages([])}
-              >
-                Clear all photos
-              </button>
-            ) : null}
-            </div>
-          )}
-          {mode === "post" && selectedVideo && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5 text-sm font-semibold text-foreground/90">
-              <span>Video attached</span>
-              <button type="button" onClick={() => setSelectedVideo(null)} className="text-emerald-700">
-                Remove
-              </button>
-            </div>
-          )}
+          <ComposeDraftBanner
+            visible={draftRestored && mode === "post"}
+            onDiscard={() => {
+              setText("")
+              setSelectedImages([])
+              setSelectedVideo(null)
+              setDraftRestored(false)
+              try {
+                void piLocalRemove("post-draft-v1")
+                window.localStorage.removeItem("ghc-post-draft-v1")
+              } catch { /* */ }
+              if (activeDraftIdRef.current) {
+                try { removePostDraft(activeDraftIdRef.current) } catch { /* */ }
+                activeDraftIdRef.current = null
+              }
+            }}
+          />
+          <ComposeUploadProgress message={uploadProgress} />
+          {mode === "post" ? (
+            <ComposeMediaStrip
+              images={selectedImages}
+              video={selectedVideo}
+              maxImages={COMPOSE_LIMITS.maxImagesPerPost}
+              onRemoveImage={(i) => setSelectedImages((imgs) => imgs.filter((_, idx) => idx !== i))}
+              onClearImages={() => setSelectedImages([])}
+              onRemoveVideo={() => setSelectedVideo(null)}
+            />
+          ) : null}
           {mode === "story" && storyMedia?.type === "image" && (
             <div className="relative mt-3 overflow-hidden rounded-2xl">
               <img src={storyMedia.url} alt="" className="max-h-64 w-full object-cover" />

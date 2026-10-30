@@ -19,10 +19,14 @@ export function PremiumSurfaceActions({
   showLabels?: boolean
 }) {
   const openMarketplace = () => {
-    try { window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: {} })) } catch { /* */ }
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { bucket: "browse" } }))
+    } catch { /* */ }
   }
   const openEcosystem = () => {
-    try { window.dispatchEvent(new CustomEvent("ghc:open-ecosystem", { detail: {} })) } catch { /* */ }
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:open-ecosystem", { detail: {} }))
+    } catch { /* */ }
   }
 
   const btn =

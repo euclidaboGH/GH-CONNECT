@@ -32,6 +32,7 @@ import { PostDetailSheet } from "./post-detail-sheet"
 import { isOwnAuthor } from "@/lib/ownership"
 import { EnhancedPostCard, VisibilityReasonTooltip } from "./enhanced-post-card"
 import ProfileStorySection from "./profile-story-section"
+import { ComposerPromptBar } from "./composer-prompt-bar"
 import { rankFeed, extractHashtags, extractMentions } from "@/lib/feed-ranking-engine"
 import type { RankedPost, FeedLocationLane, FeedIntentionBias } from "@/lib/feed-ranking-engine"
 import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
@@ -444,22 +445,34 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   useEffect(() => {
     if (typeof window === "undefined") return
     let last = 0
-    const soft = () => {
+    const soft = (force = false) => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return
       const now = Date.now()
-      if (now - last < 15_000) return
+      if (!force && now - last < 12_000) return
       last = now
       try {
         void refreshFeed?.()
       } catch { /* */ }
     }
     const onVis = () => {
-      if (document.visibilityState === "visible") soft()
+      if (document.visibilityState === "visible") soft(true)
     }
-    window.addEventListener("focus", soft)
+    const onLive = () => soft(true)
+    const timer = window.setInterval(() => soft(false), 35_000)
+    window.addEventListener("focus", onLive)
     document.addEventListener("visibilitychange", onVis)
+    window.addEventListener("online", onLive)
+    window.addEventListener("ghc:post-published", onLive)
+    window.addEventListener("ghc:post-engagement", onLive)
+    window.addEventListener("ghc:feed-invalidate", onLive)
     return () => {
-      window.removeEventListener("focus", soft)
+      window.clearInterval(timer)
+      window.removeEventListener("focus", onLive)
       document.removeEventListener("visibilitychange", onVis)
+      window.removeEventListener("online", onLive)
+      window.removeEventListener("ghc:post-published", onLive)
+      window.removeEventListener("ghc:post-engagement", onLive)
+      window.removeEventListener("ghc:feed-invalidate", onLive)
     }
   }, [refreshFeed])
 
@@ -704,21 +717,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         compactLeading={<BrandLogo size="compact" className="object-left" />}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
-                } catch { /* */ }
-                onCompose?.()
-              }}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              aria-label="Create a post"
-              title="Create post"
-            >
-              <Plus size={15} aria-hidden />
-              <span>Post</span>
-            </button>
             <PremiumSurfaceActions />
           </>
         }
@@ -762,66 +760,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         </div>
 
         {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">Offline — showing available feed data. New actions may require a connection.</div> : null}
-
-        {/* Secondary destinations — Messages, Discover, Communities (not on bottom nav) */}
-        <div className="gh-premium-feed-destinations border-b border-border/50 bg-gradient-to-b from-card/80 to-background px-3 py-2.5">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" role="navigation" aria-label="More destinations">
-            <button
-              type="button"
-              onClick={() => setTab("messages")}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
-              aria-label="Open messages"
-            >
-              <MessageCircle size={14} aria-hidden />
-              Messages
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("discover")}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
-              aria-label="Find friends and discover people"
-            >
-              <Compass size={14} aria-hidden />
-              Discover
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("communities")}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
-              aria-label="Open communities and group chat"
-            >
-              <Hash size={14} aria-hidden />
-              Communities
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: {} }))
-                } catch { /* */ }
-              }}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-emerald-400/70 hover:bg-emerald-50/90 dark:hover:bg-emerald-950/40"
-              aria-label="Open marketplace"
-            >
-              <Store size={14} aria-hidden />
-              Market
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
-                } catch { /* */ }
-                onCompose?.()
-              }}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/50 bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:bg-emerald-700"
-              aria-label="Create a post from the feed"
-            >
-              <Plus size={14} aria-hidden />
-              Create post
-            </button>
-          </div>
-        </div>
 
 
         {draftPosts.length > 0 ? (
@@ -884,7 +822,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         >
           {pullDistance > 0 ? <div className="px-4 py-1 text-center text-[10px] text-muted-foreground">{isRefreshing ? "Refreshing…" : pullDistance > 80 ? "Release to refresh" : "Pull to refresh"}</div> : null}
           <div className="px-2 pt-2">
+
             <ProfileStorySection scope="feed" />
+
+            <div className="mx-3 mt-3">
+              <ComposerPromptBar
+                avatarLetter={String(profile?.displayName || profile?.username || "G")}
+                avatarUrl={Array.isArray(profile?.photos) && profile.photos[0] ? String(profile.photos[0]) : null}
+                onOpen={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("ghc:open-create-hub"))
+                  } catch { /* */ }
+                  onCompose?.()
+                }}
+              />
+            </div>
           </div>
           {!feedBootstrapped || !initialFeedLoadSettled ? (
             <FeedSkeleton />

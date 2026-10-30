@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startT
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
-import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users, ShoppingBag, Wallet } from "lucide-react"
+import { Compass, Heart, MessagesSquare, Newspaper, Plus, ShoppingBag, ShoppingCart, UserRound, Users, Wallet } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
@@ -213,7 +213,9 @@ Toast.displayName = "Toast"
 /** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "cart", icon: ShoppingBag, label: "Market" },
+  { id: "messages", icon: MessagesSquare, label: "Messages" },
+  { id: "communities", icon: Users, label: "Communities" },
+  { id: "cart", icon: ShoppingCart, label: "Cart" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -1225,12 +1227,24 @@ export function GHConnectApp() {
                   } catch { /* */ }
                 }}
                 onClick={() => {
-                  // Phase 2B primary: Home | Cart | Wallet | Profile
+                  // Cart is the commerce checkout surface (orders + pay), not Market browse.
                   if (id === "cart") {
                     setMarketplaceOpen(true)
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:open-marketplace", {
+                          detail: { bucket: "orders", source: "bottom-cart" },
+                        }),
+                      )
+                    } catch { /* */ }
                     return
                   }
                   if (isActive) {
+                    if (id === "home" && connectionRequestBadge > 0) {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "connections" } }))
+                      } catch { /* */ }
+                    }
                     scrollActiveTabToTop()
                     return
                   }
@@ -1272,8 +1286,10 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={(id as string) === "create" ? "text-white" : undefined}
                     />
-                    {((id === "home" && (socialAttentionCount > 0 || unreadMessageCount > 0 || connectionRequestBadge > 0)) ||
-                      (id === "profile" && (economyAttentionCount > 0 || unreadGroupCount > 0))) ? (
+                    {((id === "home" && connectionRequestBadge > 0) ||
+                      (id === "messages" && unreadMessageCount > 0) ||
+                      (id === "communities" && unreadGroupCount > 0) ||
+                      (id === "profile" && economyAttentionCount > 0)) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
                         aria-label="New activity"

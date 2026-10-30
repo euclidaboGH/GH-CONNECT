@@ -15,6 +15,8 @@ import { mediaUserMessage } from "@/lib/media/user-messages"
 import type { StoryAudience, StoryItem } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
 import { downloadMedia } from "@/lib/media/download-media"
+import { prefetchStoryMediaUrls } from "@/lib/media/prefetch-story-media"
+import { prefersReducedMotion } from "@/lib/ui/prefers-reduced-motion"
 
 type StoryMode = "choose" | "text" | "camera"
 type StoryViewerRecord = Record<string, unknown>
@@ -88,6 +90,19 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     .sort((a, b) => b.createdAt - a.createdAt) : []
 
   const queue = [ownStory, ...otherStories].filter((item): item is StoryItem => Boolean(item))
+
+  const storyPrefetchKey = queue.map((q) => q?.id || "").join("|")
+  useEffect(() => {
+    const urls: string[] = []
+    for (const item of queue) {
+      const u = item?.media?.url
+      if (u && item.media?.type === "image") urls.push(String(u))
+      if (item?.photo) urls.push(String(item.photo))
+    }
+    prefetchStoryMediaUrls(urls)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prefetch when story ids change
+  }, [storyPrefetchKey])
+
   const [creatorOpen, setCreatorOpen] = useState(false)
   const [storyMode, setStoryMode] = useState<StoryMode>("choose")
   const [text, setText] = useState("")
@@ -421,25 +436,132 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   }
 
   const rail = (
-    <div className="space-y-2.5" aria-label="Stories from your community">
-      {scope === "feed" ? <div className="flex items-end justify-between gap-3 px-1"><div><h2 className="text-[13px] font-extrabold tracking-tight text-foreground">Stories</h2><p className="text-[11px] text-muted-foreground">Moments from people you follow · 24h</p></div></div> : null}
-      <div className="gh-stories-rail flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 scrollbar-hide">
-        <button type="button" onClick={() => ownStory ? openStory(ownStory) : openCreator()} className="group relative h-40 w-28 sm:h-44 sm:w-32 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={ownStory ? "View your story" : "Create a story"}>
-          {ownStory?.media?.url && !String(ownStory.media.url).startsWith("blob:") ? (ownStory.media.type === "video" ? <video src={ownStory.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop /> : <LazyImage src={ownStory.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />) : ownStory ? (profileAvatar ? <><LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/35" /><div className="absolute inset-0 flex items-center justify-center p-3"><p className="line-clamp-5 whitespace-pre-wrap text-center text-[13px] font-bold leading-snug text-white drop-shadow">{ownStory.text || "Your moment"}</p></div></> : <div className="absolute inset-0 flex items-center justify-center p-3" style={{ background: ownStory.background || STORY_BACKGROUNDS[0].value }}><p className="line-clamp-5 whitespace-pre-wrap text-center text-[13px] font-bold leading-snug text-white drop-shadow">{ownStory.text || "Your moment"}</p></div>) : (profileAvatar ? <><LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" /><div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center text-white"><span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/50 bg-black/30"><Plus size={24} /></span><span className="text-xs font-extrabold">Add a story</span></div></> : <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400"><div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center text-white"><span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/50 bg-white/15"><Plus size={24} /></span><span className="text-xs font-extrabold">Add a story</span><span className="text-[10px] text-white/75">Photo, video or text</span></div></div>)}
-          {ownStory ? <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2.5 pb-2.5 pt-10 text-white"><p className="truncate text-xs font-extrabold">Your story</p><p className="mt-0.5 line-clamp-2 text-[10px] text-white/80">{ownStory.text || "Tap to view your moment"}</p></div> : null}
-          {ownStory ? <span className="absolute left-2 top-2 rounded-full bg-black/40 px-2 py-1 text-[9px] font-bold text-white">Your moment</span> : null}
+    <div className="space-y-3" aria-label="Stories from your community">
+      {scope === "feed" ? (
+        <div className="flex items-end justify-between gap-3 px-1">
+          <div>
+            <h2 className="text-[15px] font-extrabold tracking-tight text-foreground">Stories</h2>
+            <p className="text-[11px] text-muted-foreground">Moments from people you follow · 24h</p>
+          </div>
+        </div>
+      ) : (
+        <div className="px-0">
+          <h2 className="text-[13px] font-extrabold tracking-tight text-foreground">Your moments</h2>
+          <p className="text-[11px] text-muted-foreground">Stories disappear after 24 hours</p>
+        </div>
+      )}
+      <div className="gh-stories-rail flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 scrollbar-hide">
+        {/* Own story / add */}
+        <button
+          type="button"
+          onClick={() => (ownStory ? setViewing(ownStory) : openCreator())}
+          className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
+          aria-label={ownStory ? "View your story" : "Add a story"}
+        >
+          <span
+            className={`relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 shadow-sm transition group-active:scale-[0.98] ${
+              ownStory
+                ? "border-emerald-500 ring-2 ring-emerald-500/20"
+                : "border-dashed border-border/80 bg-muted/40"
+            }`}
+          >
+            {ownStory?.media?.url && !String(ownStory.media.url).startsWith("blob:") ? (
+              ownStory.media.type === "video" ? (
+                <video src={ownStory.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop />
+              ) : (
+                <LazyImage src={ownStory.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )
+            ) : ownStory ? (
+              profileAvatar ? (
+                <>
+                  <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-black/35" />
+                  <div className="absolute inset-0 flex items-center justify-center p-2">
+                    <p className="line-clamp-4 whitespace-pre-wrap text-center text-[11px] font-bold leading-snug text-white drop-shadow">
+                      {ownStory.text || "Your moment"}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center p-2" style={{ background: ownStory.background || STORY_BACKGROUNDS[0].value }}>
+                  <p className="line-clamp-4 whitespace-pre-wrap text-center text-[11px] font-bold leading-snug text-white drop-shadow">
+                    {ownStory.text || "Your moment"}
+                  </p>
+                </div>
+              )
+            ) : profileAvatar ? (
+              <>
+                <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/25 p-2 text-center text-white">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-emerald-600 shadow">
+                    <Plus size={18} />
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2 text-center text-white">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/50 bg-white/15">
+                    <Plus size={18} />
+                  </span>
+                </div>
+              </div>
+            )}
+            {!ownStory ? (
+              <span className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-emerald-600 text-white shadow">
+                <Plus size={12} strokeWidth={3} />
+              </span>
+            ) : null}
+          </span>
+          <span className="w-full truncate text-center text-[11px] font-semibold text-foreground">
+            {ownStory ? "Your story" : "Add story"}
+          </span>
         </button>
-        {scope === "feed" && otherStories.map((story) => {
-          const seen = seenStoryIds.includes(story.id)
-          const counts = storyReactionOverrides[story.id] || story.reactionCounts || {}
-          const reactionTotal = Object.values(counts).reduce((sum, count) => sum + (Number(count) || 0), 0)
-          return <button key={story.id} type="button" onClick={() => openStory(story)} className="group relative h-40 w-28 sm:h-44 sm:w-32 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`View ${story.name || "member"}'s story`}>
-            {story.media?.url ? (story.media.type === "video" ? <video src={story.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop /> : <LazyImage src={story.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />) : <div className="absolute inset-0 flex items-center justify-center p-3" style={{ background: story.background || STORY_BACKGROUNDS[1].value }}><p className="line-clamp-6 whitespace-pre-wrap text-center text-[13px] font-bold leading-snug text-white drop-shadow">{story.text || "A moment shared"}</p></div>}
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-2.5 pb-2.5 pt-12 text-white"><div className="flex items-center gap-1.5"><span className={`h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/80 bg-black/25 ${seen ? "opacity-70" : "ring-2 ring-amber-400"}`}>{story.photo ? <LazyImage src={story.photo} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-[10px] font-bold">{(story.name || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 truncate text-[11px] font-extrabold">{story.name || "Member"}</span></div>{story.text && story.media?.url ? <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/85">{story.text}</p> : null}{reactionTotal > 0 ? <p className="mt-1 text-[10px] font-semibold text-white/90">✨ {reactionTotal} reaction{reactionTotal === 1 ? "" : "s"}</p> : null}</div>
-            {!seen ? <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-black/25" aria-label="Unseen story" /> : null}
-          </button>
+
+        {otherStories.map((item) => {
+          const label = String(item.name || item.ownerId || "Member").trim() || "Member"
+          const thumb = item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
+          const avatar = typeof item.photo === "string" && item.photo ? item.photo : null
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setViewing(item)}
+              className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
+              aria-label={`View story from ${label}`}
+            >
+              <span className="relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 border-transparent bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 p-[2px] shadow-sm transition group-active:scale-[0.98]">
+                <span className="relative block h-full w-full overflow-hidden rounded-[1.2rem] bg-card">
+                  {thumb ? (
+                    item.media?.type === "video" ? (
+                      <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+                    ) : (
+                      <LazyImage src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    )
+                  ) : avatar ? (
+                    <LazyImage src={avatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center bg-muted text-lg font-bold text-muted-foreground">
+                      {label.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+              </span>
+              <span className="w-full truncate text-center text-[11px] font-semibold text-foreground">{label}</span>
+            </button>
+          )
         })}
-        {scope === "feed" && otherStories.length === 0 && !ownStory ? <button type="button" onClick={() => openCreator()} className="flex h-40 w-28 sm:h-44 sm:w-32 shrink-0 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/25 p-3 text-center text-xs text-muted-foreground"><span><Sparkles size={20} className="mx-auto mb-2 text-emerald-600" />Be the first to share a moment with your community.</span></button> : null}
+
+        {scope === "feed" && otherStories.length === 0 && !ownStory ? (
+          <button
+            type="button"
+            onClick={openCreator}
+            className="flex h-[88px] min-w-[148px] shrink-0 snap-start flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-border/80 bg-muted/30 px-3 text-center text-[11px] text-muted-foreground transition hover:bg-muted/50"
+          >
+            <Sparkles size={18} className="mb-1.5 text-emerald-600" />
+            Be the first to share a moment with your community.
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -479,7 +601,58 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
   const viewer = viewing ? (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black text-white" role="dialog" aria-modal="true" aria-label={`${viewing.name || "Member"}'s story`} onClick={() => setViewing(null)} onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }} onTouchEnd={(e) => { if (touchStartX.current == null) return; const delta = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current; if (Math.abs(delta) > 65) navigateStory(delta < 0 ? 1 : -1); touchStartX.current = null }}>
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 p-3 sm:px-6 sm:py-4" onClick={(e) => e.stopPropagation()}><div className="flex min-w-0 flex-1 gap-1.5">{queue.map((item) => { const itemIndex = queue.findIndex((q) => q.id === item.id); const activeIndex = queue.findIndex((q) => q.id === viewing.id); const completed = itemIndex < activeIndex; const active = item.id === viewing.id; return <span key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30"><span className={`block h-full rounded-full ${completed ? "w-full bg-white" : active && viewing.media?.type !== "video" ? "bg-white" : "bg-transparent"}`} style={active && viewing.media?.type !== "video" ? { animation: "gh-story-progress 7s linear forwards" } : undefined} onAnimationEnd={active && viewing.media?.type !== "video" ? () => navigateStory(1) : undefined} /></span> })}</div>{viewing.media?.url ? <button type="button" onClick={(e) => { e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label="Download story media"><Download size={18} /></button> : null}<button type="button" onClick={() => setViewing(null)} className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label="Close story"><X size={20} /></button></div>
+      <div className="absolute inset-x-0 top-0 z-20 space-y-2.5 bg-gradient-to-b from-black/70 via-black/35 to-transparent p-3 pb-6 sm:px-6 sm:pt-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex min-w-0 flex-1 gap-1">
+          {queue.map((item) => {
+            const itemIndex = queue.findIndex((q) => q.id === item.id)
+            const activeIndex = queue.findIndex((q) => q.id === viewing.id)
+            const completed = itemIndex < activeIndex
+            const active = item.id === viewing.id
+            return (
+              <span key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+                <span
+                  className={`block h-full rounded-full ${completed ? "w-full bg-white" : active && viewing.media?.type !== "video" ? "bg-white" : "bg-transparent"}`}
+                  style={active && viewing.media?.type !== "video" && !prefersReducedMotion() ? { animation: "gh-story-progress 7s linear forwards" } : active && viewing.media?.type !== "video" ? { width: "100%" } : undefined}
+                  onAnimationEnd={active && viewing.media?.type !== "video" ? () => navigateStory(1) : undefined}
+                />
+              </span>
+            )
+          })}
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-2 ring-white/40">
+            {viewing.photo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={viewing.photo} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xs font-bold">{String(viewing.name || "M").slice(0, 1).toUpperCase()}</span>
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-white">{viewing.name || "Member"}</p>
+            <p className="text-[11px] text-white/70">
+              {viewing.createdAt ? new Date(viewing.createdAt).toLocaleString([], { hour: "2-digit", minute: "2-digit" }) : "Story"}
+              {viewing.audience ? ` · ${viewing.audience}` : ""}
+            </p>
+          </div>
+          {viewing.media?.url ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" })
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35"
+              aria-label="Download story media"
+            >
+              <Download size={18} />
+            </button>
+          ) : null}
+          <button type="button" onClick={() => setViewing(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label="Close story">
+            <X size={20} />
+          </button>
+        </div>
+      </div>
       <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
         {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <video key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <img src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
         <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <img src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
