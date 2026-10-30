@@ -122,6 +122,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [quoteMsg, setQuoteMsg] = useState<string | null>(null)
+  const [quoteDetail, setQuoteDetail] = useState<{
+    gross: number
+    fee: number
+    net: number
+    recipientUsername?: string
+  } | null>(null)
   const [quoting, setQuoting] = useState(false)
   const [requestingPayout, setRequestingPayout] = useState(false)
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null)
@@ -277,7 +283,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       } | null
       if (res.status === 503 || body?.error === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
         setPayoutMsg(
-          "PI withdrawal requests are not enabled on this deployment yet. The operator must set PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true on Pi Testnet after migrations and funded A2U readiness. No transfer was started.",
+          "PI withdrawal requests are not enabled on this deployment yet. The operator must set PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true on Pi Testnet after migrations and funded A2U readiness. No transfer was started. Enable on Testnet only after A2U funding and KYC’d wallet verification.",
         )
         return
       }
@@ -291,6 +297,15 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       )
       try {
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "payout-request" } }))
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "payout-request" } }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: {
+              message: body.message || `Payout request ${body.requestId || "queued"} recorded`,
+              type: "success",
+            },
+          }),
+        )
       } catch { /* */ }
     } catch {
       setPayoutMsg("Network error while creating payout request. No transfer was started.")
@@ -315,6 +330,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     const timeout = window.setTimeout(() => controller.abort(), 10_000)
     setQuoting(true)
     setQuoteMsg(null)
+    setQuoteDetail(null)
     try {
       const res = await fetch("/api/economy/earnings/quote", {
         method: "POST",
@@ -337,6 +353,14 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       if (!res.ok || !body?.ok) {
         setQuoteMsg(body?.message || body?.error || "Could not quote withdrawal.")
         return
+      }
+      if (typeof body.gross === "number" && typeof body.fee === "number" && typeof body.net === "number") {
+        setQuoteDetail({
+          gross: body.gross,
+          fee: body.fee,
+          net: body.net,
+          recipientUsername: body.recipientUsername || undefined,
+        })
       }
       setQuoteMsg(
         `Gross ${body.gross} π → fee ${body.fee} π (3%) → net ${body.net} π` +
@@ -509,32 +533,63 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         )}
 
         <div className="flex flex-wrap gap-2 pb-1">
-          <button
-            type="button"
-            disabled={quoting || snap.eligible !== true || snap.piWalletLinked !== true || !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)}
-            onClick={() => void onPreviewFee()}
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {quoting ? "Quoting…" : "Preview 3% fee"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void onRequestPayout()}
-            disabled={requestingPayout || snap.eligible !== true || snap.piWalletLinked !== true}
-            className="inline-flex items-center gap-1 rounded-full bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {requestingPayout ? "Submitting request…" : "Request PI withdrawal"}
-          </button>
+          {quoteDetail ? (
+            <div className="mt-2 rounded-xl border border-violet-200/80 bg-white/95 px-3 py-2.5 ring-1 ring-violet-100 dark:bg-violet-950/30">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Withdrawal quote</p>
+              <div className="mt-1.5 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Gross</p>
+                  <p className="text-[13px] font-bold tabular-nums text-foreground">{quoteDetail.gross} π</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Fee 3%</p>
+                  <p className="text-[13px] font-bold tabular-nums text-amber-800">−{quoteDetail.fee} π</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">You receive</p>
+                  <p className="text-[13px] font-bold tabular-nums text-emerald-800">{quoteDetail.net} π</p>
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Destination:{" "}
+                <span className="font-semibold text-foreground">
+                  {quoteDetail.recipientUsername ? `@${quoteDetail.recipientUsername}` : "linked KYC’d Pi wallet"}
+                </span>
+              </p>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={quoting || snap.eligible !== true || snap.piWalletLinked !== true || !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)}
+              onClick={() => void onPreviewFee()}
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-emerald-700/30 bg-emerald-50 px-4 text-[13px] font-bold text-emerald-900 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-100"
+            >
+              {quoting ? "Quoting…" : quoteDetail ? "Refresh quote" : "Preview 3% fee"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onRequestPayout()}
+              disabled={requestingPayout || snap.eligible !== true || snap.piWalletLinked !== true}
+              className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
+            >
+              {requestingPayout ? "Submitting request…" : "Withdraw to Pi wallet"}
+            </button>
+          </div>
           {payoutMsg ? (
             <p className="mt-2 text-[11px] leading-relaxed text-slate-700" role="status">{payoutMsg}</p>
           ) : (
             <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-              Creates a server-side payout request only. Pi A2U transfers are server-initiated (Testnet), require operator enablement, and never invent a paid result on the client.
+              Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement.
+              Destination is your KYC’d Pi wallet linked at sign-in
+              {snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}.
+              The client never invents a paid result.
             </p>
           )}
 
         </div>
-        {quoteMsg ? <p className="pb-2 text-[11px] text-slate-600">{quoteMsg}</p> : null}
+        {quoteMsg && !quoteDetail ? <p className="pb-2 text-[11px] text-slate-600">{quoteMsg}</p> : null}
       </div>
 
       {!compact && (

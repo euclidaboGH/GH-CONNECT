@@ -19,6 +19,7 @@
  * await api.delete('/api/user/123');
  */
 
+import { toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 type FetchResponse<T> = {
   data: T;
   status: number;

@@ -19,6 +19,12 @@ import { payoutPolicyPublic } from "@/lib/server/payouts/eligibility"
 import { buyGhcWithPiEnabled } from "@/lib/server/economy/testnet-unlock"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
+
+const __ghNoStore = {
+  "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+} as const
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 

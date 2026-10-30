@@ -6,6 +6,12 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
+
+const __ghNoStore = {
+  "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+} as const
+
   operatorSetWithdrawalStatus,
   type WithdrawalStatus,
 } from "@/lib/server/economy/withdrawal"
@@ -22,10 +28,10 @@ function isWithdrawalOperator(userId: string): boolean {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: __ghNoStore })
   }
   if (!isWithdrawalOperator(auth.userId)) {
-    return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
+    return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403, headers: __ghNoStore })
   }
 
   const parsed = await readBoundedJson(request, 4 * 1024)
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
   if (!/^[A-Za-z0-9_-]{8,180}$/.test(id) || !status || status.length > 32 ||
       settlementRef.length > 180 || rejectReason.length > 500 ||
       /[\u0000-\u001f\u007f]/.test(settlementRef + rejectReason)) {
-    return NextResponse.json({ ok: false, error: "INVALID_INPUT" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "INVALID_INPUT" }, { status: 400, headers: __ghNoStore })
   }
 
   const result = await operatorSetWithdrawalStatus({

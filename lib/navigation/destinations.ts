@@ -3,8 +3,9 @@
  * Single source of truth for tabs, overlays, and deep-link aliases.
  * Do not invent parallel routers — shell (app.tsx) owns presentation.
  *
- * Visible bottom nav (5): Home · Discover · Create · Messages · Profile
- * PRIMARY_TABS still mounts matches + communities for deep-links.
+ * Phase 2B visible bottom nav (4): Home · Cart · Wallet · Profile
+ * Discover / Messages / Communities remain reachable via Home, Profile, and deep-links.
+ * PRIMARY_TABS still mounts matches + communities + messages for deep-links.
  */
 
 import type { Tab } from "@/lib/ghc-types"
@@ -25,7 +26,7 @@ export type PrimaryTab = (typeof PRIMARY_TABS)[number]
  * Visible bottom-bar destinations (Create is an overlay, not a PRIMARY_TAB).
  * Must remain exactly these five product destinations.
  */
-export const BOTTOM_NAV_IDS = ["home", "discover", "create", "messages", "profile"] as const
+export const BOTTOM_NAV_IDS = ["home", "cart", "wallet", "profile"] as const
 
 export type OverlayDestination =
   | "wallet"
@@ -64,6 +65,7 @@ export const DESTINATION_CATALOGUE: readonly DestinationMeta[] = [
   { id: "help", label: "Help", type: "overlay", category: "tools", status: "ACTIVE" },
   { id: "ecosystem", label: "Ecosystem", type: "overlay", category: "tools", status: "ACTIVE" },
   { id: "marketplace", label: "Marketplace", type: "service", category: "commerce", status: "ACTIVE" },
+  { id: "cart", label: "Cart", type: "overlay", category: "commerce", status: "ACTIVE" },
 ] as const
 
 /**
@@ -107,6 +109,9 @@ export const DESTINATION_ALIASES: Record<string, DestinationId> = {
   ecosystem: "ecosystem",
   eco: "ecosystem",
   marketplace: "marketplace",
+  cart: "cart",
+  shop: "cart",
+  store: "marketplace",
   market: "marketplace",
   shop: "marketplace",
   listing: "marketplace",

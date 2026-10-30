@@ -28,6 +28,12 @@ import {
 } from "@/lib/server/economy/ghc-pack-catalog"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 
+
+const __ghNoStore = {
+  "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+} as const
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -157,7 +163,7 @@ export async function POST(request: Request) {
     intent.metadata?.kind !== "ghc_pack" ||
     !intent.providerPaymentId
   ) {
-    return NextResponse.json({ ok: false, error: "PACK_INTENT_BINDING_MISMATCH", granted: false }, { status: 409 })
+    return NextResponse.json({ ok: false, error: "PACK_INTENT_BINDING_MISMATCH", granted: false }, { status: 409, headers: __ghNoStore })
   }
 
   const pack =
@@ -194,7 +200,7 @@ export async function POST(request: Request) {
   }
 
   if (paymentId && intent.providerPaymentId && paymentId !== intent.providerPaymentId) {
-    return NextResponse.json({ ok: false, error: "PAYMENT_MISMATCH", granted: false }, { status: 409 })
+    return NextResponse.json({ ok: false, error: "PAYMENT_MISMATCH", granted: false }, { status: 409, headers: __ghNoStore })
   }
 
   const referenceId = `pi_pack:${intentId}:${pack.productId}`

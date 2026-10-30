@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.205.0",
+  "version": "0.214.0",
   "private": true,
   "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -136,7 +136,14 @@
     "check:phase18-marketplace-payment-binding": "node scripts/check-phase18-marketplace-payment-binding.mjs",
     "check:phase19-marketplace-rpc-transport": "node scripts/check-phase19-marketplace-rpc-transport.mjs",
     "check:phase25": "node scripts/check-phase25-operational-workflows.mjs",
-    "check:phase26-operational-execution": "node scripts/check-phase26-operational-execution.mjs"
+    "check:phase26-operational-execution": "node scripts/check-phase26-operational-execution.mjs",
+    "check:phase1-registration-topup": "node scripts/check-phase1-registration-topup.mjs",
+    "check:phase2-dual-asset-wallet": "node scripts/check-phase2-dual-asset-wallet.mjs",
+    "check:phase3-pi-claim-buttons": "node scripts/check-phase3-pi-claim-buttons.mjs",
+    "check:phase4-pi-withdraw-kyc": "node scripts/check-phase4-pi-withdraw-kyc.mjs",
+    "check:phase5-wallet-release-gate": "node scripts/check-phase5-wallet-release-gate.mjs",
+    "check:phase1-architecture-foundation": "node scripts/check-phase1-architecture-foundation.mjs",
+    "check:phase2-architecture-decomposition": "node scripts/check-phase2-architecture-decomposition.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

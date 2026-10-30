@@ -1,12 +1,12 @@
 "use client"
 
 /**
- * One-time 3 π registration bonus claim and legacy reconciliation control.
+ * Phase 3 — One-time 3 π registration bonus claim + legacy 2.95 π reconciliation.
  * Server-authoritative: never invents a balance on the client.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Gift, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
+import { Gift, Loader2, CheckCircle2, AlertCircle, Sparkles } from "lucide-react"
 
 type BonusStatus = {
   ok?: boolean
@@ -65,8 +65,7 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
     }
   }, [refresh])
 
-  // Existing v1 claimants are topped up automatically when the bonus card is loaded.
-  // New users still explicitly claim their 3 PI bonus.
+  // Legacy v1 claimants auto-reconcile once when the card loads and is claimable.
   useEffect(() => {
     if (loading || !status?.enabled || !status.legacyClaimed || !status.claimable || autoReconcileStarted.current) return
     autoReconcileStarted.current = true
@@ -91,13 +90,20 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
         setMsg(body.message || "Remaining registration bonus reconciled.")
         window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "registration-bonus-reconciliation" } }))
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "registration-bonus-reconciliation" } }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: { message: body.message || "2.95 π top-up credited", type: "success" },
+          }),
+        )
       } catch {
         if (!cancelled) setMsg("Bonus reconciliation is temporarily unavailable. Please retry later.")
       } finally {
         if (!cancelled) setClaiming(false)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [loading, status, refresh])
 
   const onClaim = async () => {
@@ -117,6 +123,7 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
         await refresh()
         return
       }
+      const amount = body.amountPi ?? status.amountPi ?? 3
       setMsg(body.message || "Registration bonus credited.")
       setStatus(body)
       try {
@@ -124,7 +131,10 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "registration-bonus" } }))
         window.dispatchEvent(
           new CustomEvent("ghc:toast", {
-            detail: { message: body.message || `${body.amountPi ?? amount} π registration bonus claimed`, type: "success" },
+            detail: {
+              message: body.message || `${amount} π registration bonus claimed`,
+              type: "success",
+            },
           }),
         )
       } catch {
@@ -151,48 +161,128 @@ export function RegistrationBonusCard({ compact = false }: { compact?: boolean }
     )
   }
 
-  // Avoid duplicate noisy banners — wallet/dashboard already surface ledger health.
+  // Migration pending while feature enabled
   if (status?.error === "EARNINGS_LEDGER_UNAVAILABLE" || status?.error === "UNAVAILABLE") {
+    if (status.enabled === true) {
+      return (
+        <section
+          className={`rounded-2xl border border-amber-500/30 bg-amber-50/80 p-3.5 dark:bg-amber-950/30 ${compact ? "mx-0" : "mx-3 mt-3"}`}
+          aria-label="Registration bonus pending infrastructure"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-foreground">Registration bonus (3 π)</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                The earnings ledger is not ready for claims yet. Operator must apply migration{" "}
+                <span className="font-mono text-[11px]">20261030010001_registration_bonus_v2_reconciliation.sql</span>{" "}
+                and ensure the service role can call the claim RPC. No balances are invented on the client.
+              </p>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="mt-2 rounded-full border border-amber-600/40 px-3 py-1 text-[11px] font-bold text-amber-900"
+              >
+                Retry status
+              </button>
+            </div>
+          </div>
+        </section>
+      )
+    }
     return null
   }
 
+  if (status?.error === "LEGACY_BONUS_REVIEW_REQUIRED") {
+    return (
+      <section
+        className={`rounded-2xl border border-amber-500/30 bg-amber-50/80 p-3.5 dark:bg-amber-950/30 ${compact ? "mx-0" : "mx-3 mt-3"}`}
+        aria-label="Registration bonus needs review"
+      >
+        <p className="text-[13px] font-bold text-foreground">Registration bonus needs review</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          {status.message || "A historical registration-bonus entry does not match the verified 0.05 π policy."}
+        </p>
+      </section>
+    )
+  }
+
   const amount = status?.amountPi ?? 3
+  const isLegacy = Boolean(status?.legacyClaimed && !status?.claimed)
+  const isClaimable = Boolean(status?.claimable)
+  const isClaimed = Boolean(status?.claimed)
+
+  // Compact claimed chip for Rewards
+  if (compact && isClaimed) {
+    return (
+      <div className="mx-0 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50/60 px-3 py-2 dark:bg-emerald-950/20">
+        <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+        <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-200">Registration bonus claimed (3 π total)</p>
+      </div>
+    )
+  }
 
   return (
     <section
-      className={`rounded-2xl border border-emerald-600/25 bg-gradient-to-br from-emerald-50/90 to-card p-3.5 shadow-sm dark:from-emerald-950/30 dark:to-card ${compact ? "mx-0" : "mx-3 mt-3"}`}
+      className={
+        compact
+          ? "rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm"
+          : isClaimable
+            ? "mx-3 mt-3 rounded-2xl border border-emerald-600/30 bg-gradient-to-br from-emerald-50 via-card to-card p-4 shadow-sm dark:from-emerald-950/40 dark:to-card"
+            : "mx-3 mt-3 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm"
+      }
       aria-label="Registration bonus"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white">
-          <Gift className="h-5 w-5" aria-hidden />
+        <div
+          className={
+            isClaimable
+              ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm"
+              : "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700/90 text-white"
+          }
+        >
+          {isClaimable ? <Sparkles className="h-5 w-5" aria-hidden /> : <Gift className="h-5 w-5" aria-hidden />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-bold text-foreground">Registration bonus</p>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Policy total: <span className="font-semibold text-emerald-800 dark:text-emerald-300">3 π</span> one-time registration bonus.
-            {status?.legacyClaimed && !status?.claimed
-              ? " You already received 0.05 π — claim the remaining 2.95 π to complete the 3 π total."
-              : " Credited to your PI earnings ledger (withdraw to your linked Pi wallet when eligible)."}
+          <p className="text-[13px] font-bold text-foreground">
+            {isLegacy ? "Complete your 3 π registration bonus" : isClaimed ? "Registration bonus claimed" : "Registration bonus"}
+          </p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+            {isLegacy ? (
+              <>
+                You already received <span className="font-semibold">0.05 π</span>. Claim the remaining{" "}
+                <span className="font-semibold text-emerald-800 dark:text-emerald-300">2.95 π</span> so your ledger totals{" "}
+                <span className="font-semibold text-emerald-800 dark:text-emerald-300">3 π</span>.
+              </>
+            ) : isClaimed ? (
+              <>Policy total of <span className="font-semibold text-emerald-800 dark:text-emerald-300">3 π</span> is in your PI earnings ledger.</>
+            ) : (
+              <>
+                One-time <span className="font-semibold text-emerald-800 dark:text-emerald-300">3 π</span> credited to your PI
+                earnings ledger. Withdrawable to your linked KYC’d Pi wallet when eligible.
+              </>
+            )}
           </p>
 
-          {status?.claimed ? (
+          {isClaimed ? (
             <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-700/10 px-3 py-1.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
               <CheckCircle2 className="h-3.5 w-3.5" /> Claimed (3 π total)
             </div>
-          ) : status?.claimable ? (
+          ) : isClaimable ? (
             <button
               type="button"
               disabled={claiming}
               onClick={() => void onClaim()}
-              className="mt-2.5 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-emerald-700 px-4 text-[12px] font-bold text-white disabled:opacity-60"
+              className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-emerald-800 active:scale-[0.98] disabled:opacity-60"
             >
               {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
               {claiming
-                ? (status?.legacyClaimed ? "Reconciling…" : "Claiming…")
-                : status?.legacyClaimed
+                ? isLegacy
+                  ? "Reconciling…"
+                  : "Claiming…"
+                : isLegacy
                   ? `Claim remaining ${amount} π`
-                  : `Claim ${amount} π`}
+                  : `Claim ${amount} π now`}
             </button>
           ) : (
             <p className="mt-2 text-[11px] text-muted-foreground">

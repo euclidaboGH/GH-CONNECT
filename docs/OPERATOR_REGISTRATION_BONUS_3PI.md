@@ -1,6 +1,9 @@
 # Registration bonus policy — 3 π
 
 ## Policy
+
+> **Math:** 3 π total − 0.05 π legacy = **2.95 π** top-up (not 2.85). Use the constants in code only.
+
 - **New users:** one-time **3 π** credit (`registration_bonus:v2:{userId}`), atomic `30_000_000`.
 - **Legacy v1 (0.05 π) claimants:** idempotent top-up **2.95 π** (`registration_bonus:v2_topup:{userId}`), atomic `29_500_000`.
 - Only one known Testnet user claimed the legacy 0.05 π amount.

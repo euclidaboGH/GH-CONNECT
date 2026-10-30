@@ -1225,11 +1225,21 @@ const lowBalance = balance === 0 && displayPending === 0
             monthEarned={monthInsight.monthEarned}
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}
+            selectedRail={assetRail}
+            onSelectRail={(rail) => setAssetRail(rail)}
             primaryActions={
               <WalletPrimaryActions
                 embedded
+                assetRail={assetRail}
                 disabled={!!claimingHoldId}
                 onSend={() => {
+                  if (assetRail === "pi") {
+                    setSendEducate(null)
+                    setHistoryRail("pi")
+                    // PI "send" is earnings withdrawal — scroll to PI tools in dashboard
+                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    return
+                  }
                   if (balance <= 0 && (displayPending > 0 || pending > 0)) {
                     setSendEducate(
                       "Claim pending GHC to send — only available balance can be transferred."
@@ -1243,12 +1253,21 @@ const lowBalance = balance === 0 && displayPending === 0
                   setP2pSuccess(null)
                 }}
                 onRequest={() => {
+                  if (assetRail === "pi") {
+                    setSendEducate("PI requests use your linked Pi identity at sign-in. Request a payout from PI earnings below.")
+                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    return
+                  }
                   setSendEducate(null)
                   setP2pMode("request")
                   setP2pError(null)
                   setP2pSuccess(null)
                 }}
                 onReceive={() => {
+                  if (assetRail === "pi") {
+                    setSendEducate("PI is credited to your earnings ledger from rewards and cashback — not via P2P receive.")
+                    return
+                  }
                   setSendEducate(null)
                   setP2pMode("receive")
                   setP2pError(null)
@@ -1256,44 +1275,69 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onActivity={() => {
                   setSendEducate(null)
-                  setHistoryRail("ghc")
+                  setHistoryRail(assetRail)
+                  setAssetRail(assetRail)
                   setShowFullHistory(true)
+                  setTab("activity")
                 }}
               />
             }
           />
           <PaymentRecoveryBanner />
-          <div className="mt-3"><PaymentRecoveryPanel /></div>
-          <div className="mt-3"><PiPaymentUtilityStatus /></div>
           <RegistrationBonusCard />
-          <UnifiedEarningsDashboard />
-          <PiCashbackSummary />
-          <div className="gh-premium-wallet-metrics mt-3 grid grid-cols-3 gap-2" aria-label="GHC wallet state">
-            {[
-              ["Available", balance, "Spendable"],
-              ["Pending", displayPending, "Awaiting validation"],
-              ["Locked", locked, escrowLocked > 0 ? `Escrow ${formatGhc(escrowLocked)}` : "Reserved"],
-            ].map(([label, amount, note]) => (
-              <div key={String(label)} className="rounded-2xl border border-border/70 bg-card/80 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-                <p className="mt-1 text-sm font-bold tabular-nums text-foreground">{formatGhc(Number(amount))}</p>
-                <p className="mt-0.5 text-[9px] text-muted-foreground">{note}</p>
-              </div>
-            ))}
-          </div>
+
+          {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
+          {assetRail === "pi" ? (
+            <div id="gh-pi-earnings-tools" className="scroll-mt-20 space-y-3">
+              <UnifiedEarningsDashboard />
+              <PiCashbackSummary />
+            </div>
+          ) : (
+            <div id="gh-pi-earnings-tools" className="scroll-mt-20">
+              <details className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card open:shadow-sm">
+                <summary className="cursor-pointer list-none px-3.5 py-3 text-[12px] font-bold text-muted-foreground [&::-webkit-details-marker]:hidden">
+                  PI earnings & cashback
+                </summary>
+                <div className="space-y-3 border-t border-border/50 px-2 pb-3 pt-2">
+                  <UnifiedEarningsDashboard compact />
+                  <PiCashbackSummary />
+                </div>
+              </details>
+            </div>
+          )}
+
+          {/* Advanced / operator diagnostics — collapsed by default */}
+          <details className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card open:shadow-sm">
+            <summary className="cursor-pointer list-none px-3.5 py-3 text-[12px] font-bold text-muted-foreground [&::-webkit-details-marker]:hidden">
+              Advanced · payment recovery & sandbox status
+            </summary>
+            <div className="space-y-3 border-t border-border/50 px-3 pb-3 pt-2">
+              <PaymentRecoveryPanel />
+              <PiPaymentUtilityStatus />
+            </div>
+          </details>
         </div>
 
         {/* Quick tools under balance card */}
         <div className="mx-3 mt-3 flex flex-wrap gap-2" role="group" aria-label="Wallet quick tools">
-          <QuickChip
-            icon={<Share2 size={14} />}
-            label="Spend GHC"
-            onClick={() => {
-              setAssetRail("ghc")
-              setShowUtilityPanel(true)
-              setSendEducate(null)
-            }}
-          />
+          {assetRail === "ghc" ? (
+            <QuickChip
+              icon={<Share2 size={14} />}
+              label="Spend GHC"
+              onClick={() => {
+                setShowUtilityPanel(true)
+                setSendEducate(null)
+              }}
+            />
+          ) : (
+            <QuickChip
+              icon={<Share2 size={14} />}
+              label="PI tools"
+              onClick={() => {
+                document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }}
+            />
+          )}
           <QuickChip
             icon={<Crown size={14} />}
             label="Membership"
@@ -1306,6 +1350,8 @@ const lowBalance = balance === 0 && displayPending === 0
               setTab("activity")
               setTxFilter("all")
               setQuery("")
+              setShowFullHistory(true)
+              setHistoryRail(assetRail)
             }}
           />
           <QuickChip
@@ -1500,12 +1546,10 @@ const lowBalance = balance === 0 && displayPending === 0
         )}
         {tab === "activity" && (
             <>
-              <div className="rounded-2xl border border-border bg-card px-3 py-2.5">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Transaction history
-                </p>
+              <div className="rounded-2xl border border-border bg-card px-3.5 py-3">
+                <p className="text-[13px] font-bold text-foreground">Activity</p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  GHC ledger and π payments are kept on separate rails — never mixed.
+                  Switch asset to view GHC utility or PI payment history. Rails are never mixed.
                 </p>
               </div>
               <div
@@ -1537,7 +1581,7 @@ const lowBalance = balance === 0 && displayPending === 0
                       : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
-                  π Payments
+                  PI
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Date range">
@@ -2337,8 +2381,10 @@ const lowBalance = balance === 0 && displayPending === 0
             </div>
           </header>
           <div className="flex gap-2 border-b border-border px-3 py-2">
-            <button type="button" onClick={() => setHistoryRail("ghc")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${historyRail === "ghc" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>GHC</button>
-            <button type="button" onClick={() => setHistoryRail("pi")} className={`rounded-full px-3 py-1.5 text-xs font-bold ${historyRail === "pi" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>π Payments</button>
+            <div className="flex w-full rounded-full bg-muted p-1" role="tablist" aria-label="Transaction asset">
+              <button type="button" role="tab" aria-selected={historyRail === "ghc"} onClick={() => setHistoryRail("ghc")} className={`flex-1 rounded-full px-3 py-2 text-xs font-bold transition ${historyRail === "ghc" ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground"}`}>GHC</button>
+              <button type="button" role="tab" aria-selected={historyRail === "pi"} onClick={() => setHistoryRail("pi")} className={`flex-1 rounded-full px-3 py-2 text-xs font-bold transition ${historyRail === "pi" ? "bg-violet-600 text-white shadow-sm" : "text-muted-foreground"}`}>PI</button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {historyRail === "ghc" ? (

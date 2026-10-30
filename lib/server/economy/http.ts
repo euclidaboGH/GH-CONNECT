@@ -2,30 +2,40 @@ import { NextResponse } from "next/server"
 import type { GhcTransferErrorCode } from "@/lib/domains/economy-transfer-contract"
 import { hasPrivilegedDatabase, readGhcServerEnv } from "./env"
 
+/** Financial responses must never be cached by browsers, CDNs, or shared caches. */
+const FINANCIAL_NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+}
+
 export function jsonOk(
   data: unknown,
   status = 200,
-  init?: { requestId?: string; headers?: Record<string, string> }
+  init?: { requestId?: string; headers?: Record<string, string>; allowStore?: boolean }
 ) {
-  const headers: Record<string, string> = { ...(init?.headers || {}) }
+  const headers: Record<string, string> = {
+    ...(init?.allowStore ? {} : FINANCIAL_NO_STORE_HEADERS),
+    ...(init?.headers || {}),
+  }
   if (init?.requestId) headers["x-request-id"] = init.requestId
-  return NextResponse.json(data, {
-    status,
-    headers: Object.keys(headers).length ? headers : undefined,
-  })
+  return NextResponse.json(data, { status, headers })
 }
 
 export function jsonErr(
   code: GhcTransferErrorCode | string,
   message: string,
   status = 400,
-  init?: { requestId?: string; headers?: Record<string, string> }
+  init?: { requestId?: string; headers?: Record<string, string>; allowStore?: boolean }
 ) {
-  const headers: Record<string, string> = { ...(init?.headers || {}) }
+  const headers: Record<string, string> = {
+    ...(init?.allowStore ? {} : FINANCIAL_NO_STORE_HEADERS),
+    ...(init?.headers || {}),
+  }
   if (init?.requestId) headers["x-request-id"] = init.requestId
   return NextResponse.json(
     { ok: false, code, message, error: message },
-    { status, headers: Object.keys(headers).length ? headers : undefined }
+    { status, headers }
   )
 }
 

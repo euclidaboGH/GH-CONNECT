@@ -488,7 +488,7 @@ export function RewardsCentreScreen({
           <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
           <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
         </div>
-        <RegistrationBonusCard />
+        <RegistrationBonusCard compact />
         {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
             Compact cashback summary only; full ledger + A2U request on Wallet. */}
         <PiCashbackSummary />

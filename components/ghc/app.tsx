@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startT
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
-import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
+import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users , ShoppingCart, Wallet} from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
@@ -213,9 +213,8 @@ Toast.displayName = "Toast"
 /** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "discover", icon: Compass, label: "Discover" },
-  { id: "create", icon: Plus, label: "Create" },
-  { id: "messages", icon: MessagesSquare, label: "Messages" },
+  { id: "cart", icon: ShoppingCart, label: "Cart" },
+  { id: "wallet", icon: Wallet, label: "Wallet" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -1215,7 +1214,7 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id !== "create" && activeTab === id
+            const isActive = id === "wallet" ? walletOpen : id === "cart" ? marketplaceOpen : id !== "create" && activeTab === id
             return (
               <button
                 key={id}
@@ -1227,6 +1226,15 @@ export function GHConnectApp() {
                   } catch { /* */ }
                 }}
                 onClick={() => {
+                  // Phase 2B primary: Home | Cart | Wallet | Profile
+                  if (id === "cart") {
+                    setMarketplaceOpen(true)
+                    return
+                  }
+                  if (id === "wallet") {
+                    openWallet()
+                    return
+                  }
                   if (id === "create") {
                     setShowCreateHub(true)
                     return
