@@ -1,0 +1,181 @@
+"use client"
+
+/**
+ * Standardized Connection Card — identity, explainable relevance, state, actions.
+ * Does not invent relationship success; actions only when eligible.
+ */
+
+import type { DiscoveryCandidate } from "@/lib/domains/contracts/discovery"
+import {
+  eligibleConnectionActions,
+  connectionStateLabel,
+  type ConnectionUiState,
+  type ConnectionCardAction,
+} from "@/lib/domains/adapters/connection-graph-adapter"
+import type { ConnectionIntentId } from "@/lib/connection-intents"
+import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
+import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
+
+
+/** Safe media/location accessors for the DiscoveryCandidate discriminated union */
+function candidateAvatarUrl(candidate: DiscoveryCandidate): string | null | undefined {
+  if (candidate.kind === "person") return candidate.avatarUrl
+  if (candidate.kind === "community") return candidate.coverImage
+  return undefined
+}
+
+function candidateLocationLabel(candidate: DiscoveryCandidate): string | null | undefined {
+  if (
+    candidate.kind === "person" ||
+    candidate.kind === "event" ||
+    candidate.kind === "service"
+  ) {
+    return candidate.locationLabel
+  }
+  if (candidate.kind === "community" && candidate.region) return candidate.region
+  return undefined
+}
+
+export interface ConnectionCardProps {
+  candidate: DiscoveryCandidate
+  connectionState?: ConnectionUiState
+  selectedIntent?: ConnectionIntentId | null
+  busy?: boolean
+  onAction?: (action: ConnectionCardAction, candidate: DiscoveryCandidate) => void
+}
+
+export function ConnectionCard({
+  candidate,
+  connectionState = "none",
+  selectedIntent,
+  busy,
+  onAction,
+}: ConnectionCardProps) {
+  const actions = eligibleConnectionActions(connectionState)
+  const reasonText = formatReasonsForUi(candidate, 2)
+  const stateLabel = connectionStateLabel(connectionState)
+  const initials = (candidate.displayName || "M").slice(0, 1).toUpperCase()
+  const avatarUrl = candidateAvatarUrl(candidate)
+  const locationLabel = candidateLocationLabel(candidate)
+
+  return (
+    <article
+      className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]"
+      aria-label={`${candidate.displayName}, ${stateLabel}`}
+      data-connection-state={connectionState}
+    >
+      <div className="flex gap-3">
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-sm font-bold text-emerald-800 dark:text-emerald-200">
+              {initials}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="truncate text-sm font-semibold text-foreground">
+              {candidate.displayName}
+            </h3>
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {stateLabel}
+            </span>
+          </div>
+          {candidate.subtitle ? (
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{candidate.subtitle}</p>
+          ) : null}
+          {locationLabel ? (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/90">{locationLabel}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="mt-2 text-[11px] leading-snug text-foreground/80">
+        <span className="font-medium text-primary">Why: </span>
+        {reasonText}
+      </p>
+
+      {((candidate.kind === "person" && candidate.interests && candidate.interests.length > 0) || selectedIntent) ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {selectedIntent ? (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              Intent: {formatIntentChip(String(selectedIntent))}
+            </span>
+          ) : null}
+          {candidate.kind === "person"
+            ? (candidate.interests || []).slice(0, 4).map((interest) => (
+                <span
+                  key={interest}
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {interest}
+                </span>
+              ))
+            : null}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {actions.map((action) => (
+          <button
+            key={action}
+            type="button"
+            disabled={busy || connectionState === "blocked"}
+            onClick={() => onAction?.(action, candidate)}
+            className={
+              action === "connect" || action === "accept" || action === "like"
+                ? "rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground disabled:opacity-50"
+                : action === "pass"
+                  ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
+                  : "rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground disabled:opacity-50"
+            }
+            title={
+              action === "like"
+                ? MATCH_CLARITY.likeHint
+                : action === "pass"
+                  ? MATCH_CLARITY.passHint
+                  : action === "connect"
+                    ? MATCH_CLARITY.connectHint
+                    : undefined
+            }
+          >
+            {labelForAction(action)}
+          </button>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function labelForAction(action: ConnectionCardAction): string {
+  switch (action) {
+    case "connect":
+      return MATCH_CLARITY.connectLabel
+    case "like":
+      return MATCH_CLARITY.likeLabel
+    case "pass":
+      return MATCH_CLARITY.passLabel
+    case "accept":
+      return "Accept"
+    case "decline":
+      return "Decline"
+    case "message":
+      return "Message"
+    case "view_profile":
+      return "View profile"
+    case "invite":
+      return "Invite"
+    case "save":
+      return "Save"
+    default:
+      return action
+  }
+}
+
+export default ConnectionCard

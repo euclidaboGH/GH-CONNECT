@@ -1,0 +1,789 @@
+"use client"
+
+/**
+ * Unified Global Search — people, public IDs, communities, posts.
+ * Debounced query, recent searches, privacy/block filters, stale-result guard.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { onCloseTransientUI } from "@/lib/transient-ui"
+import { Search, X, Users, Newspaper, MessagesSquare, Hash, Clock, Trash2 } from "lucide-react"
+import { useGHC } from "@/contexts/ghc-context"
+import { LazyImage } from "./lazy-image"
+import { resolveAvatarUrl } from "@/lib/avatar"
+import { runUniversalSearch, groupSearchResults } from "@/lib/domains/adapters/universal-search"
+import { resolveCommunitySearchAction } from "@/lib/domains/adapters/community-search-actions"
+import { IdentityService } from "@/lib/identity/identity-service"
+import { resolveUserIntents } from "@/lib/connection-intents"
+import { Calendar, Briefcase, Sparkles } from "lucide-react"
+import { navigateTo, openCommunity, openChat } from "@/lib/navigation/navigate"
+import { openListing } from "@/lib/marketplace/commerce-actions"
+import { piLocalGet, piLocalSet } from "@/lib/pi-local-storage"
+import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
+
+type SearchTab = "all" | "people" | "posts" | "communities" | "events" | "activities" | "services" | "ids"
+
+const RECENT_KEY = "ghc-search-recent-v1"
+const MAX_RECENT = 8
+
+function loadRecent(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as string[]
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string").slice(0, MAX_RECENT) : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecent(items: string[]) {
+  const payload = JSON.stringify(items.slice(0, MAX_RECENT))
+  try {
+    localStorage.setItem(RECENT_KEY, payload)
+  } catch {
+    /* ignore */
+  }
+  void piLocalSet("search-recent-v1", payload).catch(() => {})
+}
+
+async function loadRecentAsync(): Promise<string[]> {
+  try {
+    const fromPi = await piLocalGet("search-recent-v1")
+    if (fromPi) {
+      const parsed = JSON.parse(fromPi) as string[]
+      if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === "string").slice(0, MAX_RECENT)
+    }
+  } catch {
+    /* */
+  }
+  return loadRecent()
+}
+
+export function GlobalSearchButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="rounded-full p-2 text-foreground/80 hover:bg-muted active:scale-95"
+      aria-label="Search"
+    >
+      <Search size={18} />
+    </button>
+  )
+}
+
+export function GlobalSearchModal({
+  open,
+  onClose,
+  onSelectPerson,
+  onSelectPost,
+  onSelectCommunity,
+}: {
+  open: boolean
+  onClose: () => void
+  onSelectPerson?: (id: string) => void
+  onSelectPost?: (id: string) => void
+  onSelectCommunity?: (id: string) => void
+}) {
+  const { candidates, posts, conversations, blockedUsers, mutedUsers, settings, matches, setTab } =
+    useGHC()
+  const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+  const [tab, setSearchTab] = useState<SearchTab>("all")
+  const [recent, setRecent] = useState<string[]>([])
+  const [serverPeople, setServerPeople] = useState<Array<{ userId?: string; displayName?: string; username?: string; bio?: string; avatarUrl?: string; isFollowing?: boolean }>>([])
+  const [serverPosts, setServerPosts] = useState<Array<{ id?: string; content?: string; authorName?: string; video?: string | null }>>([])
+  const [serverVideos, setServerVideos] = useState<Array<{ id?: string; content?: string; authorName?: string; video?: string | null }>>([])
+  const [serverCreators, setServerCreators] = useState<Array<{ userId?: string; displayName?: string; bio?: string }>>([])
+  const [serverOk, setServerOk] = useState(false)
+  const requestGen = useRef(0)
+  const [resultGen, setResultGen] = useState<number>(0)
+
+  // Search results are snapshots, but already-visible results should not show
+  // deleted/archived/stale edited content after a mutation elsewhere in the app.
+  useEffect(() => {
+    if (!open) return
+    const onPostSync = (event: Event) => {
+      const detail = readPostSyncDetail(event)
+      if (!detail) return
+      const reconcile = <T extends { id?: string; content?: string }>(rows: T[]) => {
+        if (detail.operation === "delete" || detail.operation === "archive") return rows.filter((row) => String(row.id || "") !== detail.postId)
+        return rows.map((row) => String(row.id || "") === detail.postId ? { ...row, ...(detail.patch || {}) } : row)
+      }
+      setServerPosts((rows) => reconcile(rows))
+      setServerVideos((rows) => reconcile(rows))
+    }
+    window.addEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+    return () => window.removeEventListener(POST_SYNC_EVENT, onPostSync as EventListener)
+  }, [open])
+
+  // Debounce — prevents stale rapid typing results
+  useEffect(() => {
+    const gen = ++requestGen.current
+    const t = window.setTimeout(() => {
+      if (gen !== requestGen.current) return
+      setDebouncedQuery(query.trim())
+      setResultGen(gen)
+    }, 220)
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  useEffect(() => {
+    if (!open || debouncedQuery.length < 2) {
+      setServerOk(false)
+      setServerPeople([])
+      setServerPosts([])
+      setServerVideos([])
+      setServerCreators([])
+      return
+    }
+    const cat =
+      tab === "people"
+        ? "people"
+        : tab === "posts"
+          ? "posts"
+          : "all"
+    const ac = new AbortController()
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/social/search?q=${encodeURIComponent(debouncedQuery)}&category=${encodeURIComponent(cat)}&limit=20`,
+          { credentials: "include", headers: { Accept: "application/json" }, signal: ac.signal },
+        )
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          durable?: boolean
+          people?: typeof serverPeople
+          posts?: typeof serverPosts
+          videos?: typeof serverVideos
+          creators?: typeof serverCreators
+        }
+        if (!res.ok || !data.ok || !data.durable) {
+          setServerOk(false)
+          return
+        }
+        setServerPeople(Array.isArray(data.people) ? data.people : [])
+        setServerPosts(Array.isArray(data.posts) ? data.posts : [])
+        setServerVideos(Array.isArray(data.videos) ? data.videos : [])
+        setServerCreators(Array.isArray(data.creators) ? data.creators : [])
+        setServerOk(true)
+      } catch {
+        if (!ac.signal.aborted) setServerOk(false)
+      }
+    })()
+    return () => ac.abort()
+  }, [open, debouncedQuery, tab])
+
+  useEffect(() => {
+    if (open) void loadRecentAsync().then(setRecent)
+    else {
+      setQuery("")
+      setDebouncedQuery("")
+      setSearchTab("all")
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    return onCloseTransientUI(() => onClose())
+  }, [open, onClose])
+
+  const blocked = useMemo(
+    () =>
+      new Set([
+        ...(blockedUsers || []),
+        ...((settings?.blockedUsers as string[]) || []),
+      ]),
+    [blockedUsers, settings?.blockedUsers],
+  )
+  const muted = useMemo(
+    () =>
+      new Set([
+        ...(mutedUsers || []),
+        ...(((settings as { mutedUsers?: string[] })?.mutedUsers) || []),
+      ]),
+    [mutedUsers, settings],
+  )
+
+  const q = debouncedQuery.toLowerCase()
+  const stale = resultGen !== requestGen.current
+
+  const people = useMemo(() => {
+    if (!q || stale) return []
+    if (serverOk && serverPeople.length > 0) {
+      return serverPeople
+        .filter((p) => p.userId && !blocked.has(String(p.userId)) && !muted.has(String(p.userId)))
+        .map((p) => ({
+          id: String(p.userId),
+          name: String(p.displayName || p.username || "Member"),
+          bio: String(p.bio || ""),
+          photo: String(p.avatarUrl || ""),
+          location: "",
+          interests: [] as string[],
+        }))
+        .slice(0, 16)
+    }
+    return (candidates || [])
+      .filter((c) => c?.id && !blocked.has(c.id) && !muted.has(c.id))
+      .filter((c) => c.id !== "current-user")
+      .filter((c) => {
+        const name = (c.name || "").toLowerCase()
+        const loc = `${c.location || ""} ${(c as { city?: string }).city || ""}`.toLowerCase()
+        const bio = (c.bio || "").toLowerCase()
+        const interests = (c.interests || []).join(" ").toLowerCase()
+        const profession = String((c as { profession?: string }).profession || "").toLowerCase()
+        return (
+          name.includes(q) ||
+          loc.includes(q) ||
+          bio.includes(q) ||
+          interests.includes(q) ||
+          profession.includes(q)
+        )
+      })
+      .slice(0, 16)
+  }, [candidates, q, blocked, muted, stale, serverOk, serverPeople])
+
+  const idHits = useMemo(() => {
+    if (!q || stale) return []
+    const normalized = q.replace(/^gh-?/i, "").replace(/\s/g, "")
+    return (candidates || [])
+      .filter((c) => c?.id && !blocked.has(c.id) && !muted.has(c.id))
+      .filter((c) => {
+        const id = (c.id || "").toLowerCase()
+        const publicId = String((c as { greenHavenId?: string; publicId?: string }).greenHavenId || (c as { publicId?: string }).publicId || "").toLowerCase()
+        return (
+          id.includes(q) ||
+          id.includes(normalized) ||
+          publicId.includes(q) ||
+          publicId.includes(normalized) ||
+          `gh-${id}`.includes(q)
+        )
+      })
+      .slice(0, 12)
+  }, [candidates, q, blocked, muted, stale])
+
+  const postHits = useMemo(() => {
+    if (!q || stale) return []
+    return (posts || [])
+      .filter((p) => p && !(p as { deletedAt?: number }).deletedAt)
+      .filter((p) => !blocked.has(p.authorId) && !muted.has(p.authorId))
+      .filter((p) => {
+        // Private / followers-only posts: only show public in global search
+        const vis = (p as { visibility?: string }).visibility || "public"
+        if (vis === "private") return false
+        const content = (p.content || "").toLowerCase()
+        const author = (p.authorName || "").toLowerCase()
+        return content.includes(q) || author.includes(q) || (q.startsWith("#") && content.includes(q.slice(1)))
+      })
+      .slice(0, 16)
+  }, [posts, q, blocked, muted, stale])
+
+  const communities = useMemo(() => {
+    if (!q || stale) return []
+    return (conversations || [])
+      .filter(
+        (c) =>
+          c.conversationType === "group" ||
+          Boolean((c as { isCommunity?: boolean }).isCommunity),
+      )
+      .filter((c) => {
+        // Private invite-only: still discoverable by name only if public-ish
+        const privacy = (c as { privacy?: string }).privacy
+        if (privacy === "invite-only") return false
+        const name = (c.groupName || c.participantName || "").toLowerCase()
+        const desc = String((c as { description?: string }).description || "").toLowerCase()
+        return name.includes(q) || desc.includes(q)
+      })
+      .slice(0, 12)
+  }, [conversations, q, stale])
+
+  const universal = useMemo(() => {
+    if (!q || stale) return { hits: [] as ReturnType<typeof runUniversalSearch> extends { data: infer D } ? D : never, groups: groupSearchResults([]) }
+    const me = IdentityService.getCurrentUserId()
+    const result = runUniversalSearch(
+      {
+        q,
+        category: tab === "people" || tab === "communities" || tab === "events" || tab === "activities" || tab === "services" ? tab : "all",
+        limit: 36,
+        blockedUserIds: Array.from(blocked),
+        mutedUserIds: Array.from(muted),
+      },
+      {
+        userId: me,
+        interests: [],
+        intents: resolveUserIntents(me, null),
+      },
+      (candidates || []) as any,
+    )
+    const hits = result.ok ? result.data : []
+    return { hits, groups: groupSearchResults(hits) }
+  }, [q, stale, tab, blocked, muted, candidates])
+
+    const commitRecent = useCallback((term: string) => {
+    const t = term.trim()
+    if (!t) return
+    setRecent((prev) => {
+      const next = [t, ...prev.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, MAX_RECENT)
+      saveRecent(next)
+      return next
+    })
+  }, [])
+
+  const closeAnd = useCallback(
+    (fn?: () => void) => {
+      if (debouncedQuery) commitRecent(debouncedQuery)
+      onClose()
+      fn?.()
+    },
+    [commitRecent, debouncedQuery, onClose],
+  )
+
+  if (!open) return null
+
+  const showPeople = tab === "all" || tab === "people"
+  const showPosts = tab === "all" || tab === "posts"
+  const showCommunities = tab === "all" || tab === "communities"
+  const showEvents = tab === "all" || tab === "events"
+  const showActivities = tab === "all" || tab === "activities"
+  const showServices = tab === "all" || tab === "services"
+  const showIds = tab === "all" || tab === "ids"
+  const hasAny =
+    (showPeople && (people.length > 0 || universal.groups.people.length > 0)) ||
+    (showPosts && postHits.length > 0) ||
+    (showCommunities && (communities.length > 0 || universal.groups.communities.length > 0)) ||
+    (showEvents && universal.groups.events.length > 0) ||
+    (showActivities && universal.groups.activities.length > 0) ||
+    (showServices && universal.groups.services.length > 0) ||
+    (showIds && idHits.length > 0)
+
+  const tabBtn = (t: SearchTab, label: string) => (
+    <button
+      key={t}
+      type="button"
+      onClick={() => setSearchTab(t)}
+      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold capitalize transition ${
+        tab === t ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
+      }`}
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <div className="fixed inset-0 z-[80] flex flex-col bg-black/40" role="dialog" aria-modal="true" aria-label="Search">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close search" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[90dvh] flex-col rounded-b-[1.75rem] bg-card text-foreground shadow-2xl sm:mx-auto sm:mt-8 sm:w-full sm:max-w-lg sm:rounded-[1.75rem]">
+        <div className="flex items-center gap-2 border-b border-border px-3 py-3">
+          <Search size={18} className="shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="People, GH-XXXXXX, posts, communities, marketplace…"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            aria-label="Global search"
+            autoComplete="off"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="rounded-full p-2 text-muted-foreground hover:bg-muted"
+              aria-label="Clear query"
+            >
+              <X size={16} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-muted-foreground hover:bg-muted"
+            aria-label="Close search"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex gap-1 overflow-x-auto border-b border-border/60 px-3 py-2 scrollbar-hide">
+          {tabBtn("all", "All")}
+          {tabBtn("people", "People")}
+          {tabBtn("ids", "IDs")}
+          {tabBtn("posts", "Posts")}
+          {tabBtn("communities", "Communities")}
+          {tabBtn("events", "Events")}
+          {tabBtn("activities", "Activities")}
+          {tabBtn("services", "Services")}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-busy={query !== debouncedQuery}>
+          {!q && (
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Recent searches
+              </p>
+              {recent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Try a name, city, interest, hashtag, or GreenHaven ID.
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {recent.map((term) => (
+                    <li key={term}>
+                      <button
+                        type="button"
+                        onClick={() => setQuery(term)}
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm hover:bg-muted"
+                      >
+                        <Clock size={14} className="text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate">{term}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {recent.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecent([])
+                    saveRecent([])
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  <Trash2 size={12} /> Clear recent
+                </button>
+              )}
+            </div>
+          )}
+
+          {q && !hasAny && !stale && (
+            <div className="py-10 text-center">
+              <p className="text-sm font-semibold">
+          {(showEvents || showActivities || showServices) && (
+            <div className="space-y-3 px-3 pb-4">
+              {showEvents && universal.groups.events.length > 0 && (
+                <section aria-label="Events">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Calendar size={12} /> Events · {universal.groups.events.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.events.map((h) => (
+                      <li key={`ev-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                          {h.explanation ? <span className="text-[10px] text-primary/90">{h.explanation}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {showActivities && universal.groups.activities.length > 0 && (
+                <section aria-label="Activities">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Sparkles size={12} /> Activities · {universal.groups.activities.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.activities.map((h) => (
+                      <li key={`act-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {showServices && universal.groups.services.length > 0 && (
+                <section aria-label="Services">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <Briefcase size={12} /> Services · {universal.groups.services.length}
+                  </h3>
+                  <ul className="space-y-1">
+                    {universal.groups.services.map((h) => (
+                      <li key={`svc-${h.id}`}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                          onClick={() => closeAnd(() => {
+                            try { openListing(String(h.id)) } catch { /* */ }
+                          })}
+                        >
+                          <span className="text-sm font-semibold">{h.title}</span>
+                          {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
+          )}
+No results for “{debouncedQuery}”</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Private, blocked, or hidden profiles are not shown. Try another spelling or category.
+              </p>
+            </div>
+          )}
+
+          {showPeople && people.length > 0 && (
+            <section className="mb-4">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <Users size={12} /> People
+              </p>
+              <ul className="space-y-1">
+                {people.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        closeAnd(() => {
+                          onSelectPerson?.(c.id)
+                          try {
+                            setTab?.("discover")
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:navigate-tab", { detail: "discover" }),
+                            )
+                          } catch {
+                            /* */
+                          }
+                        })
+                      }
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-muted"
+                    >
+                      <div className="h-10 w-10 overflow-hidden rounded-full bg-muted">
+                        <LazyImage
+                          src={resolveAvatarUrl(c.photo, { seed: c.name || c.id || "member", size: 80 })}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{c.name}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {[c.location, (c.interests || []).slice(0, 2).join(" · ")]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {showIds && idHits.length > 0 && (
+            <section className="mb-4">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <Hash size={12} /> Public IDs
+              </p>
+              <ul className="space-y-1">
+                {idHits.map((c) => (
+                  <li key={`id-${c.id}`}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        closeAnd(() => {
+                          onSelectPerson?.(c.id)
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:navigate-tab", { detail: "discover" }),
+                            )
+                          } catch {
+                            /* */
+                          }
+                        })
+                      }
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-muted"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-800">
+                        GH
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{c.name}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">{c.id}</p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {showPosts && postHits.length > 0 && (
+            <section className="mb-4">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <Newspaper size={12} /> Posts
+              </p>
+              <ul className="space-y-1">
+                {postHits.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        closeAnd(() => {
+                          onSelectPost?.(p.id)
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:navigate-tab", { detail: "home" }),
+                            )
+                          } catch {
+                            /* */
+                          }
+                        })
+                      }
+                      className="w-full rounded-xl px-2 py-2 text-left hover:bg-muted"
+                    >
+                      <p className="text-[11px] font-semibold text-muted-foreground">{p.authorName}</p>
+                      <p className="line-clamp-2 text-sm">{p.content}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {showCommunities && (communities.length > 0 || universal.groups.communities.length > 0) && (
+            <section className="mb-4" aria-label="Communities">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <MessagesSquare size={12} /> Communities
+              </p>
+              <ul className="space-y-1">
+                {communities.map((c) => {
+                  const me = IdentityService.getCurrentUserId()
+                  const { action, label } = resolveCommunitySearchAction(c as any, me)
+                  return (
+                  <li key={`sess-${c.id}`}>
+                    <div className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-muted">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          closeAnd(() => {
+                            onSelectCommunity?.(c.id)
+                            try {
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:open-community", { detail: { groupId: c.id } }),
+                              )
+                              window.dispatchEvent(
+                                new CustomEvent("ghc:navigate-tab", { detail: "communities" }),
+                              )
+                            } catch {
+                              /* */
+                            }
+                          })
+                        }
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <p className="text-sm font-semibold">
+                          {c.groupName || c.participantName || "Community"}
+                        </p>
+                        <p className="line-clamp-1 text-[11px] text-muted-foreground">
+                          {c.lastMessage || (c as { description?: string }).description || "Community"}
+                        </p>
+                      </button>
+                      {label ? (
+                        <button
+                          type="button"
+                          disabled={action === "pending"}
+                          onClick={() =>
+                            closeAnd(() => {
+                              try {
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:open-community", {
+                                    detail: {
+                                      groupId: c.id,
+                                      intent:
+                                        action === "join" || action === "request"
+                                          ? "join"
+                                          : action === "accept_invite"
+                                            ? "accept_invite"
+                                            : "open",
+                                    },
+                                  }),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:navigate-tab", { detail: "communities" }),
+                                )
+                              } catch {
+                                onSelectCommunity?.(c.id)
+                              }
+                            })
+                          }
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                            action === "pending"
+                              ? "border border-border text-muted-foreground"
+                              : "bg-emerald-600 text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                  )
+                })}
+                {universal.groups.communities
+                  .filter((h) => !communities.some((c) => c.id === h.id))
+                  .map((h) => (
+                    <li key={`disc-${h.id}`}>
+                      <div className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-muted">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            closeAnd(() => {
+                              try {
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:open-community", {
+                                    detail: { groupId: h.id },
+                                  }),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent("ghc:navigate-tab", {
+                                    detail: "communities",
+                                  }),
+                                )
+                              } catch {
+                                onSelectCommunity?.(h.id)
+                              }
+                            })
+                          }
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="text-sm font-semibold">{h.title}</p>
+                          {h.subtitle ? (
+                            <p className="line-clamp-1 text-[11px] text-muted-foreground">{h.subtitle}</p>
+                          ) : null}
+                          {h.explanation ? (
+                            <p className="text-[10px] text-primary/90">{h.explanation}</p>
+                          ) : null}
+                        </button>
+                        <span className="shrink-0 rounded-full border border-emerald-600 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                          Open
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

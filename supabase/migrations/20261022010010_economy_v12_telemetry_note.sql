@@ -1,0 +1,35 @@
+-- ECONOMY_VERSION 1.2 support notes (non-destructive)
+-- No historical ledger rows are rewritten.
+-- Optional future tables (not required for memory-server path):
+--
+-- CREATE TABLE IF NOT EXISTS ghc_economic_telemetry (
+--   id text PRIMARY KEY,
+--   ts timestamptz NOT NULL DEFAULT now(),
+--   event_type text NOT NULL,
+--   day_key date NOT NULL,
+--   eligible_economic_users bigint,
+--   m numeric,
+--   g numeric,
+--   demand numeric,
+--   budget numeric,
+--   user_issuance numeric,
+--   reserve_issuance numeric,
+--   gross_issuance numeric,
+--   sinks numeric,
+--   net_circulating_change numeric,
+--   meta jsonb
+-- );
+--
+-- CREATE TABLE IF NOT EXISTS ghc_claim_streak_state (
+--   user_id text PRIMARY KEY,
+--   cycle_day int NOT NULL DEFAULT 0,
+--   completed_cycles int NOT NULL DEFAULT 0,
+--   last_claim_day_key date,
+--   total_successful_claims int NOT NULL DEFAULT 0,
+--   economic_version text NOT NULL DEFAULT '1.2',
+--   last_idempotency_key text,
+--   updated_at timestamptz NOT NULL DEFAULT now()
+-- );
+--
+-- Eligible economic users should be derived from verified identities,
+-- not raw registration counts.

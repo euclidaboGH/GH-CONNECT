@@ -1,0 +1,217 @@
+"use client"
+
+/**
+ * GreenHaven empty-state design system.
+ * Use across Feed, Messages, Communities, Discover, Matches, Profile.
+ */
+
+import type { ReactNode } from "react"
+import {
+  MessageCircle,
+  Users,
+  Newspaper,
+  Compass,
+  Heart,
+  Inbox,
+  Search,
+  Package,
+  type LucideIcon,
+} from "lucide-react"
+
+export type EmptyVariant =
+  | "feed"
+  | "messages"
+  | "communities"
+  | "discover"
+  | "matches"
+  | "search"
+  | "friends"
+  | "transactions"
+  | "posts"
+  | "wallet"
+  | "notifications"
+  | "marketplace"
+  | "generic"
+
+const PRESETS: Record<
+  EmptyVariant,
+  { icon: LucideIcon; title: string; description: string; gradient: string }
+> = {
+  feed: {
+    icon: Newspaper,
+    title: "Your feed is quiet",
+    description: "Follow people and join communities — their posts appear here. Use the + button anytime to share.",
+    gradient: "from-emerald-500 to-teal-500",
+  },
+  messages: {
+    icon: MessageCircle,
+    title: "No conversations yet",
+    description: "Start connecting with people. Matches and accepted connections appear here.",
+    gradient: "from-emerald-500 to-cyan-600",
+  },
+  communities: {
+    icon: Users,
+    title: "Find your next circle",
+    description: "Join a community for posts and events, or create one for people like you.",
+    gradient: "from-teal-500 to-emerald-600",
+  },
+  discover: {
+    icon: Compass,
+    title: "No people to show yet",
+    description:
+      "Adjust filters, add interests, or set your location for better recommendations.",
+    gradient: "from-emerald-600 to-teal-500",
+  },
+  matches: {
+    icon: Heart,
+    title: "No matches yet",
+    description:
+      "Express interest on Find. A match means mutual intentional interest — not automatic friendship.",
+    gradient: "from-rose-500 to-emerald-600",
+  },
+  search: {
+    icon: Search,
+    title: "No results",
+    description: "Try another name, interest, or community keyword.",
+    gradient: "from-stone-500 to-stone-600",
+  },
+  friends: {
+    icon: Users,
+    title: "Your network starts here",
+    description: "Find people who share your interests and connection goals.",
+    gradient: "from-emerald-500 to-teal-600",
+  },
+  transactions: {
+    icon: Inbox,
+    title: "No transactions yet",
+    description: "Your GHC activity will appear here when you receive, send, or use GHC.",
+    gradient: "from-emerald-600 to-teal-500",
+  },
+  posts: {
+    icon: Newspaper,
+    title: "Nothing here yet",
+    description: "When you share, your posts appear here and on your profile.",
+    gradient: "from-teal-500 to-emerald-600",
+  },
+  wallet: {
+    icon: Inbox,
+    title: "Wallet is ready",
+    description: "Receive or use GHC when available. Your account activity appears here.",
+    gradient: "from-emerald-700 to-teal-600",
+  },
+  notifications: {
+    icon: Inbox,
+    title: "You're all caught up",
+    description: "Likes, messages, account activity, and other updates will appear here.",
+    gradient: "from-slate-500 to-slate-600",
+  },
+  marketplace: {
+    icon: Package,
+    title: "Marketplace is open",
+    description: "Browse listings from real sellers, or publish your own with a clear delivery mode.",
+    gradient: "from-emerald-600 to-teal-600",
+  },
+  generic: {
+    icon: Inbox,
+    title: "Nothing here",
+    description: "Check back later or try another section.",
+    gradient: "from-emerald-400 to-teal-600",
+  },
+}
+
+export function EmptyState({
+  variant = "generic",
+  title,
+  description,
+  icon: IconOverride,
+  action,
+  secondaryAction,
+  className = "",
+}: {
+  variant?: EmptyVariant
+  title?: string
+  description?: string
+  icon?: LucideIcon
+  action?: { label: string; onClick: () => void }
+  secondaryAction?: { label: string; onClick: () => void }
+  className?: string
+}) {
+  const preset = PRESETS[variant]
+  const Icon = IconOverride || preset.icon
+
+  return (
+    <div
+      className={`gh-empty-state flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
+      role="status"
+    >
+      <div
+        className={`gh-empty-state-icon relative mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white`}
+      >
+        <Icon size={28} strokeWidth={2} aria-hidden />
+      </div>
+      <h3 className="gh-type-title text-[17px] tracking-tight">
+        {title || preset.title}
+      </h3>
+      <p className="gh-type-body mt-2 max-w-[17rem] text-muted-foreground">
+        {description || preset.description}
+      </p>
+      {(action || secondaryAction) && (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+          {action && (
+            <button
+              type="button"
+              onClick={action.onClick}
+              className="gh-btn gh-btn-primary min-h-11 px-6"
+            >
+              {action.label}
+            </button>
+          )}
+          {secondaryAction && (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              className="gh-btn gh-btn-secondary min-h-11 px-6"
+            >
+              {secondaryAction.label}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Compact inline empty used inside cards / lists */
+export function EmptyInline({
+  message,
+  actionLabel,
+  onAction,
+}: {
+  message: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="rounded-[var(--gh-radius-md)] bg-muted/40 px-4 py-8 text-center">
+      <p className="text-sm font-medium text-muted-foreground">{message}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 text-sm font-bold text-primary hover:opacity-90"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Optional wrapper when a tab needs a short tip under the header */
+export function SectionTip({ children }: { children: ReactNode }) {
+  return (
+    <p className="mx-4 mb-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+      {children}
+    </p>
+  )
+}
