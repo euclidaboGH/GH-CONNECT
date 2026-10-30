@@ -186,7 +186,7 @@ Referral attribution now resolves GreenHaven IDs through the same durable public
 
 Added an authenticated, Testnet-only cashback withdrawal endpoint that derives payout amounts from finalized server-side entitlements and the recipient from the linked Pi identity. It shares the global Pi app-wallet sequence lease with seller A2U, records a separate entitlement-bound payout ledger, verifies the provider payment/recipient/amount/network/transaction, and only records `paid` after verified developer completion and durable reconciliation. Rewards Center exposes the withdrawal action only when the Testnet flags and server-side Pi credentials are present. Mainnet remains disabled. The new migration is REVIEW_REQUIRED and must be validated on disposable PostgreSQL and Pi Testnet before users can receive real Testnet credits. Configure the required Testnet flags and server-only Pi credentials only on the Preview deployment; fund the Testnet app wallet and ensure testers have finalized positive cashback entitlements and linked Pi identities. See `docs/PI-A2U-EARNINGS-AND-CASHBACK-ROADMAP.md`.
 
-**Current source version:** `0.214.0`
+**Current source version:** `0.214.1`
 
 ## v0.182.0 — Phase 3 unified wallet integration
 

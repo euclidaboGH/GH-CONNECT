@@ -1214,6 +1214,7 @@ const lowBalance = balance === 0 && displayPending === 0
 
         {/* ZONE: BALANCE — hero carries title; no redundant label */}
         <div className="mt-2">
+          <div className="gh-premium-wallet-metrics" aria-label="Wallet balances">
           <WalletBalanceCard
             balance={balance}
             balanceVisible={balanceVisible}
@@ -1283,6 +1284,7 @@ const lowBalance = balance === 0 && displayPending === 0
               />
             }
           />
+          </div>
           <PaymentRecoveryBanner />
           <RegistrationBonusCard />
 
@@ -2377,7 +2379,7 @@ const lowBalance = balance === 0 && displayPending === 0
             </button>
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold">Transaction history</h2>
-              <p className="text-[11px] text-muted-foreground">GHC ledger and π payments stay on separate rails</p>
+              <p className="text-[11px] text-muted-foreground">GHC ledger and π payments are kept on separate rails</p>
             </div>
           </header>
           <div className="flex gap-2 border-b border-border px-3 py-2">

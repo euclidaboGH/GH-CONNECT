@@ -1,6 +1,6 @@
 # Phase 12 — Final integration and release readiness
 
-Release: `0.202.0` (2026-10-30)
+Release: `0.214.1` (2026-10-30)
 
 ## Delivered in v0.157.12
 

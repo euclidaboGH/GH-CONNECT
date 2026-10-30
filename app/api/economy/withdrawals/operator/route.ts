@@ -6,15 +6,14 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
+  operatorSetWithdrawalStatus,
+  type WithdrawalStatus,
+} from "@/lib/server/economy/withdrawal"
 
 const __ghNoStore = {
   "Cache-Control": "private, no-store, max-age=0, must-revalidate",
   Pragma: "no-cache",
 } as const
-
-  operatorSetWithdrawalStatus,
-  type WithdrawalStatus,
-} from "@/lib/server/economy/withdrawal"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
   const parsed = await readBoundedJson(request, 4 * 1024)
   if (!parsed.ok) {
     const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
-    return NextResponse.json({ ok: false, error: parsed.error }, { status })
+    return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: __ghNoStore })
   }
   const body = parsed.value
   const id = String(body.id || body.withdrawalId || "").trim()
