@@ -1,0 +1,2095 @@
+"use client"
+
+import { confirmDialog } from "@/lib/ui/global-interactions"
+/**
+ * Premium community detail hub — Community ≠ Chat.
+ * Board: posts, announcements, polls, events, discussion.
+ * Chat: realtime member conversation (Messaging domain, community type).
+ */
+
+import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
+import { socialSetCuration } from "@/lib/social/client"
+import { useMemo, useState, useEffect } from "react"
+import { onCloseTransientUI } from "@/lib/transient-ui"
+import {
+  ArrowLeft,
+  Bell,
+  Calendar,
+  Hash,
+  MessageSquare,
+  Shield,
+  Users,
+  Megaphone,
+  BarChart3,
+  Settings2,
+  Pin,
+  MapPin,
+  Sparkles,
+  VolumeX,
+  Timer,
+  MessageCircle,
+  Share2,
+  RefreshCw,
+  Search,
+  ThumbsUp,
+  ThumbsDown,
+  Loader2,
+} from "lucide-react"
+import { shareText } from "@/lib/pi-native"
+import { LazyImage } from "./lazy-image"
+import { resolveDisplayUrl } from "@/lib/media/resolve-display-url"
+import {
+  AnnouncementCard,
+  PollCard,
+  EventCard,
+} from "./community-features-ui"
+import { CommunityPeopleYouMayKnow } from "./community-people-you-may-know"
+import { PinnedResourceCard } from "./community-features-ui"
+import { buildCommunityFeed } from "@/lib/domains/adapters/community-feed"
+import { buildCommunityActivityDigest } from "@/lib/domains/adapters/community-activity-digest"
+import { CommunityMemberWelcome } from "@/components/ghc/community-member-welcome"
+import {
+  buildMemberWelcomeModel,
+  markWelcomeComplete,
+  markChecklistStep,
+  type OnboardingStepId,
+} from "@/lib/domains/adapters/community-member-onboarding"
+import { loadLocalJoinReasons } from "@/lib/domains/adapters/community-membership-adapter"
+import {
+  listModerationLog,
+  listCommunityReports,
+  buildGovernanceModel,
+  buildHealthSnapshot,
+  buildAdminHealthAnalytics,
+  resolveCommunityReport,
+  resolveLifecycle,
+  lifecycleLabel,
+  suggestLifecycleTransition,
+  governanceDurabilityLabel,
+} from "@/lib/domains/adapters/community-governance"
+import { buildPeopleYouMayKnowInCommunity } from "@/lib/domains/adapters/community-people-you-may-know"
+import {
+  buildCommunityParticipationHub,
+  formatEventWhen,
+} from "@/lib/domains/adapters/community-participation-hub"
+import { IdentityService } from "@/lib/identity/identity-service"
+import { useGHC } from "@/contexts/ghc-context"
+import { getPublicSiteOrigin } from "@/lib/site-url"
+import {
+  getUpcomingEvents,
+  getActivePolls,
+  type Announcement,
+  type Poll,
+  type ScheduledEvent,
+} from "@/lib/community-features-engine"
+
+export type CommunityHubTab =
+  | "board"
+  | "announcements"
+  | "discussion"
+  | "chat"
+  | "events"
+  | "members"
+  | "about"
+  | "mod"
+
+type CommunitySummary = {
+  id: string
+  name: string
+  description?: string
+  memberCount: number
+  privacy: "public" | "private"
+  isJoined: boolean
+  photo?: string
+  cover?: string
+  category?: string
+  rules?: string[]
+  tags?: string[]
+  region?: string
+  role?: "owner" | "admin" | "moderator" | "member" | "guest"
+  welcomeMessage?: string
+  boardUnread?: number
+  chatUnread?: number
+  /** User muted this community's notifications */
+  isMuted?: boolean
+  samplePosts?: { id: string; author: string; excerpt: string }[]
+}
+
+const ROLE_BADGE: Record<string, string> = {
+  owner: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+  admin: "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
+  moderator: "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
+  member: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200",
+  guest: "bg-muted text-muted-foreground",
+}
+
+const HUB_TABS: { id: CommunityHubTab; label: string; icon: React.ReactNode; board?: boolean }[] = [
+  { id: "board", label: "Board", icon: <Hash size={14} />, board: true },
+  { id: "announcements", label: "Updates", icon: <Megaphone size={14} />, board: true },
+  { id: "discussion", label: "Discussion", icon: <Pin size={14} />, board: true },
+  { id: "events", label: "Events", icon: <Calendar size={14} />, board: true },
+  { id: "chat", label: "Chat", icon: <MessageSquare size={14} /> },
+  { id: "members", label: "Members", icon: <Users size={14} /> },
+  { id: "about", label: "About", icon: <Shield size={14} /> },
+  { id: "mod", label: "Mod", icon: <Settings2 size={14} /> },
+]
+
+const DEFAULT_RULES = [
+  "Be respectful — no harassment or hate.",
+  "Stay on topic for this community.",
+  "No spam, scams, or misleading promotions.",
+  "Protect privacy — don’t share others’ personal data.",
+]
+
+export function PremiumCommunityHub({
+  community,
+  onBack,
+  onOpenChat,
+  onJoin,
+  onLeave,
+  onMute,
+  onPost,
+  onReplyToPost,
+  onReactToPost,
+  onCreateAnnouncement,
+  onPinPost,
+  onUnpinPost,
+  onHidePost,
+  onUnhidePost,
+  onTransitionLifecycle,
+  onReportCommunity,
+  onCreateEvent,
+  onRsvp,
+  onApproveRequest,
+  onRejectRequest,
+  onDeclineRequest,
+  onInviteMember,
+  onSetRole,
+  onRemoveMember,
+  pendingJoinRequests = [],
+  inviteCandidates = [],
+  announcements = [],
+  polls = [],
+  events = [],
+  boardPosts = [],
+  memberPreview = [],
+  canChat = false,
+  role,
+}: {
+  community: CommunitySummary
+  onBack: () => void
+  onOpenChat?: () => void
+  onJoin?: () => void
+  onLeave?: () => void
+  onMute?: () => void
+  onPost?: (body: string, kind?: "text" | "question" | "resource") => void
+  onReplyToPost?: (postId: string, body: string) => void
+  onReactToPost?: (postId: string) => void
+  onCreateAnnouncement?: (input: { title: string; content: string }) => void
+  onPinPost?: (postId: string) => void
+  onUnpinPost?: (postId: string) => void
+  onHidePost?: (postId: string) => void
+  onUnhidePost?: (postId: string) => void
+  onTransitionLifecycle?: (next: "draft" | "discoverable" | "active" | "quiet" | "archived") => void
+  onReportCommunity?: (input: {
+    targetType: "community" | "post" | "member"
+    targetId: string
+    reason: "spam" | "harassment" | "hate" | "misinformation" | "impersonation" | "safety" | "other"
+  }) => void
+  onCreateEvent?: (input: { title: string; startsAt: number; location?: string; isOnline?: boolean }) => void
+  onRsvp?: (eventId: string) => void
+  onApproveRequest?: (userId: string) => void
+  onRejectRequest?: (userId: string) => void
+  onDeclineRequest?: (userId: string) => void
+  onInviteMember?: (userId: string) => void
+  onSetRole?: (userId: string, role: "admin" | "moderator" | "member") => void
+  onRemoveMember?: (userId: string) => void
+  pendingJoinRequests?: string[]
+  inviteCandidates?: { id: string; name: string; photo?: string }[]
+  announcements?: Announcement[]
+  polls?: Poll[]
+  events?: ScheduledEvent[] | any[]
+  boardPosts?: any[]
+  memberPreview?: { id: string; name: string; photo?: string; role?: string }[]
+  canChat?: boolean
+  role?: string
+}) {
+  const [welcomeTick, setWelcomeTick] = useState<number>(0)
+  const [tab, setTab] = useState<CommunityHubTab>(community.isJoined ? "board" : "about")
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false)
+
+  useEffect(() => {
+    return onCloseTransientUI(() => setShowJoinConfirm(false))
+  }, [])
+  const [chatMuted, setChatMuted] = useState(false)
+  const [chatState, setChatState] = useState<{ enabled: boolean; privacy: "members" | "approval"; chatMember: boolean; requestStatus?: string | null; owner: boolean } | null>(null)
+  const [chatBusy, setChatBusy] = useState(false)
+  const loadChatState = async () => {
+    try {
+      const r = await fetch(`/api/communities/${encodeURIComponent(community.id)}/chat`, { cache: "no-store" })
+      const d = await r.json().catch(() => null)
+      if (r.ok && d?.ok) setChatState({ enabled: !!d.enabled, privacy: d.privacy === "approval" ? "approval" : "members", chatMember: !!d.chatMember, requestStatus: d.requestStatus || null, owner: !!d.owner })
+    } catch { /* fail closed: chat remains unavailable */ }
+  }
+  useEffect(() => { void loadChatState() }, [community.id, community.isJoined])
+  const runChatAction = async (action: "create" | "join", privacy?: "members" | "approval") => {
+    if (chatBusy) return
+    setChatBusy(true)
+    try {
+      const r = await fetch(`/api/communities/${encodeURIComponent(community.id)}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, privacy }), cache: "no-store" })
+      const d = await r.json().catch(() => null)
+      if (!r.ok || !d?.ok) throw new Error(d?.error || "Chat unavailable")
+      await loadChatState()
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: d.status === "pending" ? "Chat join request sent" : action === "create" ? "Community chat created" : "You joined community chat", type: "success" } }))
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Chat unavailable", type: "error" } }))
+    } finally { setChatBusy(false) }
+  }
+  const [slowMode, setSlowMode] = useState(false)
+  const [composeBody, setComposeBody] = useState("")
+  const [boardSort, setBoardSort] = useState<"new" | "hot" | "top">("new")
+  const [boardFilter, setBoardFilter] = useState<"all" | "mine">("all")
+  const [boardQuery, setBoardQuery] = useState("")
+  const [boardRefreshing, setBoardRefreshing] = useState(false)
+  const [curationState, setCurationState] = useState<Record<string, { choice: "upvote" | "downvote" | "neutral"; up: number; down: number; busy?: boolean }>>({})
+  const effectiveCanChat = !!chatState?.chatMember || (canChat && !!chatState?.enabled)
+
+  const upcoming = useMemo(() => getUpcomingEvents(events).slice(0, 5), [events])
+  const activePolls = useMemo(() => getActivePolls(polls).slice(0, 3), [polls])
+  const pinnedAnnouncements = announcements.filter((a) => a.pinned).slice(0, 3)
+  const rules = (community.rules && community.rules.length > 0 ? community.rules : DEFAULT_RULES).slice(0, 8)
+  const tags = community.tags?.length
+    ? community.tags
+    : [community.category, community.region].filter(Boolean) as string[]
+  const isMod =
+    community.role === "owner" || community.role === "admin" || community.role === "moderator"
+  const ghcSession = useGHC() as any
+  const meId = IdentityService.getCurrentUserId()
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteBusy, setInviteBusy] = useState<string | null>(null)
+  const [announceOpen, setAnnounceOpen] = useState(false)
+  const [announceTitle, setAnnounceTitle] = useState("")
+  const [announceBody, setAnnounceBody] = useState("")
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+  const [safetyTick, setSafetyTick] = useState<number>(0)
+
+  const membersWithRoles = (() => {
+    if (memberPreview.length > 0) return memberPreview
+    const roster: Array<{ id: string; name: string; role?: string; photo?: string }> = []
+    const creator = (community as { createdBy?: string }).createdBy
+    if (creator) {
+      roster.push({
+        id: creator,
+        name: creator === "current-user" ? "You" : creator,
+        role: "owner",
+      })
+    }
+    const members = Array.isArray((community as { members?: string[] }).members)
+      ? ((community as { members?: string[] }).members as string[])
+      : []
+    for (const m of members) {
+      if (roster.some((r) => r.id === m)) continue
+      roster.push({
+        id: m,
+        name: m === "current-user" ? "You" : m.charAt(0).toUpperCase() + m.slice(1),
+        role: community.role && m === "current-user" ? community.role : "member",
+      })
+    }
+    if (community.isJoined && !roster.some((r) => r.id === "current-user")) {
+      roster.unshift({
+        id: "current-user",
+        name: "You",
+        role: community.role || "member",
+      })
+    }
+    return roster
+  })()
+
+  const memberIdsForSuggestions = Array.isArray((community as { members?: string[] }).members)
+    ? ((community as { members?: string[] }).members as string[])
+    : membersWithRoles.map((m) => m.id)
+
+  const lifecycle = resolveLifecycle((community as any).lifecycle)
+  const governanceModel = buildGovernanceModel({
+    communityId: community.id,
+    role: community.role,
+    lifecycle,
+  })
+  const healthSnapshot = buildHealthSnapshot({
+    communityId: community.id,
+    lifecycle,
+    memberCount: community.memberCount || membersWithRoles.length,
+    boardPosts: boardPosts as any,
+    events: events as any,
+  })
+  const moderationLog = isMod ? listModerationLog(community.id) : []
+  const openReports = isMod ? listCommunityReports(community.id).filter((r) => r.status === "open") : []
+  const allReports = isMod ? listCommunityReports(community.id) : []
+  const adminHealth = isMod
+    ? buildAdminHealthAnalytics({
+        communityId: community.id,
+        lifecycle,
+        memberCount: community.memberCount || membersWithRoles.length,
+        boardPosts: boardPosts as any,
+        events: events as any,
+        resourceCount: Array.isArray((community as any).resources) ? (community as any).resources.length : 0,
+      })
+    : null
+
+
+  const refreshBoard = async () => {
+    setBoardRefreshing(true)
+    try {
+      // Parent owns the durable community snapshot. Request a remount so all
+      // board rows, membership state and server-backed social counts converge.
+      await new Promise((resolve) => window.setTimeout(resolve, 120))
+      window.dispatchEvent(new CustomEvent("ghc:community-refresh", { detail: { communityId: community.id } }))
+    } finally {
+      setBoardRefreshing(false)
+    }
+  }
+
+  // Legacy isolation: Like legacy discussion rows remain outside the canonical social ledger.
+  const curateCommunityPost = async (postId: string, choice: "upvote" | "downvote") => {
+    const id = String(postId || "").trim()
+    if (!id || id.startsWith("bpost_") || id.startsWith("local_")) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This older community post is not yet linked to the social curation ledger.", type: "info" } }))
+      return
+    }
+    const current = curationState[id] || { choice: "neutral" as const, up: 0, down: 0 }
+    const nextChoice = current.choice === choice ? "neutral" : choice
+    setCurationState((s) => ({ ...s, [id]: { ...current, choice: nextChoice, busy: true } }))
+    try {
+      const result = await socialSetCuration(id, nextChoice)
+      if (!result.ok) throw new Error(result.error || "Curation unavailable")
+      setCurationState((s) => ({
+        ...s,
+        [id]: {
+          choice: (result.choice === "upvote" || result.choice === "downvote" ? result.choice : nextChoice) as "upvote" | "downvote" | "neutral",
+          up: Number(result.upvoteCount || 0),
+          down: Number(result.downvoteCount || 0),
+          busy: false,
+        },
+      }))
+      window.dispatchEvent(new CustomEvent("ghc:curation-updated", { detail: { postId: id, source: "community" } }))
+      window.dispatchEvent(new CustomEvent("ghc:post-engagement", { detail: { postId: id, source: "community-curation" } }))
+    } catch (error) {
+      setCurationState((s) => ({ ...s, [id]: { ...current, busy: false } }))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Curation unavailable", type: "error" } }))
+    }
+  }
+
+  const lifecycleSuggestion = suggestLifecycleTransition({
+    lifecycle,
+    daysSinceLastActivity: adminHealth?.daysSinceLastActivity ?? null,
+    memberCount: community.memberCount || membersWithRoles.length,
+    discussionCount: adminHealth?.discussionCount ?? (Array.isArray(boardPosts) ? boardPosts.filter((p: any) => !p.hidden).length : 0),
+    openReportCount: openReports.length,
+    grade: adminHealth?.grade,
+  })
+  void safetyTick
+
+  const activityDigest = buildCommunityActivityDigest({
+    communityId: community.id,
+    communityName: community.name,
+    boardPosts: (boardPosts as any[])?.filter((p: any) => !p.hidden),
+    announcements: announcements as any,
+    events: events as any,
+    activities: (community as any).activities,
+    resources: (community as any).resources,
+  })
+
+  const participationHub = buildCommunityParticipationHub({
+    communityId: community.id,
+    events: events as any[],
+    resources: (community as any).resources,
+    boardPosts: boardPosts as any[],
+  })
+
+
+  const viewerId = IdentityService.getCurrentUserId() || ""
+  const joinReasons = (() => {
+    try {
+      return loadLocalJoinReasons(viewerId, community.id) || []
+    } catch {
+      return []
+    }
+  })()
+  const welcomeModel =
+    community.isJoined && viewerId
+      ? buildMemberWelcomeModel({
+          userId: viewerId,
+          communityId: community.id,
+          communityName: community.name,
+          welcomeMessage: community.welcomeMessage,
+          rules,
+          joinReasons,
+        })
+      : null
+  // welcomeTick forces re-read of local checklist
+  void welcomeTick
+
+
+  const feedItems = buildCommunityFeed({
+    communityId: community.id,
+    boardPosts: boardPosts as any,
+    announcements: announcements as any,
+    events: events as any,
+    activities: (community as any).activities,
+    resources: (community as any).resources,
+  })
+
+  const peopleSuggestions = buildPeopleYouMayKnowInCommunity({
+    viewerId: meId,
+    communityId: community.id,
+    memberIds: memberIdsForSuggestions,
+    directory: (ghcSession.candidates || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      photo: c.photo,
+      interests: c.interests,
+    })),
+    friendIds: ghcSession.friends || [],
+    followingIds: ghcSession.following || [],
+    blockedUserIds: ghcSession.blockedUsers || [],
+    viewerInterests: ghcSession.profile?.interests || [],
+    limit: 6,
+  })
+
+  const requestJoin = () => {
+    if (!community.isJoined) {
+      setShowJoinConfirm(true)
+      setTab("about")
+      return
+    }
+    onJoin?.()
+  }
+
+  const confirmJoin = () => {
+    setShowJoinConfirm(false)
+    onJoin?.()
+    // Always land on Board after join — Chat is an explicit tab
+    setTab("board")
+  }
+
+  const rawCover = community.cover || community.photo || ""
+  const [coverSrc, setCoverSrc] = useState(rawCover)
+  useEffect(() => {
+    let cancelled = false
+    setCoverSrc(rawCover)
+    if (!rawCover || rawCover.startsWith("data:") || rawCover.startsWith("blob:")) return
+    void resolveDisplayUrl(rawCover)
+      .then((u) => {
+        if (!cancelled && u) setCoverSrc(u)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [rawCover])
+
+  // When membership flips to joined (parent update), open Board not Chat
+  useEffect(() => {
+    if (community.isJoined) {
+      setTab((t) => (t === "about" || t === "chat" ? "board" : t))
+    }
+  }, [community.isJoined])
+
+  return (
+    <div className="gh-world-community flex h-full min-h-0 flex-col bg-background text-foreground">
+      {/* Cover + identity kit */}
+      <header className="shrink-0 border-b border-border/50 bg-card">
+        <div className="relative h-28 overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-teal-700 to-[var(--gh-balance-to)] sm:h-32">
+          {coverSrc ? (
+            <>
+              <LazyImage
+                src={coverSrc}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-black/10" aria-hidden />
+            </>
+          ) : null}
+          <div className="absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm hover:bg-black/50"
+              aria-label="Back to communities"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div className="min-w-0 flex-1" />
+            <button
+              type="button"
+              onClick={() => {
+                const origin =
+                  getPublicSiteOrigin()
+                void shareText({
+                  title: community.name || "GreenHaven Community",
+                  message: `Join ${community.name || "this community"} on GreenHaven — board, events, and member chat.`,
+                  url: `${origin}/`,
+                }).then((r) => {
+                  try {
+                    if (r.ok && r.method === "clipboard") {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:toast", {
+                          detail: { message: "Community link copied", type: "success" },
+                        })
+                      )
+                    }
+                  } catch {
+                    /* */
+                  }
+                })
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm hover:bg-black/50"
+              aria-label="Share community"
+            >
+              <Share2 size={16} />
+            </button>
+            {community.role && community.role !== "guest" && (
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${ROLE_BADGE[community.role] || ROLE_BADGE.member}`}>
+                {community.role}
+              </span>
+            )}
+          </div>
+          <div className="absolute bottom-2 left-3 right-3">
+            <h1 className="truncate text-base font-bold text-white drop-shadow">{community.name}</h1>
+            <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-white/90">
+              <span>{community.privacy === "public" ? "Public" : "Private"}</span>
+              <span>·</span>
+              <span>{community.memberCount} members</span>
+              {community.region && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-0.5">
+                    <MapPin size={11} aria-hidden /> {community.region}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {tags.slice(0, 4).map((tag) => (
+                  <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          {community.isJoined ? (
+            chatState?.chatMember ? (
+              <button type="button" onClick={() => onOpenChat?.()} className="rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white">
+                Open chat
+              </button>
+            ) : chatState?.owner && !chatState?.enabled ? (
+              <button type="button" disabled={chatBusy} onClick={() => void runChatAction("create", "members")} className="rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-60">
+                Create chat
+              </button>
+            ) : chatState?.enabled ? (
+              <button type="button" disabled={chatBusy || chatState.requestStatus === "pending"} onClick={() => void runChatAction("join")} className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold disabled:opacity-60">
+                {chatState.requestStatus === "pending" ? "Chat requested" : chatState.privacy === "approval" ? "Request chat access" : "Join chat"}
+              </button>
+            ) : null
+          ) : (
+            <button
+              type="button"
+              onClick={requestJoin}
+              className="min-h-10 rounded-full bg-primary px-4 py-2 text-[12px] font-bold text-primary-foreground"
+            >
+              Join
+            </button>
+          )}
+        </div>
+
+        <p className="px-3 pb-1 text-[10px] text-muted-foreground">
+          <span className="font-semibold text-foreground">Board</span> = posts & events ·{" "}
+          <span className="font-semibold text-teal-700 dark:text-teal-300">Chat</span> = live member talk
+        </p>
+        
+        {(community.boardUnread || community.chatUnread) ? (
+          <div className="mx-3 mb-2 flex gap-2">
+            {(community.boardUnread || 0) > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                Board · {community.boardUnread} new
+              </span>
+            )}
+            {(community.chatUnread || 0) > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800 dark:bg-teal-950/40 dark:text-teal-200">
+                Chat · {community.chatUnread} unread
+              </span>
+            )}
+          </div>
+        ) : null}
+
+        {/* Board (content) vs Chat — structured spaces */}
+        <div
+          className="flex gap-1 overflow-x-auto px-3 pb-2 scrollbar-hide"
+          role="tablist"
+          aria-label="Community spaces"
+          onKeyDown={(e) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
+            e.preventDefault()
+            const idx = HUB_TABS.findIndex((x) => x.id === tab)
+            if (idx < 0) return
+            let next = idx
+            if (e.key === "ArrowRight") next = (idx + 1) % HUB_TABS.length
+            if (e.key === "ArrowLeft") next = (idx - 1 + HUB_TABS.length) % HUB_TABS.length
+            if (e.key === "Home") next = 0
+            if (e.key === "End") next = HUB_TABS.length - 1
+            const target = HUB_TABS[next]
+            if (target.id === "chat") {
+              setTab("chat")
+              return
+            }
+            setTab(target.id)
+          }}
+        >
+          {(isMod ? HUB_TABS : HUB_TABS.filter((t) => t.id !== "mod")).map((t) => {
+            const selected = tab === t.id
+            const isChat = t.id === "chat"
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => {
+                  if (isChat) {
+                    setTab("chat")
+                    return
+                  }
+                  setTab(t.id)
+                }}
+                className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                  selected
+                    ? isChat
+                      ? "bg-[var(--gh-green)] text-white"
+                      : "bg-primary text-primary-foreground"
+                    : isChat
+                      ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 scrollbar-hide">
+        {/* Join with eyes open */}
+        {showJoinConfirm && !community.isJoined && (
+          <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-3 dark:border-amber-900 dark:bg-amber-950/40">
+            <p className="text-xs font-bold text-amber-950 dark:text-amber-100">Join with eyes open</p>
+            <p className="mt-1 text-[11px] text-amber-900/90 dark:text-amber-100/80">
+              {community.memberCount} members · {community.privacy} · Review rules below before joining.
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-amber-950/90 dark:text-amber-50/90">
+              {rules.slice(0, 4).map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ol>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={confirmJoin}
+                className="rounded-full bg-primary px-4 py-2 text-[11px] font-bold text-primary-foreground"
+              >
+                Agree & join
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowJoinConfirm(false)}
+                className="rounded-full border border-border bg-card px-4 py-2 text-[11px] font-bold"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === "board" && (
+          <div className="space-y-4">
+            {/* Participation strip — events & knowledge without leaving Board */}
+            {(participationHub.nextEvent || participationHub.resources.length > 0) && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {participationHub.nextEvent ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab("events")}
+                    className="rounded-2xl border border-border bg-card p-3 text-left transition hover:border-emerald-400/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                      Next up
+                    </p>
+                    <p className="mt-0.5 text-[13px] font-bold text-foreground line-clamp-1">
+                      {participationHub.nextEvent.title}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {formatEventWhen(participationHub.nextEvent.startsAt)}
+                      {participationHub.nextEvent.attendeeCount
+                        ? ` · ${participationHub.nextEvent.attendeeCount} attending`
+                        : ""}
+                    </p>
+                  </button>
+                ) : null}
+                {participationHub.resources.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab("about")}
+                    className="rounded-2xl border border-border bg-card p-3 text-left transition hover:border-emerald-400/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      Knowledge hub
+                    </p>
+                    <p className="mt-0.5 text-[13px] font-bold text-foreground">
+                      {participationHub.resourceCount} pinned resource{participationHub.resourceCount === 1 ? "" : "s"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1">
+                      {participationHub.resources[0]?.title}
+                    </p>
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+              <p className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-100">Board ≠ Chat</p>
+              <p className="mt-0.5 text-[11px] text-emerald-800/85 dark:text-emerald-200/80">
+                <strong>Board</strong> holds announcements, discussion, polls and events.{" "}
+                <strong>Chat</strong> is realtime member conversation — a tool inside this place, not the whole community.
+              </p>
+            </div>
+
+            
+        {welcomeModel?.showWelcome ? (
+          <div className="px-3 pt-3">
+            <CommunityMemberWelcome
+              model={welcomeModel}
+              onDismiss={() => {
+                markWelcomeComplete(viewerId, community.id)
+                setWelcomeTick((t) => t + 1)
+              }}
+              onChecklistStep={(step: OnboardingStepId) => {
+                markChecklistStep(viewerId, community.id, step)
+                setWelcomeTick((t) => t + 1)
+              }}
+              onOpenMembers={() => setTab("members")}
+              onOpenBoard={() => setTab("board")}
+              onOpenEvents={() => setTab("events")}
+            />
+          </div>
+        ) : null}
+
+        {community.welcomeMessage && (
+              <div className="rounded-2xl border border-border bg-card p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pinned welcome</p>
+                <p className="mt-1 text-sm text-foreground">
+                  {community.welcomeMessage ||
+                    `Welcome to ${community.name} — introduce yourself and read the rules.`}
+                </p>
+                <div className="mt-2 rounded-xl bg-background/80 px-2.5 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Rules</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+                    {rules.slice(0, 4).map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {community.isJoined && onPost && (
+              <div className="rounded-2xl border border-border bg-card p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Post to board</p>
+                <textarea
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  placeholder="Share an update, question, or resource…"
+                  rows={3}
+                  className="mt-2 w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(["Intro yourself", "Ask a question", "Share a resource"] as const).map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setComposeBody((b) => b || prompt + ": ")}
+                      className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!composeBody.trim()}
+                    onClick={() => {
+                      onPost(composeBody.trim(), "text")
+                      setComposeBody("")
+                    }}
+                    className="ml-auto min-h-9 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-40"
+                  >
+                    Post
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(boardPosts?.length > 0 || (community.samplePosts?.length || 0) > 0) && (
+              <section>
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-foreground">Discussion</h2>
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <button type="button" onClick={() => void refreshBoard()} disabled={boardRefreshing} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2 text-[10px] font-semibold" aria-label="Refresh community board">
+                      <RefreshCw size={12} className={boardRefreshing ? "animate-spin" : ""} /> Refresh
+                    </button>
+                    {(["all", "mine"] as const).map((f) => (
+                      <button key={f} type="button" onClick={() => setBoardFilter(f)} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${boardFilter === f ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>{f === "all" ? "All" : "My posts"}</button>
+                    ))}
+                    {(["new", "hot", "top"] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setBoardSort(s)}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                          boardSort === s ? "bg-[var(--gh-green)] text-white" : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input value={boardQuery} onChange={(e) => setBoardQuery(e.target.value)} placeholder="Search community posts…" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-400" aria-label="Search community posts" />
+                </div>
+                <div className="space-y-2">
+                  {(boardPosts && boardPosts.length > 0
+                    ? [...boardPosts]
+                        .filter((p: any) => boardFilter === "all" || String(p.authorId || "") === String(viewerId))
+                        .filter((p: any) => {
+                          const q = boardQuery.trim().toLowerCase()
+                          return !q || String(p.body || p.excerpt || "").toLowerCase().includes(q) || String(p.authorName || p.author || "").toLowerCase().includes(q)
+                        })
+                        .sort((a: any, b: any) =>
+                          boardSort === "top" || boardSort === "hot"
+                            ? (b.likes || 0) - (a.likes || 0)
+                            : (b.createdAt || 0) - (a.createdAt || 0)
+                        )
+                    : []
+                  ).map((p: any) => (
+                    <div key={p.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-semibold text-foreground">{p.authorName || p.author}</p>
+                        {p.authorRole && p.authorRole !== "member" && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                            {p.authorRole}
+                          </span>
+                        )}
+                        {p.pinned && (
+                          <span className="text-[9px] font-bold uppercase text-emerald-600">Pinned</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
+                      {(() => {
+                        const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
+                        const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                        return (
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5" role="toolbar" aria-label="Community post actions">
+                            <span className="mr-1 text-[10px] font-semibold text-muted-foreground">Quality</span>
+                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition active:scale-[0.98] ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote community post"><ThumbsUp size={12} /> {c.up}</button>
+                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition active:scale-[0.98] ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote community post"><ThumbsDown size={12} /> {c.down}</button>
+                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
+                            {!linked ? <span className="text-[9px] text-muted-foreground">Legacy post</span> : null}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {!community.isJoined && (community.samplePosts?.length || 0) > 0 && (
+              <section>
+                <h2 className="mb-2 text-xs font-bold text-foreground">Sample posts</h2>
+                <div className="space-y-2">
+                  {community.samplePosts!.slice(0, 3).map((p) => (
+                    <div key={p.id} className="rounded-xl border border-border bg-card px-3 py-2">
+                      <p className="text-[11px] font-semibold text-muted-foreground">{p.author}</p>
+                      <p className="mt-0.5 text-sm text-foreground">{p.excerpt}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {feedItems.length > 0 && (
+              <section aria-labelledby="community-timeline-heading">
+                <h2 id="community-timeline-heading" className="mb-2 text-xs font-bold text-foreground">
+                  Community timeline
+                </h2>
+                <ul className="space-y-1.5">
+                  {feedItems.slice(0, 12).map((item) => (
+                    <li
+                      key={`${item.kind}-${item.id}`}
+                      className="rounded-xl border border-border/80 bg-card/80 px-3 py-2 text-[12px]"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                        {item.kind}
+                      </span>
+                      <p className="mt-0.5 font-medium text-foreground">
+                        {item.title || item.body?.slice(0, 120) || item.authorName || "Update"}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+                        {pinnedAnnouncements.length > 0 && (
+              <section>
+                <h2 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  <Megaphone size={14} className="text-emerald-600" />
+                  Announcements
+                </h2>
+                <div className="space-y-2">
+                  {pinnedAnnouncements.map((a) => (
+                    <AnnouncementCard key={a.id} announcement={a} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activePolls.length > 0 && (
+              <section>
+                <h2 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  <BarChart3 size={14} className="text-sky-600" />
+                  Polls
+                </h2>
+                <div className="space-y-2">
+                  {activePolls.map((p) => (
+                    <PollCard key={p.id} poll={p} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {upcoming.length > 0 && (
+              <section>
+                <h2 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  <Calendar size={14} className="text-violet-600" />
+                  Upcoming events
+                </h2>
+                <div className="space-y-2">
+                  {upcoming.map((e) => (
+                    <EventCard key={e.id} event={e} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Quality loop */}
+            <section className="rounded-2xl border border-border bg-card p-3">
+              <h2 className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Sparkles size={14} className="text-amber-500" />
+                This week’s contributors
+              </h2>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Quality posts and helpful replies may earn recognition. GHC for community value is{" "}
+                <strong>approved only</strong> — never for spam.
+              </p>
+              <ul className="mt-2 space-y-1.5 text-[11px] text-muted-foreground">
+                <li className="flex justify-between rounded-lg bg-muted/50 px-2 py-1.5">
+                  <span>Helpful discussion</span>
+                  <span className="font-semibold text-foreground">Top signal</span>
+                </li>
+                <li className="flex justify-between rounded-lg bg-muted/50 px-2 py-1.5">
+                  <span>Event hosting</span>
+                  <span className="font-semibold text-foreground">Community value</span>
+                </li>
+              </ul>
+            </section>
+
+            {pinnedAnnouncements.length === 0 && activePolls.length === 0 && upcoming.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-8 text-center">
+                <Bell size={22} className="mx-auto text-muted-foreground/50" />
+                <p className="mt-2 text-sm font-semibold text-foreground">Community board</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Announcements, polls and events from moderators appear here.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "announcements" && (
+          <div className="space-y-3">
+            {isMod && onCreateAnnouncement ? (
+              <div className="rounded-2xl border border-border bg-card p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] font-bold text-foreground">Publish announcement</p>
+                  <button
+                    type="button"
+                    onClick={() => setAnnounceOpen((v) => !v)}
+                    className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold"
+                  >
+                    {announceOpen ? "Cancel" : "New"}
+                  </button>
+                </div>
+                {announceOpen ? (
+                  <div className="mt-2 space-y-2">
+                    <input
+                      value={announceTitle}
+                      onChange={(e) => setAnnounceTitle(e.target.value)}
+                      placeholder="Title"
+                      aria-label="Announcement title"
+                      className="min-h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                    />
+                    <textarea
+                      value={announceBody}
+                      onChange={(e) => setAnnounceBody(e.target.value)}
+                      placeholder="Message for members…"
+                      aria-label="Announcement body"
+                      rows={3}
+                      className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={!announceTitle.trim() || !announceBody.trim()}
+                      onClick={() => {
+                        onCreateAnnouncement({
+                          title: announceTitle.trim(),
+                          content: announceBody.trim(),
+                        })
+                        setAnnounceTitle("")
+                        setAnnounceBody("")
+                        setAnnounceOpen(false)
+                      }}
+                      className="min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      Publish
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {pinnedAnnouncements.length === 0 && announcements.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-8 text-center text-xs text-muted-foreground">
+                No announcements yet
+              </div>
+            ) : (
+              (pinnedAnnouncements.length ? pinnedAnnouncements : announcements).map((a) => (
+                <AnnouncementCard key={a.id} announcement={a} />
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === "discussion" && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">
+              Discussions are board posts — not the same as realtime chat.
+            </p>
+            {community.isJoined && onPost ? (
+              <div className="rounded-2xl border border-border bg-card p-3">
+                <label htmlFor="community-discussion-compose" className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Start a discussion
+                </label>
+                <textarea
+                  id="community-discussion-compose"
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  rows={3}
+                  placeholder="Share something with the community…"
+                  className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                />
+                <button
+                  type="button"
+                  disabled={!composeBody.trim()}
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "You are offline — post discussion when reconnected", type: "info" } }))
+                      } catch { /* */ }
+                      return
+                    }
+                    const body = composeBody.trim()
+                    if (!body) return
+                    setComposeBody("")
+                    try {
+                      onPost(body, "text")
+                      window.dispatchEvent(new CustomEvent("ghc:post-engagement", { detail: { kind: "community_board", communityId: community.id } }))
+                    } catch { /* */ }
+                  }}
+                  className="mt-2 min-h-10 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                >
+                  Post discussion
+                </button>
+              </div>
+            ) : !community.isJoined ? (
+              <p className="rounded-2xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                Join this community to start a discussion.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Posting is unavailable right now.</p>
+            )}
+            {(boardPosts?.length || 0) === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">No discussions yet.</p>
+            ) : (
+              <ul className="space-y-2" aria-label="Community discussions">
+                {[...(boardPosts || [])]
+                  .filter((p: any) => !p.hidden)
+                  .sort((a: any, b: any) => (Number(!!b.pinned) - Number(!!a.pinned)) || ((b.createdAt || 0) - (a.createdAt || 0)))
+                  .map((p: any) => {
+                    const replies = Array.isArray(p.replies) ? [...p.replies].sort((a: any, b: any) => a.createdAt - b.createdAt) : []
+                    const open = !!expandedReplies[p.id]
+                    return (
+                    <li key={p.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
+                      <button
+                        type="button"
+                        className="text-left text-[11px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        onClick={() => {
+                          if (!p.authorId) return
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ghc:open-profile", {
+                                detail: { userId: p.authorId },
+                              })
+                            )
+                          } catch { /* */ }
+                        }}
+                      >
+                        {p.authorName || p.author || "Member"}
+                      </button>
+                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                          const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
+                          if (!linked) return onReactToPost ? (
+                            <button type="button" onClick={() => onReactToPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground" aria-label={`Like discussion, ${p.likes || 0} likes`}>♥ {p.likes || 0}</button>
+                          ) : <span className="text-[11px] text-muted-foreground">Legacy · ♥ {p.likes || 0}</span>
+                          return <>
+                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote discussion"><ThumbsUp size={12} /> {c.up}</button>
+                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote discussion"><ThumbsDown size={12} /> {c.down}</button>
+                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
+                          </>
+                        })()}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
+                            if (linked) {
+                              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                              window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: String(p.id), action: "comment", source: "community" } }))
+                              return
+                            }
+                            setExpandedReplies((state) => ({ ...state, [p.id]: !state[p.id] }))
+                          }}
+                          className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        >
+                          Comments {p.comments || replies.length || 0}
+                        </button>
+                        {isMod && onPinPost && !p.pinned ? (
+                          <button type="button" onClick={() => onPinPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold">
+                            Pin
+                          </button>
+                        ) : null}
+                        {isMod && onUnpinPost && p.pinned ? (
+                          <button type="button" onClick={() => onUnpinPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold">
+                            Unpin
+                          </button>
+                        ) : null}
+                        {isMod && onHidePost ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (await confirmDialog({ title: "Hide this discussion?", message: "It will be removed from the community board for members.", confirmLabel: "Hide discussion", danger: true })) onHidePost(p.id)
+                            }}
+                            className="min-h-9 rounded-full border border-destructive/40 px-2.5 text-[11px] font-bold text-destructive"
+                          >
+                            Hide
+                          </button>
+                        ) : null}
+                      </div>
+                      {open && (String(p.id || "").startsWith("bpost_") || String(p.id || "").startsWith("local_")) ? (
+                        <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+                          {replies.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground">No replies yet.</p>
+                          ) : (
+                            replies.map((r: any) => (
+                              <div key={r.id} className="rounded-lg bg-muted/40 px-2 py-1.5">
+                                <p className="text-[10px] font-semibold text-foreground">{r.authorName || "Member"}</p>
+                                <p className="text-[12px] text-foreground whitespace-pre-wrap">{r.body}</p>
+                              </div>
+                            ))
+                          )}
+                          {community.isJoined && onReplyToPost ? (
+                            <div className="flex gap-2">
+                              <input
+                                value={replyDrafts[p.id] || ""}
+                                onChange={(e) =>
+                                  setReplyDrafts((s) => ({ ...s, [p.id]: e.target.value }))
+                                }
+                                placeholder="Write a reply…"
+                                aria-label="Reply to discussion"
+                                className="min-h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
+                              />
+                              <button
+                                type="button"
+                                disabled={!(replyDrafts[p.id] || "").trim()}
+                                onClick={() => {
+                                  const body = (replyDrafts[p.id] || "").trim()
+                                  if (!body) return
+                                  onReplyToPost(p.id, body)
+                                  setReplyDrafts((s) => ({ ...s, [p.id]: "" }))
+                                }}
+                                className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white disabled:opacity-50"
+                              >
+                                Reply
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                    )
+                  })}
+              </ul>
+            )}
+
+            {isMod && onUnhidePost ? (
+              <section className="mt-4" aria-label="Hidden discussions">
+                <h3 className="text-[12px] font-bold text-foreground">Hidden discussions</h3>
+                <ul className="mt-2 space-y-1">
+                  {((boardPosts as any[]) || [])
+                    .filter((p: any) => p.hidden)
+                    .map((p: any) => (
+                      <li key={p.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-2">
+                        <p className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                          {p.body?.slice(0, 80) || p.id}
+                        </p>
+                        <button
+                          type="button"
+                          className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold"
+                          onClick={() => onUnhidePost(p.id)}
+                        >
+                          Unhide
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        )}
+
+        {tab === "chat" && (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"><MessageCircle size={19} /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-foreground">Community chat</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Chat is optional and separate from the community Board. Only the group owner can create it; members choose whether to join.</p>
+                </div>
+              </div>
+              {!community.isJoined ? (
+                <div className="mt-4 rounded-xl bg-muted/60 p-3 text-[12px] text-muted-foreground">Join the community first. Group privacy decides whether membership is immediate or owner-approved.</div>
+              ) : !chatState?.enabled ? (
+                chatState?.owner ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[12px] text-muted-foreground">Create an optional chat and choose how members enter it.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button disabled={chatBusy} onClick={() => void runChatAction("create", "members")} className="min-h-11 rounded-xl bg-[var(--gh-green)] px-3 text-xs font-bold text-white disabled:opacity-60">Create · Members join</button>
+                      <button disabled={chatBusy} onClick={() => void runChatAction("create", "approval")} className="min-h-11 rounded-xl border border-border bg-background px-3 text-xs font-bold disabled:opacity-60">Create · Approval</button>
+                    </div>
+                  </div>
+                ) : <p className="mt-4 text-[12px] text-muted-foreground">The owner has not created a chat for this community.</p>
+              ) : chatState?.chatMember ? (
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-emerald-50/70 p-3 dark:bg-emerald-950/30">
+                  <div><p className="text-xs font-bold text-foreground">You’re in the chat</p><p className="text-[11px] text-muted-foreground">Messages open in the dedicated Messages experience.</p></div>
+                  <button onClick={() => onOpenChat?.()} className="min-h-10 shrink-0 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white">Open chat</button>
+                </div>
+              ) : chatState?.requestStatus === "pending" ? (
+                <div className="mt-4 rounded-xl bg-amber-50 p-3 text-[12px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Your chat request is waiting for the owner’s approval.</div>
+              ) : (
+                <button disabled={chatBusy} onClick={() => void runChatAction("join")} className="mt-4 min-h-11 w-full rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-60">{chatState?.privacy === "approval" ? "Request to join chat" : "Join community chat"}</button>
+              )}
+            </div>
+            {chatState?.chatMember ? (
+              <button type="button" onClick={() => { setChatMuted((v) => !v); try { onMute?.() } catch {} }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-muted-foreground">
+                <VolumeX size={14} /> {chatMuted ? "Chat muted" : "Mute chat"}
+              </button>
+            ) : null}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">Board posts, announcements and events stay in Communities. Realtime chat stays in Messages so each feature has one clear home.</p>
+          </div>
+        )}
+
+        {tab === "events" && (
+          <div className="space-y-4">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              Events and activities are how this community meets offline and online — not just another chat thread.
+            </p>
+            <p className="text-[11px] text-muted-foreground">{participationHub.summaryLine}</p>
+            <section aria-labelledby="community-upcoming-events">
+              <h3 id="community-upcoming-events" className="text-[12px] font-bold text-foreground">
+                Upcoming
+              </h3>
+              {upcoming.length === 0 ? (
+                <div className="mt-2 rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-center text-xs text-muted-foreground">
+                  No upcoming events
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {upcoming.map((e) => (
+                    <EventCard key={e.id} event={e} onAttend={onRsvp ? () => onRsvp(e.id) : undefined} />
+                  ))}
+                </div>
+              )}
+            </section>
+            <section aria-labelledby="community-past-events">
+              <h3 id="community-past-events" className="text-[12px] font-bold text-foreground">
+                Past
+              </h3>
+              {(() => {
+                const now = Date.now()
+                const past = (events || []).filter((e: any) => {
+                  const t = e.startsAt || e.startAt || e.date || 0
+                  return Number(t) > 0 && Number(t) < now
+                })
+                if (past.length === 0) {
+                  return (
+                    <p className="mt-2 text-[11px] text-muted-foreground">No past events.</p>
+                  )
+                }
+                return (
+                  <div className="mt-2 space-y-2 opacity-80">
+                    {past.slice(0, 5).map((e: any) => (
+                      <EventCard key={e.id} event={e} />
+                    ))}
+                  </div>
+                )
+              })()}
+            </section>
+          </div>
+        )}
+
+        {tab === "members" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-muted-foreground">Roles: Owner · Admin · Moderator · Member</p>
+              {isMod && onInviteMember ? (
+                <button
+                  type="button"
+                  onClick={() => setInviteOpen((v) => !v)}
+                  className="min-h-10 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
+                >
+                  {inviteOpen ? "Close invite" : "Invite member"}
+                </button>
+              ) : null}
+            </div>
+
+            {isMod && pendingJoinRequests.length > 0 ? (
+              <section aria-label="Pending join requests" className="space-y-2">
+                <h3 className="text-[12px] font-bold text-foreground">Pending join requests</h3>
+                {pendingJoinRequests.map((uid) => (
+                  <div
+                    key={uid}
+                    className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/30"
+                  >
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                      {uid === "current-user" ? "You" : uid}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onApproveRequest?.(uid)}
+                      className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeclineRequest?.(uid)}
+                      className="min-h-10 rounded-xl border border-border bg-card px-3 text-[11px] font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                ))}
+              </section>
+            ) : isMod ? (
+              <p className="text-[11px] text-muted-foreground">No pending join requests.</p>
+            ) : null}
+
+            {inviteOpen && isMod && onInviteMember ? (
+              <section aria-label="Invite a member" className="space-y-2 rounded-2xl border border-border bg-card p-3">
+                <h3 className="text-[12px] font-bold text-foreground">Invite someone</h3>
+                {inviteCandidates.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    No eligible people to invite right now.
+                  </p>
+                ) : (
+                  inviteCandidates.slice(0, 8).map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{c.name}</p>
+                      <button
+                        type="button"
+                        disabled={inviteBusy === c.id}
+                        onClick={async () => {
+                          setInviteBusy(c.id)
+                          try {
+                            await onInviteMember(c.id)
+                          } finally {
+                            setInviteBusy(null)
+                          }
+                        }}
+                        className="min-h-10 rounded-xl bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {inviteBusy === c.id ? "…" : "Invite"}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </section>
+            ) : null}
+
+            {membersWithRoles.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No members to show yet.
+              </p>
+            ) : (
+              membersWithRoles.map((m) => {
+                const roleKey = String(m.role || "member").toLowerCase()
+                const isSelf = m.id === meId
+                const isOwnerRow = roleKey === "owner" || m.id === (community as { createdBy?: string }).createdBy
+                const canManage =
+                  Boolean(onSetRole) &&
+                  (community.role === "owner" || community.role === "admin") &&
+                  !isSelf &&
+                  !isOwnerRow
+                return (
+                <div
+                  key={m.id}
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
+                >
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
+                    {m.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <LazyImage src={m.photo} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs font-bold text-muted-foreground">
+                        {(m.name || "?").slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {m.name}{isSelf ? " · You" : ""}
+                    </p>
+                    <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${ROLE_BADGE[roleKey] || ROLE_BADGE.member}`}>
+                      {isOwnerRow ? "Owner" : roleKey}
+                    </span>
+                  </div>
+                  {canManage ? (
+                    <div className="flex w-full flex-wrap gap-1.5 sm:w-auto sm:justify-end">
+                      {roleKey !== "admin" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100"
+                          onClick={() => onSetRole?.(m.id, "admin")}
+                        >
+                          Make admin
+                        </button>
+                      ) : null}
+                      {roleKey !== "moderator" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-sky-200 bg-sky-50 px-2.5 text-[10px] font-bold text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100"
+                          onClick={() => onSetRole?.(m.id, "moderator")}
+                        >
+                          Make moderator
+                        </button>
+                      ) : null}
+                      {roleKey !== "member" ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-border bg-muted/60 px-2.5 text-[10px] font-bold text-foreground"
+                          onClick={() => onSetRole?.(m.id, "member")}
+                        >
+                          Make member
+                        </button>
+                      ) : null}
+                      {onRemoveMember ? (
+                        <button
+                          type="button"
+                          className="min-h-8 rounded-full border border-red-200 bg-red-50 px-2.5 text-[10px] font-bold text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"
+                          onClick={() => onRemoveMember(m.id)}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                )
+              })
+            )}
+
+            {community.isJoined ? (
+              <CommunityPeopleYouMayKnow
+                suggestions={peopleSuggestions}
+                communityName={community.name}
+                blockedUserIds={ghcSession.blockedUsers || []}
+                onOpenProfile={(userId) => {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:open-profile", { detail: { userId } })
+                    )
+                  } catch {
+                    /* */
+                  }
+                }}
+              />
+            ) : null}
+          </div>
+        )}
+
+
+        {tab === "mod" && isMod && (
+          <div className="space-y-4" aria-label="Moderation console">
+            <section className="rounded-2xl border border-emerald-600/20 bg-gradient-to-br from-emerald-50/90 to-card p-4 dark:from-emerald-950/30">
+              <h2 className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+                <Settings2 size={16} /> Moderation console
+              </h2>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Join requests, safety reports, and action log. Changes follow community governance durability — not a demo toggle.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold">
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Role: {formatCommunityRole(community.role)}
+                </span>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Pending joins: {pendingJoinRequests.length}
+                </span>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-border dark:bg-card">
+                  Open reports: {allReports.filter((r) => r.status === "open").length}
+                </span>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h3 className="text-xs font-bold text-foreground">Join queue</h3>
+              {pendingJoinRequests.length === 0 ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">No pending join requests.</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {pendingJoinRequests.map((uid) => (
+                    <li key={uid} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-3 py-2">
+                      <span className="truncate text-[12px] font-medium text-foreground">{uid.slice(0, 16)}</span>
+                      <div className="flex shrink-0 gap-1.5">
+                        {onApproveRequest ? (
+                          <button
+                            type="button"
+                            onClick={() => onApproveRequest(uid)}
+                            className="rounded-full bg-emerald-700 px-3 py-1 text-[10px] font-bold text-white"
+                          >
+                            Approve
+                          </button>
+                        ) : null}
+                        {(onDeclineRequest || onRejectRequest) ? (
+                          <button
+                            type="button"
+                            onClick={() => (onDeclineRequest || onRejectRequest)?.(uid)}
+                            className="rounded-full border border-border px-3 py-1 text-[10px] font-bold text-muted-foreground"
+                          >
+                            Decline
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h3 className="text-xs font-bold text-foreground">Quick actions</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTab("announcements")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Post update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("members")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Manage members
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("about")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Rules & about
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("board")}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Review board
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Moderation log">
+              <h3 className="text-xs font-bold text-foreground">Recent moderation log</h3>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
+              {moderationLog.length === 0 ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">No moderation actions yet.</p>
+              ) : (
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-[11px]">
+                  {moderationLog.slice(0, 30).map((e) => (
+                    <li key={e.id} className="rounded-lg bg-muted/40 px-2 py-1.5">
+                      <span className="font-semibold capitalize">{e.action}</span>
+                      {" · "}
+                      {e.targetType} {String(e.targetId || "").slice(0, 12)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+
+        {tab === "about" && (
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h2 className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Shield size={14} /> About
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {community.description || "No description yet."}
+              </p>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Privacy: <span className="font-semibold capitalize text-foreground">{community.privacy}</span>
+                {community.category ? ` · ${community.category}` : ""}
+                {community.region ? ` · ${community.region}` : ""}
+              </p>
+              {community.region && (
+                <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                  Local chapter signal: grounded in {community.region}
+                </p>
+              )}
+            </section>
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h2 className="text-xs font-bold text-foreground">Roles that matter</h2>
+              <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                <li><strong className="text-foreground">Owner</strong> — full settings, roles, delete community</li>
+                <li><strong className="text-foreground">Admin</strong> — settings, roles, removals</li>
+                <li><strong className="text-foreground">Moderator</strong> — moderation, announcements, slow mode</li>
+                <li><strong className="text-foreground">Member</strong> — post, discuss, chat per rules</li>
+              </ul>
+            </section>
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <h2 className="text-xs font-bold text-foreground">Rules</h2>
+              <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-muted-foreground">
+                {rules.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ol>
+            </section>
+            {(community as any).stats && (community.role === "owner" || community.role === "admin") && (
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <h2 className="text-xs font-bold text-foreground">Owner snapshot (aggregate only)</h2>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold">{(community as any).stats.membersJoinedThisWeek ?? 0}</p>
+                    <p className="text-[9px] text-muted-foreground">New members / wk</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold">{(community as any).stats.postsThisWeek ?? 0}</p>
+                    <p className="text-[9px] text-muted-foreground">Posts / wk</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold">{(community as any).stats.activeChatApprox ?? 0}</p>
+                    <p className="text-[9px] text-muted-foreground">Active chat ~</p>
+                  </div>
+                </div>
+              </section>
+            )}
+            {(community as any).inviteCode && community.isJoined && (
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <h2 className="text-xs font-bold text-foreground">Invite code</h2>
+                <p className="mt-1 font-mono text-lg font-bold tracking-widest text-emerald-700">{(community as any).inviteCode}</p>
+                <p className="text-[11px] text-muted-foreground">Share for private / invite-only joins</p>
+                <button
+                  type="button"
+                  className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
+                  onClick={() => {
+                    void shareText({
+                      title: community.name || "GreenHaven community",
+                      message: `Join ${community.name || "this community"} on GreenHaven. Invite code: ${(community as any).inviteCode}`,
+                    })
+                  }}
+                >
+                  <Share2 size={14} aria-hidden /> Share invite
+                </button>
+              </section>
+            )}
+            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Community activity digest">
+              <h2 className="text-xs font-bold text-foreground">Activity digest</h2>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Non-financial summary of recent community activity.
+              </p>
+              {activityDigest.summaryLines.length === 0 ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">No activity to summarize yet.</p>
+              ) : (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-[12px] text-foreground">
+                  {activityDigest.summaryLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Community governance">
+              <h2 className="text-xs font-bold text-foreground">Community status</h2>
+              <p className="mt-1 text-[12px] text-foreground">
+                <span className="font-semibold">{lifecycleLabel(lifecycle)}</span>
+                {" · "}
+                <span className="capitalize text-muted-foreground">{governanceModel.role}</span>
+              </p>
+              <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                {healthSnapshot.signals.map((s) => (
+                  <li key={s}>• {s}</li>
+                ))}
+              </ul>
+              {isMod && onTransitionLifecycle ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(["active", "quiet", "archived"] as const).map((next) => (
+                    <button
+                      key={next}
+                      type="button"
+                      disabled={lifecycle === next}
+                      onClick={() => onTransitionLifecycle(next)}
+                      className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold capitalize disabled:opacity-40"
+                    >
+                      Mark {next}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {isMod && lifecycleSuggestion.suggested && onTransitionLifecycle ? (
+                <div
+                  className={`mt-3 rounded-xl border p-3 ${
+                    lifecycleSuggestion.severity === "warning"
+                      ? "border-amber-300 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30"
+                      : "border-emerald-300/60 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
+                  }`}
+                  role="status"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Suggested status
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-foreground">
+                    {lifecycleSuggestion.reason}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 min-h-9 rounded-full bg-foreground px-3 text-[11px] font-bold text-background"
+                    onClick={async () => {
+                      const next = lifecycleSuggestion.suggested
+                      if (!next) return
+                      if (await confirmDialog({ title: `Mark this community as "${next}"?`, message: "This action is never applied automatically.", confirmLabel: "Update status" })) onTransitionLifecycle(next)
+                    }}
+                  >
+                    Mark as {lifecycleSuggestion.suggested}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+
+            {isMod && adminHealth ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Admin health analytics">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-xs font-bold text-foreground">Community health</h2>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Non-financial engagement signals for moderators only.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      adminHealth.grade === "healthy"
+                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100"
+                        : adminHealth.grade === "needs_attention"
+                          ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40"
+                          : adminHealth.grade === "quiet"
+                            ? "bg-muted text-muted-foreground"
+                            : "bg-destructive/15 text-destructive"
+                    }`}
+                  >
+                    {adminHealth.gradeLabel}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold text-foreground">{adminHealth.engagementScore}</p>
+                    <p className="text-[9px] font-semibold text-muted-foreground">Engagement</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold text-foreground">{adminHealth.unansweredCount}</p>
+                    <p className="text-[9px] font-semibold text-muted-foreground">Unanswered</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/50 px-2 py-2">
+                    <p className="text-sm font-bold text-foreground">{adminHealth.openReportCount}</p>
+                    <p className="text-[9px] font-semibold text-muted-foreground">Open reports</p>
+                  </div>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <div>Members: <span className="font-semibold text-foreground">{adminHealth.memberCount}</span></div>
+                  <div>Discussions: <span className="font-semibold text-foreground">{adminHealth.discussionCount}</span></div>
+                  <div>Events: <span className="font-semibold text-foreground">{adminHealth.upcomingEventCount}</span></div>
+                  <div>Resources: <span className="font-semibold text-foreground">{adminHealth.resourceCount}</span></div>
+                  <div className="col-span-2">
+                    Last activity:{" "}
+                    <span className="font-semibold text-foreground">
+                      {adminHealth.daysSinceLastActivity === null
+                        ? "—"
+                        : adminHealth.daysSinceLastActivity === 0
+                          ? "Today"
+                          : `${adminHealth.daysSinceLastActivity}d ago`}
+                    </span>
+                  </div>
+                </dl>
+                {adminHealth.recommendations.length > 0 ? (
+                  <ul className="mt-2 space-y-1 rounded-xl border border-border/80 bg-muted/30 p-2.5 text-[11px] text-foreground">
+                    {adminHealth.recommendations.map((r) => (
+                      <li key={r}>• {r}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+
+            {isMod ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Safety queue">
+                <h2 className="text-xs font-bold text-foreground">Safety queue</h2>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Review reports from members and take moderation action.
+                </p>
+                {openReports.length === 0 ? (
+                  <p className="mt-2 text-[12px] text-muted-foreground">No open reports.</p>
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {openReports.map((r) => (
+                      <li key={r.id} className="rounded-xl border border-border bg-muted/30 p-2.5">
+                        <p className="text-[12px] font-semibold text-foreground capitalize">
+                          {r.targetType} · {r.reason}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Target {r.targetId.slice(0, 16)} · {new Date(r.createdAt).toLocaleString()}
+                        </p>
+                        {r.note ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">{r.note}</p>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold"
+                            onClick={() => {
+                              resolveCommunityReport(
+                                community.id,
+                                r.id,
+                                "reviewing",
+                                IdentityService.getCurrentUserId() || "mod"
+                              )
+                              setSafetyTick((t) => t + 1)
+                            }}
+                          >
+                            Reviewing
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
+                            onClick={() => {
+                              resolveCommunityReport(
+                                community.id,
+                                r.id,
+                                "resolved",
+                                IdentityService.getCurrentUserId() || "mod"
+                              )
+                              setSafetyTick((t) => t + 1)
+                            }}
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground"
+                            onClick={() => {
+                              resolveCommunityReport(
+                                community.id,
+                                r.id,
+                                "dismissed",
+                                IdentityService.getCurrentUserId() || "mod"
+                              )
+                              setSafetyTick((t) => t + 1)
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {allReports.filter((r) => r.status !== "open").length > 0 ? (
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    {allReports.filter((r) => r.status !== "open").length} closed reports
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {isMod ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Moderation log">
+                <h2 className="text-xs font-bold text-foreground">Moderation log</h2>
+                <p className="mt-1 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Recent moderation actions for this community.
+                </p>
+                {moderationLog.length === 0 ? (
+                  <p className="mt-2 text-[12px] text-muted-foreground">No moderation actions yet.</p>
+                ) : (
+                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[11px]">
+                    {moderationLog.slice(0, 20).map((e) => (
+                      <li key={e.id} className="rounded-lg bg-muted/40 px-2 py-1">
+                        <span className="font-semibold capitalize">{e.action}</span>
+                        {" · "}
+                        {e.targetType} {e.targetId.slice(0, 12)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : null}
+
+            {onReportCommunity ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Report community">
+                <h2 className="text-xs font-bold text-foreground">Safety</h2>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Report content or this community if it violates GreenHaven guidelines. Reports go to moderators.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["spam", "Spam"],
+                      ["harassment", "Harassment"],
+                      ["safety", "Safety"],
+                      ["misinformation", "Misinfo"],
+                      ["other", "Other"],
+                    ] as const
+                  ).map(([reason, label]) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      className="min-h-9 rounded-full border border-destructive/30 px-3 text-[11px] font-bold text-destructive"
+                      onClick={async () => {
+                        if (await confirmDialog({ title: `Submit a ${label.toLowerCase()} report?`, message: "Your report will be reviewed by the appropriate moderation flow.", confirmLabel: "Submit report", danger: true })) {
+                          onReportCommunity({ targetType: "community", targetId: community.id, reason })
+                          setSafetyTick((t) => t + 1)
+                        }
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+
+                        {Array.isArray((community as any).resources) && (community as any).resources.length > 0 ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Community knowledge hub">
+                <h2 className="text-xs font-bold text-foreground">Knowledge hub</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Pinned guides, links, and materials for members.</p>
+                <div className="mt-2 space-y-2">
+                  {((community as any).resources as any[]).slice(0, 8).map((r) => (
+                    <PinnedResourceCard key={r.id || r.title} resource={r} />
+                  ))}
+                </div>
+              </section>
+            ) : community.isJoined ? (
+              <p className="text-[11px] text-muted-foreground">No pinned resources yet.</p>
+            ) : null}
+
+            {Array.isArray((community as any).activities) && (community as any).activities.length > 0 ? (
+              <section className="rounded-2xl border border-border bg-card p-4" aria-label="Community activities">
+                <h2 className="text-xs font-bold text-foreground">Activities</h2>
+                <ul className="mt-2 space-y-1.5">
+                  {((community as any).activities as any[]).slice(0, 6).map((a) => (
+                    <li key={a.id || a.title} className="rounded-xl border border-border px-3 py-2 text-[12px] font-medium text-foreground">
+                      {a.title || a.name || "Activity"}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+                        <div className="flex flex-col gap-2">
+              {onMute && community.isJoined && (
+                <button
+                  type="button"
+                  onClick={onMute}
+                  className="min-h-10 rounded-xl border border-border text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  aria-pressed={!!community.isMuted}
+                >
+                  {community.isMuted ? "Unmute community" : "Mute community"}
+                </button>
+              )}
+              {onLeave && community.isJoined && community.role !== "owner" && (
+                <button type="button" onClick={onLeave} className="min-h-10 rounded-xl border border-destructive/40 text-xs font-bold text-destructive">
+                  Leave community
+                </button>
+              )}
+              <button type="button" className="min-h-10 text-xs font-semibold text-muted-foreground">
+                Report community
+              </button>
+            </div>
+            {isMod && (
+              <button
+                type="button"
+                onClick={() => setTab("mod")}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-600/30 bg-emerald-50 py-2.5 text-xs font-bold text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+              >
+                <Settings2 size={14} />
+                Open moderation console
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
