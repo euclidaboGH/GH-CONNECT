@@ -25,6 +25,11 @@ import {
   Plus,
   Tag as TagIcon,
   Loader2,
+  ShoppingCart,
+  Minus,
+  ShieldCheck,
+  Truck,
+  Zap,
 } from "lucide-react"
 import { getMarketplaceDomain, getCommunityDomain } from "@/lib/domains/compat"
 import {
@@ -63,6 +68,14 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+import {
+  addMarketplaceCartItem,
+  clearMarketplaceCart,
+  getMarketplaceCart,
+  removeMarketplaceCartItem,
+  updateMarketplaceCartQuantity,
+  type MarketplaceCartItem,
+} from "@/lib/marketplace/cart"
 import {
   formatListingFeeCta,
   quoteListingCreateFee,
@@ -441,6 +454,7 @@ function ListingDetail({
   onEditListing?: (listing: MarketplaceListing) => void
   onDelist?: (listing: MarketplaceListing) => void
   onRemoveListing?: (listing: MarketplaceListing) => void
+  onAddToCart?: (listing: MarketplaceListing) => void
 }) {
   const chip = statusChip(listing.status)
   const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
@@ -989,7 +1003,19 @@ function ListingDetail({
               Price and availability are provided by the seller. Review payment details before confirming.
             </p>
             {canBuy ? (
-              <CheckoutPanel listing={listing} />
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onAddToCart?.(listing)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-emerald-600/35 bg-emerald-50 px-3 text-[12px] font-bold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-200"
+                  >
+                    <ShoppingCart size={15} aria-hidden />
+                    Add to cart
+                  </button>
+                </div>
+                <CheckoutPanel listing={listing} />
+              </>
             ) : null}
           </div>
         </section>
@@ -1294,6 +1320,171 @@ function emitMarketplaceEconomyRefresh(reason: string) {
 }
 
 
+function CartPanel({
+  items,
+  onChange,
+  onRemove,
+  onClear,
+  onContinueShopping,
+}: {
+  items: MarketplaceCartItem[]
+  onChange: (listingId: string, quantity: number) => void
+  onRemove: (listingId: string) => void
+  onClear: () => void
+  onContinueShopping: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const totals = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const item of items) {
+      const currency = (item.currency || "GHC").toUpperCase()
+      map.set(currency, (map.get(currency) || 0) + Math.max(0, Number(item.price) || 0) * item.quantity)
+    }
+    return map
+  }, [items])
+
+  const checkout = async () => {
+    if (busy || !items.length) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import("@/lib/social/client")
+      const created: Array<{ id: string; item: MarketplaceCartItem }> = []
+      for (const item of items) {
+        const result = await socialCreateMarketplaceOrder({
+          listingId: item.listingId,
+          quantity: item.quantity,
+          idempotencyKey: `cart_${item.listingId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        })
+        if (!result.ok || !result.order) throw new Error(result.error || `Could not reserve ${item.title}`)
+        const id = String((result.order as { id?: string }).id || "")
+        if (!id) throw new Error(`Order created without an id for ${item.title}`)
+        created.push({ id, item })
+      }
+
+      const piOrder = created.find(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
+      const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
+      for (const { id } of ghcOrders) {
+        const paid = await socialPayMarketplaceOrder(id, "ghc")
+        if (!paid.ok) throw new Error(paid.message || paid.error || "GHC payment failed — check available balance")
+      }
+
+      clearMarketplaceCart()
+      if (piOrder) {
+        openPayForListing(
+          {
+            listingId: piOrder.item.listingId,
+            sellerId: piOrder.item.sellerId,
+            title: piOrder.item.title,
+            orderId: piOrder.id,
+          },
+          "pi",
+        )
+        setMessage("Your GHC items were paid. Complete the Pi payment for the remaining item; other orders remain protected in Orders.")
+      } else {
+        setMessage("Cart checkout completed. Your orders are now protected and available under Orders.")
+      }
+      emitMarketplaceEconomyRefresh("marketplace-cart-checkout")
+      window.dispatchEvent(new CustomEvent("ghc:marketplace-order-changed"))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cart checkout failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!items.length) {
+    return (
+      <div className="mx-auto max-w-2xl px-1 py-8">
+        <div className="rounded-[1.5rem] border border-border/60 bg-card p-7 text-center shadow-sm">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <ShoppingCart size={28} aria-hidden />
+          </span>
+          <h2 className="mt-4 text-xl font-bold">Your cart is ready for your next find</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+            Save products here while you compare sellers, quantities, delivery details and payment options. Checkout revalidates inventory and payment on the server.
+          </p>
+          <button type="button" onClick={onContinueShopping} className="mt-5 min-h-11 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white">
+            Continue shopping
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 px-1 pb-8">
+      <div className="rounded-[1.4rem] border border-border/60 bg-card p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Your basket</p>
+            <h2 className="mt-1 text-xl font-bold">Ready to checkout</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"} · quantities and inventory are rechecked at checkout</p>
+          </div>
+          <button type="button" onClick={onClear} className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground">Clear</button>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Items</p><p className="mt-1 text-sm font-bold">{items.reduce((n, i) => n + i.quantity, 0)}</p></div>
+          <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Sellers</p><p className="mt-1 text-sm font-bold">{new Set(items.map((i) => i.sellerId)).size}</p></div>
+          <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Currencies</p><p className="mt-1 text-sm font-bold">{totals.size}</p></div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {items.map((item) => {
+          const lineTotal = (Number(item.price) || 0) * item.quantity
+          const currency = (item.currency || "GHC").toUpperCase()
+          return (
+            <article key={item.listingId} className="flex gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+              <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted/60">
+                {item.media ? <LazyImage src={item.media} alt={item.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Package size={22} className="text-muted-foreground" /></div>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">Seller · {item.sellerId.slice(0, 8)}</p></div>
+                  <button type="button" onClick={() => onRemove(item.listingId)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label={`Remove ${item.title}`}><X size={15} /></button>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center rounded-full border border-border/70 bg-background">
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity - 1)} disabled={item.quantity <= 1} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Decrease quantity"><Minus size={13} /></button>
+                    <span className="min-w-7 text-center text-xs font-bold">{item.quantity}</span>
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity + 1)} className="flex h-8 w-8 items-center justify-center" aria-label="Increase quantity"><Plus size={13} /></button>
+                  </div>
+                  <p className="text-sm font-extrabold">{currency === "GHC" ? "₲ " : currency === "PI" ? "" : ""}{lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : ` ${currency}`}{currency === "PI" ? " π" : ""}</p>
+                </div>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+
+      <div className="rounded-[1.4rem] border border-emerald-600/20 bg-emerald-50/50 p-4 dark:bg-emerald-950/15">
+        <div className="flex items-center gap-2 text-[12px] font-bold"><ShieldCheck size={16} className="text-emerald-700 dark:text-emerald-300" /> Protected marketplace checkout</div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="flex gap-2"><Truck size={15} className="mt-0.5 shrink-0 text-muted-foreground" /><p className="text-[11px] leading-relaxed text-muted-foreground">Delivery terms stay with each seller and order.</p></div>
+          <div className="flex gap-2"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-muted-foreground" /><p className="text-[11px] leading-relaxed text-muted-foreground">Inventory is reserved through the server order flow.</p></div>
+          <div className="flex gap-2"><Zap size={15} className="mt-0.5 shrink-0 text-muted-foreground" /><p className="text-[11px] leading-relaxed text-muted-foreground">GHC and Pi payment rails remain separate.</p></div>
+        </div>
+      </div>
+
+      <div className="rounded-[1.4rem] border border-border/60 bg-card p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Estimated total</p><div className="text-right">{Array.from(totals.entries()).map(([currency, amount]) => <p key={currency} className="text-base font-extrabold">{currency === "GHC" ? "₲ " : ""}{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : ` ${currency === "PI" ? "π" : currency}`}</p>)}</div></div>
+        <p className="mt-1 text-[11px] text-muted-foreground">Shipping, service terms and final server-authoritative totals may vary by order.</p>
+        {message ? <p className="mt-3 rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200">{message}</p> : null}
+        {error ? <p className="mt-3 rounded-xl bg-red-500/10 p-3 text-xs font-semibold text-red-700 dark:text-red-300">{error}</p> : null}
+        <button type="button" disabled={busy} onClick={() => void checkout()} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white shadow-sm disabled:opacity-60">
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
+          {busy ? "Securing your orders…" : "Checkout securely"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function MarketplaceScreen({
   onBack,
   initialListingId,
@@ -1340,8 +1531,36 @@ export function MarketplaceScreen({
   const [reviewText, setReviewText] = useState("")
   const [reviewBusy, setReviewBusy] = useState(false)
   const [browseSort, setBrowseSort] = useState<BrowseSort>("newest")
+  const [cartItems, setCartItems] = useState<MarketplaceCartItem[]>([])
 
   const refresh = useCallback(() => setTick((n) => n + 1), [])
+
+  const syncCart = useCallback(() => setCartItems(getMarketplaceCart()), [])
+
+  useEffect(() => {
+    syncCart()
+    const handler = () => syncCart()
+    window.addEventListener("ghc:marketplace-cart-changed", handler)
+    return () => window.removeEventListener("ghc:marketplace-cart-changed", handler)
+  }, [syncCart])
+
+  const addToCart = useCallback((listing: MarketplaceListing) => {
+    if (listing.status !== "active") return
+    addMarketplaceCartItem({
+      listingId: listing.id,
+      quantity: 1,
+      title: listing.title,
+      price: listing.price,
+      currency: listing.currency,
+      sellerId: listing.sellerId,
+      media: listing.media?.[0],
+      availability: listing.availability,
+    })
+    setBucket("cart")
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Added to cart", type: "success" } }))
+    } catch { /* */ }
+  }, [])
 
   const loadSavedListings = useCallback(async () => {
     setSavedLoading(true)
@@ -1663,7 +1882,7 @@ export function MarketplaceScreen({
       const detail = (e as CustomEvent).detail
       if (!detail || typeof detail !== "object") return
       const bucketNext = String((detail as { bucket?: string }).bucket || "").toLowerCase()
-      if (bucketNext === "sell" || bucketNext === "mine" || bucketNext === "orders" || bucketNext === "saved" || bucketNext === "browse") {
+      if (bucketNext === "sell" || bucketNext === "mine" || bucketNext === "orders" || bucketNext === "saved" || bucketNext === "browse" || bucketNext === "cart") {
         setBucket(bucketNext as typeof bucket)
       }
       const lid = String((detail as { listingId?: string }).listingId || "").trim()
@@ -1678,6 +1897,7 @@ export function MarketplaceScreen({
       <ListingDetail
         listing={selected}
         onBack={() => setSelectedId(null)}
+        onAddToCart={addToCart}
         onOpenListing={(id) => setSelectedId(id)}
         onSearchBrowse={(q) => {
           setSelectedId(null)
@@ -1822,6 +2042,7 @@ export function MarketplaceScreen({
         {/* FB-style action chips */}
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 scrollbar-none" role="toolbar" aria-label="Marketplace tools">
           {[
+            { id: "cart" as const, label: `Cart${cartItems.length ? ` · ${cartItems.length}` : ""}`, icon: ShoppingCart },
             { id: "browse" as const, label: "Browse", icon: Store },
             { id: "sell" as const, label: "Sell", icon: Plus },
             { id: "mine" as const, label: "My listings", icon: TagIcon },
@@ -1948,6 +2169,15 @@ export function MarketplaceScreen({
       </header>
 
       <div className="gh-marketplace-content min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-3">
+        {bucket === "cart" ? (
+          <CartPanel
+            items={cartItems}
+            onChange={(id, quantity) => setCartItems(updateMarketplaceCartQuantity(id, quantity))}
+            onRemove={(id) => setCartItems(removeMarketplaceCartItem(id))}
+            onClear={() => { clearMarketplaceCart(); setCartItems([]) }}
+            onContinueShopping={() => setBucket("browse")}
+          />
+        ) : null}
         {bucket === "mine" ? (
           <div className="p-1">
             <div className="mx-auto w-full max-w-[var(--gh-content-max,42rem)]">
@@ -2613,7 +2843,7 @@ export function MarketplaceScreen({
           <>
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <h2 className="text-[15px] font-bold text-foreground">Today&apos;s picks</h2>
+                <h2 className="text-[15px] font-bold text-foreground">Discover on GreenHaven</h2>
                 <p className="text-[11px] text-muted-foreground">
                   {listings.length} listing{listings.length === 1 ? "" : "s"}
                   {category ? ` · ${category}` : ""}

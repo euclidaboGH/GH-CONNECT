@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Phase 8 — Unified earnings & wallet experience (0.165.0)
 
 ## Goal

@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Phase 06 — App shell, navigation and onboarding
 
 **Release:** 0.150.4  

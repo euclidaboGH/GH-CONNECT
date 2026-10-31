@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # GreenHaven authority map
 
 This document is a source-level orientation map, not evidence of a live deployment.

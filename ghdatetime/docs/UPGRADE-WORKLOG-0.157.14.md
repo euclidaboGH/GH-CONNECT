@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Upgrade worklog — v0.157.14 — Phase 1–12 request-boundary expansion
 
 Date: 2026-10-28

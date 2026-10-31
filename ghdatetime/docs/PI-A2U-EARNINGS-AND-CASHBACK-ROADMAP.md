@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # GreenHaven Pi Earnings, A2U Payouts and Four-Month Cashback Roadmap
 
 Status: **Testnet cashback A2U payout path implemented in source; migration application, funded-wallet execution tests, remaining revenue-source wiring and Mainnet approval remain outstanding**  

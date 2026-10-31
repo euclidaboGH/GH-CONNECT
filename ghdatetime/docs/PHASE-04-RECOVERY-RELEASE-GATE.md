@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Recovery Track Phase 4 — Operational Release Gate
 
 This Phase 4 is the next stage of the **database recovery workstream**; it is separate from the historical product Phase 4 identity-integration feature.

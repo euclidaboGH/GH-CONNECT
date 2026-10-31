@@ -1266,13 +1266,13 @@ export function GHConnectApp() {
                   } catch { /* */ }
                 }}
                 onClick={() => {
-                  // Cart is the commerce checkout surface (orders + pay), not Market browse.
+                  // Cart is the commerce basket/checkout surface, separate from Marketplace browse and Orders.
                   if (id === "cart") {
                     setMarketplaceOpen(true)
                     try {
                       window.dispatchEvent(
                         new CustomEvent("ghc:open-marketplace", {
-                          detail: { bucket: "orders", source: "bottom-cart" },
+                          detail: { bucket: "cart", source: "bottom-cart" },
                         }),
                       )
                     } catch { /* */ }

@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Phase 03 — Database Integrity and Recovery
 
 **Scope:** establish a safe, repeatable database backup/restore process and migration rehearsal discipline. This document and its helper scripts do not connect to or modify a database. No production backup, restore, or migration has been run by this change.

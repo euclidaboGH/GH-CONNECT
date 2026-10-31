@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # GreenHaven v0.212.0 → Phase 1 Massive Upgrade — Architecture Audit
 
 **Source of truth:** `GH-CONNECT-0.212.0-PHASE5-WALLET-RELEASE-GATE-2026-10-30`  

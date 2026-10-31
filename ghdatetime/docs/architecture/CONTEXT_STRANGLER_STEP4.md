@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
+
 # Step 4 — bounded context migration notes
 
 GreenHaven retains the existing App Router and domain contexts while separating feed, messaging, notifications, discovery, connections and wallet-read concerns under `contexts/domains/`. The shared application context remains a compatibility boundary during incremental migration.
