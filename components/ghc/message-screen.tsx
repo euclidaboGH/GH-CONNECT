@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, memo } from "react"
 import { useGHCMessaging, useGHC } from "@/contexts/ghc-context"
 import { useDomainEvents } from "@/lib/realtime/use-domain-events"
-import { useSectionRefresh } from "@/lib/client/section-refresh"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { userFacingError, toastError } from "@/lib/ux/user-facing-errors"
 import {

@@ -3,8 +3,7 @@
  * Single source of truth for tabs, overlays, and deep-link aliases.
  * Do not invent parallel routers — shell (app.tsx) owns presentation.
  *
- * Visible bottom nav (5): Home · Messages · Communities · Cart · Profile. Marketplace browse lives in the feed header.
- * Discover / Messages / Communities remain reachable via Home, Profile, and deep-links.
+ * Visible bottom nav (6): Home · Discovery · Communities · Cart · Messages · Profile.
  * PRIMARY_TABS still mounts matches + communities + messages for deep-links.
  */
 
@@ -24,9 +23,9 @@ export type PrimaryTab = (typeof PRIMARY_TABS)[number]
 
 /**
  * Visible bottom-bar destinations (Create is an overlay, not a PRIMARY_TAB).
- * Primary visible bar: Home · Messages · Communities · Market · Profile. Wallet from Profile header only.
+ * Primary visible bar: Home · Discovery · Communities · Cart · Messages · Profile.
  */
-export const BOTTOM_NAV_IDS = ["home", "messages", "communities", "cart", "profile"] as const
+export const BOTTOM_NAV_IDS = ["home", "discover", "communities", "cart", "messages", "profile"] as const
 
 export type OverlayDestination =
   | "wallet"

@@ -1,6 +1,6 @@
 /**
  * Phase 2B — mobile primary navigation.
- * Home | Cart | Wallet | Profile
+ * Home | Discovery | Communities | Cart | Messages | Profile
  */
 export type PrimaryTabId = "home" | "cart" | "wallet" | "profile"
 

@@ -5,12 +5,14 @@
 import { test, expect } from "@playwright/test"
 
 test.describe("Phase 2 critical journeys", () => {
-  test("mobile primary nav exposes Home Cart Wallet Profile", async ({ page }) => {
+  test("mobile primary nav exposes Home Discovery Communities Cart Messages Profile", async ({ page }) => {
     await page.goto("/")
     const nav = page.locator("nav.gh-bottom-nav, [class*='gh-bottom-nav']")
     await expect(nav.getByRole("button", { name: /Home/i })).toBeVisible({ timeout: 30_000 })
+    await expect(nav.getByRole("button", { name: /Discovery/i })).toBeVisible()
+    await expect(nav.getByRole("button", { name: /Communities/i })).toBeVisible()
     await expect(nav.getByRole("button", { name: /Cart/i })).toBeVisible()
-    await expect(nav.getByRole("button", { name: /Wallet/i })).toBeVisible()
+    await expect(nav.getByRole("button", { name: /Messages/i })).toBeVisible()
     await expect(nav.getByRole("button", { name: /Profile/i })).toBeVisible()
   })
 

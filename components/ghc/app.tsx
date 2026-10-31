@@ -213,12 +213,13 @@ const Toast = memo(({ message, type }: { message: string; type: string }) => {
 Toast.displayName = "Toast"
 
 // Memoized navigation items to prevent recalculation
-/** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
+/** Canonical primary shell navigation — secondary social surfaces remain reachable from Home/Profile. */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "messages", icon: MessagesSquare, label: "Messages" },
+  { id: "discover", icon: Compass, label: "Discovery" },
   { id: "communities", icon: Users, label: "Communities" },
   { id: "cart", icon: ShoppingCart, label: "Cart" },
+  { id: "messages", icon: MessagesSquare, label: "Messages" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -1254,7 +1255,7 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id === "cart" ? marketplaceOpen : activeTab === id
+            const isActive = id === "cart" ? marketplaceOpen : id === "wallet" ? walletOpen : activeTab === id
             return (
               <button
                 key={id}
