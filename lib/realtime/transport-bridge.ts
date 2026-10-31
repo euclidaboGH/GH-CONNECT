@@ -376,6 +376,11 @@ class TransportBridge {
     await this.transport.connect()
   }
 
+  /** Stop the active transport and detach its forwarding listeners. */
+  disconnect() {
+    this.teardown()
+  }
+
   /** Start with local transport (safe default, offline-friendly) */
   startLocal() {
     this.use(new LocalTransport())

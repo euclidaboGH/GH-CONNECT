@@ -9,7 +9,7 @@ import { confirmDialog } from "@/lib/ui/global-interactions"
 
 import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
 import { socialSetCuration } from "@/lib/social/client"
-import { useMemo, useState, useEffect } from "react"
+import { useCallback, useMemo, useState, useEffect } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import {
   ArrowLeft,
@@ -224,14 +224,14 @@ export function PremiumCommunityHub({
   const [chatMuted, setChatMuted] = useState(false)
   const [chatState, setChatState] = useState<{ enabled: boolean; privacy: "members" | "approval"; chatMember: boolean; requestStatus?: string | null; owner: boolean } | null>(null)
   const [chatBusy, setChatBusy] = useState(false)
-  const loadChatState = async () => {
+  const loadChatState = useCallback(async () => {
     try {
       const r = await fetch(`/api/communities/${encodeURIComponent(community.id)}/chat`, { cache: "no-store" })
       const d = await r.json().catch(() => null)
       if (r.ok && d?.ok) setChatState({ enabled: !!d.enabled, privacy: d.privacy === "approval" ? "approval" : "members", chatMember: !!d.chatMember, requestStatus: d.requestStatus || null, owner: !!d.owner })
     } catch { /* fail closed: chat remains unavailable */ }
-  }
-  useEffect(() => { void loadChatState() }, [community.id, community.isJoined])
+  }, [community.id])
+  useEffect(() => { void loadChatState() }, [community.id, community.isJoined, loadChatState])
   const runChatAction = async (action: "create" | "join", privacy?: "members" | "approval") => {
     if (chatBusy) return
     setChatBusy(true)

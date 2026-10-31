@@ -446,6 +446,7 @@ function ListingDetail({
   onEditListing,
   onDelist,
   onRemoveListing,
+  onAddToCart,
 }: {
   listing: MarketplaceListing
   onBack: () => void
@@ -1495,7 +1496,7 @@ export function MarketplaceScreen({
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
-  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine">("browse")
+  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">("browse")
   const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
   const [mineLoading, setMineLoading] = useState(false)
   const [showCategories, setShowCategories] = useState(true)

@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from "next/server"
+import { verifyRegistrationResponse, type RegistrationResponseJSON } from "@simplewebauthn/server"
 import { randomBytes } from "crypto"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
@@ -55,8 +56,15 @@ export async function POST(request: Request) {
 
     const parsedBody = await readBoundedJson(request, 64 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
-  const body = parsedBody.value
-    const response = body.response
+  const body = parsedBody.value as Record<string, unknown>
+    const rawResponse = body.response
+    if (!rawResponse || typeof rawResponse !== "object" || Array.isArray(rawResponse)) {
+      return NextResponse.json(
+        { ok: false, error: "RESPONSE_REQUIRED" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+    const response = rawResponse as RegistrationResponseJSON
     const label =
       typeof body.label === "string" && body.label.trim()
         ? body.label.trim().slice(0, 64)
@@ -66,16 +74,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { ok: false, error: "RESPONSE_REQUIRED" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
-      )
-    }
-
-    let verifyRegistrationResponse: typeof import("@simplewebauthn/server").verifyRegistrationResponse
-    try {
-      ;({ verifyRegistrationResponse } = await import("@simplewebauthn/server"))
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: "WEBAUTHN_LIBRARY_UNAVAILABLE" },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
       )
     }
 

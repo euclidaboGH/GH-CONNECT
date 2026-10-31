@@ -301,7 +301,7 @@ export function GHConnectApp() {
     return () => {
       off()
       window.removeEventListener("ghc:realtime-reconcile", reconcile)
-      void transportBridge.disconnect()
+      transportBridge.disconnect()
     }
   }, [])
 
@@ -1255,7 +1255,7 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id === "cart" ? marketplaceOpen : id === "wallet" ? walletOpen : activeTab === id
+            const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
                 key={id}

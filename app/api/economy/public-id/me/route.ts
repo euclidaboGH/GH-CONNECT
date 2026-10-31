@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
-  if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  if (!parsedBody.ok) return jsonErr(parsedBody.error, parsedBody.error === "REQUEST_TOO_LARGE" ? "Request too large" : "Invalid request body", parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsedBody.value as { displayName?: string; avatarUrl?: string }
 
   const preferred = deriveGreenHavenId(auth.userId)

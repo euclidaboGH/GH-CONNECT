@@ -130,7 +130,12 @@ export function MessageScreen() {
   // Realtime-first message reconciliation. Push events trigger the open thread
   // immediately; the shared section coordinator owns focus/visibility/online recovery.
   useDomainEvents(["MESSAGE_CREATED", "MESSAGE_UPDATED", "MESSAGE_DELETED", "CONVERSATION_CREATED"], (event) => {
-    const conversationId = String(event.payload?.conversationId || event.payload?.conversation_id || "").trim()
+    const payload = event.payload
+    const conversationId = String(
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? ((payload as Record<string, unknown>).conversationId || (payload as Record<string, unknown>).conversation_id || "")
+        : "",
+    ).trim()
     if (!selectedId || (conversationId && conversationId !== selectedId)) return
     void loadConversationMessages?.(selectedId).catch(() => {})
     void markConversationRead?.(selectedId)
