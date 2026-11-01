@@ -1,6 +1,6 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.273.1`
+**Current source version:** `0.274.3`
 **Current status:** **NOT APPROVED** for production release.
 
 ## Current authoritative metadata
