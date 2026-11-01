@@ -1,62 +1,60 @@
 "use client"
 
 /**
- * First-session guidance — progressive disclosure after onboarding.
- * One activation path: profile → community → message (not a 12-step tour).
- *
- * Research: first meaningful outcome under ~60s; max 3 primary tips;
- * dismissible; modeless (does not block feed).
+ * Research: first meaningful outcome under ~60s; max 3 primary tips.
+ * Phase 2: drive Profile → Community → Connect for domain engagement threshold.
  */
 
 import { useEffect, useState } from "react"
-import { Compass, Users, UserRound, X, Sparkles } from "lucide-react"
+import { Sparkles, User, Users, Compass, X } from "lucide-react"
+import { reportPioneerActivity } from "@/lib/engagement/pioneer-activity-client"
 
 const STORAGE_KEY = "ghc-first-session-tips-v2"
 
 export function FirstSessionTips({
   onNavigate,
 }: {
-  onNavigate?: (tab: "discover" | "communities" | "messages" | "profile") => void
+  onNavigate?: (target: "profile" | "communities" | "discover") => void
 }) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     try {
-      if (typeof window === "undefined") return
-      // Prefer v2 key; also honor prior dismiss so we don't re-nag
-      const dismissed =
-        window.localStorage.getItem(STORAGE_KEY) ||
-        window.localStorage.getItem("ghc-first-session-tips-v1")
-      if (!dismissed) setVisible(true)
+      if (window.localStorage.getItem(STORAGE_KEY) === "1") return
+      // migrate dismiss from v1
+      if (window.localStorage.getItem("ghc-first-session-tips-v1") === "1") {
+        window.localStorage.setItem(STORAGE_KEY, "1")
+        return
+      }
+      setVisible(true)
     } catch {
       setVisible(true)
     }
   }, [])
 
   const dismiss = () => {
-    setVisible(false)
     try {
       window.localStorage.setItem(STORAGE_KEY, "1")
     } catch {
-      /* ignore */
+      /* */
     }
+    setVisible(false)
   }
 
   if (!visible) return null
 
-  // Three layers only — Identity · Social · Belonging
   const tips = [
     {
       id: "profile" as const,
-      icon: UserRound,
-      title: "1 · Identity",
-      body: "Photo + bio so people know who you are.",
+      icon: User,
+      title: "1 · Complete profile",
+      body: "Photo, bio and interests so others can find you.",
     },
     {
       id: "communities" as const,
       icon: Users,
-      title: "2 · Belong",
-      body: "Join one community — board, events, member chat.",
+      title: "2 · Join a community",
+      body: "Post on a board — real utility for Pioneers.",
     },
     {
       id: "discover" as const,
@@ -80,7 +78,7 @@ export function FirstSessionTips({
           <div>
             <p className="text-sm font-bold text-foreground">Your first 3 steps</p>
             <p className="text-[11px] text-muted-foreground">
-              Identity · Community · People — then explore freely
+              Identity · Community · People — help GreenHaven stay useful on Pi
             </p>
           </div>
         </div>
@@ -99,7 +97,20 @@ export function FirstSessionTips({
             key={id}
             type="button"
             onClick={() => {
+              if (id === "profile") reportPioneerActivity("profile_updated")
+              if (id === "communities") reportPioneerActivity("community_joined")
               onNavigate?.(id)
+              try {
+                if (id === "profile") {
+                  window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "profile" }))
+                } else if (id === "communities") {
+                  window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" }))
+                } else {
+                  window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
+                }
+              } catch {
+                /* */
+              }
               dismiss()
             }}
             className="flex items-start gap-2.5 rounded-xl border border-border/80 bg-card/90 px-3 py-2.5 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50 active:scale-[0.99] dark:hover:bg-emerald-950/30"
@@ -109,15 +120,14 @@ export function FirstSessionTips({
             </span>
             <span>
               <span className="block text-[12px] font-bold text-foreground">{title}</span>
-              <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
-                {body}
-              </span>
+              <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">{body}</span>
             </span>
           </button>
         ))}
       </div>
       <p className="mt-2 px-0.5 text-[10px] text-muted-foreground">
-        Wallet & rewards live under Profile → Value when you need them.
+        Wallet & rewards live under Profile when you need them. Real Pioneer activity supports
+        greenhaven.pi utility requirements.
       </p>
     </div>
   )

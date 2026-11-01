@@ -19,6 +19,9 @@ import {
   verifyFirstPost,
   verifyProfileComplete,
 } from "@/lib/server/reputation/verify"
+import { emitSocialNotification } from "@/lib/server/social/notifications"
+
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -75,17 +78,14 @@ export async function POST(request: Request) {
     )
   }
 
-  let body: {
+  const parsedBody = await readBoundedJson(request, 16 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value as {
     eventType?: string
     idempotencyKey?: string
     sourceRef?: string
     userId?: string
     points?: number
-  } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    body = {}
   }
 
   if (!isReputationEventType(body.eventType)) {
@@ -136,6 +136,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EVENT_NOT_CLIENT_AWARDABLE" }, { status: 403 })
   }
 
+  const before = await getReputationState(auth.userId)
+  const prevLevel = before.ok ? Number(before.level) || 1 : 1
+
   const result = await applyReputationEvent({
     userId: auth.userId,
     eventType,
@@ -148,6 +151,26 @@ export async function POST(request: Request) {
       { ok: false, error: result.error },
       { status: result.error === "DB_UNAVAILABLE" ? 503 : 400 }
     )
+  }
+
+  // Level-up only when server level actually increases (not client-forged)
+  if (!result.duplicate && result.level > prevLevel) {
+    void emitSocialNotification({
+      recipientUserId: auth.userId,
+      actorUserId: "",
+      type: "reputation_level_up",
+      entityType: "user",
+      entityId: auth.userId,
+      title: "Reputation level up",
+      body: `You reached reputation level ${result.level}${result.levelName ? ` (${result.levelName})` : ""}. Trust signal only — not currency.`,
+      dedupeKey: `rep_level:${auth.userId}:${result.level}`,
+      metadata: {
+        level: result.level,
+        levelName: result.levelName,
+        previousLevel: prevLevel,
+        publicOnly: true,
+      },
+    })
   }
 
   return NextResponse.json({

@@ -153,33 +153,47 @@ export function applyDiscoveryFilters(
 ): Candidate[] {
   let filtered = [...candidates]
 
-  // Interest filter
-  if (filters.interests.length > 0) {
-    filtered = filtered.filter((c) =>
-      filters.interests.some((interest) => c.interests.includes(interest))
-    )
+  const normalize = (value: string | null | undefined) => (value ?? "").normalize("NFKC").trim().toLocaleLowerCase()
+  const interests = filters.interests.map(normalize).filter(Boolean)
+  const professions = filters.profession.map(normalize).filter(Boolean)
+  const education = filters.education.map(normalize).filter(Boolean)
+  const location = normalize(filters.location)
+
+  if (interests.length) {
+    filtered = filtered.filter((candidate) => {
+      const candidateInterests = new Set((candidate.interests ?? []).map(normalize))
+      return interests.some((interest) => candidateInterests.has(interest))
+    })
   }
 
-  // Location filter
-  if (filters.location) {
-    filtered = filtered.filter((c) =>
-      c.location.toLowerCase().includes(filters.location.toLowerCase())
-    )
+  if (professions.length) {
+    filtered = filtered.filter((candidate) => professions.includes(normalize(candidate.profession)))
   }
 
-  // Online filter
+  if (education.length) {
+    filtered = filtered.filter((candidate) => education.includes(normalize(candidate.education)))
+  }
+
+  if (location) {
+    filtered = filtered.filter((candidate) => normalize(candidate.location).includes(location))
+  }
+
   if (filters.online) {
-    filtered = filtered.filter((c) => (c as any).isOnline === true)
+    filtered = filtered.filter((candidate) => candidate.isOnline === true || candidate.online === true)
   }
 
-  // Verified filter
   if (filters.verified) {
-    filtered = filtered.filter((c) => (c as any).isVerified === true)
+    filtered = filtered.filter((candidate) => candidate.isVerified === true || candidate.verified === true)
   }
 
-  // Distance filter when candidate.distance is present on supplied data (not GPS-derived here)
-  if (filters.distance < 50) {
-    filtered = filtered.filter((c) => (c as any).distance <= filters.distance)
+  // Only apply the optional proximity cap when the user narrows the default 50 km range.
+  // Unknown distance is not treated as zero: that would incorrectly label an unlocated
+  // profile as nearby.
+  if (Number.isFinite(filters.distance) && filters.distance >= 0 && filters.distance < 50) {
+    filtered = filtered.filter((candidate) =>
+      typeof candidate.distance === "number" && Number.isFinite(candidate.distance) &&
+      candidate.distance >= 0 && candidate.distance <= filters.distance
+    )
   }
 
   return filtered
@@ -193,28 +207,16 @@ export function rankSuggestions(
   userInterests: string[],
   userLocation: string
 ): Candidate[] {
-  return [...candidates].sort((a, b) => {
-    // Shared interests score
-    const aSharedInterests = a.interests.filter((i) =>
-      userInterests.includes(i)
-    ).length
-    const bSharedInterests = b.interests.filter((i) =>
-      userInterests.includes(i)
-    ).length
-
-    // Same location bonus
-    const aSameLocation = a.location === userLocation ? 10 : 0
-    const bSameLocation = b.location === userLocation ? 10 : 0
-
-    // Verified bonus
-    const aVerifiedBonus = (a as any).isVerified ? 5 : 0
-    const bVerifiedBonus = (b as any).isVerified ? 5 : 0
-
-    const aScore = aSharedInterests + aSameLocation + aVerifiedBonus
-    const bScore = bSharedInterests + bSameLocation + bVerifiedBonus
-
-    return bScore - aScore
-  })
+  const normalize = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase()
+  const interestSet = new Set(userInterests.map(normalize).filter(Boolean))
+  const location = normalize(userLocation)
+  const score = (candidate: Candidate) => {
+    const shared = (candidate.interests ?? []).filter((interest) => interestSet.has(normalize(interest))).length
+    const sameLocation = location && normalize(candidate.location) === location ? 10 : 0
+    const verified = candidate.isVerified || candidate.verified ? 5 : 0
+    return shared + sameLocation + verified
+  }
+  return [...candidates].sort((a, b) => score(b) - score(a) || a.id.localeCompare(b.id))
 }
 
 /**
@@ -222,10 +224,11 @@ export function rankSuggestions(
  */
 export function getTrendingCandidates(candidates: Candidate[]): Candidate[] {
   return [...candidates]
-    .sort(
-      (a, b) =>
-        ((b as any).engagement || 0) - ((a as any).engagement || 0)
-    )
+    .sort((a, b) => {
+      const aEngagement = typeof a.engagement === "number" && Number.isFinite(a.engagement) ? a.engagement : 0
+      const bEngagement = typeof b.engagement === "number" && Number.isFinite(b.engagement) ? b.engagement : 0
+      return bEngagement - aEngagement || a.id.localeCompare(b.id)
+    })
     .slice(0, 8)
 }
 
@@ -237,9 +240,16 @@ export function getNearbyCandidates(
   userLocation: string,
   maxDistance: number = 50
 ): Candidate[] {
+  const normalizedLocation = userLocation.trim().normalize("NFKC").toLocaleLowerCase()
   return candidates
-    .filter((c) => (c as any).distance <= maxDistance)
-    .sort((a, b) => ((a as any).distance || 0) - ((b as any).distance || 0))
+    .filter((candidate) => typeof candidate.distance === "number" && Number.isFinite(candidate.distance) && candidate.distance >= 0 && candidate.distance <= maxDistance)
+    .sort((a, b) => {
+      const distanceDelta = (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY)
+      if (distanceDelta !== 0) return distanceDelta
+      const aLocal = normalizedLocation && a.location.normalize("NFKC").toLocaleLowerCase().includes(normalizedLocation) ? 0 : 1
+      const bLocal = normalizedLocation && b.location.normalize("NFKC").toLocaleLowerCase().includes(normalizedLocation) ? 0 : 1
+      return aLocal - bLocal || a.id.localeCompare(b.id)
+    })
     .slice(0, 6)
 }
 
@@ -247,14 +257,14 @@ export function getNearbyCandidates(
  * Get verified accounts
  */
 export function getVerifiedAccounts(candidates: Candidate[]): Candidate[] {
-  return candidates.filter((c) => (c as any).isVerified === true).slice(0, 6)
+  return candidates.filter((candidate) => candidate.isVerified === true || candidate.verified === true).slice(0, 6)
 }
 
 /**
  * Get online users
  */
 export function getOnlineUsers(candidates: Candidate[]): Candidate[] {
-  return candidates.filter((c) => (c as any).isOnline === true).slice(0, 10)
+  return candidates.filter((candidate) => candidate.isOnline === true || candidate.online === true).slice(0, 10)
 }
 
 /**
@@ -288,7 +298,7 @@ export function extractSearchSuggestions(query: string): string[] {
  */
 export function shouldShowSection(
   section: DiscoverySection,
-  items: any[],
+  items: readonly unknown[],
   userEngagementLevel: string = "normal"
 ): boolean {
   if (items.length === 0) return false
@@ -421,20 +431,21 @@ export interface PaginationState {
   isLoading: boolean
 }
 
-export function getNextPage(
-  items: any[],
+export function getNextPage<T>(
+  items: readonly T[],
   currentPage: number,
   pageSize: number
-): any[] {
+): T[] {
+  if (!Number.isInteger(currentPage) || currentPage < 0 || !Number.isInteger(pageSize) || pageSize <= 0) return []
   const start = currentPage * pageSize
-  const end = start + pageSize
-  return items.slice(start, end)
+  return items.slice(start, start + pageSize)
 }
 
-export function canLoadMore(
-  items: any[],
+export function canLoadMore<T>(
+  items: readonly T[],
   currentPage: number,
   pageSize: number
 ): boolean {
+  if (!Number.isInteger(currentPage) || currentPage < 0 || !Number.isInteger(pageSize) || pageSize <= 0) return false
   return (currentPage + 1) * pageSize < items.length
 }

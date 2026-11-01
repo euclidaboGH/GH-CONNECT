@@ -1,3 +1,6 @@
+import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
+import { isTestnetProductUnlocked } from "@/lib/server/economy/testnet-unlock"
+
 /**
  * Marketplace listing fee (platform service charge) — SEPARATE from seller product price.
  *
@@ -24,6 +27,8 @@ export type ListingFeeInput = {
   category?: string
   kind?: string
   durationDays?: number
+  /** Seller-selected settlement rail when both GHC and Pi fees are configured / testnet unlocked */
+  preferredFeeCurrency?: "GHC" | "PI"
 }
 
 export type ListingFeeResult = {
@@ -34,7 +39,7 @@ export type ListingFeeResult = {
   /** true only when an explicit approved config source is present */
   ratesApproved: boolean
   /** Human-readable basis for UI (never trust as authority) */
-  basis: "none" | "fixed_pi" | "bps_of_seller_price"
+  basis: "none" | "fixed_pi" | "fixed_ghc" | "bps_of_seller_price"
   /** Opaque code for clients / logs */
   code: "FEE_NOT_CONFIGURED" | "FEE_FIXED" | "FEE_BPS"
 }
@@ -51,6 +56,9 @@ function readNonNegativeNumber(raw: string | undefined): number | null {
  * Client-supplied listingFee / feeAmount must be ignored by callers.
  */
 export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingFeeResult {
+  if (isPiOnlyCommerceEnabled()) {
+    input = { ...input, preferredFeeCurrency: "PI" }
+  }
   const sellerPrice = Number(input.sellerPrice)
   if (!Number.isFinite(sellerPrice) || sellerPrice < 0) {
     return {
@@ -62,8 +70,51 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
     }
   }
 
-  // Prefer explicit fixed Pi fee after business approval.
+  const preferred =
+    String(input.preferredFeeCurrency || "").toUpperCase() === "PI"
+      ? "PI"
+      : String(input.preferredFeeCurrency || "").toUpperCase() === "GHC"
+        ? "GHC"
+        : null
+
+  const fixedGhc = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_GHC)
   const fixedPi = readNonNegativeNumber(process.env.GHC_MARKETPLACE_LISTING_FEE_PI)
+
+  // Honor seller rail when that rail has an explicit amount (or testnet unlock below).
+  if (preferred === "PI" && fixedPi != null) {
+    const feeAmount = Math.round(fixedPi * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "PI",
+      ratesApproved: true,
+      basis: "fixed_pi",
+      code: "FEE_FIXED",
+    }
+  }
+  if (preferred === "GHC" && fixedGhc != null) {
+    const feeAmount = Math.round(fixedGhc * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
+  // Prefer explicit fixed GHC fee after business approval.
+  if (fixedGhc != null && preferred !== "PI") {
+    const feeAmount = Math.round(fixedGhc * 1e8) / 1e8
+    return {
+      feeAmount,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
+  // Prefer explicit fixed Pi fee after business approval.
   if (fixedPi != null) {
     const feeAmount = Math.round(fixedPi * 1e8) / 1e8
     return {
@@ -89,7 +140,25 @@ export function calculateMarketplaceListingFee(input: ListingFeeInput): ListingF
     }
   }
 
-  // No approved schedule in repo/env — fee 0, not activated as a paid gate.
+  if (isTestnetProductUnlocked()) {
+    if (preferred === "PI") {
+      return {
+        feeAmount: 0.05,
+        feeCurrency: "PI",
+        ratesApproved: true,
+        basis: "fixed_pi",
+        code: "FEE_FIXED",
+      }
+    }
+    return {
+      feeAmount: 1,
+      feeCurrency: "GHC",
+      ratesApproved: true,
+      basis: "fixed_ghc",
+      code: "FEE_FIXED",
+    }
+  }
+
   return {
     feeAmount: 0,
     feeCurrency: "PI",

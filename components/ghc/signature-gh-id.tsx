@@ -58,32 +58,32 @@ export function SignatureGhIdCard({
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-emerald-700/30 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 text-white shadow-lg shadow-emerald-900/20"
+      className="overflow-hidden rounded-[1.25rem] border border-emerald-800/40 bg-gradient-to-br from-[var(--gh-balance-to)] via-emerald-900 to-teal-950 text-white shadow-[var(--gh-card-shadow-lg)]"
       aria-label="GreenHaven ID"
     >
-      <div className="flex items-start justify-between gap-2 px-4 pt-3">
+      <div className="flex items-start justify-between gap-2 px-4 pt-3.5">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/80">
             GreenHaven ID
           </p>
-          <p className="mt-1 font-mono text-[22px] font-black tracking-wider text-white">
+          <p className="mt-1 font-mono text-[22px] font-bold tracking-wider text-white">
             {display}
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-[13px] font-semibold text-emerald-50/95">
             {(displayName || "Member").toUpperCase()}
-            {verified ? <BadgeCheck size={14} className="text-sky-300" /> : null}
+            {verified ? <BadgeCheck size={14} className="text-sky-300" aria-label="Verified" /> : null}
           </p>
           <p className="mt-0.5 text-[10px] font-medium text-emerald-200/70">
-            Verified GreenHaven identity
+            {verified ? "Verified GreenHaven identity" : "GreenHaven identity"}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowQr((v) => !v)}
-          className="rounded-xl bg-white/10 p-2.5 backdrop-blur hover:bg-white/15"
+          className="rounded-2xl bg-white/10 p-2.5 backdrop-blur transition hover:bg-white/15"
           aria-label="Show QR"
         >
-          <QrCode size={22} />
+          <QrCode size={22} aria-hidden />
         </button>
       </div>
       {showQr ? (

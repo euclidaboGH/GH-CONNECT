@@ -6,6 +6,7 @@
  * Never creates a second charge.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   loadByProviderPaymentId,
@@ -31,7 +32,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+    if (!parsedBody.ok) {
+      const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json(
+        { ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST_BODY" },
+        { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const body = parsedBody.value
   const paymentId =
     typeof body.paymentId === "string"
       ? body.paymentId.trim()
@@ -127,19 +136,18 @@ export async function POST(request: Request) {
 
   // Cancelled on Pi
   if (st.cancelled || st.user_cancelled) {
+    let cancelledIntent = intent
     if (intent) {
-      await transitionIntent(intent.id, "CANCELLED", {
+      cancelledIntent = await transitionIntent(intent.id, "CANCELLED", {
         actor: "pi_platform",
         detail: "Cancelled on Pi during recovery",
         providerPaymentId: paymentId,
       })
+      if (!cancelledIntent || cancelledIntent.status !== "CANCELLED") {
+        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true, paymentId }, { status: 503 })
+      }
     }
-    return NextResponse.json({
-      ok: true,
-      action: "cancelled",
-      paymentId,
-      intent: intent ? getPaymentIntent(intent.id) : null,
-    })
+    return NextResponse.json({ ok: true, action: "cancelled", paymentId, intent: cancelledIntent })
   }
 
   // Create shell intent only if Pi payment identity can be bound to this session user.
@@ -204,9 +212,13 @@ export async function POST(request: Request) {
         piPayerUid: piUid,
       },
     })
-    await bindProviderPayment(intent.id, paymentId, auth.userId)
+    const bound = await bindProviderPayment(intent.id, paymentId, auth.userId)
+    if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
+    intent = bound
   } else {
-    await bindProviderPayment(intent.id, paymentId, auth.userId)
+    const bound = await bindProviderPayment(intent.id, paymentId, auth.userId)
+    if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
+    intent = bound
   }
 
   // Amount guard when we have expected amount
@@ -233,18 +245,21 @@ export async function POST(request: Request) {
 
   // Developer completed already on Pi
   if (st.developer_completed) {
-    await transitionIntent(intent.id, "COMPLETED", {
+    const completedIntent = await transitionIntent(intent.id, "COMPLETED", {
       actor: "pi_platform",
       detail: "Already completed on Pi",
       providerPaymentId: paymentId,
       txid: piTxid || undefined,
     })
+    if (!completedIntent || completedIntent.status !== "COMPLETED") {
+      return NextResponse.json({ ok: false, error: "PAYMENT_COMPLETED_RECONCILIATION_PENDING", paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+    }
     return NextResponse.json({
       ok: true,
       action: "already_completed",
       paymentId,
-      txid: piTxid || intent.txid,
-      intent: getPaymentIntent(intent.id),
+      txid: piTxid || completedIntent.txid,
+      intent: completedIntent,
       needsFulfillment: true,
     })
   }
@@ -266,12 +281,16 @@ export async function POST(request: Request) {
       })
     }
 
-    await transitionIntent(intent.id, "COMPLETION_PENDING", {
+    const pendingIntent = await transitionIntent(intent.id, "COMPLETION_PENDING", {
       actor: auth.userId,
       detail: "Incomplete recovery completing",
       providerPaymentId: paymentId,
       txid: piTxid,
     })
+    if (!pendingIntent || pendingIntent.status !== "COMPLETION_PENDING") {
+      return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true, paymentId }, { status: 503 })
+    }
+    intent = pendingIntent
 
     const completed = await piCompletePayment(paymentId, piTxid)
     if (!completed.ok) {
@@ -292,19 +311,22 @@ export async function POST(request: Request) {
       })
     }
 
-    await transitionIntent(intent.id, "COMPLETED", {
+    const completedIntent = await transitionIntent(intent.id, "COMPLETED", {
       actor: "system",
       detail: "Completed via incomplete recovery",
       providerPaymentId: paymentId,
       txid: piTxid,
     })
+    if (!completedIntent || completedIntent.status !== "COMPLETED") {
+      return NextResponse.json({ ok: false, error: "PAYMENT_COMPLETED_RECONCILIATION_PENDING", paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+    }
 
     return NextResponse.json({
       ok: true,
       action: "completed",
       paymentId,
       txid: piTxid,
-      intent: getPaymentIntent(intent.id),
+      intent: completedIntent,
       needsFulfillment: true,
     })
   }

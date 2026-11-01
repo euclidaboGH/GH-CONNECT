@@ -249,15 +249,15 @@ export function RelationshipActions({
             ? "border border-rose-200 bg-rose-50 text-rose-800"
             : "bg-rose-500 text-white shadow-sm shadow-rose-500/20"
         }`}
-        aria-label={state.isMatched ? "Matched" : "Match"}
-        title="Match — mutual intentional interest"
+        aria-label={state.isMatched ? "Matched — mutual interest" : "Like profile for matching"}
+        title="Like / Match — profile interest for matching (not a post vote)"
       >
         {busy === "match" || busy === "unmatch" ? (
           <Loader2 size={14} className="animate-spin" />
         ) : (
           <Heart size={14} className={state.isMatched ? "fill-current" : ""} />
         )}
-        {state.isMatched ? "Matched" : "Match"}
+        {state.isMatched ? "Matched" : "Like"}
       </button>
 
       {!compact && (

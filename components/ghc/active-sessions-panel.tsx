@@ -1,5 +1,6 @@
 "use client"
 
+import { confirmDialog } from "@/lib/ui/global-interactions"
 /**
  * Active Sessions panel (Phase 5).
  * Lists GH server sessions; revoke one or all others.
@@ -67,7 +68,7 @@ export function ActiveSessionsPanel() {
     const label = isCurrent
       ? "Sign out this device? You will need to sign in with Pi again."
       : "Revoke this session? That device will be signed out."
-    if (!window.confirm(label)) return
+    if (!(await confirmDialog({ title: isCurrent ? "Sign out this device?" : "Revoke this session?", message: label, confirmLabel: isCurrent ? "Sign out" : "Revoke session", danger: true }))) return
     setBusyId(id)
     setMessage(null)
     try {
@@ -95,13 +96,7 @@ export function ActiveSessionsPanel() {
   }
 
   const revokeOthers = async () => {
-    if (
-      !window.confirm(
-        "Sign out all other sessions? You will stay signed in on this device. Recent Pi confirmation may be required."
-      )
-    ) {
-      return
-    }
+    if (!(await confirmDialog({ title: "Sign out other sessions?", message: "Every other active device will be signed out. This device will remain signed in. Recent Pi confirmation may be required.", confirmLabel: "Sign out others", danger: true }))) return
     setBusyId("others")
     setMessage(null)
     try {
@@ -133,6 +128,9 @@ export function ActiveSessionsPanel() {
     }
   }
 
+  const activeSessions = sessions.filter((session) => session.active)
+  const otherActiveSessions = activeSessions.filter((session) => !session.isCurrent)
+
   return (
     <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -143,6 +141,30 @@ export function ActiveSessionsPanel() {
         These are GreenHaven server sessions (signed-in devices/browsers). This is separate from
         the local device lock PIN. Revoking a session signs that browser out of GreenHaven.
       </p>
+
+      {!loading && !error ? (
+        <div className="grid grid-cols-3 gap-2" aria-label="Session security summary">
+          <div className="rounded-xl border border-border/70 bg-background p-3">
+            <p className="text-[18px] font-extrabold">{activeSessions.length}</p>
+            <p className="text-[10px] font-semibold text-muted-foreground">Active sessions</p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background p-3">
+            <p className="text-[18px] font-extrabold">{otherActiveSessions.length}</p>
+            <p className="text-[10px] font-semibold text-muted-foreground">Other devices</p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background p-3">
+            <p className={`text-[12px] font-extrabold ${otherActiveSessions.length ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+              {otherActiveSessions.length ? "Review" : "Clear"}
+            </p>
+            <p className="text-[10px] font-semibold text-muted-foreground">Security status</p>
+          </div>
+        </div>
+      ) : null}
+      {!loading && !error && otherActiveSessions.length > 0 ? (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          You have {otherActiveSessions.length} other active {otherActiveSessions.length === 1 ? "session" : "sessions"}. If you do not recognize a device, revoke it immediately and review your account trust signals.
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-[13px] text-muted-foreground py-4">

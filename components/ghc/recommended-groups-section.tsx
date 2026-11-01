@@ -57,7 +57,7 @@ export function RecommendedGroupsSection({
       // Limit initial render to first 4, then expand
       return recs
     } catch (err) {
-      console.error("[v0] Recommendation generation error:", err)
+      console.error("[ghc] Recommendation generation error:", err)
       setError("Failed to generate recommendations. Please try again.")
       return []
     }
@@ -82,7 +82,7 @@ export function RecommendedGroupsSection({
         }
       } catch (err) {
         setError("Failed to load recommendations")
-        console.error("[v0] Failed to load recommendations:", err)
+        console.error("[ghc] Failed to load recommendations:", err)
       } finally {
         setIsLoading(false)
       }
@@ -117,7 +117,7 @@ export function RecommendedGroupsSection({
         newJoinedStates.delete(groupId)
         setJoinedStates(newJoinedStates)
 
-        console.error("[v0] Failed to join group:", err)
+        console.error("[ghc] Failed to join group:", err)
       }
     },
     [joinedStates, recommendations, onJoinGroup, onJoinSuccess]
@@ -138,8 +138,8 @@ export function RecommendedGroupsSection({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-5 h-5 text-gray-400 animate-spin mr-2" />
-        <span className="text-sm text-gray-600">Finding great groups for you...</span>
+        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mr-2" />
+        <span className="text-sm text-muted-foreground">Finding great groups for you...</span>
       </div>
     )
   }
@@ -156,9 +156,9 @@ export function RecommendedGroupsSection({
   // No recommendations
   if (recommendations.length === 0) {
     return (
-      <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-center">
-        <p className="text-sm text-gray-600 font-medium">No groups match your interests yet</p>
-        <p className="text-xs text-gray-500 mt-1">Try updating your interests or location</p>
+      <div className="bg-muted/40 border-2 border-border/70 rounded-xl p-6 text-center">
+        <p className="text-sm text-muted-foreground font-medium">No groups match your interests yet</p>
+        <p className="text-xs text-muted-foreground mt-1">Try updating your interests or location</p>
       </div>
     )
   }
@@ -167,8 +167,8 @@ export function RecommendedGroupsSection({
     <div className="space-y-3">
       <div className="px-4 py-2 flex items-center justify-between">
         <div>
-          <h2 className="font-bold text-sm text-gray-900">Suggested Groups</h2>
-          <p className="text-xs text-gray-500">
+          <h2 className="font-bold text-sm text-foreground">Suggested Groups</h2>
+          <p className="text-xs text-muted-foreground">
             {recommendations.length} group{recommendations.length !== 1 ? "s" : ""} recommended based on your interests, location & activity
           </p>
         </div>

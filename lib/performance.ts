@@ -54,10 +54,15 @@ export function useIntersectionObserver(ref: RefObject<HTMLElement | null>) {
 const requestCache = new Map<string, Promise<any>>()
 
 export async function cachedFetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  if (!requestCache.has(key)) {
-    requestCache.set(key, fetcher())
+  const existing = requestCache.get(key) as Promise<T> | undefined
+  if (existing) return existing
+  const pending = Promise.resolve().then(fetcher)
+  requestCache.set(key, pending)
+  try {
+    return await pending
+  } finally {
+    if (requestCache.get(key) === pending) requestCache.delete(key)
   }
-  return requestCache.get(key)!
 }
 
 // Clear cache after timeout

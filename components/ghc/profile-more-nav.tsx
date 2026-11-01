@@ -11,7 +11,7 @@
  * Marketplace and Ecosystem are reached from Home → Ecosystem, not Profile.
  */
 
-import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles } from "lucide-react"
+import { Heart, Wallet, Gift, Crown, Settings, HelpCircle, Sparkles, Compass, ShoppingBag } from "lucide-react"
 import { navigateTo, openMembership } from "@/lib/navigation/navigate"
 
 type NavItem = {
@@ -24,15 +24,15 @@ type NavItem = {
 
 function NavGrid({ items }: { items: NavItem[] }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2.5">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
           onClick={item.onClick}
-          className="flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-[var(--gh-radius-sm)] bg-background/80 px-1 py-2.5 text-center transition hover:bg-emerald-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-emerald-950/30"
+          className="flex min-h-[52px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/50 bg-card px-1.5 py-3 text-center shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98] dark:hover:border-emerald-800"
         >
-          <span className="text-emerald-700 dark:text-emerald-300" aria-hidden>
+          <span className="gh-icon-tile flex h-9 w-9 items-center justify-center text-emerald-700 dark:text-emerald-300" aria-hidden>
             {item.icon}
           </span>
           <span className="text-[10px] font-bold leading-tight text-foreground">{item.label}</span>
@@ -60,6 +60,23 @@ export function ProfileMoreNav({
       onClick: () => {
         navigateTo("matches")
       },
+    },
+  ]
+
+  const explore: NavItem[] = [
+    {
+      id: "ecosystem",
+      label: "Ecosystem",
+      icon: <Compass size={16} />,
+      hint: "All services",
+      onClick: () => navigateTo("ecosystem"),
+    },
+    {
+      id: "marketplace",
+      label: "Marketplace",
+      icon: <ShoppingBag size={16} />,
+      hint: "Buy & sell",
+      onClick: () => navigateTo("marketplace"),
     },
   ]
 
@@ -126,6 +143,14 @@ export function ProfileMoreNav({
           Social
         </p>
         <NavGrid items={social} />
+      </div>
+
+      <div className="gh-surface-muted rounded-xl p-3">
+        <p className="mb-2 px-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          Explore GreenHaven
+        </p>
+        <NavGrid items={explore} />
+        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Find active services and clearly labelled upcoming features in the Ecosystem directory.</p>
       </div>
 
       <div className="gh-surface-muted rounded-xl border border-emerald-200/50 p-3 dark:border-emerald-900/40">

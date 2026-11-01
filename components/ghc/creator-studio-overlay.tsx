@@ -16,7 +16,7 @@ export function CreatorStudioOverlay() {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-background shadow-2xl sm:rounded-2xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-[1.75rem] bg-background shadow-2xl sm:rounded-[1.75rem]">
         <CreatorStudioPanel onClose={() => setOpen(false)} />
       </div>
     </div>

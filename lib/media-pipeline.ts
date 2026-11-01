@@ -140,6 +140,11 @@ export async function uploadMediaBlob(
     fileName?: string
   }
 ): Promise<{ url: string }> {
+  // Keep every upload entry point below Vercel's 4.5 MB request limit until
+  // signed direct-to-storage/resumable uploads are implemented.
+  if (blob.size > 4 * 1024 * 1024) {
+    throw new Error("MEDIA_DIRECT_UPLOAD_REQUIRED: Large uploads are not enabled yet. Choose a file under 4 MB or compress it first.")
+  }
   // Prefer same-origin durable API. Optional NEXT_PUBLIC_API_URL / __GHC_API_URL__ for remote.
   const base = resolveApiBaseUrl()
   const path = opts.path || "/api/media"
@@ -231,7 +236,7 @@ export async function processMediaFile(
         return {
           ok: false,
           stage: "failed",
-          error: "Media too large for inline storage — configure upload endpoint",
+          error: "INLINE_TOO_LARGE",
         }
       }
 
@@ -315,12 +320,16 @@ export async function processImagesForPost(
   errors: string[]
   previews: string[]
 }> {
-  const validated = validateImageFiles(files, MEDIA_LIMITS.maxImages)
+  const validationError = validateImageFiles(files)
   const references: MediaReference[] = []
   const errors: string[] = []
   const previews: string[] = []
 
-  for (const file of validated) {
+  if (validationError) {
+    return { references, errors: [validationError], previews }
+  }
+
+  for (const file of files) {
     const outcome = await processMediaFile(file, {
       kind: "image",
       allowInlineFallback: true,
@@ -354,7 +363,7 @@ export function revokeMediaReferences(refs: MediaReference[]) {
 export function assertSafeMediaRefsForStorage(urls: string[]): string | null {
   for (const u of urls) {
     if (isDataUrl(u) && u.length > INLINE_WARN_BYTES) {
-      return "Inline media too large — use media pipeline upload references"
+      return "This file is too large to attach offline. Connect and try again, or choose a smaller file."
     }
   }
   return null

@@ -9,6 +9,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { recordAdVerificationAttempt } from "@/lib/server/ads/verify-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,20 +28,12 @@ export async function POST(request: Request) {
     )
   }
 
-  let body: {
-    adId?: string
-    placement?: string
-    userId?: string
-    rewardAmount?: number
-    verified?: boolean
-  } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    body = {}
+  const parsedBody = await readBoundedJson(request, 4 * 1024)
+  if (!parsedBody.ok) {
+    return NextResponse.json({ ok: false, verified: false, rewardAuthorized: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   }
-
-  const adId = String(body.adId || "").trim().slice(0, 200)
+  const body = parsedBody.value
+  const adId = (typeof body.adId === "string" ? body.adId : "").trim().slice(0, 200)
   if (!adId) {
     return NextResponse.json(
       { ok: false, verified: false, rewardAuthorized: false, error: "MISSING_AD_ID" },

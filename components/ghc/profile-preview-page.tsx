@@ -1,5 +1,6 @@
 "use client"
 
+import { confirmDialog } from "@/lib/ui/global-interactions"
 /**
  * Full-screen peer profile from Find — premium hero + circular actions
  * (aligned with production discovery products, GH relationship language).
@@ -9,7 +10,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Heart,
-  Link2,
   MapPin,
   MessageCircle,
   MoreVertical,
@@ -18,6 +18,8 @@ import {
   VolumeX,
   Ban,
   X,
+  Crown,
+  ImagePlus,
 } from "lucide-react"
 import type { Candidate } from "@/lib/ghc-types"
 import { useState, useEffect } from "react"
@@ -28,30 +30,11 @@ import { resolveAvatarUrl } from "@/lib/avatar"
 import { buildProfileConnectionContext } from "@/lib/domains/adapters/profile-connection-context"
 import { resolveUserIntents } from "@/lib/connection-intents"
 import { IdentityService } from "@/lib/identity/identity-service"
-
-function calculateProfileMatch(candidate: Candidate, interests: string[], age?: number, location?: string) {
-  const shared = (candidate.interests ?? []).filter((item) => interests.includes(item)).length
-  const ageScore = typeof age === "number" ? Math.max(0, 20 - Math.min(20, Math.abs(age - candidate.age))) : 0
-  const locationScore =
-    location && candidate.location && location.toLowerCase().includes(candidate.location.toLowerCase()) ? 15 : 0
-  return Math.min(
-    99,
-    Math.round(
-      20 +
-        Math.min(45, shared * 9) +
-        ageScore +
-        locationScore +
-        (candidate.verified ? 10 : 0) +
-        (candidate.online ? 5 : 0),
-    ),
-  )
-}
+import { ProfileContentLibrary } from "./profile-content-library"
 
 export function ProfilePreviewPage({
   candidate,
   userInterests = [],
-  userAge,
-  userLocation,
   onBack,
   onMessage,
   onLike,
@@ -71,8 +54,6 @@ export function ProfilePreviewPage({
 }: {
   candidate: Candidate
   userInterests?: string[]
-  userAge?: number
-  userLocation?: string
   onBack: () => void
   onMessage: () => void
   onLike: () => void
@@ -81,7 +62,7 @@ export function ProfilePreviewPage({
   onBlock?: () => void
   onReport?: (reason: string) => void
   onFollow?: () => void
-  publicPosts?: Array<{ id: string; content?: string; createdAt?: number }>
+  publicPosts?: Array<{ id: string; content?: string; createdAt?: number; images?: string[]; video?: string | null; pdf?: string | null; pdfName?: string | null; visibility?: "public" | "followers" | "mutuals" | "private" }>
   stories?: Array<{ id: string; text?: string; createdAt?: number }>
   canMessage?: boolean
   isFollowing?: boolean
@@ -91,8 +72,8 @@ export function ProfilePreviewPage({
   viewerFriendIds?: string[]
 }) {
   const [showActions, setShowActions] = useState(false)
+  const [showContentLibrary, setShowContentLibrary] = useState(false)
   const [liked, setLiked] = useState(false)
-  const match = calculateProfileMatch(candidate, userInterests, userAge, userLocation)
   const closeActions = () => setShowActions(false)
 
   // Dismiss menu + allow host to close full profile on tab change / global reset
@@ -206,9 +187,10 @@ export function ProfilePreviewPage({
               <MoreVertical size={18} />
             </button>
             <ActionSheet open={showActions} onClose={closeActions} title="Safety & privacy">
+              {onMute ? (
               <ActionSheetItem
                 onClick={() => {
-                  onMute?.()
+                  onMute()
                   closeActions()
                 }}
               >
@@ -216,10 +198,11 @@ export function ProfilePreviewPage({
                   <VolumeX size={16} /> Mute
                 </span>
               </ActionSheetItem>
+            ) : null}
               <ActionSheetItem
                 destructive
-                onClick={() => {
-                  if (window.confirm("Block this person?")) onBlock?.()
+                onClick={async () => {
+                  if (await confirmDialog({ title: "Block this person?", message: "They will no longer be able to interact with you.", confirmLabel: "Block", danger: true })) onBlock?.()
                   closeActions()
                 }}
               >
@@ -251,9 +234,11 @@ export function ProfilePreviewPage({
                 <ShieldCheck size={12} /> Verified
               </span>
             )}
-            <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-bold backdrop-blur">
-              {match}% compatible
-            </span>
+            {String((candidate as { membershipTier?: string; tier?: string }).membershipTier || (candidate as { tier?: string }).tier || "").toLowerCase().match(/^(vip|vvip)$/) ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/95 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                <Crown size={12} /> {String((candidate as { membershipTier?: string; tier?: string }).membershipTier || (candidate as { tier?: string }).tier).toUpperCase()}
+              </span>
+            ) : null}
           </div>
           <h1 className="text-3xl font-bold tracking-tight drop-shadow-md">
             {name}
@@ -280,13 +265,14 @@ export function ProfilePreviewPage({
           )}
         </div>
 
-        {/* Circular action dock — sample-style */}
+        {/* Profile action dock */}
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 bg-gradient-to-t from-black/70 to-transparent px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-10">
           <button
             type="button"
             onClick={onPass}
             className="flex h-14 w-14 items-center justify-center rounded-full border border-white/25 bg-white/15 text-white shadow-lg backdrop-blur-md transition active:scale-95"
-            aria-label="Not interested"
+            aria-label="Pass — not interested for matching"
+            title="Pass — skip for matching"
           >
             <X size={26} strokeWidth={2.5} />
           </button>
@@ -296,7 +282,8 @@ export function ProfilePreviewPage({
               onFollow?.()
             }}
             className="flex h-14 w-14 items-center justify-center rounded-full border border-white/25 bg-white/15 text-white shadow-lg backdrop-blur-md transition active:scale-95"
-            aria-label={isFollowing ? "Following" : "Follow"}
+            aria-label={isFollowing ? "Unfollow" : "Follow"}
+            title={isFollowing ? "Unfollow" : "Follow"}
           >
             <UserPlus size={22} />
           </button>
@@ -308,10 +295,11 @@ export function ProfilePreviewPage({
             }}
             className={`flex h-16 w-16 items-center justify-center rounded-full shadow-xl transition active:scale-95 ${
               liked || isMatched
-                ? "bg-gradient-to-br from-rose-500 to-pink-600 text-white"
+                ? "bg-[var(--gh-green)] text-white"
                 : "bg-gradient-to-br from-emerald-400 to-teal-600 text-white"
             }`}
-            aria-label="Like / Match interest"
+            aria-label="Like — interest for matching"
+            title="Like — helps matching when mutual"
           >
             <Heart size={28} fill={liked || isMatched ? "currentColor" : "none"} />
           </button>
@@ -323,20 +311,38 @@ export function ProfilePreviewPage({
           >
             <MessageCircle size={22} />
           </button>
+        </div>
+      </div>
+
+      {/* X-style dual primary CTAs — Message | Follow/Connect */}
+      <div className="shrink-0 border-t border-border bg-card px-4 pt-3">
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
-            onClick={onLike}
-            className="flex h-14 w-14 items-center justify-center rounded-full border border-white/25 bg-white/15 text-white shadow-lg backdrop-blur-md transition active:scale-95"
-            aria-label="Connect interest"
-            title="Match"
+            onClick={onMessage}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-emerald-600 px-3 text-[13px] font-bold text-white shadow-sm transition active:scale-[0.98]"
+            aria-label={canMessage ? "Message" : "Message request"}
           >
-            <Link2 size={22} />
+            <MessageCircle size={17} />
+            {canMessage ? "Message" : "Message"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onFollow?.()}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground shadow-sm transition hover:bg-muted active:scale-[0.98]"
+            aria-label={isFollowing ? "Following" : "Follow"}
+          >
+            <UserPlus size={17} />
+            {isFollowing ? "Following" : "Follow"}
           </button>
         </div>
       </div>
 
       {/* Scrollable details under hero (optional depth) */}
       <div className="max-h-[32dvh] shrink-0 overflow-y-auto border-t border-border bg-card px-5 py-4">
+        <button type="button" onClick={() => setShowContentLibrary(true)} className="mb-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 px-4 text-sm font-bold text-foreground transition hover:bg-muted" aria-label={`Browse ${name}'s posts and media`}>
+          <ImagePlus size={17} /> Browse posts, photos, videos & documents
+        </button>
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
           <span className={`h-2.5 w-2.5 rounded-full ${candidate.online ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
           {candidate.online ? "Online now" : "Recently active"}
@@ -345,20 +351,6 @@ export function ProfilePreviewPage({
               <CheckCircle2 size={15} /> Verified
             </span>
           )}
-        </div>
-        <div className="mb-4 rounded-2xl bg-gradient-to-r from-violet-50 to-fuchsia-50 p-3 dark:from-violet-950/40 dark:to-fuchsia-950/30">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-              Compatibility
-            </span>
-            <span className="text-lg font-bold text-violet-900 dark:text-violet-100">{match}%</span>
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-violet-200/80">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
-              style={{ width: `${match}%` }}
-            />
-          </div>
         </div>
         {publicPosts.length > 0 && (
           <div>
@@ -388,6 +380,16 @@ export function ProfilePreviewPage({
           Follow · Connect · Match mean different things — use the actions above intentionally.
         </p>
       </div>
+      <ProfileContentLibrary
+        open={showContentLibrary}
+        onClose={() => setShowContentLibrary(false)}
+        profileId={candidate.id}
+        profileName={name}
+        profilePhotos={candidate.photos?.length ? candidate.photos : [candidate.photo].filter(Boolean)}
+        coverPhoto={candidate.coverPhoto || null}
+        profilePhotoHistory={candidate.profilePhotoHistory || []}
+        coverPhotoHistory={candidate.coverPhotoHistory || []}
+      />
     </section>
   )
 }

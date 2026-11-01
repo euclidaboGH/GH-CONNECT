@@ -5,11 +5,11 @@
  * Does not invent transactions; only presents GhcTransaction fields.
  */
 
-import { ArrowLeft, Copy, X } from "lucide-react"
-import { useState } from "react"
+import { ArrowLeft, Copy, Download, ExternalLink, Share2, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import type { GhcTransaction } from "@/lib/domains/economy-types"
-import { activityTitle, formatGhcAmount, formatGhcWhen } from "@/lib/domains/ghc-wallet-ux"
+import { navigateGhcActivityTarget, resolveGhcActivityAttribution } from "@/lib/domains/ghc-activity-attribution"
 
 const KIND_LABELS: Record<string, string> = {
   earned: "Earned",
@@ -32,9 +32,12 @@ const STATUS_HELP: Record<string, string> = {
   failed: "This operation did not complete.",
 }
 
-function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0"
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function formatWhen(ts?: number) {
@@ -68,9 +71,37 @@ export type GhcTransactionDetailProps = {
 
 export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetailProps) {
   const [copied, setCopied] = useState(false)
+  const [receiptFeedback, setReceiptFeedback] = useState<string | null>(null)
+  const receipt = useMemo(() => {
+    if (!tx) return ""
+    const amount = Number.isFinite(tx.amount)
+      ? `${tx.amount > 0 ? "+" : ""}${tx.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })} GHC`
+      : "Amount unavailable"
+    return [
+      "GreenHaven · GHC Ledger Transaction Record",
+      `Description: ${tx.reason || tx.kind}`,
+      `Amount: ${amount}`,
+      `Type: ${KIND_LABELS[tx.kind] || tx.kind}`,
+      `Status: ${tx.status}`,
+      `Created: ${formatWhen(tx.createdAt)}`,
+      `Posted: ${tx.postedAt ? formatWhen(tx.postedAt) : "Not recorded"}`,
+      `Transaction ID: ${tx.id}`,
+      `Reference ID: ${tx.referenceId || "Not provided"}`,
+      `Source event: ${tx.sourceEvent || "Not provided"}`,
+      "This is a copy of the GHC ledger record, not an external bank or Pi settlement receipt.",
+      "GHC is an in-app utility/reward credit; this record does not authorize or initiate balance changes.",
+    ].join("\n")
+  }, [tx])
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose() }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [open, onClose])
   if (!open || !tx) return null
 
   const positive = tx.amount >= 0
+  const attribution = resolveGhcActivityAttribution(tx)
   const kindLabel = KIND_LABELS[tx.kind] || tx.kind
   const counterparty =
     metaString(tx.metadata, "counterpartyName") ||
@@ -88,19 +119,52 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      /* */
+      setReceiptFeedback("Reference copy is unavailable in this browser.")
+    }
+  }
+  const copyReceipt = async () => {
+    try {
+      await navigator.clipboard.writeText(receipt)
+      setReceiptFeedback("Transaction record copied.")
+    } catch {
+      setReceiptFeedback("Copy is unavailable. Download the record instead.")
+    }
+  }
+  const shareReceipt = async () => {
+    try {
+      if (!navigator.share) { setReceiptFeedback("Sharing is not supported here. Download or copy the record instead."); return }
+      await navigator.share({ title: "GreenHaven GHC transaction record", text: receipt })
+      setReceiptFeedback("Transaction record shared.")
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setReceiptFeedback("Could not share the record. Try downloading it.")
+    }
+  }
+  const downloadReceipt = () => {
+    try {
+      const blob = new Blob([receipt], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `greenhaven-ghc-ledger-${tx.id.slice(0, 12)}.txt`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setReceiptFeedback("Transaction record downloaded.")
+    } catch {
+      setReceiptFeedback("Download is unavailable in this browser.")
     }
   }
 
   return (
     <div
-      className="fixed inset-0 z-[88] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      className="gh-world-transaction fixed inset-0 z-[88] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Transaction details"
     >
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
+      <div className="relative z-[1] flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[1.45rem] border border-border bg-card shadow-2xl sm:rounded-[1.45rem]">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <button
             type="button"
@@ -120,12 +184,12 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-          <div className="rounded-2xl border border-border bg-muted/20 px-4 py-5 text-center">
-            <div className="mx-auto mb-2 flex justify-center">
-              <GhcCoinIcon size={28} />
+          <div className="rounded-[1.25rem] border border-border/60 bg-card px-4 py-6 text-center shadow-[var(--gh-card-shadow)]">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+              <GhcCoinIcon size={32} />
             </div>
             <p
-              className={`text-3xl font-semibold tabular-nums ${
+              className={`text-3xl font-semibold tabular-nums tracking-tight ${
                 tx.status === "pending"
                   ? "text-amber-700"
                   : positive
@@ -134,12 +198,13 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
               }`}
             >
               {positive ? "+" : ""}
-              {formatGhc(tx.amount)} <span className="text-base font-bold text-muted-foreground">GHC</span>
+              {formatGhc(tx.amount)}{" "}
+              <span className="text-base font-bold text-muted-foreground">GHC</span>
             </p>
             <p className="mt-2 text-sm font-semibold text-foreground">
               {tx.reason || kindLabel}
             </p>
-            <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {tx.status}
             </p>
           </div>
@@ -196,6 +261,20 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
               </div>
             )}
             <div className="border-b border-border/60 pb-2">
+              <dt className="text-muted-foreground">Linked activity</dt>
+              <dd className="mt-0.5 font-semibold">{attribution.label}</dd>
+              {attribution.related.length ? (
+                <div className="mt-1 space-y-0.5">
+                  {attribution.related.map((item) => <p key={`${item.label}:${item.value}`} className="break-all text-[10px] text-muted-foreground"><span className="font-semibold">{item.label}:</span> {item.value}</p>)}
+                </div>
+              ) : <p className="mt-1 text-[10px] text-muted-foreground">No durable product reference was attached to this ledger row.</p>}
+              {attribution.target && attribution.target.kind !== "reward" && attribution.target.kind !== "payment" ? (
+                <button type="button" onClick={() => { if (navigateGhcActivityTarget(attribution.target!)) onClose() }} className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-muted">
+                  <ExternalLink size={12} /> Open source activity
+                </button>
+              ) : null}
+            </div>
+            <div className="border-b border-border/60 pb-2">
               <dt className="text-muted-foreground">Reference</dt>
               <dd className="mt-0.5 break-all font-mono text-[11px]">
                 {tx.referenceId || tx.id}
@@ -213,11 +292,17 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
 
           <p className="mt-4 text-[10px] leading-relaxed text-muted-foreground">
             Balances are derived from the ledger. This detail view does not authorize credits or
-            debits.
+            debits. The exported record is not an external bank or Pi settlement receipt.
           </p>
+          {receiptFeedback && <p className="mt-2 text-xs text-muted-foreground" role="status">{receiptFeedback}</p>}
         </div>
 
         <div className="border-t border-border p-3">
+          <div className="mb-2 grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => void copyReceipt()} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Copy size={14} /> Copy record</button>
+            <button type="button" onClick={() => void shareReceipt()} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Share2 size={14} /> Share</button>
+            <button type="button" onClick={downloadReceipt} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-border px-2 text-xs font-bold hover:bg-muted"><Download size={14} /> Download</button>
+          </div>
           <button
             type="button"
             onClick={onClose}

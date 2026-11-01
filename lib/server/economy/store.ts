@@ -27,6 +27,7 @@ export type GhcLedgerRow = GhcTransaction
 export interface GhcAuthoritativeStore {
   listTransactions(userId: string): GhcLedgerRow[]
   appendPosted(tx: GhcLedgerRow): void
+  updateTransaction(userId: string, transactionId: string, patch: Partial<GhcLedgerRow>): void
   findByReference(
     referenceId: string
   ): { debit?: GhcLedgerRow; credit?: GhcLedgerRow }
@@ -79,6 +80,10 @@ export function createMemoryGhcStore(): GhcAuthoritativeStore {
     },
     appendPosted(tx) {
       txs.push(tx)
+    },
+    updateTransaction(userId, transactionId, patch) {
+      const index = txs.findIndex((tx) => tx.userId === userId && tx.id === transactionId)
+      if (index >= 0) txs[index] = { ...txs[index], ...patch }
     },
     findByReference(referenceId) {
       const debit = txs.find(
@@ -154,7 +159,7 @@ export async function executeAuthoritativeTransfer(
   }
 ): Promise<GhcTransferResult> {
   const limits = input.limits || getServerEconomyLimits()
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   const ref = (input.referenceId || "").trim()
   const toUserId = (input.toUserId || "").trim()
   const senderId = (input.senderId || "").trim()
@@ -327,7 +332,7 @@ export async function createTransferRequest(
   }
 ): Promise<{ ok: true; request: GhcTransferRequest } | { ok: false; error: string; code: string }> {
   const limits = input.limits || getServerEconomyLimits()
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!input.requesterId) return { ok: false, error: "Authentication required", code: "AUTH_REQUIRED" }
   if (input.requesterId === input.payerId) {
     return { ok: false, error: "Cannot request from yourself", code: "SELF_TRANSFER" }
@@ -554,7 +559,55 @@ export async function expirePendingRequests(
 }
 
 
-/** Authoritative credit (reward claim, promo, admin) — posted positive amount */
+/** Pi-verified pack purchase credit — not general minting; reference must be unique. */
+export async function executeAuthoritativePackPurchase(
+  store: GhcAuthoritativeStore,
+  input: {
+    userId: string
+    amount: number
+    referenceId: string
+    reason: string
+    productId?: string
+    intentId?: string
+  }
+): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
+  const amount = Number(input.amount)
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
+  const ref = String(input.referenceId || "").trim()
+  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
+
+  return withUserLock(input.userId, () => {
+    const existing = store.listTransactions(input.userId).find(
+      (t) =>
+        t.referenceId === ref &&
+        t.status === "posted" &&
+        t.amount > 0 &&
+        t.sourceEvent === "PI_PACK_PURCHASE"
+    )
+    if (existing) return { ok: true as const, tx: existing, idempotent: true }
+
+    const tx: GhcLedgerRow = {
+      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      userId: input.userId,
+      kind: "earned",
+      amount,
+      status: "posted",
+      reason: input.reason || "Pi pack purchase",
+      sourceEvent: "PI_PACK_PURCHASE",
+      referenceId: ref,
+      createdAt: Date.now(),
+      metadata: {
+        productId: input.productId,
+        intentId: input.intentId,
+        settlement: "pi_verified_pack",
+      },
+    }
+    store.appendPosted(tx)
+    return { ok: true as const, tx }
+  })
+}
+
+/** Generic positive credits are disabled by the Daily-Claim-only issuance policy. */
 export async function executeAuthoritativeCredit(
   store: GhcAuthoritativeStore,
   input: {
@@ -566,31 +619,9 @@ export async function executeAuthoritativeCredit(
     kind?: GhcLedgerRow["kind"]
   }
 ): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
-  const amount = Math.abs(Number(input.amount))
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
-  const ref = String(input.referenceId || "").trim()
-  if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
-
-  return withUserLock(input.userId, () => {
-    const existing = store.listTransactions(input.userId).find(
-      (t) => t.referenceId === ref && t.status === "posted" && t.amount > 0
-    )
-    if (existing) return { ok: true as const, tx: existing, idempotent: true }
-
-    const tx: GhcLedgerRow = {
-      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
-      userId: input.userId,
-      kind: input.kind || "earned",
-      amount,
-      status: "posted",
-      reason: input.reason,
-      sourceEvent: input.sourceEvent || "SYSTEM",
-      referenceId: ref,
-      createdAt: Date.now(),
-    }
-    store.appendPosted(tx)
-    return { ok: true as const, tx }
-  })
+  void store
+  void input
+  return { ok: false, error: "GHC_ISSUANCE_POLICY_LOCKED" }
 }
 
 /** Stage pending hold (not transferable until claim) */
@@ -604,14 +635,21 @@ export async function executeAuthoritativePending(
     sourceEvent?: string
   }
 ): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
-  const amount = Math.abs(Number(input.amount))
+  const sourceEvent = String(input.sourceEvent || "").trim().toUpperCase()
+  if (sourceEvent !== "DAILY_CLAIM_V12") {
+    return { ok: false, error: "GHC_ISSUANCE_POLICY_LOCKED" }
+  }
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
 
   return withUserLock(input.userId, () => {
     const existing = store.listTransactions(input.userId).find(
-      (t) => t.referenceId === ref && (t.status === "pending" || t.status === "posted")
+      (t) =>
+        t.sourceEvent === "DAILY_CLAIM_V12" &&
+        t.referenceId === ref &&
+        (t.status === "pending" || (t.status === "posted" && t.kind === "earned"))
     )
     if (existing) return { ok: true as const, tx: existing, idempotent: true }
 
@@ -622,16 +660,17 @@ export async function executeAuthoritativePending(
       amount,
       status: "pending",
       reason: input.reason,
-      sourceEvent: input.sourceEvent || "SYSTEM",
+      sourceEvent: "DAILY_CLAIM_V12",
       referenceId: ref,
       createdAt: Date.now(),
+      metadata: { rewardLifecycle: "daily_claim_48h", claimedAt: Date.now(), redeemableAt: Date.now() + 48 * 60 * 60 * 1000 },
     }
     store.appendPosted(tx)
     return { ok: true as const, tx }
   })
 }
 
-/** Claim pending → posted available (zero out pending, post reward) */
+/** Redeem an eligible Daily Claim pending entitlement into posted wallet value. */
 export async function executeAuthoritativeClaimPending(
   store: GhcAuthoritativeStore,
   input: { userId: string; holdId: string }
@@ -650,7 +689,12 @@ export async function executeAuthoritativeClaimPending(
     if (!pending) {
       const already = txs.find(
         (t) =>
-          (t.id === input.holdId || t.referenceId === input.holdId) &&
+          t.sourceEvent === "DAILY_CLAIM_V12" &&
+          t.kind === "earned" &&
+          (t.id === input.holdId ||
+            t.referenceId === input.holdId ||
+            t.metadata?.claimedFrom === input.holdId ||
+            t.metadata?.claimedReference === input.holdId) &&
           t.status === "posted" &&
           t.amount > 0
       )
@@ -658,40 +702,60 @@ export async function executeAuthoritativeClaimPending(
       return { ok: false, error: "NOT_CLAIMABLE" }
     }
 
-    // Mark original pending as cancelled via zeroing post pattern — append claim credit
+    if (pending.sourceEvent !== "DAILY_CLAIM_V12") {
+      return { ok: false as const, error: "SOURCE_NOT_REDEEMABLE" }
+    }
+    const redeemableAt = pending.createdAt + 48 * 60 * 60 * 1000
+    if (Date.now() < redeemableAt) {
+      return { ok: false as const, error: "NOT_YET_REDEEMABLE" }
+    }
+
+    // A completed claim is a single positive credit; the original entitlement expires.
     const claimRef = `claim:${pending.referenceId || pending.id}`
-    const existingClaim = txs.find((t) => t.referenceId === claimRef && t.status === "posted")
+    const existingClaim = txs.find(
+      (t) =>
+        t.sourceEvent === "DAILY_CLAIM_V12" &&
+        t.kind === "earned" &&
+        (t.referenceId === claimRef || t.metadata?.claimedFrom === pending.id) &&
+        t.status === "posted"
+    )
     if (existingClaim) {
+      // Heal an interrupted local write: if the credit exists, always retire its hold.
+      store.updateTransaction(input.userId, pending.id, {
+        status: "expired",
+        metadata: { ...(pending.metadata || {}), claimedAt: Date.now(), claimedBy: input.userId },
+      })
       return { ok: true as const, tx: existingClaim, amount: existingClaim.amount, alreadyClaimed: true }
     }
 
-    // Append negative pending clear + positive available (net: available increases)
-    const clear: GhcLedgerRow = {
-      id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
-      userId: input.userId,
-      kind: "pending",
-      amount: -Math.abs(pending.amount),
-      status: "posted",
-      reason: "Claim clear",
-      sourceEvent: pending.sourceEvent || "SYSTEM",
-      referenceId: claimRef + ":clear",
-      createdAt: Date.now(),
-      metadata: { clearedHoldId: pending.id },
-    }
+    // Mirror the database lifecycle: append one positive credit, then expire the
+    // original hold. A negative clear row would incorrectly reduce the wallet balance.
     const credit: GhcLedgerRow = {
       id: `tx_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
       userId: input.userId,
       kind: "earned",
       amount: Math.abs(pending.amount),
       status: "posted",
-      reason: pending.reason || "Claimed reward",
-      sourceEvent: pending.sourceEvent,
+      reason: pending.reason || "Claimed Daily Claim",
+      sourceEvent: "DAILY_CLAIM_V12",
       referenceId: claimRef,
       createdAt: Date.now(),
-      metadata: { claimedFrom: pending.id },
+      metadata: {
+        claimedFrom: pending.id,
+        claimedReference: pending.referenceId,
+        claimKind: "DAILY_CLAIM_V12",
+        redeemedAt: Date.now(),
+      },
     }
-    store.appendPosted(clear)
     store.appendPosted(credit)
+    store.updateTransaction(input.userId, pending.id, {
+      status: "expired",
+      metadata: {
+        ...(pending.metadata || {}),
+        claimedAt: Date.now(),
+        claimedBy: input.userId,
+      },
+    })
     return { ok: true as const, tx: credit, amount: credit.amount }
   })
 }
@@ -708,7 +772,7 @@ export async function executeAuthoritativeSpend(
     kind?: GhcLedgerRow["kind"]
   }
 ): Promise<{ ok: true; tx: GhcLedgerRow; idempotent?: boolean } | { ok: false; error: string }> {
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
@@ -755,7 +819,7 @@ export async function executeDurableGhcSpend(input: {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
   }
-  const amount = Math.abs(Number(input.amount))
+  const amount = Number(input.amount)
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "INVALID_AMOUNT" }
   const ref = String(input.referenceId || "").trim()
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }

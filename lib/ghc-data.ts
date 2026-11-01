@@ -39,6 +39,14 @@ export function seedStories(): StoryItem[] {
 }
 
 const STORY_MEDIA_MAX_BYTES = 48_000
+const SAFE_STORY_BACKGROUNDS = new Set([
+  "linear-gradient(145deg,#064e3b 0%,#047857 48%,#0f172a 100%)",
+  "linear-gradient(145deg,#7c2d12 0%,#db2777 52%,#4c1d95 100%)",
+  "linear-gradient(145deg,#082f49 0%,#0369a1 52%,#312e81 100%)",
+  "linear-gradient(145deg,#713f12 0%,#ca8a04 52%,#9a3412 100%)",
+  "linear-gradient(145deg,#4a044e 0%,#a21caf 55%,#831843 100%)",
+  "linear-gradient(145deg,#111827 0%,#334155 52%,#020617 100%)",
+])
 
 function boundedStoryText(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, maxLength) : ""
@@ -63,6 +71,12 @@ export function sanitizeStory(value: unknown): StoryItem | null {
     photo: typeof raw.photo === "string" && raw.photo.length <= STORY_MEDIA_MAX_BYTES ? raw.photo : undefined,
     text: boundedStoryText(raw.text, 500),
     media,
+    background: typeof raw.background === "string" && SAFE_STORY_BACKGROUNDS.has(raw.background) ? raw.background : undefined,
+    audience: ["everyone", "followers", "friends", "matches-only", "private"].includes(String(raw.audience)) ? raw.audience : undefined,
+    status: ["draft", "published", "expired", "archived", "highlight"].includes(String(raw.status)) ? raw.status : undefined,
+    expiresAt: typeof raw.expiresAt === "number" && Number.isFinite(raw.expiresAt) ? raw.expiresAt : undefined,
+    archivedAt: typeof raw.archivedAt === "number" && Number.isFinite(raw.archivedAt) ? raw.archivedAt : undefined,
+    highlightedAt: typeof raw.highlightedAt === "number" && Number.isFinite(raw.highlightedAt) ? raw.highlightedAt : undefined,
     createdAt,
   }
 }
@@ -411,8 +425,11 @@ export function timeAgo(timestamp: number): string {
   if (hours < 24) return `${hours}h ago`
   if (days < 7) return `${days}d ago`
 
-  const date = new Date(timestamp)
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(timestamp))
+  } catch {
+    return ""
+  }
 }
 
 export function generateId(): string {
@@ -480,73 +497,19 @@ Our Values:
 • Respect: We maintain a culture of kindness and mutual respect
 • Transparency: We are open about how your data is used and protected`,
 
-  terms: `Terms of Service - GreenHaven
+  terms: `Terms of Service — GreenHaven
 
-1. Acceptance of Terms
-By using GreenHaven, you accept these terms and our privacy policy.
+The authoritative Terms of Service are published at /terms (structured document with table of contents).
+Effective date and full clauses are maintained in lib/legal/terms-of-service.ts.
 
-2. User Conduct
-You agree to:
-- Be at least 18 years old
-- Provide accurate information
-- Respect other users
-- Not engage in harassment or abuse
-- Not share explicit content
-- Follow all applicable laws
+By using GreenHaven you agree to those Terms and the Privacy Policy at /privacy.`,
 
-3. Account Responsibility
-You are responsible for maintaining your account security and all activities under your account.
+  privacy: `Privacy Policy — GreenHaven
 
-4. User Content
-You retain all rights to content you post. By posting, you grant GreenHaven a license to use that content.
+The authoritative Privacy Policy is published at /privacy (structured document with table of contents).
+Effective date and full clauses are maintained in lib/legal/privacy-policy.ts.
 
-5. Limitations of Liability
-GreenHaven is provided "as is". We are not liable for indirect damages or issues arising from third-party content.
-
-6. Termination
-We reserve the right to terminate accounts that violate these terms.
-
-7. Changes to Terms
-We may update these terms at any time with notice to users.`,
-
-  privacy: `Privacy Policy - GreenHaven
-
-1. Information We Collect
-- Account information (name, age, location)
-- Profile content (photos, bio, interests)
-- Interaction data (matches, messages, likes)
-- Device information (IP, device type, operating system)
-- Usage data (features used, time spent)
-
-2. How We Use Information
-- To provide and improve our service
-- To personalize your experience
-- To communicate with you
-- To detect and prevent fraud
-- To comply with legal obligations
-
-3. Data Security
-We use industry-standard encryption and security measures to protect your data.
-
-4. Your Rights
-You can:
-- Access your personal data
-- Request corrections
-- Download your data
-- Delete your account and associated data
-- Opt out of marketing communications
-
-5. Third-Party Sharing
-We do not sell your data. We only share with:
-- Service providers (hosting, analytics)
-- Legal authorities when required
-- Other users (as you authorize)
-
-6. Data Retention
-We retain your data as long as your account is active, then delete it within 90 days of deletion.
-
-7. Contact
-For privacy questions, email support@ghconnect.com`,
+Contact: support@ghconnect.com`,
 }
 
 

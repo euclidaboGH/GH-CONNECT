@@ -1,5 +1,6 @@
 "use client"
 
+import { confirmDialog, promptDialog } from "@/lib/ui/global-interactions"
 /**
  * Passkeys management panel (Phase 7).
  * Optional additive security — does not replace Pi auth or App Lock PIN.
@@ -53,7 +54,7 @@ export function PasskeysPanel() {
   const onRegister = async () => {
     setBusy(true)
     setMessage(null)
-    const label = window.prompt("Label for this passkey (optional)") || undefined
+    const label = (await promptDialog({ title: "Name your passkey", message: "Optional label to help you recognize this device later.", label: "Passkey label", placeholder: "e.g. My phone", maxLength: 80, confirmLabel: "Continue" })) || undefined
     const r = await registerPasskey(label)
     setBusy(false)
     if (!r.ok) {
@@ -81,7 +82,7 @@ export function PasskeysPanel() {
   }
 
   const onRevoke = async (id: string) => {
-    if (!window.confirm("Revoke this passkey? It can no longer be used.")) return
+    if (!(await confirmDialog({ title: "Revoke passkey?", message: "This passkey will no longer be able to sign in or approve sensitive actions on this account.", confirmLabel: "Revoke passkey", danger: true }))) return
     setBusy(true)
     try {
       const res = await fetch("/api/auth/webauthn/credentials", {

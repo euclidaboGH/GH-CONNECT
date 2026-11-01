@@ -32,7 +32,14 @@ import {
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
+import { PiCashbackSummary } from "./pi-cashback-summary"
+import { UnifiedEarningsDashboard } from "./unified-earnings-dashboard"
+import { RegistrationBonusCard } from "./registration-bonus-card"
+import { SurfaceIntro } from "./ui/product-surface"
+import { EconomyProgramStatus } from "./economy-program-status"
+import { ReferralShareCard } from "./referral-share-card"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
+import { navigateGhcActivityTarget, resolveRewardActivityTarget } from "@/lib/domains/ghc-activity-attribution"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
@@ -54,9 +61,12 @@ type RewardsSnapshot = {
   }
 }
 
-function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function formatWhen(ts: number) {
@@ -73,12 +83,12 @@ function formatWhen(ts: number) {
 }
 
 const STATUS_STYLE: Record<ChallengeStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800",
-  in_progress: "bg-sky-50 text-sky-800",
-  pending_validation: "bg-amber-50 text-amber-900",
-  completed: "bg-stone-100 text-stone-600",
-  expired: "bg-stone-100 text-stone-400",
-  locked: "bg-stone-100 text-stone-400",
+  available: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/40",
+  in_progress: "bg-sky-50 text-sky-800 ring-1 ring-sky-100 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-900/40",
+  pending_validation: "bg-amber-50 text-amber-900 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/40",
+  completed: "bg-stone-100 text-stone-600 ring-1 ring-stone-200 dark:bg-stone-800 dark:text-stone-300",
+  expired: "bg-stone-100 text-stone-400 ring-1 ring-stone-200",
+  locked: "bg-stone-100 text-stone-400 ring-1 ring-stone-200",
 }
 
 const STATUS_LABEL: Record<ChallengeStatus, string> = {
@@ -132,10 +142,20 @@ export function RewardsCentreScreen({
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [achievementsHydrating, setAchievementsHydrating] = useState(true)
   /** Durable unlocks from /api/profile/achievements (merged with local domain) */
   const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
     []
   )
+  const [serverEconomy, setServerEconomy] = useState<{
+    balance: number | null
+    pending: number | null
+    locked: number | null
+    curationBalance: number | null
+    canFundCuration: boolean | null
+  }>({ balance: null, pending: null, locked: null, curationBalance: null, canFundCuration: null })
   const ghc = useGHC()
   const profile = ghc.profile
   // Optional community lists may be present on the provider value without being
@@ -215,19 +235,53 @@ export function RewardsCentreScreen({
     }
   }, [tick, userId, signals, serverAchievements])
 
+  // Use the same server-authoritative economy snapshot as Wallet.
+  // Rewards Centre is presentation only; it never invents balances or issuance.
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/social/economy/status", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled || !data?.ok) return
+        setServerEconomy({
+          balance: Number.isFinite(Number(data.wallet?.balance)) ? Number(data.wallet.balance) : null,
+          pending: Number.isFinite(Number(data.wallet?.pending)) ? Number(data.wallet.pending) : null,
+          locked: Number.isFinite(Number(data.wallet?.locked)) ? Number(data.wallet.locked) : null,
+          curationBalance: Number.isFinite(Number(data.curation?.spendableBalance)) ? Number(data.curation.spendableBalance) : null,
+          canFundCuration: typeof data.curation?.canFundSuggestedContribution === "boolean"
+            ? data.curation.canFundSuggestedContribution
+            : null,
+        })
+      })
+      .catch(() => { /* retain last confirmed snapshot */ })
+    return () => { cancelled = true }
+  }, [tick, userId])
+
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
     let cancelled = false
-    void fetchServerAchievements().then((r) => {
-      if (cancelled || !r.ok) return
-      const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
-        id: a.achievementId,
-        title: a.achievementId.replace(/_/g, " "),
-        description: r.durable ? "Unlocked on this account" : undefined,
-        unlockedAt: a.unlockedAt,
-      })) as UnlockedAchievementRow[]
-      setServerAchievements(rows)
-    })
+    setAchievementsHydrating(true)
+    void fetchServerAchievements()
+      .then((r) => {
+        if (cancelled) return
+        if (!r.ok) {
+          setAchievementsHydrating(false)
+          return
+        }
+        const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
+          id: a.achievementId,
+          title: a.achievementId.replace(/_/g, " "),
+          description: "Unlocked on this account",
+          unlockedAt: a.unlockedAt,
+        })) as UnlockedAchievementRow[]
+        setServerAchievements(rows)
+      })
+      .finally(() => {
+        if (!cancelled) setAchievementsHydrating(false)
+      })
     return () => {
       cancelled = true
     }
@@ -260,7 +314,23 @@ export function RewardsCentreScreen({
     return Array.from(map.values())
   }, [snapshot.pending])
 
-  const refresh = useCallback(() => setTick((t) => t + 1), [])
+  const refresh = useCallback(() => {
+    setTick((n) => n + 1)
+    setStatusMsg("Refreshing rewards…")
+    window.setTimeout(() => setStatusMsg(null), 1200)
+  }, [])
+
+  useEffect(() => {
+    const onLive = () => refresh()
+    window.addEventListener("ghc:daily-reward-claimed", onLive)
+    window.addEventListener("ghc:wallet-synced", onLive)
+    window.addEventListener("ghc:wallet-refresh", onLive)
+    return () => {
+      window.removeEventListener("ghc:daily-reward-claimed", onLive)
+      window.removeEventListener("ghc:wallet-synced", onLive)
+      window.removeEventListener("ghc:wallet-refresh", onLive)
+    }
+  }, [refresh])
 
   useEffect(() => {
     const tabHandler = (e: Event) => {
@@ -273,28 +343,75 @@ export function RewardsCentreScreen({
     return () => window.removeEventListener("ghc:open-rewards-tab", tabHandler)
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showLearnMore) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowLearnMore(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showLearnMore])
+
 
   const claimPendingReward = useCallback(
     async (rewardId: string) => {
       if (claimingId) return
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        ghc.addToast?.("You are offline. Claims need a connection so the ledger can confirm.", "info")
+        return
+      }
       setClaimingId(rewardId)
+      setStatusMsg("Claiming…")
       try {
-        const eco = getBoundDomainServices()?.economy
-        if (!eco?.claimReward) {
-          ghc.addToast?.("Claim unavailable right now", "error")
+        let claimed = false
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
+          try {
+            const { IdentityService } = await import("@/lib/identity/identity-service")
+            Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+          } catch { /* */ }
+          const serverRes = await fetch("/api/economy/rewards/claim", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+            headers,
+            // The hold ID is the stable server-side idempotency/ownership key.
+            // Do not mint a different client request ID on every retry.
+            body: JSON.stringify({ holdId: rewardId }),
+          })
+          const body = await serverRes.json().catch(() => ({}))
+          if (serverRes.ok && body?.ok) claimed = true
+          else {
+            ghc.addToast?.(body?.message || body?.error || body?.code || `Claim failed (${serverRes.status}). Your reward remains unchanged; retry later.`, "error")
+            return
+          }
+        } catch {
+          ghc.addToast?.("Could not reach the secure claims service. Your reward was not changed; retry when connected.", "error")
           return
         }
-        const res = await eco.claimReward(rewardId)
-        if (!res.ok) {
-          ghc.addToast?.(res.error || "Could not claim reward", "error")
-        } else {
+        if (claimed) {
           setClaimedFlash(rewardId)
-          ghc.addToast?.("Claimed — GHC is available in Wallet", "success")
+          ghc.addToast?.("Reward redemption confirmed by the server. Refreshing Wallet…", "success")
           try {
-            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-          } catch {
-            /* */
-          }
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "reward-claimed" } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "reward-claimed" } }))
+          } catch { /* */ }
+          try {
+            const { syncWalletAfterServerClaim } = await import("@/lib/domains/adapters/wallet-sync-after-claim")
+            await syncWalletAfterServerClaim({ referenceId: rewardId })
+          } catch { /* a later refresh will retry; never optimistically credit */ }
           window.setTimeout(() => setClaimedFlash(null), 2000)
         }
         setTick((x) => x + 1)
@@ -302,33 +419,35 @@ export function RewardsCentreScreen({
         ghc.addToast?.(e instanceof Error ? e.message : "Claim failed", "error")
       } finally {
         setClaimingId(null)
+        // Never leave the Rewards Centre stuck on a stale "Claiming…" label
+        // after an error, timeout, or successful server confirmation.
+        setStatusMsg(null)
       }
     },
     [ghc, claimingId]
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
+    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven Rewards Centre">
+
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
           aria-label="Back"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold text-foreground">Rewards Centre</h1>
-          <p className="text-[11px] text-muted-foreground">
-            Engagement economy · daily · challenges · social · not pay-to-win
-          </p>
+          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">Rewards</h1>
+          <p className="text-[10px] leading-tight text-muted-foreground">Daily · missions · not pay-to-win</p>
         </div>
         {onOpenWallet && (
           <button
             type="button"
             onClick={onOpenWallet}
-            className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800"
+            className="h-8 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -336,11 +455,24 @@ export function RewardsCentreScreen({
         <button
           type="button"
           onClick={refresh}
-          className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"
+          className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted"
+          aria-label="Refresh rewards"
         >
           Refresh
         </button>
       </header>
+
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (achievementsHydrating ? "Loading achievements" : "")}
+      </div>
+      {isOffline ? (
+        <div
+          className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          Offline — journey progress already on this device stays visible. Claims need a connection so the ledger can confirm.
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]">
         <div className="px-4 pt-3">
@@ -349,30 +481,70 @@ export function RewardsCentreScreen({
 
         <RewardsJourneyHero
           userId={userId}
-          onClaimed={refresh}
           onOpenWallet={onOpenWallet}
         />
 
-        {/* Weekly quality streak (careful — not likes) */}
-        <div className="mx-3 mt-3 flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/80 px-3 py-3 dark:border-orange-900 dark:bg-orange-950/30">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700">
-            <Flame size={18} />
+        <section className="mx-3 mt-3 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/70 px-3.5 py-3 dark:border-emerald-900 dark:bg-emerald-950/25" aria-label="Recommended next action">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">Best next action</p>
+          <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review pending rewards" : "Keep building quality participation"}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{recommended.length > 0 ? "This mission is currently the strongest available next step based on your verified progress." : snapshot.pending.length > 0 ? "Some rewards are still pending validation or maturity. Review their status before planning around them." : "There is no reward action you need to force. Useful posts, helpful comments and community participation build your journey naturally."}</p>
+          <button type="button" onClick={() => recommended.length > 0 ? setTab("challenges") : snapshot.pending.length > 0 ? setTab("history") : setTab("opportunities")} className="mt-2.5 min-h-9 rounded-full bg-emerald-700 px-3.5 text-[11px] font-bold text-white">{recommended.length > 0 ? "View mission" : snapshot.pending.length > 0 ? "Review status" : "Explore opportunities"}</button>
+        </section>
+
+        <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="font-semibold text-foreground">Two different rewards</p>
+          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
+          <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
+        </div>
+        <SurfaceIntro
+          kicker="Earn & claim"
+          title="Claims stay in Rewards"
+          body="Daily GHC, registration bonus, cashback, and missions are claimed here. Wallet shows balances and History only."
+          tone="emerald"
+        />
+        <RegistrationBonusCard compact />
+        {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
+            Compact cashback summary only; full ledger + A2U request on Wallet. */}
+        <PiCashbackSummary />
+        <UnifiedEarningsDashboard compact />
+
+        <div className="mx-3 mt-3">
+          <EconomyProgramStatus />
+        </div>
+
+        <div className="mx-3 mt-3">
+          <ReferralShareCard compact />
+        </div>
+
+        {/* Weekly quality streak — real qualityDays only (not likes) */}
+        <div className="mx-3 mt-3 flex items-start gap-3 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 ring-1 ring-orange-200/80 dark:bg-orange-950/60 dark:ring-orange-900/50">
+            <Flame size={18} aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-foreground">
+            <p className="text-[13px] font-bold text-foreground">
               Weekly quality streak · {snapshot.streak.qualityDays}/7 days
             </p>
-            <div className="mt-1.5 flex gap-1">
+            <div
+              className="mt-2 flex gap-1"
+              role="progressbar"
+              aria-valuenow={snapshot.streak.qualityDays}
+              aria-valuemin={0}
+              aria-valuemax={7}
+              aria-label="Weekly quality streak days"
+            >
               {Array.from({ length: 7 }).map((_, i) => (
                 <span
                   key={i}
                   className={`h-2 flex-1 rounded-full ${
-                    i < snapshot.streak.qualityDays ? "bg-orange-500" : "bg-orange-200/80 dark:bg-orange-900"
+                    i < snapshot.streak.qualityDays
+                      ? "bg-orange-500"
+                      : "bg-orange-200/80 dark:bg-orange-900"
                   }`}
                 />
               ))}
             </div>
-            <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
               Counts days with verified quality contributions (posts, helpful comments, community
               activity). Never likes, self-interaction, or spam.
             </p>
@@ -380,14 +552,47 @@ export function RewardsCentreScreen({
         </div>
 
         {((snapshot.wallet?.pending ?? 0) > 0 || snapshot.pending.length > 0) && (
-          <p className="mx-3 mt-2 text-[11px] text-amber-800/90">
-            Pending GHC is held for validation (usually within 24 hours) — not spendable until
-            cleared.
-          </p>
+          <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/80 px-3.5 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="text-[11px] leading-snug text-amber-900 dark:text-amber-100">
+              Pending GHC is not spendable until the server confirms its maturity and claim state.
+              Daily Claim rewards have a 48-hour lock.
+            </p>
+            {snapshot.pending.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setTab("history")}
+                className="mt-2 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-card px-3 py-1.5 text-[11px] font-bold text-amber-950 shadow-sm dark:text-amber-50"
+              >
+                Review {snapshot.pending.length} claim{snapshot.pending.length === 1 ? "" : "s"}
+                <ChevronRight size={12} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {snapshot.wallet != null && (
+          <div className="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-2.5 shadow-sm">
+            <GhcCoinIcon size={18} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available GHC</p>
+              <p className="text-[14px] font-bold tabular-nums text-foreground">
+                {formatGhc(Number(snapshot.wallet.balance) || 0)}
+              </p>
+            </div>
+            {onOpenWallet ? (
+              <button
+                type="button"
+                onClick={onOpenWallet}
+                className="rounded-full border border-border/70 bg-muted/40 px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:bg-muted"
+              >
+                Open Wallet
+              </button>
+            ) : null}
+          </div>
         )}
 
         <p className="mx-3 mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Complete missions → pending GHC → claim to available. Daily caps limit spam.{" "}
+          Daily Claim rewards mature after 48 hours. Mission rewards are paused until the server can verify completion and prevent duplicate claims.{" "}
           <button
             type="button"
             className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
@@ -399,16 +604,17 @@ export function RewardsCentreScreen({
         {claimedFlash && onOpenWallet && (
           <div className="mx-4 mt-2 flex items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
             <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-100">Claimed ✓ · added to available balance</p>
-            <button type="button" onClick={onOpenWallet} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white">
+            <button type="button" onClick={onOpenWallet} className="shrink-0 rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white">
               View in Wallet
             </button>
           </div>
         )}
         {showLearnMore && (
           <p className="mx-3 mt-1 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-            Rewards need verified, meaningful actions. Self-likes, spam and artificial engagement
-            are capped. High-value rewards may stay pending until validation (~24h). Ledger
-            transactions always record event → rule → amount → status.
+            Rewards require server-verified, meaningful actions. Daily Claim rewards mature after
+            48 hours; pending funds cannot be spent or transferred. Mission rewards remain paused
+            until completion verification and one-time claim storage are available. Ledger
+            transactions should record event → rule → amount → status.
           </p>
         )}
 
@@ -426,58 +632,104 @@ export function RewardsCentreScreen({
           </div>
         )}
 
-        <div className="mx-4 mt-3 flex gap-1 rounded-2xl border border-border bg-card p-1 shadow-sm">
+        <div
+          className="mx-3 mt-4 flex gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-[var(--gh-card-shadow)]"
+          role="tablist"
+          aria-label="Rewards sections"
+          onKeyDown={(e) => {
+            const order: Tab[] = ["challenges", "opportunities", "history", "achievements"]
+            const idx = order.indexOf(tab)
+            if (idx < 0) return
+            if (e.key === "ArrowRight") {
+              e.preventDefault()
+              setTab(order[(idx + 1) % order.length])
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault()
+              setTab(order[(idx - 1 + order.length) % order.length])
+            } else if (e.key === "Home") {
+              e.preventDefault()
+              setTab(order[0])
+            } else if (e.key === "End") {
+              e.preventDefault()
+              setTab(order[order.length - 1])
+            }
+          }}
+        >
           {(
             [
               { id: "challenges" as const, label: "Missions" },
-              { id: "opportunities" as const, label: "Earn" },
+              { id: "opportunities" as const, label: "Opportunities" },
               { id: "history" as const, label: "History" },
               { id: "achievements" as const, label: "Achievements" },
             ] as const
-          ).map((t) => (
+          ).map((item) => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              className={`shrink-0 flex-1 rounded-xl px-2 py-2 text-[11px] font-bold ${
-                tab === t.id ? "bg-emerald-600 text-white" : "text-muted-foreground"
+              role="tab"
+              aria-selected={tab === item.id}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setTab(item.id)}
+              className={`shrink-0 flex-1 rounded-xl px-2 py-2.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                tab === item.id
+                  ? "bg-[var(--gh-green)] text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t.label}
+              {item.label}
             </button>
           ))}
         </div>
+        <p className="mx-3 mt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+          {tab === "challenges"
+            ? `${snapshot.challenges.length} mission${snapshot.challenges.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "opportunities"
+            ? `${snapshot.rules.length} participation path${snapshot.rules.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "history"
+            ? `${snapshot.rewards.length} history item${snapshot.rewards.length === 1 ? "" : "s"}`
+            : null}
+          {tab === "achievements"
+            ? achievementsHydrating
+              ? "Loading achievements…"
+              : `${snapshot.achievements.length} achievement${snapshot.achievements.length === 1 ? "" : "s"}`
+            : null}
+          {snapshot.pending.length > 0
+            ? ` · ${snapshot.pending.length} pending claim${snapshot.pending.length === 1 ? "" : "s"}`
+            : ""}
+        </p>
 
         <div className="mx-3 mt-3 mb-8 space-y-2">
           {tab === "opportunities" && (
           <>
 
-            <div className="mb-3 rounded-2xl border border-border bg-card px-3 py-3" aria-label="Engagement paths">
+            <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]" aria-label="Engagement paths">
               <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Engagement paths
               </h2>
-              <ul className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+              <ul className="mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Daily reward</p>
                   <p className="text-[10px] text-muted-foreground">On Home every 24h</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Profile completion</p>
                   <p className="text-[10px] text-muted-foreground">Finish profile fields</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Community activity</p>
                   <p className="text-[10px] text-muted-foreground">Posts & groups</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Social milestones</p>
                   <p className="text-[10px] text-muted-foreground">Friends & messages</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Referrals</p>
                   <p className="text-[10px] text-muted-foreground">Invite pioneers</p>
                 </li>
-                <li className="rounded-xl bg-muted/40 px-2.5 py-2">
+                <li className="rounded-xl border border-border/50 bg-muted/25 px-2.5 py-2.5 shadow-sm">
                   <p className="font-bold text-foreground">Campaigns</p>
                   <p className="text-[10px] text-muted-foreground">Limited-time events</p>
                 </li>
@@ -496,7 +748,7 @@ export function RewardsCentreScreen({
                 snapshot.rules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="rounded-2xl border border-border bg-card px-3 py-3"
+                    className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
@@ -532,6 +784,15 @@ export function RewardsCentreScreen({
               <p className="px-1 text-[11px] font-semibold text-muted-foreground">
                 Progress, status and next step — GHC still validates on the ledger
               </p>
+              <div
+                className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                role="status"
+              >
+                Mission GHC is fail-closed until the server can verify each action (post, join,
+                profile, connection) and claim it once. Completing a mission in the UI tracks
+                progress only — it does not mint GHC on the device. Daily claim remains the
+                primary server-backed reward path.
+              </div>
               {snapshot.challenges.map((card) => (
                 <ChallengeCardView key={card.challenge.id} card={card} />
               ))}
@@ -562,7 +823,7 @@ export function RewardsCentreScreen({
                   return (
                     <div
                       key={r.id}
-                      className="rounded-2xl border border-border bg-card px-3 py-3"
+                      className="rounded-[1.25rem] border border-border/50 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                     >
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
@@ -608,14 +869,17 @@ export function RewardsCentreScreen({
                           <p className="mt-1 text-[10px] text-muted-foreground/80">
                             {formatWhen(r.createdAt)}
                           </p>
+                          {resolveRewardActivityTarget(r) ? (
+                            <button type="button" onClick={() => navigateGhcActivityTarget(resolveRewardActivityTarget(r)!)} className="mt-2 inline-flex min-h-9 items-center rounded-full border border-border px-3 text-[11px] font-bold text-emerald-700 hover:bg-muted">Open source activity</button>
+                          ) : null}
                           {(status === "pending_validation" ||
                             status === "eligible" ||
                             status === "approved") && (
                             <button
                               type="button"
                               onClick={() => void claimPendingReward(String(r.id))}
-                              disabled={claimingId === String(r.id)}
-                              className="mt-2 flex min-h-11 w-full items-center justify-center rounded-2xl bg-emerald-600 px-3 py-2 text-[13px] font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                              disabled={claimingId === String(r.id) || isOffline}
+                              className="mt-2.5 flex min-h-11 w-full items-center justify-center rounded-[1.25rem] bg-[var(--gh-green)] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm shadow-emerald-700/15 transition hover:brightness-110 disabled:opacity-60"
                             >
                               {claimingId === String(r.id) ? "Claiming…" : claimedFlash === String(r.id) ? "✓ Claimed" : "Claim to available GHC"}
                             </button>
@@ -643,15 +907,19 @@ export function RewardsCentreScreen({
                 snapshot.achievements.map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3"
+                    className="flex items-center gap-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]"
                   >
-                    <Award size={18} className="text-amber-600" />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">
+                      <Award size={18} className="text-amber-600" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold text-foreground">
                         {a.title || a.id}
                       </p>
                       {a.description ? (
-                        <p className="text-[11px] text-muted-foreground">{a.description}</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                          {a.description}
+                        </p>
                       ) : null}
                     </div>
                   </div>
@@ -681,27 +949,31 @@ function ChallengeCardView({
 
   return (
     <div
-      className={`rounded-2xl border bg-card px-3 py-3 ${
+      className={`rounded-[1.25rem] border bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)] ${
         card.recommended && status !== "completed"
-          ? "border-emerald-200 shadow-sm shadow-emerald-600/5"
-          : "border-border"
+          ? "border-emerald-200/90 dark:border-emerald-800/60"
+          : "border-border/60"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <Target size={16} className="mt-0.5 shrink-0 text-teal-600" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <span className="gh-icon-tile mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center">
+            <Target size={16} aria-hidden />
+          </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-sm font-semibold text-foreground">{challenge.title}</p>
+              <p className="text-[14px] font-semibold text-foreground">{challenge.title}</p>
               {card.recommended && status !== "completed" && (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-800">
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/40">
                   For you
                 </span>
               )}
             </div>
             {!compact && (
               <>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{challenge.description}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {challenge.description}
+                </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   <span className="font-semibold text-foreground/80">Why: </span>
                   {challenge.why}
@@ -709,10 +981,9 @@ function ChallengeCardView({
               </>
             )}
 
-            {/* Always show progress bar */}
-            <div className="mt-2">
-              <div className="mb-0.5 flex justify-between text-[10px] text-muted-foreground">
-                <span>Progress</span>
+            <div className="mt-2.5">
+              <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+                <span className="font-semibold">Progress</span>
                 <span className="font-semibold text-foreground">
                   {targetLabel}
                   {challenge.rewardAmount ? ` · +${challenge.rewardAmount} GHC` : ""}
@@ -732,23 +1003,22 @@ function ChallengeCardView({
                       ? "bg-stone-400"
                       : status === "pending_validation"
                         ? "bg-amber-500"
-                        : "bg-emerald-500"
+                        : "bg-[var(--gh-green)]"
                   }`}
                   style={{ width: `${Math.min(100, percent)}%` }}
                 />
               </div>
             </div>
 
-            {/* Claim / track next step */}
             <p className="mt-2 text-[11px] font-medium text-foreground/90">{nextStep}</p>
             {(status === "available" || status === "in_progress") && challenge.ctaHint && (
               <button
                 type="button"
                 onClick={() => runCta(challenge.ctaHint)}
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white"
+                className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-[var(--gh-green)] px-3.5 py-1.5 text-[11px] font-bold text-white shadow-sm"
               >
                 {status === "in_progress" ? "Continue" : "Start"}
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
             {status === "pending_validation" && (
@@ -765,10 +1035,10 @@ function ChallengeCardView({
                     /* */
                   }
                 }}
-                className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-900"
+                className="mt-2.5 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-amber-50 px-3.5 py-1.5 text-[11px] font-bold text-amber-900 shadow-sm"
               >
                 View pending in Wallet
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
             {status === "completed" && (
@@ -785,10 +1055,10 @@ function ChallengeCardView({
                     /* */
                   }
                 }}
-                className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3 py-1.5 text-[11px] font-bold text-foreground"
+                className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3.5 py-1.5 text-[11px] font-bold text-foreground"
               >
                 Open Wallet
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden />
               </button>
             )}
           </div>
@@ -799,10 +1069,12 @@ function ChallengeCardView({
           >
             {STATUS_LABEL[status]}
           </span>
-          <p className="mt-1 inline-flex items-center gap-0.5 text-sm font-bold text-emerald-700">
-            <GhcCoinIcon size={16} />
-            +{challenge.rewardAmount}
-          </p>
+          {challenge.rewardAmount != null && Number(challenge.rewardAmount) > 0 && (
+            <p className="mt-1.5 inline-flex items-center justify-end gap-0.5 text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              <GhcCoinIcon size={16} />
+              +{challenge.rewardAmount}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -811,10 +1083,14 @@ function ChallengeCardView({
 
 function Empty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-10 text-center">
-      <Sparkles size={20} className="mx-auto text-muted-foreground/40" />
-      <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{body}</p>
+    <div className="rounded-[1.25rem] border border-dashed border-border/80 bg-card px-5 py-12 text-center shadow-[var(--gh-card-shadow)]">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+        <GhcCoinIcon size={28} />
+      </div>
+      <p className="text-[15px] font-bold text-foreground">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-[16rem] text-[13px] leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </div>
   )
 }

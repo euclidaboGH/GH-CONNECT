@@ -1,107 +1,36 @@
-# GreenHaven (GH Connect)
+# GreenHaven / GH-CONNECT
 
-## Implementation status
+**Current source version:** `0.271.4`
 
-- **Phases 1–13:** source-implemented (social economy through engagement). See `docs/PHASE_IMPLEMENTATION_STATUS.md`.
-- **Phases 14–15:** not started.
-- **Testnet / production:** not claimed until `docs/TESTNET_VERIFICATION_GATE.md` exit criteria pass.
+GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
 
+## Current release baseline
 
-Human Connection OS — social connection, communities, messaging, discovery, and a separate GHC utility economy with optional Pi payments.
+- Node: `24.15.0` / `^24.15.0`
+- Supabase migrations: **172 canonical SQL files**
+- Duplicate migration numeric prefixes: **0**
+- Static/source audit: **57/57** consolidated checks passing (2026-11-01; source-only)
+- Pass 41: marketplace loaders now protect against stale responses and preserve last-known data on transient failures; feed requests use latest-request-wins cancellation
+- Pass 42: marketplace API record normalization is centralized in runtime-tested domain mappers for listings, saved items and durable orders
+- Phase 1 foundation pass: release-truth metadata, documentation hygiene, and the marketplace shared-mapper regression contract reconciled; see `docs/PHASE-1-FOUNDATION-UPGRADE-0.265.0.md`.
+- Pass 43: Feed, Connections and Discovery read seams are connected to the policy-filtered GHC session; production discovery now requires explicit server-hydrated candidate provenance
+- Pass 44: 10 high-impact financial/payment routes use awaited, fail-closed durable rate limits
+- Pass 45: bounded retention for expired security-control-plane state, 90-day default security-event expiry, and strict limiter input/RPC response validation
+- Pass 46: correct 429/503 durable-limiter failure semantics, fail-closed social mute/block writes, and app-wide keyboard/reduced-motion/mobile interaction polish; no Cloudflare/R2 integration
+- Pass 47: global offline/reconnect feedback, consistent feed/tab loading surfaces, and safer root-level error diagnostics
+- Pass 48: inactive tab panels and hidden bottom navigation are made inert, preventing keyboard focus from entering visually hidden app surfaces
+- Production status: **NOT APPROVED** until supported-runtime build, live backend/provider evidence and migration reconciliation are completed
 
-## Stack
+## Source of truth
 
-- Next.js 15 (App Router)
-- TypeScript / React
-- Tailwind CSS
-- Supabase (ledger / economy when configured)
-- Pi Network SDK (server-side approval/completion)
+Read `docs/SOURCE_OF_TRUTH.md` before using project documentation for implementation decisions. It defines document precedence and prevents historical worklogs from being mistaken for current product requirements.
 
-## Quick start
+Use `docs/PROJECT_TRUTH.md` for the current release boundary and verification status. Use the current dated audit documents only for the feature they cover.
 
-```bash
-npm install --legacy-peer-deps
-cp .env.example .env.local
-# Fill server-only secrets in .env.local — never commit them
-npm run dev
-```
+## Important repository rule
 
-Production-style checks:
+The Next.js application must live at repository root. `app/`, `components/`, `features/`, `hooks/`, `lib/`, `public/`, `scripts/`, `supabase/` and `package.json` must be directly under the repository root. Do not wrap the project in an extra directory such as `ghdatetime/`.
 
-```bash
-npm run typecheck
-npm run lint
-npm run build
-npm run test:economy
-node scripts/test-pi-payment-durable.mjs
-```
+## Verification boundary
 
-## Environment
-
-Copy `.env.example` → `.env.local`.
-
-- **Never** commit `.env` or `.env.local`
-- `PI_API_KEY` and Supabase **service role** keys are **server-only**
-- Use `NEXT_PUBLIC_*` only for non-secret client config
-
-See `.env.example` for variable names.
-
-## Foundation readiness (release gate)
-
-Stabilize config **before** shipping more product features.
-
-| Endpoint | Role |
-|----------|------|
-| `GET /api/health/live` | Process liveness only |
-| `GET /api/health` | Full readiness (Client ID, API key, Supabase durability, network mode) |
-| `GET /api/payments/health` | Pi payment rail readiness |
-
-On **Production**, `/api/health` returns **HTTP 503** when critical blockers exist (`status: "not_ready"`).
-
-**Ship only when** Production shows `"status": "ready"` and payments health `ready: true`.
-
-Full sandbox vs mainnet matrix and checklist: [`docs/FOUNDATION_READINESS.md`](docs/FOUNDATION_READINESS.md).
-
-In the app: **Settings → About** shows a non-secret foundation status card.
-
-## Product pillars
-
-| Layer | Surfaces |
-|-------|----------|
-| Identity | Pi sign-in, profile, GH ID |
-| Social | Feed, Discover, Messages, Matches |
-| Belonging | Communities (board + member chat) |
-| Value | Wallet, Rewards, Membership (GHC — not π) |
-
-Home prioritizes one **next action**; Profile groups **Social · Value · Tools**.  
-See [`docs/PRODUCT_CLARITY.md`](docs/PRODUCT_CLARITY.md).
-| Marketplace | Listings; shareable to feed |
-
-Architecture notes: `docs/SOCIAL_OS_ROADMAP.md`, `docs/HUMAN_CONNECTION_OS_COMMUNITY_ROADMAP.md`, `docs/HUMAN_CONNECTION_OS_AUDIT_60.md`
-
-## Pi domain validation
-
-Set `DOMAIN_VALIDATION_KEY` in Vercel (per environment). The app serves it at:
-
-`https://<your-domain>/validation-key.txt` → rewrite → `/api/validation-key`
-
-Do not commit the key. Missing env returns 503 (fail-closed).
-
-## Deploy (Vercel)
-
-- Root directory = folder containing `package.json`
-- Install: `npm install --legacy-peer-deps` (or `npm ci` when lockfile is in sync)
-- Build: `next build`
-- Node: `24.x` (see `package.json` engines)
-- Set env vars in the Vercel project — do not upload `.env` files
-
-## Safety
-
-- GHC ledger operations are server-authoritative
-- No automatic GHC ↔ Pi conversion
-- Community/social actions do not mint GHC on the client
-- Demo/seed data must not appear in production paths
-
-## License
-
-Private / proprietary unless otherwise stated by the repository owner.
+Source checks prove source contracts only. They do not prove that Supabase migrations are applied, Pi/Testnet providers are live, realtime infrastructure is configured, or the Node 24 production build has passed in the target environment.

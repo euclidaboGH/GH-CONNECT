@@ -6,6 +6,8 @@
  * or solid color square; let the page background show through.
  */
 
+import { brandAssets } from "@/lib/design-system"
+
 const SIZES = {
   /** App bar / compact headers */
   header: "h-10 w-auto max-w-[6.5rem]",
@@ -33,7 +35,7 @@ export function BrandLogo({
 }) {
   return (
     <img
-      src="/gh-connect-logo.png"
+      src={brandAssets.greenHavenLogo}
       alt="GreenHaven"
       className={`${SIZES[size]} object-contain object-center bg-transparent ${className}`}
       width={size === "hero" ? 216 : size === "bar" ? 120 : size === "header" ? 104 : size === "icon" ? 44 : 92}

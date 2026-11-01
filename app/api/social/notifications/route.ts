@@ -4,11 +4,14 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import {
   listSocialNotifications,
   markSocialNotificationsRead,
   socialUnreadCount,
 } from "@/lib/server/social/notifications"
+
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -65,7 +68,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
+  const rl = checkRateLimit(`notifications:${auth.userId}`, 60, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+    )
+  }
+
+  const parsedBody = await readBoundedJson(request, 16 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value as {
     action?: string
     ids?: string[]
     markAll?: boolean
@@ -77,10 +90,17 @@ export async function POST(request: Request) {
       all: body.markAll === true || body.action === "mark_all_read",
       ids: Array.isArray(body.ids) ? body.ids.map(String).slice(0, 100) : undefined,
     })
+    if (!result.ok) {
+      const status = result.error === "DB_UNAVAILABLE" ? 503 : 400
+      return NextResponse.json(
+        { ok: false, durable: false, updated: 0, error: result.error || "MARK_READ_FAILED" },
+        { status }
+      )
+    }
     return NextResponse.json({
-      ok: result.ok,
+      ok: true,
+      durable: true,
       updated: result.data?.updated ?? 0,
-      error: result.error,
     })
   }
 

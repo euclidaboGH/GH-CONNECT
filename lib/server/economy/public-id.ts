@@ -107,6 +107,7 @@ async function rpcEnsure(
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      signal: AbortSignal.timeout(5000),
       body: JSON.stringify({
         p_user_id: userId,
         p_display_name: displayName ?? null,
@@ -116,10 +117,12 @@ async function rpcEnsure(
     })
     if (!res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
-    if (data?.ok !== true) return null
+    const returnedUserId = typeof data?.userId === "string" ? data.userId : ""
+    const returnedPublicId = typeof data?.publicId === "string" ? normalizeGreenHavenId(data.publicId) : ""
+    if (data?.ok !== true || returnedUserId !== userId || !GH_ID_REGEX.test(returnedPublicId)) return null
     return {
-      userId: String(data.userId),
-      publicId: String(data.publicId),
+      userId: returnedUserId,
+      publicId: returnedPublicId,
       displayName: (data.displayName as string) || null,
       avatarUrl: (data.avatarUrl as string) || null,
       created: Boolean(data.created),
@@ -144,14 +147,17 @@ async function rpcResolve(
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      signal: AbortSignal.timeout(5000),
       body: JSON.stringify({ p_public_id: publicId }),
     })
     if (!res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
-    if (data?.ok !== true) return null
+    const returnedUserId = typeof data?.userId === "string" ? data.userId.trim() : ""
+    const returnedPublicId = typeof data?.publicId === "string" ? normalizeGreenHavenId(data.publicId) : ""
+    if (data?.ok !== true || !returnedUserId || returnedUserId.length > 256 || !GH_ID_REGEX.test(returnedPublicId)) return null
     return {
-      userId: String(data.userId),
-      publicId: String(data.publicId),
+      userId: returnedUserId,
+      publicId: returnedPublicId,
       displayName: (data.displayName as string) || null,
       avatarUrl: (data.avatarUrl as string) || null,
       source: "database",
@@ -171,21 +177,22 @@ export async function ensurePublicIdentity(input: {
   if (!userId) return null
 
   if (isDatabaseConfigured()) {
-    const row = await rpcEnsure(
+    // A configured production database is authoritative. Do not mint an ephemeral
+    // identity when the RPC fails; it would not resolve consistently across instances.
+    return await rpcEnsure(
       userId,
       input.displayName,
       input.avatarUrl,
       input.preferred
     )
-    if (row) return row
   }
 
   if (allowMemoryServer()) {
     return memoryEnsure(userId, input.displayName, input.avatarUrl, input.preferred)
   }
 
-  // Last resort temporary compatibility (never claim DB authority)
-  return memoryEnsure(userId, input.displayName, input.avatarUrl, input.preferred)
+  // Fail closed outside explicitly enabled local/test memory mode.
+  return null
 }
 
 export async function resolvePublicIdentity(
@@ -195,15 +202,16 @@ export async function resolvePublicIdentity(
   if (!GH_ID_REGEX.test(id)) return null
 
   if (isDatabaseConfigured()) {
-    const row = await rpcResolve(id)
-    if (row) return row
+    // Never fall back to process-local identity state when the durable directory is
+    // configured but unavailable: IDs must resolve identically across server instances.
+    return await rpcResolve(id)
   }
 
   if (allowMemoryServer()) {
     return memoryResolve(id)
   }
 
-  return memoryResolve(id)
+  return null
 }
 
 /** Public API projection — never includes balance/email/token */

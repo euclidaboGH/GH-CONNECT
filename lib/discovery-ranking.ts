@@ -32,10 +32,29 @@ function normalizeId(id: unknown): string {
   return typeof id === "string" ? id.trim() : ""
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.normalize("NFKC").trim().toLocaleLowerCase() : ""
+}
+
+function timestampOf(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value < 100_000_000_000 ? value * 1000 : value
+  if (typeof value !== "string" || !value.trim()) return null
+  const numeric = Number(value)
+  if (Number.isFinite(numeric) && numeric > 0) return numeric < 100_000_000_000 ? numeric * 1000 : numeric
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function sharedInterestCount(a: string[] | undefined, b: string[] | undefined): string[] {
   if (!a?.length || !b?.length) return []
-  const set = new Set(a.map((x) => x.toLowerCase()))
-  return b.filter((x) => set.has(String(x).toLowerCase()))
+  const set = new Set(a.map(normalizeText).filter(Boolean))
+  const matched = new Map<string, string>()
+  for (const value of b) {
+    const normalized = normalizeText(value)
+    const display = value.trim()
+    if (normalized && display && set.has(normalized) && !matched.has(normalized)) matched.set(normalized, display)
+  }
+  return [...matched.values()]
 }
 
 /**
@@ -97,37 +116,38 @@ export function scoreDiscoveryCandidate(
     score -= 8
   }
 
-  const loc = `${candidate.location || ""} ${(candidate as any).city || ""} ${(candidate as any).country || ""}`.toLowerCase()
-  if (ctx.city && loc.includes(ctx.city.toLowerCase())) {
+  const loc = normalizeText(`${candidate.location || ""} ${candidate.city || ""} ${candidate.country || ""}`)
+  if (ctx.city && loc.includes(normalizeText(ctx.city))) {
     score += 10
     reasons.push("Same city")
-  } else if (ctx.country && loc.includes(ctx.country.toLowerCase())) {
+  } else if (ctx.country && loc.includes(normalizeText(ctx.country))) {
     score += 5
     reasons.push("Same country")
   }
 
-  if (ctx.profession && (candidate as any).profession === ctx.profession) {
+  if (ctx.profession && normalizeText(candidate.profession) === normalizeText(ctx.profession)) {
     score += 8
     reasons.push("Similar profession")
   }
 
-  if (ctx.education && (candidate as any).education === ctx.education) {
+  if (ctx.education && normalizeText(candidate.education) === normalizeText(ctx.education)) {
     score += 4
     reasons.push("Similar education")
   }
 
-  if (candidate.online || (candidate as any).isOnline) {
+  if (candidate.online || candidate.isOnline) {
     score += 6
     reasons.push("Active now")
   } else {
-    const last = Number((candidate as any).lastActiveAt || 0)
-    if (last && Date.now() - last < 7 * 86400000) {
+    const last = timestampOf(candidate.lastActiveAt)
+    const ageMs = last === null ? null : Date.now() - last
+    if (ageMs !== null && ageMs >= 0 && ageMs < 7 * 86400000) {
       score += 3
       reasons.push("Active this week")
     }
   }
 
-  if (candidate.verified || (candidate as any).isVerified) {
+  if (candidate.verified || candidate.isVerified) {
     score += 3
     reasons.push("Verified")
   }
@@ -135,13 +155,13 @@ export function scoreDiscoveryCandidate(
   // Intent / connection mode soft boost (user-selected preference)
   const mode = (ctx.connectionMode || "all").toLowerCase()
   const goals = [
-    ...(((candidate as any).relationshipGoals as string[]) || []),
-    (candidate as any).primaryMode,
-    (candidate as any).relationshipType,
+    ...(candidate.relationshipGoals || []),
+    candidate.primaryMode,
+    candidate.relationshipType,
   ]
     .flat()
     .filter(Boolean)
-    .map((g) => String(g).toLowerCase())
+    .map((g) => normalizeText(g))
 
   if (mode && mode !== "all") {
     const modeHints: Record<string, string[]> = {
@@ -182,7 +202,7 @@ export function rankDiscoveryCandidates(
     const { score, reasons } = scoreDiscoveryCandidate(c, ctx)
     return { ...c, _discoveryScore: score, _discoveryReasons: reasons }
   })
-  ranked.sort((a, b) => (b._discoveryScore || 0) - (a._discoveryScore || 0))
+  ranked.sort((a, b) => (b._discoveryScore || 0) - (a._discoveryScore || 0) || normalizeId(a.id).localeCompare(normalizeId(b.id)))
   return ranked
 }
 

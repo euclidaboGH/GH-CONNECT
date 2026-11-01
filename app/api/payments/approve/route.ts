@@ -4,15 +4,14 @@
  * Binds Pi payment to server intent, verifies amount/purpose, approves on Pi.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getPaymentIntent,
-  getByProviderPaymentId,
   bindProviderPayment,
   transitionIntent,
   loadPaymentIntent,
   loadByProviderPaymentId,
-  assertDurableWrite,
 } from "@/lib/server/payments/intent-store"
 import {
   piApprovePayment,
@@ -34,7 +33,15 @@ export async function POST(request: Request) {
     } catch {
       auth = null
     }
-    const body = await request.json().catch(() => ({}))
+    const parsedBody = await readBoundedJson(request, 8 * 1024)
+    if (!parsedBody.ok) {
+      const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json(
+        { ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST_BODY" },
+        { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const body = parsedBody.value
     const paymentId = typeof body.paymentId === "string" ? body.paymentId.trim() : ""
     const intentId = typeof body.intentId === "string" ? body.intentId.trim() : ""
 
@@ -53,34 +60,45 @@ export async function POST(request: Request) {
       )
     }
 
-    // Resolve durable intent (DB then memory)
+    // Resolve durable intent only; a failed durable read must not fall back to process memory
     let intent = intentId
-      ? (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
-      : (await loadByProviderPaymentId(paymentId)) || getByProviderPaymentId(paymentId)
+      ? (await loadPaymentIntent(intentId))
+      : (await loadByProviderPaymentId(paymentId))
 
-    if (intent && auth && intent.userId !== auth.userId) {
-      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
-    }
-    // Production: never approve a bound intent without authenticated ownership.
-    // Unbound pipeline checks (no intent) still go through Pi API verification below.
-    if (
-      intent &&
-      intent.userId &&
-      !auth &&
-      (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production")
-    ) {
+    // Any server-owned intent is bound to a GH account in every environment.
+    // Do not weaken ownership in Preview/Testnet: intent IDs and provider payment
+    // IDs are identifiers, not bearer credentials. Unbound pipeline checks remain
+    // a separate explicitly gated non-production path below.
+    if (intent?.userId && !auth) {
       return NextResponse.json(
         { ok: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to approve this payment" },
-        { status: 401 },
+        { status: 401, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    if (intent && auth && intent.userId !== auth.userId) {
+      return NextResponse.json(
+        { ok: false, error: "FORBIDDEN" },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
       )
     }
 
     // Idempotent if already approved/completed
-    if (intent && (intent.status === "APPROVED" || intent.status === "COMPLETED" || intent.status === "COMPLETION_PENDING" || intent.status === "USER_SUBMITTED")) {
+    if (intent && (intent.status === "APPROVED" || intent.status === "COMPLETED" || intent.status === "FULFILLED" || intent.status === "COMPLETION_PENDING" || intent.status === "USER_SUBMITTED")) {
       if (intent.providerPaymentId === paymentId || !intent.providerPaymentId) {
-        if (!intent.providerPaymentId) await bindProviderPayment(intent.id, paymentId, auth?.userId)
-        // Still ensure Pi approved (retry-safe)
+        if (!intent.providerPaymentId) {
+          const bound = await bindProviderPayment(intent.id, paymentId, auth?.userId)
+          if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
+          intent = bound
+        }
+        // Completed/fulfilled intents are already beyond approval; never re-submit an approve action.
+        if (intent.status === "COMPLETED" || intent.status === "FULFILLED") {
+          return NextResponse.json({ ok: true, idempotent: true, intent, paymentId })
+        }
+        // Still ensure Pi approved (retry-safe) only after durable binding.
         const appr = await piApprovePayment(paymentId)
+        if (!appr.ok) {
+          return NextResponse.json({ ok: false, error: "PI_APPROVE_FAILED", detail: appr.error, retryable: true }, { status: 502 })
+        }
         return NextResponse.json({
           ok: true,
           idempotent: true,
@@ -130,15 +148,22 @@ export async function POST(request: Request) {
           { status: 409 }
         )
       }
-      await transitionIntent(intent.id, "APPROVAL_PENDING", {
+      const approvalPending = await transitionIntent(intent.id, "APPROVAL_PENDING", {
         actor: auth?.userId || "system",
         detail: "Approval requested",
         providerPaymentId: paymentId,
       })
+      if (!approvalPending || approvalPending.status !== "APPROVAL_PENDING") {
+        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+      }
+      intent = approvalPending
 
       // Lookup + verify amount before approve
       const lookup = await piGetPayment(paymentId)
-      if (lookup.ok && lookup.payment) {
+      if (!lookup.ok || !lookup.payment) {
+        return NextResponse.json({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", detail: lookup.error, retryable: true }, { status: 502 })
+      }
+      {
         if (!amountsMatch(intent.amount, lookup.payment.amount)) {
           await transitionIntent(intent.id, "FAILED", {
             actor: "system",
@@ -221,15 +246,15 @@ export async function POST(request: Request) {
     }
 
     if (intent) {
-      await transitionIntent(intent.id, "APPROVED", {
+      const approvedIntent = await transitionIntent(intent.id, "APPROVED", {
         actor: auth?.userId || "system",
         detail: "Pi developer approved",
         providerPaymentId: paymentId,
       })
-      const durable = await assertDurableWrite(getPaymentIntent(intent.id) || intent)
-      if (!durable.ok) {
-        return NextResponse.json({ ok: false, error: durable.error }, { status: 503 })
+      if (!approvedIntent) {
+        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE" }, { status: 503 })
       }
+      intent = approvedIntent
     }
 
     return NextResponse.json({

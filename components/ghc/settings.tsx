@@ -1,5 +1,6 @@
 "use client"
 
+import { promptDialog } from "@/lib/ui/global-interactions"
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, type ReactNode } from "react"
 import { useGHC } from "@/contexts/ghc-context"
 import { LANGUAGES, SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
@@ -26,15 +27,27 @@ import {
   User,
   Ban,
   Lock,
+  Users,
+  ArrowLeft,
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
+import { useRegionalContext } from "@/contexts/regional-context"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
 import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
+import { AccountSecuritySignals } from "@/components/ghc/account-security-signals"
+import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
+import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
+import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
+import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
+import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+import { APP_RELEASE_VERSION } from "@/lib/app-release"
+import { getPrivacyHealth } from "@/lib/privacy-health"
+import { matchSettingsSearch } from "@/lib/settings-search"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -51,6 +64,18 @@ const RewardsCentreScreen = lazy(() =>
     default: m.RewardsCentreScreen,
   }))
 )
+
+async function ensureBrowserNotificationPermission(): Promise<boolean> {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return false
+    if (Notification.permission === "granted") return true
+    if (Notification.permission === "denied") return false
+    const result = await Notification.requestPermission()
+    return result === "granted"
+  } catch {
+    return false
+  }
+}
 
 function SectionFallback({ label }: { label: string }) {
   return (
@@ -76,6 +101,7 @@ export type SettingsSection =
   | "wallet"
   | "membership"
   | "rewards"
+  | "pi-payout-auth"
 
 export function SettingsScreen({
   onBack,
@@ -87,6 +113,7 @@ export function SettingsScreen({
 }) {
   const { settings, updateSettings, logout, blockedUsers, unblockUser, candidates } = useGHC()
   const sessionLock = useSessionLock()
+  const regional = useRegionalContext()
   const [navStack, setNavStack] = useState<SettingsSection[]>(() =>
     initialSection && initialSection !== "main" ? ["main", initialSection] : ["main"],
   )
@@ -138,9 +165,23 @@ export function SettingsScreen({
         next === "wallet" ||
         next === "rewards" ||
         next === "membership" ||
-        next === "help"
+        next === "help" ||
+        next === "privacy" ||
+        next === "notifications" ||
+        next === "appearance" ||
+        next === "device-lock"
       ) {
-        goToSection(next as "wallet" | "rewards" | "membership" | "help")
+        goToSection(
+          next as
+            | "wallet"
+            | "rewards"
+            | "membership"
+            | "help"
+            | "privacy"
+            | "notifications"
+            | "appearance"
+            | "device-lock",
+        )
       }
     }
     window.addEventListener("ghc:open-settings-section", handler)
@@ -178,9 +219,10 @@ export function SettingsScreen({
   const [themeBusy, setThemeBusy] = useState(false)
   const themeFileRef = useRef<HTMLInputElement>(null)
 
-  /** Keep Membership row in sync with domain status (trial / VIP / VVIP / Free) */
+  /** Keep Membership row in sync with server status (trial / VIP / VVIP / Free) */
   useEffect(() => {
-    const refreshMembershipLabel = () => {
+    let cancelled = false
+    const applyLocalFallback = () => {
       try {
         const { getBoundDomainServices } = require("@/lib/domains/compat")
         const st = getBoundDomainServices()?.membership?.getStatus?.() as
@@ -210,13 +252,49 @@ export function SettingsScreen({
         setMembershipSubtitle("Free plan")
       }
     }
-    refreshMembershipLabel()
-    // Domain services may hydrate slightly after mount
-    const t1 = window.setTimeout(refreshMembershipLabel, 400)
-    const t2 = window.setTimeout(refreshMembershipLabel, 1500)
+    const refreshMembershipLabel = async () => {
+      try {
+        const headers: Record<string, string> = { Accept: "application/json" }
+        try {
+          Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+        } catch { /* */ }
+        const res = await fetch("/api/membership/status", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok && data?.ok) {
+          const ent = data.entitlement || data
+          const tierRaw = String(ent.tier || data.tier || "free").toLowerCase()
+          const tierLabel =
+            tierRaw === "vvip" ? "VVIP" : tierRaw === "vip" ? "VIP" : tierRaw === "free" ? "Free" : tierRaw.toUpperCase()
+          const isTrial = ent.source === "trial" || ent.lifecycle === "trial" || data.source === "trial"
+          const expiresAt = Number(ent.expiresAt || data.expiresAt) || 0
+          if (isTrial && expiresAt > Date.now()) {
+            const h = Math.max(1, Math.round((expiresAt - Date.now()) / 3600000))
+            setMembershipSubtitle(h < 48 ? `${tierLabel} trial · ${h}h left` : `${tierLabel} trial · active`)
+          } else {
+            setMembershipSubtitle(tierLabel === "Free" ? "Free plan" : `${tierLabel} · active`)
+          }
+          return
+        }
+      } catch {
+        /* fall through */
+      }
+      if (!cancelled) applyLocalFallback()
+    }
+    void refreshMembershipLabel()
+    const t1 = window.setTimeout(() => void refreshMembershipLabel(), 400)
+    const t2 = window.setTimeout(() => void refreshMembershipLabel(), 1500)
+    const onActivated = () => void refreshMembershipLabel()
+    window.addEventListener("ghc:membership-activated", onActivated)
     return () => {
+      cancelled = true
       window.clearTimeout(t1)
       window.clearTimeout(t2)
+      window.removeEventListener("ghc:membership-activated", onActivated)
     }
   }, [section, initialSection])
 
@@ -264,6 +342,25 @@ export function SettingsScreen({
     }
   }
 
+  if (section === "pi-payout-auth") {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2.5">
+          <button type="button" onClick={goBackOneLevel} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Back">
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="text-[16px] font-bold">Pi payout authorization</h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
+          <PiPayoutAuthorizationCard />
+          <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+            GreenHaven never moves Pi without this consent. Authorization is stored server-side and checked on every withdrawal request. Revoking blocks future payouts only.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (section === "wallet") {
     return <Suspense fallback={<SectionFallback label="Wallet" />}>
         <PremiumWalletScreen onBack={goBackOneLevel} />
@@ -290,12 +387,12 @@ export function SettingsScreen({
   if (section === "about") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">About GreenHaven</h2>
-          <p className="text-[12px] text-muted-foreground">Version 0.59.4</p>
+          <h2 className="text-[14px] font-bold tracking-tight">About GreenHaven</h2>
+          <p className="text-[12px] text-muted-foreground">Version {APP_RELEASE_VERSION}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <FoundationStatusCard />
@@ -312,11 +409,11 @@ export function SettingsScreen({
   if (section === "terms") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Terms of Service</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Terms of Service</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
           <div className="space-y-4 text-[14px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.terms}</div>
@@ -328,11 +425,11 @@ export function SettingsScreen({
   if (section === "privacy-policy") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Privacy Policy</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Privacy Policy</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)]">
           <div className="space-y-4 text-[14px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.privacy}</div>
@@ -344,11 +441,11 @@ export function SettingsScreen({
   if (section === "help") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Help & Contact</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Help & Contact</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-3">
           <a
@@ -387,18 +484,18 @@ export function SettingsScreen({
     const { lockNow, configurePin, idleLockMs, policy, setPolicy } = sessionLock
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Device lock</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Device lock</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
           <p className="text-[13px] leading-relaxed text-muted-foreground">
             Protects this device after idle or when you leave the app. Your real account identity is
             still Pi Network — the PIN never replaces Pi sign-in or Pi Wallet approval for payments.
           </p>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <div className="rounded-[1.25rem] border border-border/50 bg-card p-4 space-y-3 shadow-[var(--gh-card-shadow)]">
             <p className="text-[14px] font-bold">
               Status:{" "}
               <span className={hasPin ? "text-emerald-600" : "text-amber-600"}>
@@ -461,8 +558,9 @@ export function SettingsScreen({
               <button
                 type="button"
                 onClick={() => {
-                  const pin = window.prompt("Choose a 4–8 digit PIN")
-                  if (pin) void configurePin(pin)
+                  void promptDialog({ title: "Create device PIN", message: "Choose a 4–8 digit PIN. This unlocks this device only.", label: "Device PIN", inputType: "password", maxLength: 8, pattern: "^\\d{4,8}$", confirmLabel: "Create PIN" }).then((pin) => {
+                    if (pin) void configurePin(pin)
+                  })
                 }}
                 className="w-full rounded-full bg-primary px-4 py-3 text-sm font-bold text-primary-foreground"
               >
@@ -478,6 +576,11 @@ export function SettingsScreen({
 
           {/* Phase 5: server sessions (separate from local App Lock) */}
           <ActiveSessionsPanel />
+          <div className="mt-3"><AccountSecuritySignals /></div>
+          <div className="mt-3"><PiPlatformCapabilitiesCard /></div>
+          <div className="mt-3"><PiListingReadinessCard /></div>
+          <div className="mt-3"><CompliancePostureCard /></div>
+          <div className="mt-3"><ClaimReadinessCard /></div>
 
           {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
           <PasskeysPanel />
@@ -489,13 +592,30 @@ export function SettingsScreen({
   if (section === "privacy") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Privacy & Safety</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Privacy & Safety</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
+          {(() => {
+            const health = getPrivacyHealth(settings as any)
+            return (
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--gh-card-shadow)]" aria-label={`Privacy posture: ${health.label}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[15px] font-bold">Privacy posture</p>
+                    <p className="mt-1 text-[12px] text-muted-foreground">A practical summary of the controls you have enabled. GreenHaven does not use this score as a trust badge.</p>
+                  </div>
+                  <div className="shrink-0 rounded-full border border-border px-3 py-1 text-[12px] font-bold">{health.label}</div>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${health.score}%` }} /></div>
+                <p className="mt-2 text-[12px] text-muted-foreground">{health.score}/100 privacy posture</p>
+                {health.recommendations[0] ? <p className="mt-2 rounded-xl bg-muted/50 px-3 py-2 text-[12px] leading-relaxed"><span className="font-semibold">Recommended:</span> {health.recommendations[0]}</p> : null}
+              </div>
+            )
+          })()}
           <div>
             <p className="text-[14px] font-bold mb-3">Online Status</p>
             <select
@@ -585,7 +705,7 @@ export function SettingsScreen({
                   role="switch"
                   aria-checked={Boolean(on)}
                   onClick={() => handleSelect(key as any, (!on) as any)}
-                  className={`relative h-7 w-12 rounded-full transition ${on ? "bg-emerald-600" : "bg-muted-foreground/30"}`}
+                  className={`relative min-h-11 min-w-12 rounded-full transition ${on ? "bg-emerald-600" : "bg-muted-foreground/30"}`}
                 >
                   <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${on ? "left-5" : "left-0.5"}`} />
                 </button>
@@ -684,7 +804,7 @@ export function SettingsScreen({
     const rel = Array.isArray(settings.relationshipType) ? settings.relationshipType : []
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border px-4 py-3.5">
+        <div className="border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <div className="flex items-center gap-3">
             <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
               <ChevronLeft size={24} />
@@ -697,7 +817,7 @@ export function SettingsScreen({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-5">
           {/* Language */}
-          <section className="rounded-2xl border border-border bg-card p-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Language</p>
             <select
               value={settings.language || "English"}
@@ -714,8 +834,39 @@ export function SettingsScreen({
             <p className="mt-2 text-[11px] text-muted-foreground">Applies to menus and system labels. Chat content stays as written.</p>
           </section>
 
+          {/* Device date, time & optional live location */}
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 space-y-3 shadow-[var(--gh-card-shadow)]">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Regional context</p>
+              <p className="mt-1 text-[14px] font-bold">Date, time &amp; location</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">GreenHaven uses your device time zone and language automatically. Live location is optional and is only requested when you enable it.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <span className="text-muted-foreground">Time zone</span>
+                <p className="mt-1 truncate font-bold" title={regional.timeZone}>{regional.timeZone}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <span className="text-muted-foreground">Language</span>
+                <p className="mt-1 truncate font-bold">{regional.locale}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold">Live location</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{regional.location ? "Available for nearby features" : regional.locationPermission === "denied" ? "Permission denied on this device" : "Not enabled"}</p>
+              </div>
+              {regional.location ? (
+                <button type="button" onClick={regional.clearLocation} className="min-h-10 rounded-xl border border-border bg-background px-3 text-[11px] font-bold">Turn off</button>
+              ) : (
+                <button type="button" onClick={() => void regional.requestLocation()} className="min-h-10 rounded-xl bg-emerald-600 px-3 text-[11px] font-bold text-white">Enable</button>
+              )}
+            </div>
+            {regional.location ? <p className="text-[10px] text-muted-foreground">Exact coordinates are kept in memory for the current session and are rounded before optional API use.</p> : null}
+          </section>
+
           {/* Discovery */}
-          <section className="rounded-2xl border border-border bg-card p-4 space-y-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 space-y-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Discovery defaults</p>
             <div>
               <div className="mb-1.5 flex items-center justify-between">
@@ -786,7 +937,7 @@ export function SettingsScreen({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border bg-card p-4">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[13px] font-bold text-foreground">Need finer alert control?</p>
             <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
               Choose which events can notify you under{" "}
@@ -851,7 +1002,7 @@ export function SettingsScreen({
     ]
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="bg-card border-b border-border px-4 py-3.5">
+        <div className="border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <div className="flex items-center gap-3">
             <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
               <ChevronLeft size={24} />
@@ -867,8 +1018,30 @@ export function SettingsScreen({
             <p className="text-[12px] leading-relaxed text-muted-foreground">
               These control in-app and push categories. Your device must still allow notifications for GreenHaven. Delivery is best-effort when offline.
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                void ensureBrowserNotificationPermission().then((ok) => {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("ghc:toast", {
+                        detail: {
+                          message: ok
+                            ? "Browser notifications enabled"
+                            : "Browser notifications were not enabled",
+                          type: ok ? "success" : "info",
+                        },
+                      }),
+                    )
+                  } catch { /* */ }
+                })
+              }}
+              className="mt-3 min-h-10 w-full rounded-xl border border-emerald-500/40 bg-white/80 text-xs font-bold text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+            >
+              Enable browser alerts
+            </button>
           </section>
-          <section className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+          <section className="rounded-[1.25rem] border border-border/50 bg-card divide-y divide-border/50 overflow-hidden shadow-[var(--gh-card-shadow)]">
             {toggles.map((t) => {
               const raw = settings[t.key]
               const on = typeof raw === "boolean" ? raw : t.defaultOn
@@ -912,11 +1085,11 @@ export function SettingsScreen({
 
     return (
       <div className="h-full flex flex-col bg-background text-foreground">
-        <div className="bg-card border-b border-border p-4 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5">
           <button type="button" onClick={goBackOneLevel} className="hover:opacity-60" aria-label="Back">
             <ChevronLeft size={24} />
           </button>
-          <h2 className="text-[18px] font-bold">Appearance</h2>
+          <h2 className="text-[14px] font-bold tracking-tight">Appearance</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-6">
           {/* Mode */}
@@ -992,7 +1165,7 @@ export function SettingsScreen({
           {/* Custom wallpaper */}
           <div>
             <p className="text-[13px] font-bold text-muted-foreground mb-2">Custom background</p>
-            <div className="rounded-2xl border border-border bg-card p-3 space-y-3">
+            <div className="rounded-[1.25rem] border border-border/50 bg-card p-3.5 space-y-3 shadow-[var(--gh-card-shadow)]">
               {settings.themeCustomImage ? (
                 <div
                   className="h-28 w-full rounded-xl bg-cover bg-center border border-border"
@@ -1107,6 +1280,20 @@ export function SettingsScreen({
           keywords: "rewards challenges earn pending claim",
         },
         {
+          title: "Pi payout authorization",
+          subtitle: "Required consent for A2U withdrawals",
+          icon: <Shield size={20} strokeWidth={1.75} />,
+          action: () => goToSection("pi-payout-auth"),
+          keywords: "pi wallet authorization a2u payout withdraw consent identity",
+        },
+        {
+          title: "Invite friends",
+          subtitle: "Referral code · rewards when settlement is enabled",
+          icon: <Users size={20} strokeWidth={1.75} />,
+          action: () => goToSection("rewards"),
+          keywords: "referral invite friends share code",
+        },
+        {
           title: "Membership",
           subtitle: membershipSubtitle,
           icon: <Crown size={20} strokeWidth={1.75} />,
@@ -1172,7 +1359,7 @@ export function SettingsScreen({
         },
         {
           title: "About GreenHaven",
-          subtitle: "Version 0.59.4",
+          subtitle: `Version ${APP_RELEASE_VERSION}`,
           icon: <Info size={20} strokeWidth={1.75} />,
           action: () => goToSection("about"),
           keywords: "about version mission",
@@ -1193,50 +1380,57 @@ export function SettingsScreen({
     },
   ]
 
-  const q = settingsQuery.trim().toLowerCase()
   const filteredGroups = groups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter(
-        (it) =>
-          !q ||
-          it.title.toLowerCase().includes(q) ||
-          (it.subtitle || "").toLowerCase().includes(q) ||
-          (it.keywords || "").includes(q),
-      ),
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => ({ item, score: matchSettingsSearch(settingsQuery, item) }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => entry.item),
     }))
-    .filter((g) => g.items.length > 0)
+    .filter((group) => group.items.length > 0)
+  const settingsResultCount = filteredGroups.reduce((count, group) => count + group.items.length, 0)
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card p-4">
+    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven settings">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Back to profile"
         >
           <ChevronLeft size={24} strokeWidth={2} />
         </button>
-        <h2 className="text-[20px] font-bold">Settings</h2>
+        <h2 className="text-[18px] font-bold tracking-tight text-foreground">Settings</h2>
       </div>
 
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
+      <div className="shrink-0 border-b border-border/50 px-4 py-2.5">
         <div className="relative">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             type="search"
             value={settingsQuery}
             onChange={(e) => setSettingsQuery(e.target.value)}
-            placeholder="Search settings…"
-            className="min-h-11 w-full rounded-2xl border border-border bg-muted/50 py-2.5 pl-10 pr-3 text-[15px] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            placeholder="Search wallet, privacy, messages, language…"
+            className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-11 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
             aria-label="Search settings"
+            aria-describedby="settings-search-hint"
           />
+          {settingsQuery ? (
+            <button type="button" onClick={() => setSettingsQuery("")} className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Clear settings search">
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)]">
         <div className="space-y-5 px-4 py-4">
+          <p id="settings-search-hint" className="text-[11px] text-muted-foreground" aria-live="polite">
+            {settingsQuery.trim() ? `${settingsResultCount} matching setting${settingsResultCount === 1 ? "" : "s"}` : "Find account controls by feature or task."}
+          </p>
           {filteredGroups.length === 0 ? (
             <p className="px-2 text-[13px] text-muted-foreground">No settings match “{settingsQuery}”.</p>
           ) : (
@@ -1244,21 +1438,21 @@ export function SettingsScreen({
               <section key={group.heading} aria-labelledby={`settings-${group.heading}`}>
                 <h3
                   id={`settings-${group.heading}`}
-                  className="mb-2 px-1 text-[12px] font-bold uppercase tracking-wide text-muted-foreground"
+                  className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"
                 >
                   {group.heading}
                 </h3>
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="overflow-hidden rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
                   {group.items.map((item, idx) => (
                     <button
                       key={item.title}
                       type="button"
                       onClick={item.action}
-                      className={`flex min-h-12 w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
-                        idx > 0 ? "border-t border-border" : ""
+                      className={`flex min-h-12 w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                        idx > 0 ? "border-t border-border/50" : ""
                       }`}
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+                      <span className="gh-icon-tile flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground">
                         {item.icon}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -1283,7 +1477,7 @@ export function SettingsScreen({
               <button
                 type="button"
                 onClick={() => setLogoutConfirm(true)}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-[15px] font-bold text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[1.25rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-[15px] font-bold text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
               >
                 <LogOut size={18} strokeWidth={2} />
                 Log out

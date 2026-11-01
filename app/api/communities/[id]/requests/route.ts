@@ -4,6 +4,7 @@
  * Actor must be owner/admin/moderator. Cannot self-approve.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
@@ -24,7 +25,9 @@ export async function POST(request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value
   const applicantId = String(body.applicantId || body.userId || "").trim()
   if (!applicantId) {
     return NextResponse.json({ ok: false, error: "APPLICANT_REQUIRED" }, { status: 400 })
@@ -35,11 +38,10 @@ export async function POST(request: Request, ctx: Ctx) {
   const approve = body.approve !== false && body.approve !== "false"
 
   if (!socialDbConfigured()) {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      status: approve ? "active" : "rejected",
+    const nd = nonDurableWriteResponse("Community join decide", {
+      extra: { status: "unavailable" },
     })
+    return NextResponse.json(nd.body, { status: nd.status })
   }
 
   const result = await socialRpc("gh_community_join_decide", {
@@ -59,9 +61,10 @@ export async function POST(request: Request, ctx: Ctx) {
           : 503
     return NextResponse.json({ ok: false, error: code }, { status })
   }
+  const status = data?.status || (approve ? "active" : "rejected")
   return NextResponse.json({
     ok: true,
     durable: true,
-    status: data?.status || (approve ? "active" : "rejected"),
+    status,
   })
 }

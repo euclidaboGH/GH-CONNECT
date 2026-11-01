@@ -16,6 +16,8 @@ export type PrivacySettingsSlice = {
   showInterests?: boolean
   showCommunities?: boolean
   showLocation?: boolean
+  /** Optional location precision; aligned with profile geography settings when present. */
+  locationPrivacy?: "hidden" | "approximate" | "precise" | string
   onlineStatus?: PrivacyAudience | string
 }
 

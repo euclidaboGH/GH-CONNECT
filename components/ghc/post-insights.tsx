@@ -15,23 +15,32 @@ export function PostInsightsSheet({
 }) {
   if (!open || !post) return null
   const i = computePostInsights(post)
+  const up = Number((post as { upvotes?: number }).upvotes ?? (post as { voteUp?: number }).voteUp ?? 0)
+  const down = Number((post as { downvotes?: number }).downvotes ?? (post as { voteDown?: number }).voteDown ?? 0)
+  const durableFlag = Boolean((post as { durable?: boolean }).durable !== false)
+  const honesty = durableFlag
+    ? "Counts reflect the last values loaded with this post. Refresh the feed for the newest server totals."
+    : "These figures may be incomplete until the post is confirmed on the server."
 
   return (
     <div className="fixed inset-0 z-[75] flex items-end bg-black/40 sm:items-center sm:justify-center" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
+        className="w-full max-w-sm rounded-t-[1.75rem] border border-border/50 bg-card p-5 shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Post insights"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900">Post insights</h3>
-          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-gray-100" aria-label="Close">
+          <h3 className="text-base font-bold text-foreground">Post insights</h3>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted" aria-label="Close">
             <X size={18} />
           </button>
         </div>
-        <p className="mb-4 line-clamp-2 text-xs text-gray-500">{post.content}</p>
+        <p className="mb-1 line-clamp-2 text-xs text-muted-foreground">{post.content}</p>
+        <p className="mb-4 text-[10px] text-muted-foreground">
+          Counts come from this post&apos;s engagement data only — nothing is invented.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {[
             { icon: Eye, label: "Reach", value: i.reach },
@@ -39,20 +48,26 @@ export function PostInsightsSheet({
             { icon: MessageCircle, label: "Comments", value: i.comments },
             { icon: Share2, label: "Shares", value: i.shares },
             { icon: Bookmark, label: "Saves", value: i.saves },
+            ...(up > 0 || down > 0
+              ? [
+                  { icon: Heart, label: "Up votes", value: up },
+                  { icon: Heart, label: "Down votes", value: down },
+                ]
+              : []),
           ].map((row) => (
-            <div key={row.label} className="rounded-2xl bg-gray-50 p-3 ring-1 ring-gray-100">
-              <row.icon size={16} className="mb-1 text-purple-600" />
-              <p className="text-lg font-bold text-gray-900">{row.value}</p>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{row.label}</p>
+            <div key={row.label} className="rounded-[1.25rem] border border-border/50 bg-card p-3 shadow-[var(--gh-card-shadow)]">
+              <row.icon size={16} className="mb-1 text-violet-600" />
+              <p className="text-lg font-bold text-foreground">{row.value}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-between rounded-xl bg-purple-50 px-3 py-2 text-[11px] font-semibold text-purple-800">
+        <div className="mt-3 flex items-center justify-between rounded-[1.25rem] border border-violet-200/60 bg-violet-50/70 px-3 py-2 text-[11px] font-semibold text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
           <span>Audience: {String((i as any).audience || post.visibility || "public")}</span>
           <span>~{i.engagementRate}% eng.</span>
         </div>
-        <p className="mt-3 text-center text-xs text-gray-500">
-          Insights are private to you · estimates until server analytics is connected
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          Insights are private to you · {honesty}
         </p>
       </div>
     </div>

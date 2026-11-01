@@ -91,9 +91,11 @@ export function resolveCanonicalUserId(input?: {
   profileUserId?: string | null
   explicitUserId?: string | null
 }): string {
+  // A newly verified Pi UID must outrank a previously cached explicit ID.
+  // Otherwise an account switch can accidentally keep the prior user's identity.
   const candidates = [
-    input?.explicitUserId,
     input?.piUid,
+    input?.explicitUserId,
     input?.profileUserId,
   ]
   for (const c of candidates) {
@@ -213,8 +215,13 @@ export const IdentityService = {
     try {
       void import("@/lib/onboarding-local").then((m) =>
         m.stampLocalOnboardingComplete({
-          userId: identity.userId || identity.piUserId,
+          userId: identity.userId || identity.piUserId || (identity as { piUid?: string }).piUid,
           username: identity.username,
+          altUserIds: [
+            identity.userId,
+            identity.piUserId,
+            (identity as { piUid?: string }).piUid,
+          ],
         })
       )
     } catch {
@@ -285,9 +292,10 @@ export const IdentityService = {
     if (token) {
       return { Authorization: `Bearer ${token}` }
     }
-    // Dev / memory-ledger path when server allows GHC_ALLOW_DEV_AUTH
-    // Includes studio placeholder so local spend/claim can authenticate in development
-    if (identity.userId) {
+    // Dev / memory-ledger path only. Never send synthetic user tokens from a
+    // production browser: production requests must use the verified GH session
+    // cookie or a real Pi access token.
+    if (process.env.NODE_ENV !== "production" && identity.userId) {
       return { Authorization: `Bearer user:${identity.userId}` }
     }
     return {}

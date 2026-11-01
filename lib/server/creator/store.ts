@@ -236,7 +236,7 @@ export async function listCreatorPosts(
 > {
   const q =
     `gh_posts?author_id=eq.${encodeURIComponent(userId)}` +
-    `&deleted_at=is.null&select=id,content,visibility,like_count,comment_count,share_count,view_count,qualified_view_count,upvote_count,downvote_count,created_at,updated_at` +
+    `&deleted_at=is.null&select=id,content,visibility,community_id,community_name,like_count,comment_count,share_count,view_count,qualified_view_count,upvote_count,downvote_count,created_at,updated_at` +
     `&order=created_at.desc&limit=${Math.min(
       100,
       Math.max(1, limit)
@@ -259,6 +259,58 @@ export async function listCreatorPosts(
   return {
     ok: true,
     posts,
+  }
+}
+
+
+export type CreatorEconomySummary = {
+  ok: boolean
+  tipPiGross: number
+  tipPiPayable: number
+  tipPiPaid: number
+  tipGhcSettled: number
+  tipCount: number
+  rewardTotal: number
+  rewardAuthor: number
+  rewardCuration: number
+  rewardPosts: number
+  walletCreatorCredits: number
+  walletCreatorDebits: number
+}
+
+export async function getCreatorEconomySummary(userId: string, postIds: string[]): Promise<CreatorEconomySummary> {
+  const ids = postIds.filter(Boolean).slice(0, 100)
+  const empty: CreatorEconomySummary = { ok: false, tipPiGross: 0, tipPiPayable: 0, tipPiPaid: 0, tipGhcSettled: 0, tipCount: 0, rewardTotal: 0, rewardAuthor: 0, rewardCuration: 0, rewardPosts: 0, walletCreatorCredits: 0, walletCreatorDebits: 0 }
+  if (!userId) return empty
+  const q = (table: string, params: string) => restGet(`${table}?${params}`)
+  const postFilter = ids.length ? `post_id=in.(${ids.map(encodeURIComponent).join(',')})` : 'post_id=in.(null)'
+  const [tips, ghcTips, rewards, ledger] = await Promise.all([
+    q('gh_tip_settlements', `creator_id=eq.${encodeURIComponent(userId)}&select=gross_amount,status&limit=500`),
+    q('gh_tip_ghc_settlements', `creator_id=eq.${encodeURIComponent(userId)}&select=amount&limit=500`),
+    q('gh_content_rewards', `${postFilter}&select=post_id,total_earned,author_reward,curation_reward&limit=100`),
+    q('ghc_transactions', `user_id=eq.${encodeURIComponent(userId)}&status=eq.posted&select=amount,kind,source_event,reference_id&limit=500`),
+  ])
+  if (!tips.ok && !ghcTips.ok && !rewards.ok && !ledger.ok) return empty
+  const tipRows = Array.isArray(tips.data) ? tips.data as Array<{gross_amount?: unknown;status?: string}> : []
+  const ghcRows = Array.isArray(ghcTips.data) ? ghcTips.data as Array<{amount?: unknown}> : []
+  const rewardRows = Array.isArray(rewards.data) ? rewards.data as Array<{total_earned?: unknown;author_reward?: unknown;curation_reward?: unknown}> : []
+  const ledgerRows = Array.isArray(ledger.data) ? ledger.data as Array<{amount?: unknown;kind?: string;source_event?: string}> : []
+  const sum = (rows: any[], key: string) => rows.reduce((a,r) => a + (Number.isFinite(Number(r[key])) ? Number(r[key]) : 0), 0)
+  const creatorCredits = ledgerRows.filter(r => Number(r.amount) > 0 && ['CREATOR_TIP','CONTENT_REWARD','CURATION_REWARD'].some(k => String(r.source_event||'').includes(k))).reduce((a,r)=>a+Number(r.amount||0),0)
+  const creatorDebits = ledgerRows.filter(r => Number(r.amount) < 0 && String(r.source_event||'').includes('CREATOR')).reduce((a,r)=>a+Math.abs(Number(r.amount||0)),0)
+  return {
+    ok: true,
+    tipPiGross: sum(tipRows,'gross_amount'),
+    tipPiPayable: tipRows.filter(r=>r.status==='payable').reduce((a,r)=>a+Number(r.gross_amount||0),0),
+    tipPiPaid: tipRows.filter(r=>r.status==='paid').reduce((a,r)=>a+Number(r.gross_amount||0),0),
+    tipGhcSettled: sum(ghcRows,'amount'),
+    tipCount: tipRows.length + ghcRows.length,
+    rewardTotal: sum(rewardRows,'total_earned'),
+    rewardAuthor: sum(rewardRows,'author_reward'),
+    rewardCuration: sum(rewardRows,'curation_reward'),
+    rewardPosts: rewardRows.length,
+    walletCreatorCredits: creatorCredits,
+    walletCreatorDebits: creatorDebits,
   }
 }
 

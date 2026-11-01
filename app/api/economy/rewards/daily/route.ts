@@ -1,13 +1,15 @@
 /**
  * POST /api/economy/rewards/daily
  *
- * ECONOMY_VERSION 1.2 — atomic claim path:
- *   auth → server compute (m,g,80/20) → single DB transaction (ledger + streak)
+ * ECONOMY_VERSION 1.2 — atomic Daily Claim path:
+ *   auth → server compute (m,g,80/20) → pending entitlement + streak in one DB transaction.
+ *   The pending entitlement becomes redeemable after 48 hours; it is not spendable yet.
  *
  * Client amounts are ignored. Double-submit returns existing success (idempotent).
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { computeDailyClaim } from "@/lib/server/economy/claim-engine"
+import { computeDailyClaim, lagosDayKey, lagosYesterdayKey, loadClaimStreakState } from "@/lib/server/economy/claim-engine"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
 import { rpcExecuteDailyClaimV12 } from "@/lib/server/economy/db"
 import {
@@ -18,7 +20,6 @@ import {
 } from "@/lib/server/economy/http"
 import {
   executeAuthoritativePending,
-  executeAuthoritativeClaimPending,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import {
@@ -28,30 +29,75 @@ import {
   recordEmissionDemand,
 } from "@/lib/server/economy/network-scarcity"
 import { recordTelemetryEvent } from "@/lib/server/economy/telemetry"
+import { recordGhcNotification } from "@/lib/server/economy/notifications"
 import {
   commitDailyClaimState,
 } from "@/lib/server/economy/claim-engine"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+/** GET /api/economy/rewards/daily — durable, read-only claim availability. */
+export async function GET(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  if (!isDatabaseConfigured() && !allowMemoryServer()) {
+    return jsonErr(
+      "SERVER_UNAVAILABLE",
+      "Daily reward status requires the durable economy database to be configured.",
+      503
+    )
+  }
+
+  try {
+    const state = await loadClaimStreakState(auth.userId)
+    const today = lagosDayKey()
+    const yesterday = lagosYesterdayKey()
+    const claimedToday = state.lastClaimDayKey === today
+    let cycleDay = 1
+    if (claimedToday) {
+      cycleDay = Math.max(1, Math.min(7, state.cycleDay || 1))
+    } else if (state.lastClaimDayKey === yesterday) {
+      cycleDay = state.cycleDay >= 7 ? 1 : Math.max(1, state.cycleDay + 1)
+    }
+
+    return jsonOk({
+      ok: true,
+      dayKey: today,
+      lastClaimDayKey: state.lastClaimDayKey,
+      claimedToday,
+      claimable: !claimedToday,
+      cycleDay,
+      completedCycles: state.completedCycles,
+      totalSuccessfulClaims: state.totalSuccessfulClaims,
+      economicVersion: state.economicVersion,
+    }, 200, { headers: { "Cache-Control": "no-store, max-age=0" } })
+  } catch {
+    return jsonErr("SERVER_UNAVAILABLE", "Could not load daily reward status. Retry shortly.", 503)
+  }
+}
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`daily_claim:${auth.userId}`, 10, 60_000)
+  const rl = await checkDurableRateLimit(`daily_claim:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Reward protection is temporarily unavailable" : `Too many claim attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
-  let body: Record<string, unknown> = {}
-  try {
-    body = await request.json()
-  } catch {
-    body = {}
+  const parsedBody = await readBoundedJson(request, 4096)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid daily claim request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
   // Explicitly ignore client-dictated economic values
   void body.amount
   void body.ghc
@@ -71,7 +117,19 @@ export async function POST(request: Request) {
 
   const computed = await computeDailyClaim({ userId: auth.userId })
   if (!computed.ok) {
-    const status = computed.error === "ALREADY_CLAIMED_TODAY" ? 409 : 400
+    if (computed.error === "ALREADY_CLAIMED_TODAY") {
+      // Idempotent response: a repeated tap must not look like a failed claim.
+      return jsonOk({
+        ok: true,
+        amount: 0,
+        alreadyClaimed: true,
+        idempotent: true,
+        cycleDay: computed.cycleDay,
+        dayKey: computed.dayKey,
+        economicVersion: ECONOMY_VERSION,
+      })
+    }
+    const status = computed.error === "SERVER_UNAVAILABLE" ? 503 : 400
     return jsonErr(computed.error, computed.error, status)
   }
 
@@ -103,6 +161,15 @@ export async function POST(request: Request) {
         atomic.error === "SERVER_UNAVAILABLE" ? 503 : 400
       return jsonErr(atomic.error || "CLAIM_FAILED", atomic.error || "CLAIM_FAILED", status)
     }
+    // Fail closed if the database has not yet been upgraded to the 48-hour
+    // pending-claim contract. Never tell users a posted legacy credit is locked.
+    if (atomic.pending !== true || !atomic.redeemableAt) {
+      return jsonErr(
+        "GHC_DAILY_CLAIM_MIGRATION_REQUIRED",
+        "Daily rewards are temporarily unavailable while the 48-hour claim migration is verified.",
+        503
+      )
+    }
 
     recordEmissionDemand(computed.dayKey, computed.baseGross * computed.m)
     recordTelemetryEvent({
@@ -117,20 +184,46 @@ export async function POST(request: Request) {
       reserveIssuance: atomic.reserveAmount ?? computed.reserveGhc,
       grossIssuance: atomic.grossAmount ?? computed.grossGhc,
       sinks: 0,
-      netCirculatingChange: atomic.userAmount ?? computed.userGhc,
+      netCirculatingChange: 0, // pending entitlements do not enter circulating/spendable balance yet
       meta: {
         userId: auth.userId,
         cycleDay: atomic.cycleDay ?? computed.cycleDay,
         alreadyClaimed: atomic.alreadyClaimed,
+        pending: true,
+        redeemableAt: atomic.redeemableAt,
         transactionId: atomic.transactionId,
         economicVersion: ECONOMY_VERSION,
         streakBackend: "database_atomic",
       },
     })
 
+    const authoritativeClaimAmount = atomic.userAmount ?? computed.userGhc
+    // Durable notification uses the exact server-authoritative claim amount.
+    // Never derive reward details from a client preview or wallet balance.
+    if (!atomic.alreadyClaimed && Number.isFinite(authoritativeClaimAmount) && authoritativeClaimAmount > 0) {
+      await recordGhcNotification({
+        userId: auth.userId,
+        eventType: "GHC_REWARD_CLAIMED",
+        title: "Daily GHC claimed",
+        body: `+${authoritativeClaimAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} GHC claimed · pending for 48 hours`,
+        referenceId: atomic.referenceId ?? computed.idempotencyKey,
+        dedupeKey: `${auth.userId}:GHC_REWARD_CLAIMED:${atomic.referenceId ?? computed.idempotencyKey}`,
+        metadata: {
+          amount: authoritativeClaimAmount,
+          asset: "GHC",
+          pending: true,
+          redeemableAt: atomic.redeemableAt,
+          cycleDay: atomic.cycleDay ?? computed.cycleDay,
+          claimKind: "DAILY_CLAIM_V12",
+        },
+      }).catch(() => ({ ok: false }))
+    }
+
     return jsonOk({
       ok: true,
-      amount: atomic.userAmount ?? computed.userGhc,
+      amount: authoritativeClaimAmount,
+      pending: true,
+      redeemableAt: atomic.redeemableAt,
       reserve: atomic.reserveAmount ?? computed.reserveGhc,
       gross: atomic.grossAmount ?? computed.grossGhc,
       baseGross: atomic.baseGross ?? computed.baseGross,
@@ -141,6 +234,7 @@ export async function POST(request: Request) {
       missedDayReset: atomic.missedDayReset ?? computed.missedDayReset,
       economicVersion: atomic.economicVersion ?? ECONOMY_VERSION,
       transactionId: atomic.transactionId,
+      holdId: atomic.transactionId,
       reserveTransactionId: atomic.reserveTransactionId,
       referenceId: atomic.referenceId ?? computed.idempotencyKey,
       alreadyClaimed: Boolean(atomic.alreadyClaimed),
@@ -149,7 +243,7 @@ export async function POST(request: Request) {
     })
   }
 
-  // ---------- Memory studio path: ledger first, then streak (no permanent streak without credit) ----------
+  // ---------- Local development path: pending entitlement first, then streak ----------
   const store = getProcessGhcStore()
   const pending = await executeAuthoritativePending(store, {
     userId: auth.userId,
@@ -165,6 +259,8 @@ export async function POST(request: Request) {
     return jsonOk({
       ok: true,
       amount: computed.userGhc,
+      pending: true,
+      redeemableAt: new Date(pending.tx.createdAt + 48 * 60 * 60 * 1000).toISOString(),
       alreadyClaimed: true,
       idempotent: true,
       economicVersion: ECONOMY_VERSION,
@@ -176,24 +272,12 @@ export async function POST(request: Request) {
     })
   }
 
-  const claim = await executeAuthoritativeClaimPending(store, {
-    userId: auth.userId,
-    holdId: pending.tx.id,
-  })
-  if (!claim.ok) {
-    // Ledger did not post — do NOT consume streak
-    return jsonErr("LEDGER_CREDIT_FAILED", "Ledger credit failed; claim not consumed", 500)
-  }
+  // Daily claims are pending entitlements, not spendable wallet credits.
+  // They become redeemable after the server-enforced 48-hour lock.
+  const claimTransactionId = pending.tx.id
+  const redeemableAt = new Date(pending.tx.createdAt + 48 * 60 * 60 * 1000).toISOString()
 
-  await executeAuthoritativePending(store, {
-    userId: "__PROTOCOL_RESERVE__",
-    amount: computed.reserveGhc,
-    referenceId: `${computed.idempotencyKey}:reserve`,
-    reason: `Protocol reserve day ${computed.cycleDay}/7`,
-    sourceEvent: "PROTOCOL_RESERVE_V12",
-  }).catch(() => null)
-
-  // Streak only after successful ledger credit
+  // Streak commits after the pending entitlement is durably recorded.
   const locked = await commitDailyClaimState({
     userId: auth.userId,
     result: computed,
@@ -203,13 +287,15 @@ export async function POST(request: Request) {
     return jsonOk({
       ok: true,
       amount: computed.userGhc,
+      pending: true,
+      redeemableAt,
       reserve: computed.reserveGhc,
       gross: computed.grossGhc,
       cycleDay: computed.cycleDay,
       m: computed.m,
       g: computed.g,
       economicVersion: ECONOMY_VERSION,
-      transactionId: claim.tx?.id,
+      transactionId: claimTransactionId,
       referenceId: computed.idempotencyKey,
       alreadyClaimed: false,
       streakBackend: "memory",
@@ -220,6 +306,8 @@ export async function POST(request: Request) {
   return jsonOk({
     ok: true,
     amount: computed.userGhc,
+    pending: true,
+    redeemableAt,
     reserve: computed.reserveGhc,
     gross: computed.grossGhc,
     baseGross: computed.baseGross,
@@ -229,11 +317,11 @@ export async function POST(request: Request) {
     g: computed.g,
     missedDayReset: computed.missedDayReset,
     economicVersion: ECONOMY_VERSION,
-    transactionId: claim.tx?.id,
+    transactionId: claimTransactionId,
     holdId: pending.tx.id,
     referenceId: computed.idempotencyKey,
-    alreadyClaimed: Boolean(claim.alreadyClaimed),
-    idempotent: Boolean(claim.alreadyClaimed),
+    alreadyClaimed: false,
+    idempotent: false,
     streakBackend: "memory",
   })
 }

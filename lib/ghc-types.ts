@@ -26,6 +26,8 @@ export interface StoryItem {
   photo?: string
   text: string
   media?: { type: "image" | "video"; url: string } | null
+  /** Preset background used for text-only stories. */
+  background?: string
   createdAt: number
   /** Lifecycle */
   status?: StoryStatus
@@ -37,6 +39,8 @@ export interface StoryItem {
   /** Engagement (optional session fields) */
   viewIds?: string[]
   reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
+  reactionCount?: number
   replyCount?: number
 }
 
@@ -67,6 +71,12 @@ export interface Profile {
   interests: string[]
   photos: string[] // max 6 base64 or URLs
   coverPhoto: string | null
+  /** Previous public-facing profile image references; stored in profile_payload. */
+  profilePhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Previous cover image references; stored in profile_payload. */
+  coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Non-financial extension payload persisted by the server profile store. */
+  profilePayload?: Record<string, unknown>
   status: string // custom status
   profession: string
   bornDate: string
@@ -175,6 +185,11 @@ export interface Settings {
   notifyMarketing?: boolean
 }
 
+export type PostEditMedia = {
+  images?: string[]
+  video?: string | null
+}
+
 export interface Post {
   id: string
   authorId: string
@@ -206,11 +221,22 @@ export interface Post {
   impressionRank?: number // algorithm rank for "why am I seeing this"
   nativeLanguage?: string
   engagement?: PostEngagementMetrics
+  /** Durable aggregate counts by reaction type, hydrated with the initial feed. */
+  reactionCounts?: Record<string, number>
+  /** Reaction types the authenticated viewer has applied to this post. */
+  viewerReactions?: string[]
+  /** Curation quality votes (independent of emoji reactions). */
+  upvoteCount?: number
+  downvoteCount?: number
+  /** Viewer's active curation choice when known from server. */
+  viewerCurationChoice?: "upvote" | "downvote"
   // Marketplace share — canonical listing remains in marketplace domain
   listingId?: string
   listingKind?: "product" | "service" | "opportunity"
   communityId?: string
   communityName?: string
+  /** Optional approximate coordinates for explicit nearby/discovery experiences. */
+  location?: { latitude: number; longitude: number } | null
   contentType?: "standard" | "marketplace_listing" | "community_listing"
   // Post action tracking
   hideCount?: number
@@ -267,17 +293,19 @@ export interface PostComment {
   // Reactions with counts
   reactions?: Record<string, string[]> // emoji -> user ids
   reactionCounts?: Record<string, number> // emoji -> count
+  viewerReactions?: string[] // emojis selected by the current viewer
   // Editing & history
   isPinned?: boolean
   isEdited?: boolean
   editedAt?: number
   editedBy?: string
-  // Media attachments (images, GIFs, voice)
+  // Media attachments (images, GIFs, video, files, voice)
   mediaAttachments?: Array<{
     id: string
-    type: "image" | "gif" | "voice"
+    type: "image" | "gif" | "voice" | "video" | "file"
     url: string
-    duration?: number // seconds for voice
+    fileName?: string
+    duration?: number // seconds for voice/video
     thumbnail?: string
     size?: number // bytes
     mimeType?: string
@@ -298,6 +326,29 @@ export interface Candidate {
   verified: boolean
   online: boolean
   lastSeen: number
+  /** Optional media fields when the public-profile adapter supplies them. */
+  photos?: string[]
+  coverPhoto?: string | null
+  profilePhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
+  /** Optional approximate discovery distance in kilometres when supplied by the server/discovery layer. */
+  distance?: number
+  /** Optional profile enrichment fields consumed by discovery/search ranking. */
+  city?: string
+  country?: string
+  profession?: string
+  education?: string
+  joinedAt?: number | string
+  lastActiveAt?: number | string
+  isOnline?: boolean
+  isVerified?: boolean
+  /** Optional aggregate engagement signal used only for discovery ordering. */
+  engagement?: number
+  relationshipGoals?: string[]
+  primaryMode?: string
+  relationshipType?: string | string[]
+  /** Marks non-durable/demo discovery entries; server-hydrated people explicitly set this false. */
+  isSample?: boolean
 }
 
 export interface MatchEntry {
@@ -400,6 +451,7 @@ export interface Message {
   // Canonical message states (UI must derive from these)
   status?: "sending" | "sent" | "delivered" | "read" | "failed" | "deleted"
   readAt?: number
+  deliveredAt?: number | null
   readBy?: string[] // user ids who read (for groups)
   failedAt?: number
   failureReason?: string
@@ -421,7 +473,7 @@ export interface Message {
   // Media & attachments
   mediaAttachments?: Array<{
     id: string
-    type: "image" | "file" | "voice" | "video"
+    type: "image" | "gif" | "file" | "voice" | "video"
     url: string
     duration?: number // seconds for voice/video
     size?: number // bytes
@@ -464,6 +516,7 @@ export type FeedFilter =
   | "trending"
   | "nearby"
   | "latest"
+  | "saved"
 
 export interface PostReaction {
   type:
@@ -498,6 +551,7 @@ export interface PostVisibilityReason {
     | "location"
     | "intention"
     | "contribution"
+    | "saved"
     | "error"
   /** Optional short label for chip UI */
   shortLabel?: string

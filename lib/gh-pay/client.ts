@@ -55,7 +55,7 @@ type ActivateOutcome =
  */
 async function callMembershipActivate(input: {
   tier: "vip" | "vvip"
-  period: "monthly" | "yearly"
+  period: "monthly" | "four_months" | "eight_months" | "yearly"
   paymentId: string
   intentId?: string
   txid?: string
@@ -122,7 +122,7 @@ export async function retryMembershipActivation(orderId: string): Promise<{
   let intentId: string | undefined
   let txid: string | undefined
   let tier: "vip" | "vvip" | undefined
-  let period: "monthly" | "yearly" | undefined
+  let period: "monthly" | "four_months" | "eight_months" | "yearly" | undefined
 
   const order = getOrder(orderId)
   if (order && order.category === "membership") {
@@ -186,12 +186,14 @@ export async function retryMembershipActivation(orderId: string): Promise<{
         const mTier = String(meta.tier || meta.membershipTier || "").toLowerCase()
         const mPeriod = String(meta.period || meta.billingPeriod || "monthly").toLowerCase()
         if (!tier && (mTier === "vip" || mTier === "vvip")) tier = mTier
-        if (!period && (mPeriod === "monthly" || mPeriod === "yearly")) period = mPeriod
+        if (!period && (["monthly", "four_months", "eight_months", "yearly"].includes(mPeriod))) period = mPeriod as "monthly" | "four_months" | "eight_months" | "yearly"
         // productId like membership_vip_monthly
         const productId = String(meta.productId || "").toLowerCase()
         if (!tier && productId.includes("vvip")) tier = "vvip"
         else if (!tier && productId.includes("vip")) tier = "vip"
         if (!period && productId.includes("yearly")) period = "yearly"
+        else if (!period && productId.includes("eight_months")) period = "eight_months"
+        else if (!period && productId.includes("four_months")) period = "four_months"
         else if (!period && productId.includes("monthly")) period = "monthly"
       }
     } catch {
@@ -561,7 +563,12 @@ export async function ghPayPurchase(
   ) {
     const f = product.fulfillment as { type: "membership"; tier?: string; period?: string }
     const tier = f.tier === "vvip" ? "vvip" : f.tier === "vip" ? "vip" : null
-    const period = f.period === "yearly" ? "yearly" : f.period === "monthly" ? "monthly" : null
+    const period =
+      f.period === "yearly" ? "yearly"
+      : f.period === "eight_months" ? "eight_months"
+      : f.period === "four_months" ? "four_months"
+      : f.period === "monthly" ? "monthly"
+      : null
     if (tier && period && pay.paymentId) {
       const outcome = await callMembershipActivate({
         tier,
@@ -622,7 +629,7 @@ export async function ghPayPurchase(
 /** Membership helper */
 export async function ghPayMembership(
   tier: "vip" | "vvip",
-  period: "monthly" | "yearly"
+  period: "monthly" | "four_months" | "eight_months" | "yearly"
 ): Promise<GhPayResult> {
   const product = productForMembership(tier, period)
   return ghPayPurchase(product.id)

@@ -2,8 +2,7 @@
 
 /**
  * GreenHaven Challenge (Reward Quest)
- * Unique engagement loop: goal → duration → GHC/XP stake of reputation (not pay-to-win).
- * Distinct from polls and plain posts.
+ * Feed announcement + local progress track. Completions stay server-validated in Rewards.
  */
 
 import { useMemo, useState } from "react"
@@ -76,11 +75,20 @@ export function ChallengeComposer({
   if (!open) return null
 
   const publish = async () => {
-    if (!createPost) return
+    if (!createPost || busy) return
+    if (templateId === "custom" && customTitle.trim().length < 4) {
+      addToast?.("Give your custom challenge a clear title", "info")
+      return
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      addToast?.("You are offline — launch the challenge when connected so others can see it", "info")
+      return
+    }
     setBusy(true)
     try {
       const title = templateId === "custom" ? customTitle.trim() || "Custom challenge" : tpl.title
       const blurb = templateId === "custom" ? customBlurb.trim() || tpl.blurb : tpl.blurb
+      const challengeId = `ch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
       const body = [
         `🏆 CHALLENGE · ${title}`,
         blurb,
@@ -89,7 +97,8 @@ export function ChallengeComposer({
         `📅 Window: ${tpl.days} days`,
         inviteNetwork ? "👥 Open invite — join from this post" : "Personal quest",
         "",
-        "Track progress in Rewards Centre. Completing challenges can unlock pending GHC after validation.",
+        "Track progress in Rewards Centre. Completing challenges unlocks pending GHC only after validation.",
+        `challengeId:${challengeId}`,
       ].join("\n")
 
       const ok = await createPost(body, [], null, null, null, "public")
@@ -99,7 +108,7 @@ export function ChallengeComposer({
           const raw = localStorage.getItem(key)
           const list = raw ? JSON.parse(raw) : []
           list.unshift({
-            id: `ch_${Date.now()}`,
+            id: challengeId,
             templateId,
             title,
             blurb,
@@ -110,15 +119,27 @@ export function ChallengeComposer({
             createdAt: Date.now(),
             endsAt: Date.now() + tpl.days * 86400_000,
             owner: profile?.displayName || "You",
+            joined: true,
           })
           localStorage.setItem(key, JSON.stringify(list.slice(0, 30)))
         } catch {
+          /* local track only */
+        }
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:post-engagement", {
+              detail: { kind: "challenge_create", challengeId },
+            }),
+          )
+        } catch {
           /* */
         }
-        addToast?.("Challenge launched", "success")
+        addToast?.("Challenge launched — track it under Rewards → Missions", "success")
+        setCustomTitle("")
+        setCustomBlurb("")
         onOpenChange(false)
       } else {
-        addToast?.("Could not start challenge", "error")
+        addToast?.("Could not publish challenge", "error")
       }
     } finally {
       setBusy(false)
@@ -126,95 +147,79 @@ export function ChallengeComposer({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-background" role="dialog" aria-modal="true" aria-label="Start challenge">
-      <header className="flex items-center justify-between border-b border-border px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <button type="button" onClick={() => onOpenChange(false)} className="flex h-10 w-10 items-center justify-center rounded-full" aria-label="Close">
-          <X size={22} />
+    <div className="fixed inset-0 z-[90] flex flex-col bg-background" role="dialog" aria-modal="true" aria-label="Create challenge">
+      <header className="flex items-center justify-between border-b border-border px-3 py-2.5">
+        <button type="button" onClick={() => onOpenChange(false)} className="rounded-full p-2 hover:bg-muted" aria-label="Close">
+          <X size={20} />
         </button>
-        <div className="text-center">
-          <p className="text-[15px] font-bold">Challenge</p>
-          <p className="text-[10px] text-muted-foreground">Reward quests · real activity</p>
-        </div>
+        <h2 className="flex items-center gap-1.5 text-[15px] font-bold">
+          <Trophy size={18} className="text-rose-600" /> Challenge
+        </h2>
         <button
           type="button"
-          disabled={busy || (templateId === "custom" && customTitle.trim().length < 4)}
+          disabled={busy}
           onClick={() => void publish()}
-          className="rounded-full bg-rose-600 px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+          className="rounded-full bg-rose-600 px-4 py-1.5 text-[13px] font-bold text-white disabled:opacity-40"
         >
-          {busy ? "…" : "Launch"}
+          {busy ? "Launching…" : "Launch"}
         </button>
       </header>
-
-      <div className="mx-auto w-full max-w-[var(--gh-content-max,28rem)] flex-1 overflow-y-auto px-4 py-4">
-        <div className="mb-4 overflow-hidden rounded-3xl bg-gradient-to-br from-rose-600 via-rose-500 to-amber-500 p-4 text-white shadow-lg">
-          <div className="flex items-center gap-2">
-            <Trophy size={22} />
-            <p className="text-sm font-bold">GreenHaven Quests</p>
-          </div>
-          <p className="mt-1 text-[12px] text-white/90">
-            Challenges track meaningful participation — not spam. Any GHC credit is server-validated and subject to daily caps.
-          </p>
-        </div>
-
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Choose a quest</p>
-        <div className="space-y-2">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <p className="text-[12px] text-muted-foreground">
+          Challenges are social quests. GHC rewards only land after server validation — this screen does not invent balances.
+        </p>
+        <div className="grid gap-2">
           {TEMPLATES.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTemplateId(t.id)}
-              className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+              className={`rounded-2xl border px-3 py-3 text-left transition ${
                 templateId === t.id
-                  ? "border-rose-400 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40"
-                  : "border-border bg-card"
+                  ? "border-rose-400 bg-rose-50 dark:bg-rose-950/30"
+                  : "border-border bg-card hover:bg-muted/50"
               }`}
             >
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200">
-                {t.id === "custom" ? <Sparkles size={18} /> : t.id === "post3" ? <Flame size={18} /> : <Target size={18} />}
-              </span>
-              <span>
-                <span className="block text-[13px] font-bold text-foreground">{t.title}</span>
-                <span className="block text-[11px] text-muted-foreground">{t.blurb}</span>
-                <span className="mt-1 block text-[10px] font-semibold text-rose-700 dark:text-rose-300">
-                  {t.days} days · target {t.target}
-                </span>
-              </span>
+              <p className="text-[14px] font-bold text-foreground">{t.title}</p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">{t.blurb}</p>
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t.days}d · {t.target} {t.metric}
+              </p>
             </button>
           ))}
         </div>
-
         {templateId === "custom" ? (
-          <div className="mt-4 space-y-2">
+          <div className="space-y-2">
             <input
               value={customTitle}
-              onChange={(e) => setCustomTitle(e.target.value.slice(0, 60))}
+              onChange={(e) => setCustomTitle(e.target.value.slice(0, 80))}
               placeholder="Challenge title"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[14px] outline-none focus:border-rose-500"
+              className="min-h-11 w-full rounded-xl border border-border bg-card px-3 text-sm"
             />
             <textarea
               value={customBlurb}
-              onChange={(e) => setCustomBlurb(e.target.value.slice(0, 160))}
-              placeholder="What does success look like?"
+              onChange={(e) => setCustomBlurb(e.target.value.slice(0, 240))}
+              placeholder="What should people do?"
               rows={3}
-              className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2.5 text-[14px] outline-none focus:border-rose-500"
+              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
             />
           </div>
         ) : null}
-
-        <label className="mt-5 flex items-center gap-2 text-[13px] font-medium text-foreground">
-          <input
-            type="checkbox"
-            checked={inviteNetwork}
-            onChange={(e) => setInviteNetwork(e.target.checked)}
-            className="rounded border-border"
-          />
-          Invite others to join this challenge
+        <label className="flex items-center gap-2 text-[13px] font-semibold">
+          <input type="checkbox" checked={inviteNetwork} onChange={(e) => setInviteNetwork(e.target.checked)} />
+          Invite network from the feed post
         </label>
-
-        <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-          Launching publishes a challenge card to your feed and tracks progress locally until the
-          rewards engine confirms completion server-side.
-        </p>
+        <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+            <Target size={12} /> Clear goal
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+            <Flame size={12} /> Time-boxed
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+            <Sparkles size={12} /> Rewards-validated
+          </span>
+        </div>
       </div>
     </div>
   )

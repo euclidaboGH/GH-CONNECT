@@ -1,41 +1,75 @@
 "use client"
 
+import { confirmDialog } from "@/lib/ui/global-interactions"
 import { memo, useState, useRef, useEffect } from "react"
-import { Heart, MessageCircle, Share2, ChevronUp, ChevronDown, MoreVertical, Bookmark, Link as LinkIcon, Eye, X, ShieldCheck, Pencil, Trash2, Pin, Archive, Copy } from "lucide-react"
-import type { Post, PostReaction, LinkPreview } from "@/lib/ghc-types"
+import {
+  MessageCircle,
+  Share2,
+  ThumbsUp,
+  ThumbsDown,
+  MoreVertical,
+  Bookmark,
+  Link as LinkIcon,
+  Eye,
+  X,
+  ShieldCheck,
+  Pencil,
+  Trash2,
+  Pin,
+  Archive,
+  Copy,
+  ImagePlus,
+  Loader2,
+} from "lucide-react"
+import { SafeTextWithLinks } from "./safe-external-links"
+import { absoluteTimeLabel, formatRelativeTime } from "@/lib/product/essentials"
+import type { Post, PostEditMedia, PostReaction, LinkPreview } from "@/lib/ghc-types"
 import { timeAgo, generateId } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
-import { ActionIconButton } from "./action-controls"
+import { PollInline, resolvePostPoll } from "./poll-inline"
+import { ChallengeInline, resolvePostChallenge } from "./challenge-inline"
+import { PostContentText } from "./post-content-text"
+import { DurableVideo } from "./durable-video"
+import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
+import { isDurableMediaUrl } from "@/lib/media/durable-url"
+import { downloadMedia } from "@/lib/media/download-media"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
 import { SpecialPostBody, detectSpecialPost } from "./feed-special-blocks"
 import { resolveAvatarUrl } from "@/lib/avatar"
+import { AuthorRepChip } from "./author-rep-chip"
+import { authorReputationFromPost } from "@/lib/reputation/display"
 import { isOwnAuthor } from "@/lib/ownership"
 import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
+import { EngagementRosterSheet, type RosterKind } from "./engagement-roster-sheet"
 import { socialRecordAttention, socialSetCuration } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
+import { PostRewardPanel } from "@/components/ghc/post-reward/post-reward-panel"
 
 const REACTIONS: PostReaction[] = [
-  { type: "like", emoji: "👍", label: "Like" },
   { type: "support", emoji: "💪", label: "Support" },
   { type: "inspire", emoji: "✨", label: "Inspire" },
   { type: "insight", emoji: "💡", label: "Insightful" },
   { type: "celebrate", emoji: "🎉", label: "Celebrate" },
   { type: "love", emoji: "❤️", label: "Love" },
+  { type: "sad", emoji: "😢", label: "Concerned" },
 ]
 
 interface EnhancedPostCardProps {
   post: Post
-  isLiked: boolean
+  /** @deprecated Post likes are not used for matching; optional legacy signal */
+  isLiked?: boolean
   isSaved: boolean
   isOwnPost?: boolean
-  onLike: (postId: string, isDouble?: boolean) => void
+  /** @deprecated Prefer profile Like/Pass; optional legacy */
+  onLike?: (postId: string, isDouble?: boolean) => void
   onReact?: (postId: string, reaction: PostReaction["type"]) => void
   onComment: (postId: string) => void
   onShare: (postId: string) => void
   onSave: (postId: string) => void
   onDelete?: (postId: string) => void
-  onEdit?: (postId: string, content: string) => void
+  onEdit?: (postId: string, content: string, media?: PostEditMedia) => void
   onPin?: (postId: string) => void
   onHide?: (postId: string) => void
   onArchive?: (postId: string) => void
@@ -45,7 +79,14 @@ interface EnhancedPostCardProps {
   onBlock?: (postId: string) => void
   onCopyLink?: (postId: string) => void
   onInsights?: (postId: string) => void
-  onOpenMedia?: (url: string, caption?: string) => void
+  onOpenPost?: (postId: string) => void
+  /** Open clean full-screen media viewer (preferred over opening the post sheet). */
+  onOpenMedia?: (payload: {
+    urls: Array<string | { url: string; kind?: "image" | "video"; alt?: string }>
+    index?: number
+    caption?: string
+    kind?: "image" | "video"
+  }) => void
   onShowVisibilityReason: (postId: string) => void
   visibilityReason?: { reason: string; category: string }
   onOpenProfile?: (userId: string) => void
@@ -53,7 +94,7 @@ interface EnhancedPostCardProps {
 
 function EnhancedPostCardInner({
   post,
-  isLiked,
+  isLiked = false,
   isSaved,
   isOwnPost = false,
   onLike,
@@ -72,37 +113,189 @@ function EnhancedPostCardInner({
   onBlock,
   onCopyLink,
   onInsights,
+  onOpenPost,
   onOpenMedia,
   onShowVisibilityReason,
   visibilityReason,
   onOpenProfile,
 }: EnhancedPostCardProps) {
   const [showReactions, setShowReactions] = useState(false)
-  const [lastTapTime, setLastTapTime] = useState<number>(0)
-  const [tapCount, setTapCount] = useState<number>(0)
+  const [curationReactionKind, setCurationReactionKind] = useState<"positive" | "negative">("positive")
   const isOwn = Boolean(isOwnPost || isOwnAuthor(post.authorId, post.authorName))
+  const displayAuthor = (() => {
+    const raw = String(post.authorName || "").trim()
+    if (raw && raw.toLowerCase() !== "user" && raw.toLowerCase() !== "unknown") return raw
+    return isOwn ? "You" : "Member"
+  })()
+  const realImages = (Array.isArray(post.images) ? post.images : []).filter((u): u is string => {
+    if (typeof u !== "string" || !u.trim()) return false
+    // Allow small inline data images for offline/emergency; durable URLs otherwise
+    if (u.startsWith("data:image/") && u.length < 180_000 && !u.includes("svg")) return true
+    return isDurableMediaUrl(u)
+  })
   const [showMenu, setShowMenu] = useState(false)
   const [editingPost, setEditingPost] = useState(false)
   const [draftContent, setDraftContent] = useState(post.content ?? "")
+  const [draftImages, setDraftImages] = useState<string[]>(() =>
+    Array.isArray(post.images) ? post.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u)) : [],
+  )
+  const [draftVideo, setDraftVideo] = useState<string | null>(
+    typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null,
+  )
+  const [editMediaBusy, setEditMediaBusy] = useState(false)
+  const editImageInputRef = useRef<HTMLInputElement>(null)
   const [imageIndex, setImageIndex] = useState<number>(0)
+  const [mediaToolsOpen, setMediaToolsOpen] = useState(false)
+  const mediaLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mediaLongPressFiredRef = useRef(false)
   const [contentExpanded, setContentExpanded] = useState(false)
-  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">("neutral")
-  const [upvoteCount, setUpvoteCount] = useState(0)
-  const [downvoteCount, setDownvoteCount] = useState(0)
+  const galleryIdentity = realImages.join("\u001f")
+  useEffect(() => {
+    setImageIndex(0)
+    setShowReactions(false)
+  }, [post.id, galleryIdentity])
+  const seedChoiceRaw = String(
+    (post as { viewerCurationChoice?: string }).viewerCurationChoice || ""
+  ).toLowerCase()
+  const seedChoice: "upvote" | "downvote" | "neutral" =
+    seedChoiceRaw === "upvote" || seedChoiceRaw === "downvote" ? seedChoiceRaw : "neutral"
+  const [curationChoice, setCurationChoice] = useState<"upvote" | "downvote" | "neutral">(seedChoice)
+  const [rosterOpen, setRosterOpen] = useState(false)
+  const [rosterKind, setRosterKind] = useState<RosterKind>("likes")
+  const openRoster = (kind: RosterKind) => {
+    setRosterKind(kind)
+    setRosterOpen(true)
+  }
+  const seedUp = Number(
+    (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ??
+      (post as { upvote_count?: number }).upvote_count ??
+      0
+  )
+  const seedDown = Number(
+    (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ??
+      (post as { downvote_count?: number }).downvote_count ??
+      0
+  )
+  const [upvoteCount, setUpvoteCount] = useState(() => (Number.isFinite(seedUp) ? Math.max(0, seedUp) : 0))
+  const [downvoteCount, setDownvoteCount] = useState(() =>
+    Number.isFinite(seedDown) ? Math.max(0, seedDown) : 0
+  )
   const [curationBusy, setCurationBusy] = useState(false)
+  const [rewardPercentage, setRewardPercentage] = useState(100)
+  const lastCurationAtRef = useRef(0)
+  const curationRosterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const curationRosterLongPressRef = useRef(false)
+  useEffect(() => () => {
+    if (curationRosterTimerRef.current) clearTimeout(curationRosterTimerRef.current)
+  }, [])
+  const startCurationRosterLongPress = (kind: "upvotes" | "downvotes") => {
+    if (curationRosterTimerRef.current) clearTimeout(curationRosterTimerRef.current)
+    curationRosterLongPressRef.current = false
+    curationRosterTimerRef.current = setTimeout(() => {
+      curationRosterTimerRef.current = null
+      curationRosterLongPressRef.current = true
+      openRoster(kind)
+    }, 650)
+  }
+  const endCurationRosterLongPress = (cancelled = false) => {
+    const wasPending = curationRosterTimerRef.current !== null
+    if (curationRosterTimerRef.current) {
+      clearTimeout(curationRosterTimerRef.current)
+      curationRosterTimerRef.current = null
+    }
+    if (cancelled && wasPending) curationRosterLongPressRef.current = false
+  }
+  const propUp = (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ?? (post as { upvote_count?: number }).upvote_count
+  const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
+  const propViewerChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
+  useEffect(() => {
+    setUpvoteCount(typeof propUp === "number" && Number.isFinite(propUp) ? Math.max(0, propUp) : 0)
+    setDownvoteCount(typeof propDown === "number" && Number.isFinite(propDown) ? Math.max(0, propDown) : 0)
+    setCurationChoice(propViewerChoice === "upvote" || propViewerChoice === "downvote" ? propViewerChoice : "neutral")
+  }, [post.id, propUp, propDown, propViewerChoice])
+  const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
+  const visibleShareCount = Math.max(0, Number(post.engagement?.shares ?? post.shares ?? 0) || 0)
+  const visibleReactionEntries = Object.entries(post.reactionCounts || {})
+    .filter(([type, count]) => type !== "like" && Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+  const reactionEmoji: Record<string, string> = { like: "❤️", love: "😍", support: "💪", inspire: "✨", insight: "💡", celebrate: "🎉", laugh: "😂", fire: "🔥", clap: "👏", wow: "😮", sad: "😢" }
+
+  // Community review status is loaded only on its dedicated detail surface.
+  // Fetching it once per feed card caused an N+1 request storm and the value
+  // was not rendered here; keep feed cards lean and defer that request.
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "You are offline — vote when reconnected", type: "info" } })) } catch { /* */ }
+      return
+    }
+    if (Date.now() - lastCurationAtRef.current < 400) return
+    lastCurationAtRef.current = Date.now()
     setCurationBusy(true)
     try {
-      const res = await socialSetCuration(post.id, choice)
+      const res = await socialSetCuration(post.id, choice, rewardPercentage)
+      if (!res.ok) {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:toast", {
+            detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : (res.error || "Could not record vote"), type: "error" },
+          }))
+        } catch { /* */ }
+        return
+      }
+      if (res.durable === false) {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:toast", {
+            detail: { message: "Vote not visible to others yet — server not confirmed", type: "error" },
+          }))
+        } catch { /* */ }
+        return
+      }
       if (res.ok && res.choice) {
         setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
+        const nextUp = typeof res.upvoteCount === "number" ? res.upvoteCount : upvoteCount
+        const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
+        const redistributed = Boolean(res.redistribute?.credited) && Number(res.redistribute?.amount) > 0
+        if (redistributed) {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.redistribute?.amount).toFixed(4).replace(/\.?0+$/, "")} GHC contributed to this creator`, type: "success" } }))
+          } catch { /* */ }
+        } else if (res.reward?.credited && Number(res.reward.amount) > 0) {
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC credited`, type: "success" } }))
+          } catch { /* */ }
+        } else {
+          // A curation vote is a quality signal. GHC movement is a separate,
+          // balance-funded redistribution and is never invented by the client.
+          const redReason = String(res.redistribute?.reason || "").toUpperCase()
+          const rewardReason = String(res.reward?.reason || "").toUpperCase()
+          const required = Number(res.redistribute?.requiredBalance || 0)
+          const available = Number(res.redistribute?.availableBalanceAfter || 0)
+          const message = redReason.includes("INSUFFICIENT")
+            ? required > 0
+              ? `Vote saved. Your wallet needs ${required.toFixed(4).replace(/\.?0+$/, "")} GHC to fund this contribution.`
+              : "Vote saved. Fund your GHC wallet to make a curation contribution."
+            : rewardReason.includes("DISABLED") || rewardReason.includes("DAILY_CLAIM_ONLY")
+              ? "Vote saved. Curation reward issuance is gated; no GHC was created."
+              : "Vote saved. No GHC movement was recorded for this vote."
+          try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message, type: "success" } })) } catch { /* */ }
+        }
+        broadcastPostEngagement({
+          postId: post.id,
+          kind: "curation",
+          choice: res.choice as "upvote" | "downvote" | "neutral",
+          upvoteCount: nextUp,
+          downvoteCount: nextDown,
+        })
+        // Keep curation analytics synchronized even when this vote produces no GHC movement.
+        try { window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id, source: "curation-vote" } })) } catch { /* fail-soft */ }
       }
     } finally {
       setCurationBusy(false)
@@ -114,9 +307,11 @@ function EnhancedPostCardInner({
 
   // Phase 2.4 — view / qualified_view (fail-soft, server authoritative)
   useEffect(() => {
+    const postId = post.id
+    visibleSinceRef.current = null
+    qualifiedSentRef.current = false
     const el = containerRef.current
     if (!el || typeof IntersectionObserver === "undefined") return
-    const postId = post.id
     const obs = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
@@ -152,55 +347,73 @@ function EnhancedPostCardInner({
     }
   }, [post.id])
 
-  // Double-tap to like
-  const handleImageTap = () => {
-    const now = Date.now()
-    const timeSinceLastTap = now - lastTapTime
-    setLastTapTime(now)
+  // Tap media → clean full-screen lightbox when available; never jam comments into the media view.
+    const clearMediaLongPress = () => {
+    if (mediaLongPressRef.current) {
+      clearTimeout(mediaLongPressRef.current)
+      mediaLongPressRef.current = null
+    }
+  }
 
-    if (timeSinceLastTap < 300 && tapCount > 0) {
-      // Double tap detected
-      if (!isLiked) {
-        onLike(post.id, true)
-        showDoubleTapAnimation()
+  const startMediaLongPress = () => {
+    clearMediaLongPress()
+    mediaLongPressFiredRef.current = false
+    mediaLongPressRef.current = setTimeout(() => {
+      mediaLongPressRef.current = null
+      mediaLongPressFiredRef.current = true
+      setMediaToolsOpen(true)
+      try {
+        if ("vibrate" in navigator) navigator.vibrate(10)
+      } catch {
+        /* */
       }
-      setTapCount(0)
-    } else {
-      setTapCount(1)
-      doubleTapTimerRef.current = setTimeout(() => {
-        setTapCount(0)
-      }, 300)
-    }
+    }, 480)
   }
 
-  const showDoubleTapAnimation = () => {
-    // Visual feedback for double tap
-    if (containerRef.current) {
-      const el = document.createElement("div")
-      el.textContent = "❤️"
-      el.style.position = "fixed"
-      el.style.fontSize = "48px"
-      el.style.pointerEvents = "none"
-      el.style.animation = "float-up 0.8s ease-out forwards"
-      const rect = containerRef.current.getBoundingClientRect()
-      el.style.left = rect.left + rect.width / 2 - 24 + "px"
-      el.style.top = rect.top + rect.height / 2 - 24 + "px"
-      document.body.appendChild(el)
-      setTimeout(() => el.remove(), 800)
-    }
+  const endMediaLongPress = () => {
+    clearMediaLongPress()
   }
 
-  // Long-press for quick reactions
-  const handleLongPress = () => {
-    pressTimerRef.current = setTimeout(() => {
-      setShowReactions(true)
-    }, 500)
+  const handleDownloadCurrentMedia = async () => {
+    const src = realImages[Math.min(imageIndex, Math.max(0, realImages.length - 1))] || realImages[0]
+    if (!src) return
+    setMediaToolsOpen(false)
+    await downloadMedia(src, { kind: "image" })
   }
 
-  const handlePressEnd = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current)
+  const handleImageTap = (event?: React.MouseEvent) => {
+    const target = event?.target as HTMLElement | null
+    if (target?.closest("button, a, [role=button]")) return
+    event?.stopPropagation()
+    if (mediaLongPressFiredRef.current) {
+      mediaLongPressFiredRef.current = false
+      return
     }
+    if (onOpenMedia && realImages.length > 0) {
+      onOpenMedia({
+        urls: realImages.map((u) => ({ url: u, kind: "image" as const })),
+        index: imageIndex,
+        caption: post.content?.slice(0, 120) || undefined,
+        kind: "image",
+      })
+      return
+    }
+    onOpenPost?.(post.id)
+  }
+
+  const handleVideoTap = (event?: React.MouseEvent) => {
+    event?.stopPropagation()
+    const v = typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null
+    if (onOpenMedia && v) {
+      onOpenMedia({
+        urls: [{ url: v, kind: "video" as const }],
+        index: 0,
+        caption: displayAuthor ? `Video · ${displayAuthor}` : "Video",
+        kind: "video",
+      })
+      return
+    }
+    onOpenPost?.(post.id)
   }
 
   const handleQuickReaction = (reaction: PostReaction) => {
@@ -212,27 +425,22 @@ function EnhancedPostCardInner({
       }
     }
     setShowReactions(false)
-    if (reaction.type === "like") {
-      onLike(post.id)
-      return
-    }
+    // Post cards do not expose Like; Likes belong to profile/account cards.
+    if (reaction.type === "like") return
     if (onReact) {
       onReact(post.id, reaction.type)
-      return
     }
-    // Fallback: treat non-like as like for backward compatibility
-    onLike(post.id)
   }
 
   // Media gallery navigation
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setImageIndex(Math.max(0, imageIndex - 1))
+    setImageIndex((current) => Math.max(0, current - 1))
   }
 
   const handleNextImage = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setImageIndex(Math.min(post.images.length - 1, imageIndex + 1))
+    setImageIndex((current) => Math.min(realImages.length - 1, current + 1))
   }
 
   // Parse hashtags and mentions from content
@@ -268,23 +476,36 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md"
+      data-post-id={post.id} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
+      onClick={(event) => {
+        const target = event.target as HTMLElement | null
+        if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
+        onOpenPost?.(post.id)
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || !onOpenPost) return
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onOpenPost(post.id)
+        }
+      }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-        <div className="flex items-center gap-2 flex-1">
-          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Open ${post.authorName}'s profile`}>
+      <div className="flex items-center justify-between px-3 pb-2 pt-3 sm:px-4 sm:pt-4">
+        <div className="flex flex-1 items-center gap-2.5">
+          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${displayAuthor}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
-              alt={post.authorName}
-              className="h-11 w-11 rounded-full object-cover bg-muted"
+              alt={displayAuthor}
+              className="h-11 w-11 rounded-full object-cover bg-muted ring-2 ring-background shadow-sm"
             />
-            {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" title="Online now" aria-label="Online now" />}
-            {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-blue-600 shadow-sm" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
+            {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
+            {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
           <div className="min-w-0 flex-1">
-            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{post.authorName}</button>
+            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{displayAuthor}</button>
             <div className="flex flex-wrap items-center gap-1">
+              <AuthorRepChip data={authorReputationFromPost(post as never)} />
               {(() => {
                 const p = post as Post & { authorProfession?: string; authorTitle?: string; communityName?: string }
                 const ctx = p.authorProfession || p.authorTitle || p.communityName
@@ -298,7 +519,7 @@ function EnhancedPostCardInner({
               </p>
               {(() => {
                 const hasVideo = Boolean(post.video)
-                const realImages = (post.images || []).filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))
+                const realImages = (post.images || []).filter((u) => typeof u === "string" && isDurableMediaUrl(u))
                 const hasImage = realImages.length > 0
                 const special = detectSpecialPost(post.content)
                 const isPoll = Boolean((post as Post & { poll?: unknown }).poll) || special === "poll"
@@ -352,7 +573,19 @@ function EnhancedPostCardInner({
         title={isOwn ? "Your post" : "Post options"}
       >
         {isOwn && onEdit && (
-          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => { setDraftContent(post.content ?? ""); setEditingPost(true); setShowMenu(false) }}>
+          <ActionSheetItem icon={<Pencil size={16} />} onClick={() => {
+              setDraftContent(post.content ?? "")
+              setDraftImages(
+                Array.isArray(post.images)
+                  ? post.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u))
+                  : [],
+              )
+              setDraftVideo(
+                typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null,
+              )
+              setEditingPost(true)
+              setShowMenu(false)
+            }}>
             Edit post
           </ActionSheetItem>
         )}
@@ -372,7 +605,7 @@ function EnhancedPostCardInner({
           </ActionSheetItem>
         )}
         {isOwn && onDelete && (
-          <ActionSheetItem destructive onClick={() => { if (window.confirm("Delete this post? This cannot be undone.")) onDelete(post.id); setShowMenu(false) }}>
+          <ActionSheetItem destructive onClick={async () => { if (await confirmDialog({ title: "Delete post?", message: "This cannot be undone. The post and its visible discussion will be removed.", confirmLabel: "Delete post", danger: true })) onDelete(post.id); setShowMenu(false) }}>
             Delete post
           </ActionSheetItem>
         )}
@@ -405,29 +638,156 @@ function EnhancedPostCardInner({
         )}
       </ActionSheet>
 
-      {editingPost && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post"><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"><h2 className="text-lg font-bold text-gray-900">Edit Post</h2><textarea autoFocus value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="mt-4 min-h-32 w-full resize-y rounded-xl border border-gray-200 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" maxLength={5000} /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditingPost(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100">Cancel</button><button type="button" disabled={!draftContent.trim()} onClick={() => { onEdit?.(post.id, draftContent.trim()); setEditingPost(false) }} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save changes</button></div></div></div>}
+      {editingPost && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Edit post">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.25rem] border border-border/50 bg-card p-5 shadow-2xl">
+            <h2 className="text-lg font-bold text-foreground">Edit post</h2>
+            <textarea
+              autoFocus
+              value={draftContent}
+              onChange={(event) => setDraftContent(event.target.value)}
+              className="mt-4 min-h-28 w-full resize-y rounded-xl border border-border/70 bg-background p-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              maxLength={5000}
+              placeholder="Update your post…"
+            />
+            <div className="mt-3">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Media</p>
+              {draftImages.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {draftImages.map((url) => (
+                    <div key={url} className="relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border/60">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                        aria-label="Remove image"
+                        onClick={() => setDraftImages((prev) => prev.filter((u) => u !== url))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {draftVideo ? (
+                <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-[12px]">
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">Video attached</span>
+                  <button type="button" className="font-semibold text-rose-600" onClick={() => setDraftVideo(null)}>
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+              <input
+                ref={editImageInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                multiple
+                onChange={(e) => {
+                  const files = e.target.files
+                  e.target.value = ""
+                  if (!files?.length) return
+                  void (async () => {
+                    setEditMediaBusy(true)
+                    try {
+                      for (const file of Array.from(files).slice(0, 10 - draftImages.length)) {
+                        if (file.type.startsWith("video/")) {
+                          const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
+                          const url =
+                            (res as { url?: string; publicUrl?: string })?.url ||
+                            (res as { publicUrl?: string })?.publicUrl
+                          if (url && isDurableMediaUrl(String(url))) setDraftVideo(String(url))
+                          continue
+                        }
+                        if (!file.type.startsWith("image/")) continue
+                        const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
+                        const url =
+                          (res as { url?: string; publicUrl?: string })?.url ||
+                          (res as { publicUrl?: string })?.publicUrl
+                        if (url && isDurableMediaUrl(String(url))) {
+                          setDraftImages((prev) => [...prev, String(url)].slice(0, 10))
+                        }
+                      }
+                    } catch {
+                      /* fail-soft — keep existing media */
+                    } finally {
+                      setEditMediaBusy(false)
+                    }
+                  })()
+                }}
+              />
+              <button
+                type="button"
+                disabled={editMediaBusy || draftImages.length >= 10}
+                onClick={() => editImageInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+              >
+                {editMediaBusy ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+                {editMediaBusy ? "Uploading…" : "Add photo or video"}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingPost(false)}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!draftContent.trim() || editMediaBusy}
+                onClick={() => {
+                  const media: PostEditMedia = {
+                    images: draftImages,
+                    video: draftVideo,
+                  }
+                  onEdit?.(post.id, draftContent.trim(), media)
+                  setEditingPost(false)
+                }}
+                className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content with rich formatting */}
-      <div className="p-4">
+      <div className="px-3 pb-2.5 pt-1 sm:px-4 sm:pb-3">
         {detectSpecialPost(post.content) ? (
           <SpecialPostBody content={post.content || ""} />
         ) : (
           <>
             <div
-              className={`mb-1 break-words text-[15px] sm:text-base leading-relaxed text-foreground ${
+              className={`mb-1 break-words text-[15px] leading-[1.55] tracking-[-0.011em] text-foreground sm:text-base ${
                 !contentExpanded && (post.content?.length || 0) > 220 ? "line-clamp-5" : ""
               }`}
             >
               {contentParts.map((part, idx) => {
                 if (typeof part === "string") {
-                  return <span key={idx}>{part}</span>
+                  return <SafeTextWithLinks key={idx} text={part} />
                 }
                 if (part.type === "hashtag") {
                   return (
                     <button
                       key={idx}
                       type="button"
+                      data-post-no-open
                       className="text-emerald-700 hover:underline dark:text-emerald-400"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        try {
+                          window.dispatchEvent(
+                            new CustomEvent("ghc:feed-search", {
+                              detail: { query: String(part.value || "") },
+                            }),
+                          )
+                          window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+                        } catch { /* */ }
+                      }}
                     >
                       {part.value}
                     </button>
@@ -451,10 +811,11 @@ function EnhancedPostCardInner({
             {(post.content?.length || 0) > 220 && (
               <button
                 type="button"
+                aria-expanded={contentExpanded}
                 onClick={() => setContentExpanded((v) => !v)}
-                className="mb-3 text-[13px] font-bold text-emerald-700 hover:text-emerald-800"
+                className="mb-3 min-h-9 rounded-lg px-1 text-[13px] font-bold text-[var(--gh-green)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                {contentExpanded ? "Show less" : "more"}
+                {contentExpanded ? "Show less" : "Read more"}
               </button>
             )}
           </>
@@ -466,9 +827,9 @@ function EnhancedPostCardInner({
             href={post.linkPreview.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block mb-2 border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition"
+            className="mb-2 block overflow-hidden rounded-[1.15rem] border border-border/50 shadow-sm transition hover:border-border hover:shadow-[var(--gh-card-shadow)]"
           >
-            <div className="flex gap-2 p-2 bg-gray-50 hover:bg-gray-100">
+            <div className="flex gap-2 bg-muted/40 p-2 hover:bg-muted/60">
               {post.linkPreview.image && (
                 <LazyImage
                   src={post.linkPreview.image}
@@ -477,154 +838,340 @@ function EnhancedPostCardInner({
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-900 truncate">{post.linkPreview.title}</p>
-                <p className="text-xs text-gray-500 truncate">{post.linkPreview.domain}</p>
+                <p className="truncate text-xs font-semibold text-foreground">{post.linkPreview.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{post.linkPreview.domain}</p>
               </div>
             </div>
           </a>
         )}
 
         {/* Media gallery with improved viewing */}
-        {Array.isArray(post.images) && post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder")).length > 0 && (
+        {realImages.length > 0 && (
           <div
-            className="relative mb-2 aspect-[4/5] max-h-[28rem] w-full overflow-hidden rounded-xl sm:aspect-video bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 group cursor-pointer"
+            className="group relative mb-2 aspect-[4/5] max-h-[24rem] w-full cursor-pointer overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem]"
             onClick={handleImageTap}
-            onMouseDown={handleLongPress}
-            onMouseUp={handlePressEnd}
-            onTouchStart={handleLongPress}
-            onTouchEnd={handlePressEnd}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              if ((e.target as HTMLElement).closest("button")) return
+              startMediaLongPress()
+            }}
+            onPointerUp={endMediaLongPress}
+            onPointerCancel={endMediaLongPress}
+            onPointerLeave={endMediaLongPress}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMediaToolsOpen(true)
+            }}
+            role="group"
+            tabIndex={onOpenPost || onOpenMedia ? 0 : undefined}
+            aria-label={`Post image gallery, image ${imageIndex + 1} of ${realImages.length}. Hold for download.`}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault()
+                handleImageTap()
+              }
+            }}
           >
             <LazyImage
-              src={(post.images.filter((u) => typeof u === "string" && u.trim() && !u.includes("placeholder"))[Math.min(imageIndex, post.images.length - 1)] || post.images[0])}
-              alt={`Post image ${imageIndex + 1}`}
+              src={realImages[Math.min(imageIndex, realImages.length - 1)] || realImages[0]}
+              alt={`Photo ${imageIndex + 1} of ${realImages.length}`}
               className="absolute inset-0 h-full w-full object-cover"
+              variant="post-media"
             />
-
-            {/* Navigation arrows */}
-            {post.images.length > 1 && (
+            {realImages.length > 1 && (
               <>
-                <button
-                  onClick={handlePrevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  ←
+                <button type="button" onClick={handlePrevImage} disabled={imageIndex === 0} aria-label="Previous post image" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 disabled:opacity-35 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100">
+                  <span aria-hidden="true">←</span>
                 </button>
-                <button
-                  onClick={handleNextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  →
+                <button type="button" onClick={handleNextImage} disabled={imageIndex >= realImages.length - 1} aria-label="Next post image" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 disabled:opacity-35 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100">
+                  <span aria-hidden="true">→</span>
                 </button>
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white px-2 py-1 rounded-full text-xs">
-                  {imageIndex + 1} / {post.images.length}
+                <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold tabular-nums text-white" aria-live="polite">
+                  {Math.min(imageIndex + 1, realImages.length)} / {realImages.length}
                 </div>
               </>
-            )}
-
-            {/* Quick reactions overlay */}
-            {showReactions && (
-              <div className="absolute inset-0 bg-black/20 flex items-center justify-center gap-2 z-40">
-                {REACTIONS.map((reaction) => (
-                  <button
-                    key={reaction.type}
-                    onClick={() => handleQuickReaction(reaction)}
-                    className="w-12 h-12 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-2xl transform hover:scale-125 transition-transform"
-                    title={reaction.label}
-                  >
-                    {reaction.emoji}
-                  </button>
-                ))}
-              </div>
             )}
           </div>
         )}
 
+        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={handleVideoTap} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Play video full screen"><DurableVideo src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video</span></button> : null}
+
         {/* Quote repost */}
         {post.quoteOf && (
-          <div className="mb-2 p-2 border border-gray-300 rounded-lg bg-gray-50 text-xs text-gray-600">
+          <div className="mb-2 p-2 border border-border/80 rounded-lg bg-muted/40 text-xs text-muted-foreground">
             <p className="font-semibold mb-1">Quoted post</p>
-            <p className="text-gray-600">Original post content preview...</p>
+            <p className="text-muted-foreground">Original post content preview...</p>
           </div>
         )}
       </div>
 
-      {/* Engagement stats */}
-      {post.engagement && (
-        <div className="px-3 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-500 space-y-1">
-          <div className="flex justify-between">
-            <span>{post.engagement.views} views</span>
-            <span>{post.engagement.saves} saved</span>
+
+      {(() => {
+        const pollView = resolvePostPoll(post as { content?: string; poll?: import("./poll-inline").PollView | null })
+        return pollView ? (
+          <div className="px-3.5">
+            <PollInline poll={pollView} postId={post.id} />
+          </div>
+        ) : null
+      })()}
+      {(() => {
+        const ch = resolvePostChallenge(post as { content?: string })
+        return ch ? (
+          <div className="px-3.5">
+            <ChallengeInline challenge={ch} />
+          </div>
+        ) : null
+      })()}
+
+      {/* Reaction summary only. Comment/share totals live beside their single action controls below. */}
+      {visibleReactionEntries.length > 0 ? (
+        <section className="mx-4 mb-2 px-1 py-1" aria-label="Reaction counts">
+          <div className="flex flex-wrap gap-1">
+            {visibleReactionEntries.slice(0, 5).map(([type, count]) => (
+              <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                <span>{reactionEmoji[type] || "✨"}</span>
+                <span className="tabular-nums">{Number(count).toLocaleString()}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Saves only — views are shown once inside Curation & post insights (no duplicate 0 views). */}
+      {post.engagement && Number(post.engagement.saves || 0) > 0 ? (
+        <div className="border-t border-border/40 bg-muted/25 px-3.5 py-1.5 text-[11px] text-muted-foreground">
+          <div className="flex justify-end">
+            <span className="tabular-nums">{Number(post.engagement.saves).toLocaleString()} saved</span>
+          </div>
+        </div>
+      ) : null}
+
+      {showReactions && (
+        <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>
+          <span className="px-1 text-xs font-semibold text-muted-foreground">{curationReactionKind === "positive" ? "Positive reaction" : "Negative reaction"}</span>
+          {REACTIONS.filter((reaction) => curationReactionKind === "positive" ? reaction.type !== "sad" && reaction.type !== "like" : reaction.type === "sad").map((reaction) => (
+            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-8 min-w-8 items-center justify-center rounded-full bg-muted px-1.5 text-base hover:bg-muted/70" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
+          ))}
+          <button type="button" onClick={() => setShowReactions(false)} className="ml-auto rounded-full px-2 py-1 text-xs text-muted-foreground">Cancel</button>
+        </div>
+      )}
+
+      {/* Primary actions — separate quality curation from everyday response actions. */}
+      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
+        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
+      </div>
+      <div
+        className="px-2 pb-2 pt-1 sm:px-3"
+        role="toolbar"
+        aria-label="Post engagement and curation actions"
+      >
+        <div className="flex min-w-0 w-full flex-wrap items-center gap-y-1.5">
+          {/* Curation cluster — shrinks first on narrow screens */}
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <label
+              className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
+              title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
+            >
+              <span className="sr-only sm:not-sr-only sm:inline">Quality</span>
+              <select
+                aria-label="Curation vote weight percentage; does not issue GHC"
+                value={rewardPercentage}
+                disabled={curationBusy}
+                onChange={(e) => setRewardPercentage(Number(e.target.value))}
+                className="h-10 max-w-[4rem] rounded-full border border-border/70 bg-background px-2 text-[11px] font-semibold text-foreground outline-none focus:ring-2 focus:ring-emerald-500/30 sm:max-w-[4.5rem] sm:text-xs"
+              >
+                <option value={0}>0%</option>
+                <option value={25}>25%</option>
+                <option value={50}>50%</option>
+                <option value={75}>75%</option>
+                <option value={100}>100%</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={curationBusy}
+              aria-label={curationChoice === "upvote" ? "Change vote to upvote" : "Upvote this post"}
+              aria-pressed={curationChoice === "upvote"}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (curationRosterLongPressRef.current) {
+                  curationRosterLongPressRef.current = false
+                  return
+                }
+                setShowReactions(false)
+                void handleCuration("upvote")
+              }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("upvotes") }}
+              onPointerUp={() => endCurationRosterLongPress()}
+              onPointerCancel={() => endCurationRosterLongPress(true)}
+              onPointerLeave={() => endCurationRosterLongPress(true)}
+              onContextMenu={(e) => { e.preventDefault(); openRoster("upvotes") }}
+              title="Upvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
+              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
+                curationChoice === "upvote"
+                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
+                  : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
+              }`}
+            >
+                <ThumbsUp size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
+              <span className="tabular-nums">{upvoteCount}</span>
+            </button>
+            <button
+              type="button"
+              disabled={curationBusy}
+              aria-label={curationChoice === "downvote" ? "Change vote to downvote" : "Downvote this post"}
+              aria-pressed={curationChoice === "downvote"}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (curationRosterLongPressRef.current) {
+                  curationRosterLongPressRef.current = false
+                  return
+                }
+                setShowReactions(false)
+                void handleCuration("downvote")
+              }}
+              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("downvotes") }}
+              onPointerUp={() => endCurationRosterLongPress()}
+              onPointerCancel={() => endCurationRosterLongPress(true)}
+              onPointerLeave={() => endCurationRosterLongPress(true)}
+              onContextMenu={(e) => { e.preventDefault(); openRoster("downvotes") }}
+              title="Downvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
+              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
+                curationChoice === "downvote"
+                  ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
+                  : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
+              }`}
+            >
+              <ThumbsDown size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
+              <span className="tabular-nums">{downvoteCount}</span>
+            </button>
+          </div>
+
+          {/* Response cluster — never shrinks away; share/save always visible */}
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <div className="mx-0.5 hidden h-5 w-px bg-border/70 xs:block sm:mx-1 sm:h-6" aria-hidden />
+            <button
+              type="button"
+              aria-label="Comment"
+              onClick={() => onComment(post.id)}
+              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+            >
+              <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
+              <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
+                {visibleCommentCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={isSaved ? "Unsave" : "Save"}
+              aria-pressed={isSaved}
+              onClick={() => onSave(post.id)}
+              className={`inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full transition active:scale-95 ${
+                isSaved
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Share"
+              onClick={() => onShare(post.id)}
+              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+            >
+              <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Public reward / quality strip — GHC amounts only when server-enabled */}
+      <PostRewardPanel
+        postId={post.id}
+        upvoteCount={upvoteCount}
+        downvoteCount={downvoteCount}
+        views={post.engagement?.views ?? 0}
+      />
+
+      <EngagementRosterSheet
+        open={rosterOpen}
+        onClose={() => setRosterOpen(false)}
+        kind={rosterKind}
+        postId={post.id}
+      />
+      {mediaToolsOpen && (
+        <div
+          className="fixed inset-0 z-[210] flex items-end justify-center bg-black/45 sm:items-center"
+          onClick={(e) => {
+            e.stopPropagation()
+            setMediaToolsOpen(false)
+          }}
+          role="presentation"
+          data-post-no-open
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl border border-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="menu"
+            aria-label="Post media tools"
+            data-post-no-open
+          >
+            <p className="mb-3 text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">Media tools</p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                role="menuitem"
+                className="flex min-h-12 items-center gap-3 rounded-xl bg-muted/80 px-4 text-sm font-semibold hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMediaToolsOpen(false)
+                  if (onOpenMedia && realImages.length > 0) {
+                    onOpenMedia({
+                      urls: realImages.map((u) => ({ url: u, kind: "image" as const })),
+                      index: imageIndex,
+                      caption: post.content?.slice(0, 120) || undefined,
+                      kind: "image",
+                    })
+                  } else {
+                    handleImageTap()
+                  }
+                }}
+              >
+                View full screen
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex min-h-12 items-center gap-3 rounded-xl bg-muted/80 px-4 text-sm font-semibold hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handleDownloadCurrentMedia()
+                }}
+              >
+                Download photo
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="mt-1 flex min-h-11 items-center justify-center rounded-xl text-sm text-muted-foreground hover:bg-muted/50"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMediaToolsOpen(false)
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Primary actions — equal weight, 44px targets, clear active states */}
-      <div className="grid grid-cols-4 items-center border-t border-border/60 bg-card/95 px-0.5 py-1.5" role="toolbar" aria-label="Post actions">
-        <ActionIconButton
-          label={isLiked ? "Unlike" : "Like"}
-          tone="rose"
-          active={isLiked}
-          count={Math.max(0, Number(post.engagement?.likes ?? post.likes ?? 0) + (isLiked ? 1 : 0))}
-          icon={<Heart size={20} fill={isLiked ? "currentColor" : "none"} aria-hidden />}
-          onClick={() => onLike(post.id)}
-        />
-        <ActionIconButton
-          label="Comment"
-          count={Array.isArray(post.comments) ? post.comments.length : 0}
-          icon={<MessageCircle size={20} aria-hidden />}
-          onClick={() => onComment(post.id)}
-        />
-        <ActionIconButton
-          label={isSaved ? "Unsave" : "Save"}
-          tone="amber"
-          active={isSaved}
-          icon={<Bookmark size={20} fill={isSaved ? "currentColor" : "none"} aria-hidden />}
-          onClick={() => onSave(post.id)}
-        />
-        <ActionIconButton
-          label="Share"
-          icon={<Share2 size={20} aria-hidden />}
-          onClick={() => onShare(post.id)}
-        />
-      </div>
-      {/* Quality ranking — upvote / downvote (feeds ranking engine) */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-muted/20 px-3 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Quality
-        </p>
-        <div className="flex items-center gap-1" role="group" aria-label="Content quality ranking">
-          <button
-            type="button"
-            disabled={curationBusy}
-            aria-label="Upvote — improve ranking"
-            aria-pressed={curationChoice === "upvote"}
-            onClick={() => void handleCuration("upvote")}
-            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
-              curationChoice === "upvote"
-                ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <ChevronUp size={18} strokeWidth={2.5} aria-hidden />
-            <span className="tabular-nums text-[11px]">{upvoteCount > 0 ? upvoteCount : ""}</span>
-          </button>
-          <button
-            type="button"
-            disabled={curationBusy}
-            aria-label="Downvote — lower ranking"
-            aria-pressed={curationChoice === "downvote"}
-            onClick={() => void handleCuration("downvote")}
-            className={`inline-flex min-h-10 min-w-10 items-center justify-center gap-0.5 rounded-full text-xs font-bold transition active:scale-95 ${
-              curationChoice === "downvote"
-                ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-900/40 dark:text-rose-300"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <ChevronDown size={18} strokeWidth={2.5} aria-hidden />
-            <span className="tabular-nums text-[11px]">{downvoteCount > 0 ? downvoteCount : ""}</span>
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -659,16 +1206,16 @@ export function VisibilityReasonTooltip({
     <div className="fixed inset-0 bg-black/50 flex items-end z-50">
       <div className="w-full bg-white rounded-t-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-gray-900">Why am I seeing this?</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <h3 className="font-bold text-foreground">Why am I seeing this?</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground/90">
             <X size={20} />
           </button>
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-gray-700">{reason.reason}</p>
+          <p className="text-sm text-foreground/90">{reason.reason}</p>
           <div className="flex gap-2">
-            <button className="flex-1 py-2 px-3 bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-200">
+            <button className="flex-1 rounded-xl bg-muted px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted/80">
               See less like this
             </button>
             <button className="flex-1 py-2 px-3 bg-blue-100 rounded-lg text-sm font-semibold text-blue-700 hover:bg-blue-200">

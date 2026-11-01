@@ -9,6 +9,10 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { socialRpc } from "@/lib/server/social/rpc"
+import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   listMessages,
   appendMessage,
@@ -32,19 +36,39 @@ export async function GET(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const readLimit = checkRateLimit(`msg-read:${auth.userId}`, 120, 60_000)
+    if (!readLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const url = new URL(request.url)
-    const limit = Number(url.searchParams.get("limit") || "50")
+    const rawLimit = Number(url.searchParams.get("limit") || "50")
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100)
     const before = url.searchParams.get("before")
+    const beforeId = url.searchParams.get("beforeId")
+    // Bound cursor input before it reaches date parsing or database query construction.
+    if (before !== null && (before.length > 80 || /[\u0000-\u001f\u007f]/.test(before))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    if (beforeId !== null && (!beforeId.trim() || beforeId.length > 180 || /[\u0000-\u001f\u007f]/.test(beforeId))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    // Ignore client identity query params
+    void url.searchParams.get("userId")
+    void url.searchParams.get("senderId")
 
     const result = await listMessages({
       conversationId,
       ghUserId: auth.userId,
-      limit: Number.isFinite(limit) ? limit : 50,
+      limit,
       before,
+      beforeId,
     })
     if (!result.ok) {
-      const status = result.error === "FORBIDDEN" ? 403 : 503
+      const status = result.error === "FORBIDDEN" ? 403 : result.error === "INVALID_CURSOR" ? 400 : 503
       return NextResponse.json(
         { ok: false, error: result.error },
         { status, headers: { "Cache-Control": "no-store" } }
@@ -80,30 +104,104 @@ export async function POST(request: Request, ctx: Ctx) {
       )
     }
     const { conversationId } = await ctx.params
-    const body = await request.json().catch(() => ({}))
-    const text = typeof body?.body === "string" ? body.body : ""
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const rl = checkRateLimit(`msg-send:${auth.userId}`, 60, 60_000)
+    if (!rl.ok) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED" },
+        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } }
+      )
+    }
+    const parsed = await readBoundedJson(request, 24 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+    }
+    const body = parsed.value
+    // Actor is session only — never trust client identity fields
+    void body.senderId
+    void body.userId
+    void body.authorId
+    void body.actorId
+    const text = typeof body?.body === "string" ? body.body.trim() : ""
+    if (text.length > 8000) {
+      return NextResponse.json(
+        { ok: false, error: "TOO_LONG" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
     const clientMessageId =
-      typeof body?.clientMessageId === "string" ? body.clientMessageId : null
+      typeof body?.clientMessageId === "string" ? body.clientMessageId.trim() : null
+    if (clientMessageId !== null && (!clientMessageId || clientMessageId.length > 180 || /[\u0000-\u001f\u007f]/.test(clientMessageId))) {
+      return NextResponse.json({ ok: false, error: "INVALID_CLIENT_MESSAGE_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const replyToMessageId =
+      typeof body?.replyToMessageId === "string" ? body.replyToMessageId.trim() : ""
+    const sharedPostId = typeof body?.sharedPostId === "string" ? body.sharedPostId.trim() : ""
+    if (sharedPostId.length > 180 || /[\u0000-\u001f\u007f]/.test(sharedPostId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_SHARED_POST" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    if (replyToMessageId.length > 180 || /[\u0000-\u001f\u007f]/.test(replyToMessageId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_REPLY_TARGET" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
 
-    // Never trust body.senderId
+    // Persist only durable first-party media IDs owned by the session actor.
+    // Arbitrary HTTPS URLs and expiring storage URLs are not accepted.
+    const rawAtts = Array.isArray(body?.mediaAttachments) ? body.mediaAttachments : Array.isArray(body?.attachments) ? body.attachments : []
+    const attachmentValidation = await validateOwnedMediaAttachments({
+      requestUrl: request.url,
+      ownerId: auth.userId,
+      raw: rawAtts,
+      maxItems: 4,
+    })
+    if (!attachmentValidation.ok) {
+      const status = attachmentValidation.error === "MEDIA_AUTHORIZATION_UNAVAILABLE" ? 503 : 400
+      return NextResponse.json({ ok: false, error: attachmentValidation.error }, { status, headers: { "Cache-Control": "no-store" } })
+    }
+    const mediaAttachments = attachmentValidation.attachments
+
+    if (!text && mediaAttachments.length === 0) {
+      return NextResponse.json({ ok: false, error: "EMPTY_BODY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+
     const result = await appendMessage({
       conversationId,
       senderId: auth.userId,
       body: text,
       clientMessageId,
+      replyToMessageId: replyToMessageId || undefined,
+      sharedPostId: sharedPostId || undefined,
+      mediaAttachments: mediaAttachments.length ? mediaAttachments : undefined,
     })
     if (!result.ok) {
       const status =
-        result.error === "FORBIDDEN"
+        result.error === "FORBIDDEN" || result.error === "BLOCKED" || result.error === "PRIVACY_RESTRICTED" || result.error === "SHARED_POST_PRIVATE"
           ? 403
-          : result.error === "EMPTY_BODY"
+          : result.error === "PRIVACY_SETTINGS_UNCONFIGURED"
+            ? 409
+          : result.error === "EMPTY_BODY" || result.error === "INVALID_ATTACHMENTS" || result.error === "INVALID_REPLY_TARGET"
             ? 400
-            : 503
+            : result.error === "REPLY_TARGET_NOT_FOUND" || result.error === "INVALID_SHARED_POST"
+              ? 404
+              : 503
       return NextResponse.json(
         { ok: false, error: result.error },
         { status, headers: { "Cache-Control": "no-store" } }
       )
     }
+    // Durable recipient notification: one server-side fan-out RPC after the
+    // message was accepted, never for optimistic/local-only or idempotent retries.
+    // Notification failure never turns a sent message into failure.
+    if (isMessagingStoreDurable() && !result.idempotent) {
+      await socialRpc("gh_social_notify_message_members", {
+        p_sender_id: auth.userId,
+        p_conversation_id: conversationId,
+        p_message_id: result.message.id,
+      }).catch(() => null)
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -134,10 +232,22 @@ export async function PATCH(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const editLimit = checkRateLimit(`msg-edit:${auth.userId}`, 60, 60_000)
+    if (!editLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(editLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
-    const body = await request.json().catch(() => ({}))
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const parsed = await readBoundedJson(request, 16 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+    }
+    const body = parsed.value
     const messageId = String(body?.messageId || "").trim()
-    if (!messageId) {
+    if (!messageId || messageId.length > 180 || /[\u0000-\u001f\u007f]/.test(messageId)) {
       return NextResponse.json(
         { ok: false, error: "MESSAGE_ID_REQUIRED" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
@@ -167,6 +277,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
     // Edit body
     const text = typeof body?.body === "string" ? body.body : ""
+    if (text.length > 8000) {
+      return NextResponse.json({ ok: false, error: "TOO_LONG" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const result = await editMessage({
       conversationId,
       messageId,
@@ -216,10 +329,17 @@ export async function DELETE(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const deleteLimit = checkRateLimit(`msg-delete:${auth.userId}`, 60, 60_000)
+    if (!deleteLimit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(deleteLimit.retryAfterSec) } })
+    }
     const { conversationId } = await ctx.params
+    if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
+      return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const url = new URL(request.url)
     const messageId = url.searchParams.get("messageId") || ""
-    if (!messageId) {
+    if (!messageId || messageId.length > 180 || /[\u0000-\u001f\u007f]/.test(messageId)) {
       return NextResponse.json(
         { ok: false, error: "MESSAGE_ID_REQUIRED" },
         { status: 400, headers: { "Cache-Control": "no-store" } }

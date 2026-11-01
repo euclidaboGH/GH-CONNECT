@@ -4,7 +4,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
-  getPaymentIntent,
   loadPaymentIntent,
 } from "@/lib/server/payments/intent-store"
 
@@ -20,8 +19,8 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
   const { intentId } = await ctx.params
-  // Durable-first so status survives cold start
-  const intent = (await loadPaymentIntent(intentId)) || getPaymentIntent(intentId)
+  // Durable-only: status must survive cold starts and remain authoritative across instances
+  const intent = (await loadPaymentIntent(intentId))
   if (!intent) {
     return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
   }

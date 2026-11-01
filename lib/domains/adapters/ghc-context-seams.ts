@@ -177,6 +177,9 @@ export function createDiscoverySeam(getCandidates: () => Array<Record<string, un
         if (mapped.length >= limit) break
         const id = String(c.id || c.userId || "")
         if (!id) continue
+        // Production must fail closed: only explicitly server-hydrated candidates
+        // may cross the discovery domain boundary. Prefix checks alone are weak.
+        if (!isDemoDataAllowed() && c.isSample !== false) continue
         if (!isDemoDataAllowed() && (id.startsWith("demo-") || id.startsWith("seed-"))) continue
         const interests = Array.isArray(c.interests) ? (c.interests as string[]) : []
         const intents = resolveUserIntents(id, {

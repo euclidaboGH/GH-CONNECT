@@ -1,36 +1,20 @@
 import type { PendingHold } from "./wallet-types"
+import { formatDateTime } from "@/lib/regional-context"
 
-export function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0.00"
-  return n.toLocaleString(undefined, {
+export function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  })}`
 }
 
 export function formatWhen(ts: number) {
-  try {
-    return new Date(ts).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return ""
-  }
+  return formatDateTime(ts, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 
 export function formatDay(ts: number) {
-  try {
-    return new Date(ts).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
-  } catch {
-    return ""
-  }
+  return formatDateTime(ts, { month: "short", day: "numeric", year: "numeric" })
 }
 
 export function statusLabel(status?: string): { text: string; className: string } {

@@ -34,9 +34,12 @@ import {
 import { encodeQrSvg } from "@/lib/qr-lite"
 import { collectSendRecipients, type SendRecipient } from "./send-ghc-flow"
 
-function formatGhc(n: number) {
-  if (!Number.isFinite(n)) return "0"
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+function formatGhc(n: number): string {
+  if (!Number.isFinite(n)) return "₲ 0.00"
+  return `₲ ${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 export type ReceiveGhcFlowProps = {
@@ -254,7 +257,7 @@ export function ReceiveGhcFlow({
       aria-label="Receive GHC"
     >
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
+      <div className="relative z-[1] flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <button
             type="button"
@@ -329,7 +332,7 @@ export function ReceiveGhcFlow({
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Your QR code
                 </p>
-                <div className="mx-auto mt-3 flex max-w-[240px] items-center justify-center rounded-xl border border-border bg-white p-3">
+                <div className="mx-auto mt-3 flex max-w-[240px] items-center justify-center rounded-xl border border-border/60 bg-card p-3">
                   {qrSvg ? (
                     <div
                       className="mx-auto"

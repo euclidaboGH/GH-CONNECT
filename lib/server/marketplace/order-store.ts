@@ -42,6 +42,16 @@ export type ServerMarketOrder = {
   paymentId?: string
   txid?: string
   ghcSpendRef?: string
+  reservationExpiresAt?: number
+  escrowStatus?: "none" | "held" | "releasable" | "released" | "refund_pending" | "refunded"
+  deliveryStatus?: "not_started" | "processing" | "shipped" | "delivered" | "service_active" | "completed"
+  disputeReason?: string
+  cancellationReason?: string
+  buyerNote?: string
+  sellerNote?: string
+  deliveredAt?: number
+  buyerConfirmedAt?: number
+  sellerConfirmedAt?: number
   createdAt: number
   updatedAt: number
   confirmedAt?: number
@@ -77,18 +87,23 @@ async function rpcJson(fn: string, body: Record<string, unknown>): Promise<unkno
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Cache-Control": "no-store",
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
       },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify(body),
     })
     if (!res.ok) return null
     const text = await res.text()
-    if (!text) return { ok: true }
+    // PostgREST void RPCs may legitimately return an empty body. A non-empty,
+    // malformed body is never evidence that a financial/order mutation succeeded.
+    if (!text.trim()) return { ok: true }
     try {
       return JSON.parse(text)
     } catch {
-      return { ok: true }
+      return null
     }
   } catch {
     return null
@@ -119,7 +134,29 @@ function orderToRow(order: ServerMarketOrder): Record<string, unknown> {
     fulfilledAt: order.fulfilledAt ? new Date(order.fulfilledAt).toISOString() : null,
     completedAt: order.completedAt ? new Date(order.completedAt).toISOString() : null,
     cancelledAt: order.cancelledAt ? new Date(order.cancelledAt).toISOString() : null,
+    escrowStatus: order.escrowStatus ?? "none", deliveryStatus: order.deliveryStatus ?? "not_started",
+    disputeReason: order.disputeReason ?? null, cancellationReason: order.cancellationReason ?? null,
+    buyerNote: order.buyerNote ?? null, sellerNote: order.sellerNote ?? null,
+    deliveredAt: order.deliveredAt ? new Date(order.deliveredAt).toISOString() : null,
+    buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
+    sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
   }
+}
+
+
+/** Accept database epoch milliseconds/seconds and ISO timestamps without
+ * silently replacing valid persisted history with the current wall clock. */
+function timestampMs(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 0 && value < 100_000_000_000 ? Math.trunc(value * 1000) : Math.trunc(value)
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return timestampMs(numeric, fallback)
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
 }
 
 function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
@@ -140,12 +177,17 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     paymentId: data.paymentId ? String(data.paymentId) : undefined,
     txid: data.txid ? String(data.txid) : undefined,
     ghcSpendRef: data.ghcSpendRef ? String(data.ghcSpendRef) : undefined,
-    createdAt: Number(data.createdAt) || Date.now(),
-    updatedAt: Number(data.updatedAt) || Date.now(),
-    confirmedAt: data.confirmedAt != null ? Number(data.confirmedAt) : undefined,
-    fulfilledAt: data.fulfilledAt != null ? Number(data.fulfilledAt) : undefined,
-    completedAt: data.completedAt != null ? Number(data.completedAt) : undefined,
-    cancelledAt: data.cancelledAt != null ? Number(data.cancelledAt) : undefined,
+    reservationExpiresAt: data.reservationExpiresAt != null ? timestampMs(data.reservationExpiresAt) : undefined,
+    escrowStatus: data.escrowStatus as ServerMarketOrder["escrowStatus"], deliveryStatus: data.deliveryStatus as ServerMarketOrder["deliveryStatus"],
+    disputeReason: data.disputeReason ? String(data.disputeReason) : undefined, cancellationReason: data.cancellationReason ? String(data.cancellationReason) : undefined,
+    buyerNote: data.buyerNote ? String(data.buyerNote) : undefined, sellerNote: data.sellerNote ? String(data.sellerNote) : undefined,
+    deliveredAt: data.deliveredAt != null ? timestampMs(data.deliveredAt) : undefined, buyerConfirmedAt: data.buyerConfirmedAt != null ? timestampMs(data.buyerConfirmedAt) : undefined, sellerConfirmedAt: data.sellerConfirmedAt != null ? timestampMs(data.sellerConfirmedAt) : undefined,
+    createdAt: timestampMs(data.createdAt, 0),
+    updatedAt: timestampMs(data.updatedAt, 0),
+    confirmedAt: data.confirmedAt != null ? timestampMs(data.confirmedAt) : undefined,
+    fulfilledAt: data.fulfilledAt != null ? timestampMs(data.fulfilledAt) : undefined,
+    completedAt: data.completedAt != null ? timestampMs(data.completedAt) : undefined,
+    cancelledAt: data.cancelledAt != null ? timestampMs(data.cancelledAt) : undefined,
     audit: Array.isArray(data.audit) ? (data.audit as ServerMarketOrder["audit"]) : [],
   }
 }
@@ -160,14 +202,78 @@ export function getOrder(id: string): ServerMarketOrder | null {
 }
 
 export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
-  const mem = map().get(id)
-  if (mem) return mem
-  if (!dbConfigured()) return null
+  // When Supabase is configured, always refresh from the authoritative database.
+  // A process-local cache can be stale after reservation expiry or another instance's payment/cancellation transition.
+  if (!dbConfigured()) return map().get(id) || null
   const data = await rpcJson("gh_marketplace_order_get", { p_id: id })
   if (!data || typeof data !== "object") return null
   const order = rowToOrder(data as Record<string, unknown>)
   map().set(order.id, order)
   return order
+}
+
+/** Create an order and reserve finite inventory in one database transaction.
+ * The caller-supplied idempotency key is scoped to the authenticated buyer.
+ */
+export async function createReservedOrder(
+  order: ServerMarketOrder,
+  idempotencyKey: string
+): Promise<{ ok: true; order: ServerMarketOrder; idempotent: boolean } | { ok: false; error: string; available?: number }> {
+  if (!dbConfigured()) return { ok: false, error: "DURABLE_RESERVATION_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_create_reserved", {
+    p_row: orderToRow(order),
+    p_idempotency_key: idempotencyKey,
+  })
+  if (!result || typeof result !== "object") {
+    return { ok: false, error: "RESERVATION_RPC_UNAVAILABLE" }
+  }
+  const payload = result as Record<string, unknown>
+  if (payload.ok !== true) {
+    return {
+      ok: false,
+      error: String(payload.error || "RESERVATION_FAILED"),
+      available: payload.available == null ? undefined : Number(payload.available),
+    }
+  }
+  if (!payload.order || typeof payload.order !== "object") {
+    return { ok: false, error: "RESERVATION_RESPONSE_INVALID" }
+  }
+  const created = rowToOrder(payload.order as Record<string, unknown>)
+  map().set(created.id, created)
+  return { ok: true, order: created, idempotent: Boolean(payload.idempotent) }
+}
+
+/** Claim the durable inventory reservation before starting a payment operation. */
+export async function claimOrderForPayment(
+  orderId: string,
+  buyerId: string,
+  method: "ghc" | "pi"
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DURABLE_RESERVATION_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_claim_payment", {
+    p_order_id: orderId,
+    p_buyer_id: buyerId,
+    p_method: method,
+  })
+  if (!result || typeof result !== "object") return { ok: false, error: "PAYMENT_CLAIM_RPC_UNAVAILABLE" }
+  const payload = result as Record<string, unknown>
+  return payload.ok === true
+    ? { ok: true }
+    : { ok: false, error: String(payload.error || "PAYMENT_CLAIM_FAILED") }
+}
+
+/** Release a claim only after the payment operation has definitely failed. */
+export async function releaseOrderPaymentClaim(
+  orderId: string,
+  buyerId: string,
+  detail: string
+): Promise<void> {
+  if (!dbConfigured()) return
+  await rpcJson("gh_marketplace_order_release_payment_claim", {
+    p_order_id: orderId,
+    p_buyer_id: buyerId,
+    p_detail: detail.slice(0, 120),
+  })
 }
 
 /**
@@ -177,7 +283,6 @@ export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
 export async function saveOrder(
   order: ServerMarketOrder
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  map().set(order.id, order)
   if (!dbConfigured()) {
     if (isProd()) {
       return {
@@ -185,6 +290,7 @@ export async function saveOrder(
         error: "DURABLE_REQUIRED: production requires Supabase marketplace orders schema",
       }
     }
+    map().set(order.id, order)
     return { ok: true }
   }
   const res = await rpcJson("gh_marketplace_order_upsert", { p_row: orderToRow(order) })
@@ -193,6 +299,7 @@ export async function saveOrder(
       return { ok: false, error: "DURABLE_WRITE_FAILED: gh_marketplace_order_upsert" }
     }
   }
+  map().set(order.id, order)
   return { ok: true }
 }
 
@@ -239,10 +346,9 @@ export async function transitionOrder(
   actor: string,
   detail?: string
 ): Promise<{ ok: true; order: ServerMarketOrder } | { ok: false; error: string }> {
-  let order = map().get(orderId) || null
-  if (!order && dbConfigured()) {
-    order = await loadOrder(orderId)
-  }
+  // Durable state is authoritative whenever configured: never transition from a
+  // process-local snapshot that may predate another instance’s payment/fulfilment.
+  let order = dbConfigured() ? await loadOrder(orderId) : (map().get(orderId) || null)
   if (!order) return { ok: false, error: "NOT_FOUND" }
   if (order.status === to) return { ok: true, order }
 
@@ -267,6 +373,58 @@ export async function transitionOrder(
   return { ok: true, order }
 }
 
+export async function updateCommerceOrder(orderId: string, actorId: string, action: "seller_fulfill" | "seller_mark_delivered" | "buyer_confirm" | "dispute" | "cancel_unpaid", note?: string): Promise<{ok:true;order:ServerMarketOrder}|{ok:false;error:string}> {
+  if (!dbConfigured()) return {ok:false,error:"DATABASE_REQUIRED"}
+  const result=await rpcJson("gh_marketplace_order_commerce_update",{p_order_id:orderId,p_actor_id:actorId,p_action:action,p_note:note||null})
+  if (!result || typeof result!=="object") return {ok:false,error:"COMMERCE_RPC_UNAVAILABLE"}
+  const payload=result as Record<string,unknown>
+  if(payload.ok!==true || !payload.order || typeof payload.order!=="object") return {ok:false,error:String(payload.error||"COMMERCE_UPDATE_FAILED")}
+  const order=rowToOrder(payload.order as Record<string,unknown>); map().set(order.id,order); return {ok:true,order}
+}
+
 export function marketplaceOrdersDurable(): boolean {
   return dbConfigured()
+}
+
+
+/** Ops: list orders with payment claims older than N minutes (service-role RPC). */
+export async function listStalePaymentClaims(
+  olderThanMinutes = 60,
+  limit = 50
+): Promise<{ ok: boolean; orders: unknown[]; error?: string }> {
+  if (!dbConfigured()) return { ok: false, orders: [], error: "DB_NOT_CONFIGURED" }
+  const result = await rpcJson("gh_marketplace_list_stale_payment_claims", {
+    p_older_than_minutes: olderThanMinutes,
+    p_limit: limit,
+  })
+  if (!result || typeof result !== "object") {
+    return { ok: false, orders: [], error: "RPC_UNAVAILABLE" }
+  }
+  const payload = result as { ok?: boolean; orders?: unknown[]; error?: string }
+  if (payload.ok !== true) {
+    return { ok: false, orders: [], error: String(payload.error || "LIST_FAILED") }
+  }
+  return { ok: true, orders: Array.isArray(payload.orders) ? payload.orders : [] }
+}
+
+/**
+ * Ops: force-release a stale payment claim after confirming payment is not in flight.
+ * Does not mark the order paid and does not mint GHC.
+ */
+export async function forceReleaseStalePaymentClaim(
+  orderId: string,
+  operatorNote: string,
+  minAgeMinutes = 60
+): Promise<{ ok: boolean; error?: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DB_NOT_CONFIGURED" }
+  const result = await rpcJson("gh_marketplace_force_release_stale_payment_claim", {
+    p_order_id: orderId,
+    p_operator_note: operatorNote.slice(0, 160),
+    p_min_age_minutes: minAgeMinutes,
+  })
+  if (!result || typeof result !== "object") return { ok: false, error: "RPC_UNAVAILABLE" }
+  const payload = result as { ok?: boolean; error?: string }
+  return payload.ok === true
+    ? { ok: true }
+    : { ok: false, error: String(payload.error || "RELEASE_FAILED") }
 }

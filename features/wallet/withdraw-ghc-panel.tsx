@@ -74,7 +74,7 @@ export function WithdrawGhcPanel() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) {
-        setError(data.error || "Could not load withdrawal info")
+        setError(data.message || data.error || "Could not load withdrawal info")
         setQuote(null)
         setItems([])
         return
@@ -156,7 +156,7 @@ export function WithdrawGhcPanel() {
 
   return (
     <section
-      className="rounded-2xl border border-border/50 bg-card/80 p-3 space-y-3"
+      className="space-y-3 rounded-[1.25rem] border border-border/50 bg-card p-3.5 shadow-[var(--gh-card-shadow)]"
       aria-label="Withdraw GHC"
     >
       <div className="flex items-start justify-between gap-2">

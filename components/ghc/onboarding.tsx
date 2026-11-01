@@ -110,7 +110,7 @@ const INTEREST_ICONS: Record<string, string> = {
 /** Premium dark shell — deep green-black with soft emerald glow */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#050a08] text-white">
+    <div className="gh-world-onboarding relative flex h-full min-h-0 flex-col overflow-hidden bg-[#050a08] text-white" role="region" aria-label="GreenHaven account setup">
       {/* Ambient glows */}
       <div className="pointer-events-none absolute -left-24 -top-28 h-72 w-72 rounded-full bg-emerald-500/15 blur-[100px]" />
       <div className="pointer-events-none absolute -right-20 top-40 h-64 w-64 rounded-full bg-teal-400/10 blur-[90px]" />
@@ -181,7 +181,7 @@ function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 px-6 text-[15px] font-bold text-white shadow-[0_8px_28px_rgba(16,185,129,0.35)] transition active:scale-[0.98] disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600 disabled:shadow-none disabled:opacity-50"
+      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--gh-green)] px-6 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:brightness-105 active:scale-[0.98] disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-50"
     >
       {children}
     </button>
@@ -717,7 +717,7 @@ export function Onboarding() {
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { value: "friendship", label: "Friendship", icon: Users, accent: "from-violet-500 to-purple-500" },
+                  { value: "friendship", label: "Friendship", icon: Users, accent: "from-emerald-500 to-teal-500" },
                   { value: "dating", label: "Dating", icon: Heart, accent: "from-rose-500 to-pink-500" },
                   { value: "networking", label: "Networking", icon: Briefcase, accent: "from-sky-500 to-blue-600" },
                   { value: "business", label: "Business", icon: Building2, accent: "from-emerald-500 to-teal-600" },

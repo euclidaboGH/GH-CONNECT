@@ -10,6 +10,8 @@ import {
   validateSession,
   isSessionStoreDurable,
 } from "@/lib/server/identity/session-store"
+import { getByGhUserId } from "@/lib/server/identity/pi-identity-store"
+import { deriveGreenHavenId } from "@/lib/domains/greenhaven-id"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,6 +34,17 @@ export async function GET(request: Request) {
       )
     }
 
+    let piUsername: string | null = null
+    let serverVerified = false
+    try {
+      const pi = await getByGhUserId(session.ghUserId)
+      if (pi?.piAppUid) {
+        serverVerified = true
+        piUsername = pi.piUsername
+      }
+    } catch {
+      /* */
+    }
     return NextResponse.json(
       {
         ok: true,
@@ -43,6 +56,11 @@ export async function GET(request: Request) {
           expiresAt: session.expiresAt,
           absoluteExpiresAt: session.absoluteExpiresAt,
           lastSeenAt: session.lastSeenAt,
+        },
+        identity: {
+          serverVerified,
+          piUsername,
+          greenHavenId: deriveGreenHavenId(session.ghUserId),
         },
       },
       { headers: { "Cache-Control": "no-store" } }

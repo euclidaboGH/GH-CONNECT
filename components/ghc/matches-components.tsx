@@ -6,6 +6,7 @@ import type { Candidate, MatchIntention } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "@/components/ghc/lazy-image"
 import type { ConnectionUiState } from "@/lib/domains/adapters/connection-graph-adapter"
+import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 
 export const MATCH_INTENTION_META: Record<
   MatchIntention,
@@ -90,10 +91,8 @@ export function EmptyMatchesState({ onStartSwiping }: { onStartSwiping: () => vo
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-950/40">
           <Heart size={32} className="text-rose-500" />
         </div>
-        <h2 className="mb-1.5 text-xl font-bold text-foreground">No matches yet</h2>
-        <p className="mb-1 text-sm text-muted-foreground">
-          Mutual interest — not automatic friendship.
-        </p>
+        <h2 className="mb-1.5 text-xl font-bold text-foreground">No mutual matches yet</h2>
+        <p className="mb-1 text-sm text-muted-foreground">{MATCH_CLARITY.matchesIntro}</p>
         <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
           Dating · Friendship · Pro · Mentor (and more) are mutual interest types — they do not
           auto-create friends.
@@ -123,7 +122,7 @@ export function EmptyMatchesState({ onStartSwiping }: { onStartSwiping: () => vo
                 Shared: product, mentoring · Mutual interest only
               </p>
               <div className="mt-2 flex gap-1.5">
-                <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-1 text-[10px] font-bold text-white">
                   Message
                 </span>
                 <span className="rounded-full border border-border px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
@@ -140,7 +139,7 @@ export function EmptyMatchesState({ onStartSwiping }: { onStartSwiping: () => vo
             onStartSwiping()
             window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" }))
           }}
-          className="w-full rounded-2xl bg-emerald-600 px-8 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+          className="w-full rounded-2xl bg-[var(--gh-green)] px-8 py-3 font-bold text-white shadow-sm transition hover:brightness-110 active:scale-[0.98]"
         >
           Express interest on Find
         </button>
@@ -295,7 +294,7 @@ export function MatchCard({
                   e.stopPropagation()
                   onMessage()
                 }}
-                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--gh-green)] px-3 text-sm font-bold text-white shadow-sm transition hover:brightness-110 active:scale-[0.98]"
               >
                 <MessageCircle size={15} aria-hidden />
                 Message
@@ -422,33 +421,70 @@ export function MatchTabs({
   onTabChange,
   newCount,
   totalCount,
+  likesYouCount = 0,
 }: {
-  activeTab: "new" | "all"
-  onTabChange: (tab: "new" | "all") => void
+  activeTab: "new" | "all" | "likes_you"
+  onTabChange: (tab: "new" | "all" | "likes_you") => void
   newCount: number
   totalCount: number
+  likesYouCount?: number
 }) {
+  const order: Array<"new" | "all" | "likes_you"> = ["new", "all", "likes_you"]
   return (
-    <div className="flex gap-1 rounded-2xl border border-stone-100 bg-white p-1 shadow-sm">
+    <div
+      className="flex gap-1 overflow-x-auto rounded-2xl border border-border/50 bg-muted/50 p-1 scrollbar-none"
+      role="tablist"
+      aria-label="Match views"
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault()
+          const i = order.indexOf(activeTab)
+          const next = e.key === "ArrowRight" ? order[(i + 1) % order.length] : order[(i + order.length - 1) % order.length]
+          onTabChange(next)
+        }
+      }}
+    >
       <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "new"}
+        tabIndex={activeTab === "new" ? 0 : -1}
         onClick={() => onTabChange("new")}
-        className={`relative flex-1 rounded-xl px-3 py-2 text-xs font-semibold transition active:scale-95 ${
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           activeTab === "new"
-            ? "bg-emerald-600 text-white shadow-sm"
-            : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+            ? "bg-[var(--gh-green)] text-white shadow-sm"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
         New{newCount > 0 ? ` (${newCount > 99 ? "99+" : newCount})` : ""}
       </button>
       <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "all"}
+        tabIndex={activeTab === "all" ? 0 : -1}
         onClick={() => onTabChange("all")}
-        className={`flex min-h-10 flex-1 items-center justify-center rounded-xl px-3 py-2 text-[13px] font-semibold transition active:scale-95 ${
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
           activeTab === "all"
-            ? "bg-emerald-600 text-white shadow-sm"
-            : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+            ? "bg-[var(--gh-green)] text-white shadow-sm"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
         All ({totalCount})
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "likes_you"}
+        tabIndex={activeTab === "likes_you" ? 0 : -1}
+        onClick={() => onTabChange("likes_you")}
+        className={`flex min-h-10 flex-1 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[12px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+          activeTab === "likes_you"
+            ? "bg-[var(--gh-green)] text-white shadow-sm"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+      >
+        Likes you{likesYouCount > 0 ? ` (${likesYouCount > 99 ? "99+" : likesYouCount})` : ""}
       </button>
     </div>
   )
@@ -487,10 +523,10 @@ export function MatchIntentionFilters({
             role="tab"
             aria-selected={selected}
             onClick={() => onChange(key)}
-            className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold transition active:scale-95 ${
+            className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               selected
-                ? "bg-stone-900 text-white"
-                : "bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50"
+                ? "bg-foreground text-background"
+                : "bg-card text-muted-foreground ring-1 ring-border hover:bg-muted"
             }`}
           >
             {key !== "all" && (

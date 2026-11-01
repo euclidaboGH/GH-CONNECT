@@ -143,3 +143,44 @@ export const piBrowser = {
   safeAreaLeft: "env(safe-area-inset-left)",
   safeAreaRight: "env(safe-area-inset-right)",
 }
+
+
+/** Semantic state classes shared by forms, transactions and social surfaces. */
+export const statusClass = {
+  success: "gh-status gh-status-success",
+  warning: "gh-status gh-status-warning",
+  danger: "gh-status gh-status-danger",
+  info: "gh-status gh-status-info",
+} as const
+
+/** Layout and feedback primitives for consistent responsive screens. */
+export const feedbackClass = {
+  empty: "gh-empty-state",
+  skeleton: "gh-skeleton",
+  pageGutter: "gh-page-gutter",
+  contentWidth: "gh-content-width",
+} as const
+
+export const motion = {
+  fast: "var(--gh-motion-fast)",
+  normal: "var(--gh-motion-normal)",
+  slow: "var(--gh-motion-slow)",
+  standardEasing: "var(--gh-ease-standard)",
+} as const
+
+
+/** Stable public asset paths. Keep these mapped to the owner-approved files in /public. */
+export const brandAssets = {
+  greenHavenLogo: "/gh-connect-logo.png",
+  ghcCoinLogo: "/ghc-coin-logo.png",
+  ghcCoinLarge: "/ghc-coin-logo.png",
+  ghcCoinMedium: "/ghc-coin-64.png",
+  ghcCoinSmall: "/ghc-coin-32.png",
+} as const
+
+/** Interaction and layout contracts used by shared components. */
+export const accessibility = {
+  minimumTouchTargetPx: 44,
+  focusVisibleClass: "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+  reducedMotionMediaQuery: "(prefers-reduced-motion: reduce)",
+} as const

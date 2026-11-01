@@ -10,6 +10,7 @@
 
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import type { DomainResult } from "@/lib/domains/contracts/types"
+import type { WalletV2Categories } from "@/lib/domains/wallet-v2"
 
 export type WalletReadStatus = "loading" | "ready" | "unavailable" | "error"
 
@@ -18,13 +19,24 @@ export interface WalletReadSnapshot {
   /** Available GHC — only when status === "ready" */
   availableGhc: number | null
   pendingGhc: number | null
+  lockedGhc: number | null
   currency: "GHC"
   /** Display-only membership tier if economy exposes it */
   membershipTier: string | null
   /** Opaque message for UI when unavailable/error */
   message?: string
-  source: "session" | "empty" | "error"
+  source: "session" | "server" | "empty" | "error"
   updatedAt: number
+  categories: WalletV2Categories
+  ledgerBalance: number | null
+  escrowLocked: number
+  reconciliation: {
+    availablePlusLockedEqualsLedger: boolean
+    availableNonNegative: boolean
+    pendingNonNegative: boolean
+    ledgerNonNegative: boolean
+    unclassifiedAmount: number
+  }
 }
 
 function numOrNull(v: unknown): number | null {
@@ -47,6 +59,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
             available?: number
             pending?: number
             pendingBalance?: number
+            locked?: number
           }
           getPremiumStatus?: () => { tier?: string; plan?: string } | null
         }
@@ -57,11 +70,15 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         status: "unavailable",
         availableGhc: null,
         pendingGhc: null,
+        lockedGhc: null,
         currency: "GHC",
         membershipTier: null,
         message: "Wallet services are not bound yet.",
         source: "empty",
         updatedAt: now,
+        categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+        ledgerBalance: null, escrowLocked: 0,
+        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
       }
     }
 
@@ -74,11 +91,15 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         status: "unavailable",
         availableGhc: null,
         pendingGhc: null,
+        lockedGhc: null,
         currency: "GHC",
         membershipTier: null,
         message: "Balance unavailable from authoritative wallet.",
         source: "empty",
         updatedAt: now,
+        categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+        ledgerBalance: null, escrowLocked: 0,
+        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
       }
     }
 
@@ -92,25 +113,39 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       membershipTier = null
     }
 
+    const locked = numOrNull(w?.locked) ?? 0
+    const ledger =
+      typeof (w as { ledgerBalance?: unknown } | null)?.ledgerBalance === "number"
+        ? Number((w as { ledgerBalance?: number }).ledgerBalance)
+        : available + locked
     return {
       status: "ready",
       availableGhc: available,
       pendingGhc: pending,
+      lockedGhc: locked,
       currency: "GHC",
       membershipTier,
       source: "session",
       updatedAt: now,
+      categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+      ledgerBalance: Number.isFinite(ledger) ? ledger : available + locked,
+      escrowLocked: 0,
+      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
     }
   } catch (e) {
     return {
       status: "error",
       availableGhc: null,
       pendingGhc: null,
+      lockedGhc: null,
       currency: "GHC",
       membershipTier: null,
       message: e instanceof Error ? e.message : "Wallet read failed",
       source: "error",
       updatedAt: now,
+      categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
+      ledgerBalance: null, escrowLocked: 0,
+      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
     }
   }
 }

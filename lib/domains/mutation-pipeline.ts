@@ -98,3 +98,16 @@ export async function runMutation<TInput, TOutput>(
     return { ok: false, error: message, code: "MUTATE", phase: "error", requestId: rid }
   }
 }
+
+
+/** Safe error string from a MutationResult without breaking discriminated unions. */
+export function mutationError(result: MutationResult<unknown>): string | undefined {
+  return result.ok ? undefined : result.error
+}
+
+export function mutationErrorMessage(
+  result: MutationResult<unknown>,
+  fallback = "Something went wrong",
+): string {
+  return result.ok ? fallback : (result.error || fallback)
+}

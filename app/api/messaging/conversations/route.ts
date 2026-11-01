@@ -5,6 +5,8 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   listConversationsForUser,
   createDirectConversation,
@@ -24,7 +26,8 @@ export async function GET(request: Request) {
       )
     }
     const url = new URL(request.url)
-    const limit = Number(url.searchParams.get("limit") || "50")
+    const rawLimit = Number(url.searchParams.get("limit") || "50")
+    const limit = Math.min(100, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 50))
     // Ignore client userId
     void url.searchParams.get("userId")
 
@@ -60,29 +63,38 @@ export async function POST(request: Request) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const body = await request.json().catch(() => ({}))
+    const rl = checkRateLimit(`conversation-create:${auth.userId}`, 20, 60_000)
+    if (!rl.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+    }
+    const parsed = await readBoundedJson(request, 16 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+    }
+    const body = parsed.value
     const otherUserId =
       typeof body?.otherUserId === "string" ? body.otherUserId.trim() : ""
-    if (!otherUserId || otherUserId === auth.userId) {
+    if (!otherUserId || otherUserId.length > 180 || /[\u0000-\u001f\u007f]/.test(otherUserId) || otherUserId === auth.userId) {
       return NextResponse.json(
         { ok: false, error: "INVALID_PEER" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
       )
     }
-    // Block checks should be applied by higher-level domain before open;
-    // still refuse empty/self.
+    // The server re-checks reciprocal blocks and the recipient's persisted privacy setting.
 
     const conv = await createDirectConversation({
       creatorId: auth.userId,
       otherUserId,
     })
-    if (conv && "blocked" in conv && conv.blocked) {
+    if (conv && "denied" in conv) {
+      const status = conv.denied === "STORE_UNAVAILABLE" ? 503 : conv.denied === "PRIVACY_SETTINGS_UNCONFIGURED" ? 409 : 403
       return NextResponse.json(
-        { ok: false, error: "BLOCKED" },
-        { status: 403, headers: { "Cache-Control": "no-store" } }
+        { ok: false, error: conv.denied },
+        { status, headers: { "Cache-Control": "no-store" } }
       )
     }
-    if (!conv || ("blocked" in conv && conv.blocked)) {
+    if (!conv) {
       return NextResponse.json(
         { ok: false, error: "CREATE_FAILED" },
         { status: 503, headers: { "Cache-Control": "no-store" } }

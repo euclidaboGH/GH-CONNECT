@@ -9,17 +9,45 @@ class RateLimiter {
   private limits = new Map<string, RateLimitEntry>()
   private readonly maxAttempts: number
   private readonly windowMs: number
+  private readonly maxBuckets: number
+  private lastPruneAt = 0
 
-  constructor(maxAttempts = 10, windowMs = 60000) {
+  constructor(maxAttempts = 10, windowMs = 60000, maxBuckets = 10_000) {
+    if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error('INVALID_RATE_LIMIT_CONFIGURATION')
+    }
+    if (!Number.isSafeInteger(windowMs) || windowMs < 1) {
+      throw new Error('INVALID_RATE_LIMIT_CONFIGURATION')
+    }
+    if (!Number.isSafeInteger(maxBuckets) || maxBuckets < 1) {
+      throw new Error('INVALID_RATE_LIMIT_CONFIGURATION')
+    }
     this.maxAttempts = maxAttempts
     this.windowMs = windowMs
+    this.maxBuckets = maxBuckets
+  }
+
+  private pruneExpired(now: number): void {
+    // Avoid a full map scan on every request during high-cardinality pressure.
+    if (now - this.lastPruneAt < 1_000) return
+    this.lastPruneAt = now
+    for (const [key, entry] of this.limits) {
+      if (entry.resetTime <= now) this.limits.delete(key)
+    }
   }
 
   isAllowed(key: string): boolean {
+    if (typeof key !== 'string' || key.length === 0 || key.length > 512) {
+      throw new Error('INVALID_RATE_LIMIT_KEY')
+    }
     const now = Date.now()
     const entry = this.limits.get(key)
 
-    if (!entry || now > entry.resetTime) {
+    if (!entry || now >= entry.resetTime) {
+      if (entry) this.limits.delete(key)
+      if (this.limits.size >= this.maxBuckets) this.pruneExpired(now)
+      // Never evict an active key: doing so would reset another user's limit.
+      if (this.limits.size >= this.maxBuckets) return false
       this.limits.set(key, { count: 1, resetTime: now + this.windowMs })
       return true
     }

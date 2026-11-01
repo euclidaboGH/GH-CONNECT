@@ -144,23 +144,25 @@ async function dbFindValid(
   }
 }
 
-async function dbRevokeForSession(sessionId: string): Promise<void> {
+async function dbRevokeForSession(sessionId: string): Promise<boolean> {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return false
   try {
     const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_step_ups?session_id=eq.${encodeURIComponent(sessionId)}&revoked_at=is.null`
-    await fetch(url, {
+    const response = await fetch(url, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        Prefer: "return=minimal",
       },
       body: JSON.stringify({ revoked_at: new Date().toISOString() }),
       cache: "no-store",
     })
+    return response.ok
   } catch {
-    /* */
+    return false
   }
 }
 
@@ -187,8 +189,24 @@ export async function createStepUp(input: {
     revokedAt: null,
   }
 
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.GHC_ENV === "production"
+
+  // High-risk authorization must be durable across instances in production.
+  // Never grant a process-local step-up if the durable write failed or is absent.
+  if (isProd && !dbConfigured()) {
+    throw new Error("STEP_UP_DURABILITY_UNAVAILABLE")
+  }
   if (dbConfigured()) {
-    await dbInsert(rec)
+    const persisted = await dbInsert(rec)
+    if (!persisted && isProd) {
+      throw new Error("STEP_UP_DURABILITY_UNAVAILABLE")
+    }
+    if (!persisted) {
+      console.warn("[step-up] durable write failed; using memory fallback outside production")
+    }
   }
   memBySession.set(sessionKey(ghUserId, sessionId), rec)
   console.info("[step-up] STEP_UP_SUCCESS", { userId: ghUserId, sessionId: sessionId.slice(0, 8) })
@@ -203,31 +221,45 @@ export async function findValidStepUp(
   sessionId: string
 ): Promise<StepUpRecord | null> {
   const key = sessionKey(ghUserId, sessionId)
-  const mem = memBySession.get(key)
-  if (mem && isValid(mem)) return mem
-  if (mem && !isValid(mem)) memBySession.delete(key)
-
   if (dbConfigured()) {
+    // Durable storage is authoritative across instances. Never accept a cached
+    // proof without checking that it remains valid in the shared store.
     const fromDb = await dbFindValid(ghUserId, sessionId)
     if (fromDb) {
       memBySession.set(key, fromDb)
       return fromDb
     }
+    // A missing row, revoked row, expired row, or database outage all fail
+    // closed. The cache must not resurrect a proof during a storage outage.
+    memBySession.delete(key)
+    return null
   }
+
+  const mem = memBySession.get(key)
+  if (mem && isValid(mem)) return mem
+  if (mem) memBySession.delete(key)
   return null
 }
 
 /** Revoke all step-ups for a session (logout / session revoke) */
-export async function revokeStepUpsForSession(sessionId: string): Promise<void> {
+export async function revokeStepUpsForSession(sessionId: string): Promise<boolean> {
   const sid = String(sessionId || "").trim()
-  if (!sid) return
+  if (!sid) return false
+
+  // Persist first so a storage failure cannot be mistaken for a completed
+  // cross-instance revocation. Memory-only behavior is reserved for local/dev.
+  if (dbConfigured()) {
+    const persisted = await dbRevokeForSession(sid)
+    if (!persisted) return false
+  }
+
   for (const [k, rec] of memBySession) {
     if (rec.sessionId === sid && rec.revokedAt == null) {
       memBySession.set(k, { ...rec, revokedAt: now() })
     }
   }
-  if (dbConfigured()) await dbRevokeForSession(sid)
   console.info("[step-up] SESSION_STEP_UP_REVOKED", { sessionId: sid.slice(0, 8) })
+  return true
 }
 
 /**

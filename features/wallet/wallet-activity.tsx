@@ -20,7 +20,7 @@ export function QuickChip({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition active:scale-[0.98] hover:bg-muted/50"
+      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-card px-3.5 py-1.5 text-[11px] font-bold text-foreground shadow-sm transition hover:bg-muted/60 active:scale-[0.98]"
     >
       {icon}
       {label}
@@ -41,15 +41,15 @@ export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void 
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-3 border-b border-border/60 bg-card px-3.5 py-3.5 text-left transition last:border-b-0 hover:bg-muted/25 active:bg-muted/40"
+      className="flex w-full items-center gap-3 border-b border-border/50 bg-card px-3.5 py-3.5 text-left transition last:border-b-0 hover:bg-muted/30 active:bg-muted/40"
     >
       <div
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
           isPending
-            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100 dark:bg-amber-950/50 dark:text-amber-200 dark:ring-amber-900/40"
             : positive
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
-              : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200"
+              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/40"
+              : "bg-stone-50 text-stone-600 ring-1 ring-stone-100 dark:bg-stone-800/60 dark:text-stone-200 dark:ring-stone-700/40"
         }`}
         aria-hidden
       >
@@ -67,13 +67,13 @@ export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void 
           <span
             className={`inline-flex shrink-0 items-center gap-0.5 text-[14px] font-bold tabular-nums ${
               isPending
-                ? "text-amber-800 dark:text-amber-300"
+                ? "text-amber-700 dark:text-amber-300"
                 : positive
                   ? "text-emerald-700 dark:text-emerald-400"
                   : "text-foreground"
             }`}
           >
-            {positive ? "+" : ""}
+            {positive ? "+" : "−"}
             {formatGhc(Math.abs(tx.amount))}
             <span className="ml-0.5 text-[10px] font-semibold text-muted-foreground">GHC</span>
           </span>
@@ -86,7 +86,7 @@ export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void 
           </span>
         </div>
       </div>
-      <ChevronRight size={16} className="shrink-0 text-muted-foreground/50" aria-hidden />
+      <ChevronRight size={16} className="shrink-0 text-muted-foreground/40" aria-hidden />
     </button>
   )
 }
@@ -94,20 +94,20 @@ export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void 
 export function StatusChip({ status }: { status: string }) {
   const s = (status || "posted").toLowerCase()
   const map: Record<string, string> = {
-    pending: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200",
-    posted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
-    confirmed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
-    completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
-    reversed: "bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
-    expired: "bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400",
-    failed: "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200",
-    cancelled: "bg-stone-200 text-stone-600",
-    canceled: "bg-stone-200 text-stone-600",
+    pending: "bg-amber-50 text-amber-800 ring-1 ring-amber-100 dark:bg-amber-950/50 dark:text-amber-200 dark:ring-amber-900/40",
+    posted: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-200 dark:ring-emerald-900/40",
+    confirmed: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-200 dark:ring-emerald-900/40",
+    completed: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-200 dark:ring-emerald-900/40",
+    reversed: "bg-stone-100 text-stone-700 ring-1 ring-stone-200 dark:bg-stone-800 dark:text-stone-300",
+    expired: "bg-stone-100 text-stone-600 ring-1 ring-stone-200 dark:bg-stone-800 dark:text-stone-400",
+    failed: "bg-rose-50 text-rose-800 ring-1 ring-rose-100 dark:bg-rose-950/50 dark:text-rose-200",
+    cancelled: "bg-stone-100 text-stone-600 ring-1 ring-stone-200",
+    canceled: "bg-stone-100 text-stone-600 ring-1 ring-stone-200",
   }
   const cls = map[s] || "bg-muted text-muted-foreground"
   const label = statusLabel(s).text
   return (
-    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${cls}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${cls}`}>
       {label}
     </span>
   )
@@ -115,12 +115,14 @@ export function StatusChip({ status }: { status: string }) {
 
 export function EmptyBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-12 text-center">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted/80">
-        <GhcCoinIcon size={28} />
+    <div className="rounded-[1.25rem] border border-dashed border-border/80 bg-card px-5 py-14 text-center shadow-[var(--gh-card-shadow)]">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
+        <GhcCoinIcon size={32} />
       </div>
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{body}</p>
+      <p className="text-[15px] font-bold text-foreground">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-[16rem] text-[13px] leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </div>
   )
 }

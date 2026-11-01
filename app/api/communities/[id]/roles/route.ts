@@ -4,6 +4,7 @@
  * Actor must be owner or admin. Cannot change owner or self.
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
@@ -20,11 +21,21 @@ export async function POST(request: Request, ctx: Ctx) {
   }
   const { id } = await ctx.params
   const communityId = String(id || "").trim()
-  const body = await request.json().catch(() => ({}))
-  const targetUserId = String(body.targetUserId || "").trim()
-  const role = String(body.role || "").trim()
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value
+  const targetUserId = String(body.targetUserId || body.userId || "").trim()
+  const role = String(body.role || "").trim().toLowerCase()
+  // Ownership transfer is not available via this endpoint — prevents client owner injection
+  const ALLOWED = new Set(["member", "moderator", "admin"])
   if (!communityId || !targetUserId || !role) {
     return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
+  }
+  if (!ALLOWED.has(role)) {
+    return NextResponse.json({ ok: false, error: "INVALID_ROLE" }, { status: 400 })
+  }
+  if (targetUserId === auth.userId) {
+    return NextResponse.json({ ok: false, error: "SELF_ROLE" }, { status: 403 })
   }
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community role", { extra: { role } })

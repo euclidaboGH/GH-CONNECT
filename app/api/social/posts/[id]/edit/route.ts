@@ -8,10 +8,30 @@ import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Ctx = { params: Promise<{ id: string }> }
+
+const MAX_DATA_URL_CHARS = 900_000
+const MAX_HTTPS_URL = 2000
+function safeImage(ref: unknown): string | null {
+  const s = String(ref || "").trim()
+  if (!s || s.startsWith("blob:")) return null
+  if (s.startsWith("data:image/") && s.length <= MAX_DATA_URL_CHARS) return s
+  if (s.startsWith("https://") && s.length <= MAX_HTTPS_URL) return s
+  return null
+}
+function safeVideo(ref: unknown): string | null {
+  if (ref == null || ref === "") return null
+  const s = String(ref).trim()
+  if (s.startsWith("blob:")) return null
+  if (s.startsWith("data:video/") && s.length <= 2_500_000) return s
+  if (s.startsWith("https://") && s.length <= MAX_HTTPS_URL) return s
+  return null
+}
 
 export async function POST(request: Request, ctx: Ctx) {
   return PATCH(request, ctx)
@@ -27,10 +47,23 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!postId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 64 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value
   const content = String(body.content || "").trim()
   if (!content || content.length > 5000) {
     return NextResponse.json({ ok: false, error: "INVALID_CONTENT" }, { status: 400 })
+  }
+  const hasImages = Object.prototype.hasOwnProperty.call(body, "images")
+  const hasVideo = Object.prototype.hasOwnProperty.call(body, "video")
+  const rawImages = hasImages && Array.isArray(body.images) ? body.images.slice(0, 10) : []
+  const images = rawImages.map(safeImage)
+  if (hasImages && (rawImages.length !== (body.images as unknown[]).length || images.some((x: string | null) => !x))) {
+    return NextResponse.json({ ok: false, error: "INVALID_MEDIA" }, { status: 400 })
+  }
+  const video = hasVideo ? safeVideo(body.video) : null
+  if (hasVideo && body.video && !video) {
+    return NextResponse.json({ ok: false, error: "INVALID_MEDIA" }, { status: 400 })
   }
 
   if (!socialDbConfigured()) {
@@ -72,10 +105,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
         "Content-Type": "application/json",
         apikey: env.supabaseServiceRoleKey,
         Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "return=minimal",
+        Prefer: "return=representation",
       },
       body: JSON.stringify({
         content,
+        ...(hasImages ? { images } : {}),
+        ...(hasVideo ? { video } : {}),
         is_edited: true,
         edited_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -85,5 +120,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!patchRes.ok) {
     return NextResponse.json({ ok: false, error: "EDIT_FAILED" }, { status: 503 })
   }
-  return NextResponse.json({ ok: true, durable: true, content })
+  const updatedRows = await patchRes.json().catch(() => []) as Array<{ id?: string; author_id?: string }>
+  if (!Array.isArray(updatedRows) || !updatedRows.some((row) => row.id === postId && row.author_id === auth.userId)) {
+    return NextResponse.json({ ok: false, error: "EDIT_NOT_CONFIRMED" }, { status: 503 })
+  }
+  return NextResponse.json({ ok: true, durable: true, content, ...(hasImages ? { images } : {}), ...(hasVideo ? { video } : {}) }, { headers: { "Cache-Control": "no-store" } })
 }

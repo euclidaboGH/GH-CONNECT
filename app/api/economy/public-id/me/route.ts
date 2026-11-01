@@ -11,6 +11,8 @@ import {
 } from "@/lib/server/economy/public-id"
 import { deriveGreenHavenId } from "@/lib/domains/greenhaven-id"
 
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
@@ -35,12 +37,9 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  let body: { displayName?: string; avatarUrl?: string } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    body = {}
-  }
+  const parsedBody = await readBoundedJson(request, 16 * 1024)
+  if (!parsedBody.ok) return jsonErr(parsedBody.error, parsedBody.error === "REQUEST_TOO_LARGE" ? "Request too large" : "Invalid request body", parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const body = parsedBody.value as { displayName?: string; avatarUrl?: string }
 
   const preferred = deriveGreenHavenId(auth.userId)
   const row = await ensurePublicIdentity({

@@ -147,7 +147,10 @@ export function ProfileHeroMeta({
         <StatCell label="Following" value={followingCount} />
       </div>
 
-      <ReputationBadge />
+      <div className="flex flex-col items-start gap-0.5">
+        <ReputationBadge />
+        <p className="text-[10px] text-muted-foreground">From activity · not for sale · not a balance</p>
+      </div>
 
       {/* GreenHaven Identity — compact card */}
       <div className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-card dark:border-emerald-900 dark:from-emerald-950/40">

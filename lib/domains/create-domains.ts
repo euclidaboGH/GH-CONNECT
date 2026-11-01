@@ -231,6 +231,10 @@ export function createDomainServices(
               })
             } else if (t === "friend_accept") {
               await socialConnectionAccept(target)
+              try {
+                const { reportMissionProgress } = await import("@/lib/missions/progress")
+                await reportMissionProgress("accept_connection", { fromUserId: target })
+              } catch { /* */ }
             } else if (t === "mute" || t === "unmute") {
               await socialMute(target, t === "mute")
             } else if (t === "restrict" || t === "unrestrict") {

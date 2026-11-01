@@ -174,39 +174,55 @@ export async function startUserToAppPayment(options?: {
   /** Auth headers for API calls */
   authHeaders?: Record<string, string>
 }): Promise<U2APaymentResult> {
-  // Give the injected SDK a moment if the user just opened the app
-  if (!isPiPaymentsAvailable()) {
-    await waitForPiPayments(6000, 200)
+  // Pi Core Team guidance requires Pi.init() to complete before any other SDK
+  // method. Fail closed here; continuing after an init error can route a payment
+  // to the wrong network or invoke a partially initialized bridge.
+  try {
+    const { ensurePiInitialized } = await import("@/lib/pi-runtime")
+    await ensurePiInitialized()
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error
+        ? `Pi SDK could not be initialized safely: ${error.message}`
+        : "Pi SDK could not be initialized safely. Re-open GreenHaven in the registered Pi Browser app.",
+    }
   }
+
+  // SDK initialization can complete just after script loading; wait briefly for
+  // createPayment to become available, but never bypass the initialization gate.
+  if (!isPiPaymentsAvailable()) await waitForPiPayments(3000, 150)
   const Pi = getPi()
   if (!Pi?.createPayment) {
     const probe = probePiPayments()
     return {
       ok: false,
       error: probe.hasWindowPi
-        ? "Pi bridge loaded but createPayment is unavailable. Re-open the app in Pi Browser after Pi.init completes."
-        : "Pi payments only work inside the Pi Browser. Open your Vercel URL there (Develop/sandbox or production app link), not Chrome or Studio alone.",
+        ? "Pi SDK initialized, but createPayment is unavailable for this app or host. Verify the Developer Portal app network and reopen GreenHaven in Pi Browser."
+        : "Pi payments require the official Pi SDK inside the registered Pi Browser app. Open GreenHaven using its Developer Portal URL.",
     }
-  }
-  // Single runtime init — sandbox from lib/pi-env (Preview/dev → sandbox, Production → mainnet)
-  try {
-    const { ensurePiInitialized } = await import("@/lib/pi-runtime")
-    await ensurePiInitialized()
-  } catch {
-    /* already initialized or unavailable — createPayment path may still fail below */
   }
 
   const amount = options?.amount ?? 0.01
-  const memo = options?.memo ?? "GreenHaven payment"
+  const memo = (options?.memo ?? "GreenHaven payment").trim()
+  if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 10_000_000 - Math.round(amount * 10_000_000)) > 0.00001) {
+    return { ok: false, error: "Payment amount must be positive and use at most 7 decimal places." }
+  }
+  if (!memo || memo.length > 250) {
+    return { ok: false, error: "Payment memo must contain 1–250 characters." }
+  }
   const intentId = options?.intentId
   const authHeaders = options?.authHeaders || {}
-  const metadata = {
-    purpose: "commerce",
+  // Caller metadata remains available for product-specific business context,
+  // but app identity, engine and server-created intent binding are reserved keys.
+  const metadata: Record<string, unknown> = {
+    ...(options?.metadata || {}),
     app: "gh-connect",
     engine: "gh_pay",
-    ...(intentId ? { intentId } : {}),
-    ...(options?.metadata || {}),
   }
+  if (intentId) metadata.intentId = intentId
+  else delete metadata.intentId // never accept a client-supplied intent binding
+  if (typeof metadata.purpose !== "string" || !metadata.purpose.trim()) metadata.purpose = "commerce"
 
   return new Promise((resolve) => {
     let settled = false

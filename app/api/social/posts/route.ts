@@ -11,6 +11,9 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { resolveMediaAssets } from "@/lib/server/media/asset-store"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { getServerProfile } from "@/lib/server/identity/profile-store"
+import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -56,11 +59,13 @@ export async function GET(request: Request) {
     p_before_ms: null,
   })
   const payload = result.data as { posts?: unknown[] }
+  const rawPosts = Array.isArray(payload?.posts) ? payload.posts : []
+  const posts = await hydratePublicProfileIdentity(rawPosts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")))
   return NextResponse.json({
     ok: true,
     durable: result.ok,
-    posts: Array.isArray(payload?.posts) ? payload.posts : [],
-  })
+    posts,
+  }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {
@@ -77,7 +82,9 @@ export async function POST(request: Request) {
     )
   }
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+  const parsedBody = await readBoundedJson(request, 12 * 1024 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
   const content = String(body.content || "").trim()
   const rawImages = Array.isArray(body.images) ? body.images.map(String).slice(0, 10) : []
   const images = rawImages.filter(isSafeImageRef)
@@ -96,24 +103,36 @@ export async function POST(request: Request) {
   // Optional durable media IDs (session must own or public_url available)
   let videoFromMedia: string | null = null
   const mediaIds = Array.isArray(body.mediaIds)
-    ? body.mediaIds.map(String).filter(Boolean).slice(0, 10)
+    ? [...new Set(body.mediaIds.map(String).map((s) => s.trim()).filter(Boolean))].slice(0, 10)
     : []
   if (mediaIds.length > 0) {
     const resolved = await resolveMediaAssets(auth.userId, mediaIds)
-    if (resolved.ok) {
-      for (const a of resolved.assets) {
-        const owned = a.owned === true
-        const url = String(a.url || "")
-        if (!owned && !url) continue
-        if (!url) continue
-        if (String(a.kind) === "video" && !videoFromMedia) {
-          videoFromMedia = url
-        } else if (String(a.kind) === "image" && isSafeImageRef(url) && images.length < 10) {
-          images.push(url)
-        }
+    if (!resolved.ok) {
+      return NextResponse.json({ ok: false, error: "MEDIA_RESOLUTION_UNAVAILABLE" }, { status: 503 })
+    }
+    const byId = new Map(resolved.assets.map((a) => [String(a.id || ""), a]))
+    for (const mediaId of mediaIds) {
+      const asset = byId.get(mediaId)
+      // Durable private attachments must belong to the authenticated author.
+      if (!asset || asset.owned !== true || asset.status !== "ready") {
+        return NextResponse.json({ ok: false, error: "MEDIA_NOT_OWNED_OR_READY" }, { status: 403 })
       }
+      const url = `${new URL(request.url).origin}/api/media/${encodeURIComponent(mediaId)}/content`
+      if (String(asset.kind) === "video" && !videoFromMedia) videoFromMedia = url
+      else if (String(asset.kind) === "image" && images.length < 10) images.push(url)
     }
   }
+  // Older composer versions only send the stable delivery URL. Recover the opaque media ID
+  // from that first-party URL so the post gets a durable media relation as well.
+  const mediaIdsFromUrls = [...images, ...(videoFromMedia ? [videoFromMedia] : [])]
+    .map((value) => {
+      try {
+        const parsed = new URL(value, new URL(request.url).origin)
+        const match = parsed.pathname.match(/^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content$/i)
+        return parsed.origin === new URL(request.url).origin ? match?.[1] || "" : ""
+      } catch { return "" }
+    }).filter(Boolean)
+  const durableMediaIds = [...new Set([...mediaIds, ...mediaIdsFromUrls])].slice(0, 20)
 
   const video = videoFromMedia || (body.video ? String(body.video) : null)
   if (video && !isSafeVideoRef(video)) {
@@ -170,11 +189,53 @@ export async function POST(request: Request) {
   const quoteOf =
     quoteOfRaw && /^[a-zA-Z0-9_-]{6,120}$/.test(quoteOfRaw) ? quoteOfRaw : null
 
+  // Community posts: require active membership (session user) — never trust client role claims
+  const communityId =
+    body.communityId != null ? String(body.communityId).trim() : ""
+  if (communityId) {
+    if (!socialDbConfigured()) {
+      return NextResponse.json(
+        { ok: false, error: "SOCIAL_DB_UNAVAILABLE", durable: false },
+        { status: 503 }
+      )
+    }
+    const roleRes = await socialRpc("gh_community_member_role", {
+      p_community_id: communityId,
+      p_user_id: auth.userId,
+    })
+    const roleData = roleRes.data as {
+      ok?: boolean
+      role?: string
+      status?: string
+      error?: string
+    }
+    const status = String(roleData?.status || "").toLowerCase()
+    const role = String(roleData?.role || "").toLowerCase()
+    const activeMember =
+      roleRes.ok &&
+      (status === "active" || (!status && Boolean(role))) &&
+      status !== "banned" &&
+      status !== "pending" &&
+      status !== "rejected"
+    if (!activeMember) {
+      return NextResponse.json(
+        { ok: false, error: "NOT_A_MEMBER", message: "Join this community before posting." },
+        { status: 403 }
+      )
+    }
+  }
+
+  // Presentation identity is server-derived. Never let a post creation request
+  // impersonate another display name/avatar via client-supplied snapshot fields.
+  const serverProfile = await getServerProfile(auth.userId).catch(() => null)
+  const authorName = String(serverProfile?.displayName || serverProfile?.username || auth.username || "Member").slice(0, 120)
+  const authorPhoto = String(serverProfile?.photos?.[0] || "").slice(0, 2000)
+
   const row = {
     id,
     authorId: auth.userId,
-    authorName: String(body.authorName || auth.username || "Member").slice(0, 120),
-    authorPhoto: String(body.authorPhoto || "").slice(0, 2000),
+    authorName,
+    authorPhoto,
     content,
     images,
     video,
@@ -183,7 +244,7 @@ export async function POST(request: Request) {
     visibility,
     listingId: body.listingId ? String(body.listingId) : null,
     listingKind: body.listingKind ? String(body.listingKind) : null,
-    communityId: body.communityId ? String(body.communityId) : null,
+    communityId: communityId || null,
     communityName: body.communityName ? String(body.communityName) : null,
     contentType,
     createdAt: Date.now(),
@@ -216,6 +277,38 @@ export async function POST(request: Request) {
       { ok: false, error: data.error || "CREATE_REJECTED" },
       { status: 400 }
     )
+  }
+
+  // Persist durable media-ID references after post creation. The RPC re-checks author,
+  // media ownership, readiness and deleted state in one database transaction. On failure,
+  // hide the just-created post rather than leave an unauthorized half-published attachment.
+  if (durableMediaIds.length > 0) {
+    const { readGhcServerEnv } = await import("@/lib/server/economy/env")
+    const env = readGhcServerEnv()
+    let attached = false
+    if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+      try {
+        const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_post_media_attach`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+          body: JSON.stringify({ p_actor_id: auth.userId, p_post_id: id, p_media_ids: durableMediaIds }),
+          cache: "no-store",
+        })
+        const result = await response.json().catch(() => null) as { ok?: boolean } | null
+        attached = response.ok && result?.ok === true
+      } catch { attached = false }
+    }
+    if (!attached) {
+      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+        await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_posts?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(auth.userId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Prefer: "return=minimal" },
+          body: JSON.stringify({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+          cache: "no-store",
+        }).catch(() => undefined)
+      }
+      return NextResponse.json({ ok: false, error: "MEDIA_ATTACH_FAILED", message: "The post was not published because media authorization could not be persisted." }, { status: 503 })
+    }
   }
 
   // Best-effort attach quote_of_post_id when migration 56 is applied
@@ -255,6 +348,20 @@ export async function POST(request: Request) {
     } catch {
       /* column may not exist until migration 56 */
     }
+  }
+
+  // Durable post-created alerts go only to followers who are allowed to see
+  // this post. The RPC skips blocked relationships and enforces mutual-only
+  // visibility in SQL; community/private posts never fan out to all followers.
+  if (!communityId && visibility !== "private") {
+    const preview = content || (images.length ? "Shared a photo" : video ? "Shared a video" : "Shared a post")
+    await socialRpc("gh_social_notify_post_followers", {
+      p_author_id: auth.userId,
+      p_post_id: id,
+      p_body: preview.slice(0, 180),
+      p_dedupe_key: `post_created:${id}`,
+      p_visibility: visibility,
+    }).catch(() => null)
   }
 
   return NextResponse.json({ ok: true, durable: true, post: row })

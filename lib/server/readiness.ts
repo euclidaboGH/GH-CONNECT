@@ -13,9 +13,11 @@
  */
 
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
+import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
 import { isMessagingStoreDurable } from "@/lib/server/messaging/message-store"
+import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export type CheckStatus = "pass" | "fail" | "warn" | "info"
@@ -89,6 +91,7 @@ export type ReadinessReport = {
     membership: "configured_unverified" | "missing"
     marketplace: "configured_unverified" | "missing"
     socialCommunity: "configured_unverified" | "missing"
+    multiUser: "configured_unverified" | "missing"
   }
   ts: string
 }
@@ -241,17 +244,44 @@ export function evaluateReadiness(opts?: {
       "Apply migration 20260919_gh_user_profiles_and_progress.sql after identity migrations",
   })
 
+  // --- High: explicit network flag schema ---
+  // A typo must not silently fall through to an environment-derived network.
+  // This is especially important because a false default can select Mainnet.
+  const rawSandboxFlag = (process.env.NEXT_PUBLIC_PI_SANDBOX || "").trim()
+  const invalidSandboxFlag = rawSandboxFlag !== "" && rawSandboxFlag !== "true" && rawSandboxFlag !== "false"
+  const mainnetTarget = vercelEnv === "production" || process.env.GHC_ENV === "production"
+  checks.push({
+    id: "pi_sandbox_flag_schema",
+    label: "Pi sandbox flag schema",
+    status: invalidSandboxFlag ? (mainnetTarget ? "fail" : "warn") : "pass",
+    severity: mainnetTarget ? "critical" : "medium",
+    detail: invalidSandboxFlag
+      ? "NEXT_PUBLIC_PI_SANDBOX must be exactly true or false; its current value is ignored by the network resolver"
+      : rawSandboxFlag
+        ? "NEXT_PUBLIC_PI_SANDBOX uses an accepted boolean string"
+        : "No explicit sandbox flag; environment-aware network resolution applies",
+    remediation: "Set NEXT_PUBLIC_PI_SANDBOX to exactly true for Testnet or false for Mainnet; align the Pi Portal app and server API key to the same network.",
+  })
+
   // --- High: network consistency ---
+  // Mainnet Production + sandbox flag is a critical misconfiguration. Vercel Preview uses NODE_ENV=production too, but should remain on Testnet.
+  // NODE_ENV=production is also set for Vercel Preview builds. Vercel Preview is expected to use Pi Testnet, so only the actual Vercel Production target (or
+  // an explicit GHC_ENV=production override) must reject sandbox mode.
+  const isMainnetDeployment = vercelEnv === "production" || process.env.GHC_ENV === "production"
+  const sandboxInProduction = Boolean(isMainnetDeployment && sandbox)
   checks.push({
     id: "pi_network_mode",
     label: "Pi network mode (sandbox vs mainnet)",
-    status: "info",
-    severity: "info",
-    detail: sandbox
-      ? "sandbox=true → expect Testnet portal app + Testnet API key"
-      : "sandbox=false → expect Mainnet portal app + Mainnet API key (real π)",
-    remediation:
-      "Align NEXT_PUBLIC_PI_SANDBOX, Developer Portal App Network, and PI_API_KEY network. Mixing causes approve failures and auth confusion.",
+    status: sandboxInProduction ? "fail" : "info",
+    severity: sandboxInProduction ? "critical" : "info",
+    detail: sandboxInProduction
+      ? "NEXT_PUBLIC_PI_SANDBOX appears enabled while runtime is production — refuse treating this as Mainnet-ready"
+      : sandbox
+        ? "sandbox=true → expect Testnet portal app + Testnet API key"
+        : "sandbox=false → expect Mainnet portal app + Mainnet API key (real π)",
+    remediation: sandboxInProduction
+      ? "On Vercel Production set NEXT_PUBLIC_PI_SANDBOX=false and use Mainnet Pi credentials + Mainnet Supabase"
+      : "Align NEXT_PUBLIC_PI_SANDBOX, Developer Portal App Network, and PI_API_KEY network. Mixing causes approve failures and auth confusion.",
   })
 
   // --- Critical security: dev auth must not be on in production ---
@@ -278,17 +308,39 @@ export function evaluateReadiness(opts?: {
     })
   }
 
-  // --- Medium: memory ledger in production ---
-  if (isProduction && memoryFinancial && !durableOk) {
+  // --- Critical: memory financial flag must not be set in production ---
+  // allowMemoryServer() already returns false on Vercel/production; this flags misconfiguration.
+  if (isProduction && memoryFinancial) {
     checks.push({
       id: "memory_finance",
       label: "Financial store durability",
-      status: "warn",
-      severity: "high",
+      status: "fail",
+      severity: "critical",
       detail:
-        "GHC_SERVER_MEMORY may be active without durable identity — acceptable only for controlled demos",
+        "GHC_SERVER_MEMORY is set in a production runtime — process memory must never be financial authority",
       remediation:
-        "Prefer Supabase ledger for production money paths; keep memory for local/dev",
+        "Unset GHC_SERVER_MEMORY on Production. Require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY for ledger paths",
+    })
+  } else if (isProduction && !supabaseConfigured) {
+    checks.push({
+      id: "memory_finance",
+      label: "Financial store durability",
+      status: "fail",
+      severity: "critical",
+      detail:
+        "Production runtime without privileged Supabase configuration — durable GHC ledger unavailable",
+      remediation:
+        "Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Production (never rely on process memory)",
+    })
+  } else {
+    checks.push({
+      id: "memory_finance",
+      label: "Financial store durability",
+      status: "pass",
+      severity: "high",
+      detail: isProduction
+        ? "Production memory financial flag not set; durable DB path expected"
+        : "Non-production: memory ledger allowed only when allowMemoryServer() permits",
     })
   }
 
@@ -321,7 +373,7 @@ export function evaluateReadiness(opts?: {
     ready: strictlyReady,
     status,
     service: "gh-connect",
-    version: process.env.npm_package_version || "0.59.4",
+    version: process.env.npm_package_version || APP_RELEASE_VERSION,
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",
@@ -386,6 +438,9 @@ export function evaluateReadiness(opts?: {
         ? ("configured_unverified" as const)
         : ("missing" as const),
       socialCommunity: supabaseConfigured
+        ? ("configured_unverified" as const)
+        : ("missing" as const),
+      multiUser: socialDbConfigured()
         ? ("configured_unverified" as const)
         : ("missing" as const),
     },

@@ -48,26 +48,26 @@ export function CollapsingAppHeader({
       {/* Compact sticky bar — mirrors Profile compact identity bar */}
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 z-30 transition-[opacity,transform] duration-300 ease-out ${
-          compact
+          compact && !hidden
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-full opacity-0"
         }`}
-        aria-hidden={!compact}
+        aria-hidden={!compact || hidden}
       >
-        <div className="flex items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-1.5 sm:px-4">
+        <div className="flex min-h-11 items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-1 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-pink-500 text-[11px] font-bold text-white">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">
               {(compactTitle || title).slice(0, 1)}
             </div>
           )}
           <div className="min-w-0 flex-1">
             {(compactTitle || title) ? (
-              <p className="truncate text-sm font-bold text-gray-900">{compactTitle || title}</p>
+              <p className="truncate text-sm font-bold text-foreground">{compactTitle || title}</p>
             ) : null}
             {subtitle ? (
-              <p className={`truncate text-[10px] font-medium text-gray-500 ${(compactTitle || title) ? "" : "text-xs font-semibold text-gray-700"}`}>
+              <p className={`truncate text-[10px] font-medium text-muted-foreground ${(compactTitle || title) ? "" : "text-xs font-semibold text-foreground/80"}`}>
                 {subtitle}
               </p>
             ) : null}
@@ -78,24 +78,25 @@ export function CollapsingAppHeader({
 
       {/* Expanded header — part of scroll stream conceptually; hides on scroll-down */}
       <div
-        className={`sticky top-0 z-20 shrink-0 border-b border-gray-100 bg-white/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
+        role="banner" id="gh-main-header"
+        className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
           hidden && compact
             ? "pointer-events-none max-h-0 -translate-y-2 overflow-hidden opacity-0 border-transparent"
             : "translate-y-0 opacity-100"
         } ${className}`}
       >
-        <div className="px-3 py-1 sm:px-4 sm:py-1.5">
+        <div className="px-3 py-0.5 sm:px-4 sm:py-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               {leading}
               <div className="min-w-0">
                 {title ? (
-                  <h2 className="truncate text-base font-bold tracking-tight text-gray-900 sm:text-lg">
+                  <h2 className="truncate text-base font-bold tracking-tight text-foreground sm:text-lg">
                     {title}
                   </h2>
                 ) : null}
                 {subtitle ? (
-                  <p className={`truncate font-medium text-gray-500 ${title ? "text-[10px] leading-tight text-gray-400" : "text-xs font-semibold"}`}>
+                  <p className={`truncate font-medium text-muted-foreground ${title ? "text-[10px] leading-tight text-muted-foreground" : "text-xs font-semibold"}`}>
                     {subtitle}
                   </p>
                 ) : null}

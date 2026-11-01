@@ -3,6 +3,7 @@
  * Server-authoritative GHC debit (membership, boosts, catalog spends).
  * Amount from spend-catalog — client amount cannot inflate charge.
  */
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   allowMemoryServer,
@@ -11,13 +12,14 @@ import {
   jsonOk,
 } from "@/lib/server/economy/http"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { resolveSpendAmount } from "@/lib/server/economy/spend-catalog"
 import {
   executeAuthoritativeSpend,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
 
 async function rpcSpend(input: {
@@ -77,18 +79,20 @@ export async function POST(request: Request) {
     return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
   }
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`spend:${auth.userId}`, 20, 60_000)
+  const rl = await checkDurableRateLimit(`spend:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many spend attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Spend protection is temporarily unavailable" : `Too many spend attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("INVALID_INPUT", "Invalid JSON body", 400)
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_INPUT",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid spend request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
 
   // Buyer is ONLY auth.userId — ignore client identity/balance/price claims
   void body.userId
@@ -162,6 +166,7 @@ export async function POST(request: Request) {
         const status = rpc.error === "INSUFFICIENT_BALANCE" ? 402 : 503
         return jsonErr(rpc.error || "SPEND_FAILED", rpc.error || "Spend failed", status)
       }
+      await attachLedgerCorrelation({ userId: auth.userId, referenceId, envelope: buildCorrelationEnvelope({ kind: "marketplace", event: "MARKETPLACE_PURCHASE", orderId: order.id, listingId: order.listingId }) })
       return jsonOk({
         ok: true,
         idempotent: rpc.idempotent,

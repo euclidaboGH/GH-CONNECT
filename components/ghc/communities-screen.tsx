@@ -12,6 +12,7 @@ import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/doma
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import {
   Plus,
   Search,
@@ -28,8 +29,16 @@ import { useScrollHeader } from "@/lib/use-scroll-header"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { GroupCard } from "./group-card"
 import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal"
+import { privacyJoinHint, formatCommunityRole } from "@/lib/community/role-labels"
+import {
+  matchesPrivacyFilter,
+  privacyFilterLabel,
+  sortCommunityRows,
+  type CommunityPrivacyFilter,
+} from "@/lib/community/discovery"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
+import { PremiumSurfaceActions } from "./premium-surface-actions"
 import { EmptyState } from "./empty-state"
 import { CommunityJoinReasonPicker } from "./community-join-reason-picker"
 import {
@@ -85,6 +94,7 @@ type CommunityRow = {
     pinned?: boolean
   }>
   pendingJoinRequests?: string[]
+  memberCount?: number
   /** User ids invited but not yet members */
   invitedMembers?: string[]
   groupRoles?: Record<string, string>
@@ -300,14 +310,30 @@ export function CommunitiesScreen() {
   )
   const [directory, setDirectory] = useState<DirectoryTab>("discover")
   const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
+  const [sortBy, setSortBy] = useState<"recent" | "active" | "unread" | "name">("recent")
+  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "request" | "invite">("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
+  const [createSubmitError, setCreateSubmitError] = useState<string | null>(null)
+  const openCreateCommunity = useCallback(() => setShowCreate(true), [])
+  useEffect(() => {
+    const onCompose = () => openCreateCommunity()
+    window.addEventListener("ghc:open-community-compose", onCompose)
+    return () => window.removeEventListener("ghc:open-community-compose", onCompose)
+  }, [openCreateCommunity])
+  useEffect(() => {
+    if (!showCreate) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowCreate(false) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [showCreate])
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null)
   /** Snapshot so hub opens immediately after create (before conversations state catches up) */
   const [createdSnapshot, setCreatedSnapshot] = useState<CommunityRow | null>(null)
   const [joinGate, setJoinGate] = useState<CommunityRow | null>(null)
   const [hubKey, setHubKey] = useState<number>(0)
+  const [platformSnapshots, setPlatformSnapshots] = useState<Record<string, any>>({})
+  const [platformLoading, setPlatformLoading] = useState(false)
   const [joinPickerRow, setJoinPickerRow] = useState<CommunityRow | null>(null)
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
@@ -326,9 +352,37 @@ export function CommunitiesScreen() {
 
   /** Server public directory from GET /api/communities — no fabricated rows */
   const [remoteDirectory, setRemoteDirectory] = useState<CommunityRow[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [directoryDurable, setDirectoryDurable] = useState<boolean | null>(null)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [directoryTick, setDirectoryTick] = useState(0)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setIsOffline(!navigator.onLine)
+    sync()
+    window.addEventListener("online", sync)
+    window.addEventListener("offline", sync)
+    return () => {
+      window.removeEventListener("online", sync)
+      window.removeEventListener("offline", sync)
+    }
+  }, [])
+
+  const reloadDirectory = useCallback(() => {
+    setDirectoryTick((n) => n + 1)
+  }, [])
+
+  useSectionRefresh("communities", () => {
+    reloadDirectory()
+  }, { minIntervalMs: 15_000 })
 
   useEffect(() => {
     let cancelled = false
+    setDirectoryLoading(true)
+    setDirectoryError(null)
     void import("@/lib/social/client")
       .then(({ socialListCommunities }) => socialListCommunities(50))
       .then((res) => {
@@ -341,38 +395,58 @@ export function CommunitiesScreen() {
           const name = String(r.name || "").trim()
           if (!id || !name) continue
           const createdBy = String(r.createdBy || r.created_by || "").trim()
+          const cover = String(r.coverImage || r.cover_image || r.photo || "").trim()
+          const memberCount = Number(r.memberCount || r.member_count || 0) || 0
+          const membersFromRemote = Array.isArray(r.members)
+            ? (r.members as unknown[]).map(String).filter(Boolean)
+            : createdBy
+              ? [createdBy]
+              : []
           rows.push({
             id,
             conversationType: "group",
             groupName: name,
             participantName: name,
             participantId: createdBy,
+            participantPhoto: cover || undefined,
+            groupPhoto: cover || undefined,
+            photo: cover || undefined,
             lastMessage: String(r.purpose || r.description || "").slice(0, 120),
             lastMessageTime:
               typeof r.createdAt === "number"
                 ? r.createdAt
                 : typeof r.created_at === "number"
                   ? r.created_at
-                  : 0,
-            // Do not fabricate member ids — only known creator if present
-            members: createdBy ? [createdBy] : [],
+                  : Date.parse(String(r.createdAt || r.created_at || "")) || 0,
+            members: membersFromRemote,
+            memberCount: memberCount || membersFromRemote.length || undefined,
             createdBy,
             description: r.description != null ? String(r.description) : undefined,
             privacy: r.privacy != null ? String(r.privacy) : "public",
             category: r.category != null ? String(r.category) : undefined,
+            tags: Array.isArray(r.tags) ? r.tags.map(String) : undefined,
+            rules: Array.isArray(r.rules) ? r.rules.map(String) : r.rules != null ? String(r.rules) : undefined,
+            welcomeMessage: r.welcomeMessage != null ? String(r.welcomeMessage) : r.welcome_message != null ? String(r.welcome_message) : undefined,
             kind: "community",
             communityId: id,
           })
         }
         setRemoteDirectory(rows)
+        setDirectoryDurable(Boolean(res.durable))
+        setDirectoryLoading(false)
       })
       .catch(() => {
-        if (!cancelled) setRemoteDirectory([])
+        if (!cancelled) {
+          setRemoteDirectory([])
+          setDirectoryDurable(false)
+          setDirectoryError("Could not load the community directory")
+          setDirectoryLoading(false)
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [directoryTick])
 
   useEffect(() => {
     if (!communityLocalCacheAllowed()) return
@@ -393,6 +467,37 @@ export function CommunitiesScreen() {
     window.addEventListener("ghc:open-community", onOpen as EventListener)
     return () => window.removeEventListener("ghc:open-community", onOpen as EventListener)
   }, [])
+
+
+  useEffect(() => {
+    if (!selectedCommunityId) return
+    let cancelled = false
+    setPlatformLoading(true)
+    void fetch(`/api/communities/${encodeURIComponent(selectedCommunityId)}/platform`, { credentials: "include", cache: "no-store" })
+      .then(async (r) => ({ ok: r.ok, payload: await r.json().catch(() => ({})) }))
+      .then(({ ok, payload }) => {
+        if (cancelled) return
+        if (ok && payload?.durable === true && payload?.community) {
+          setPlatformSnapshots((prev) => ({ ...prev, [selectedCommunityId]: payload.community }))
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setPlatformLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedCommunityId, hubKey])
+  useEffect(() => {
+    const onRefresh = (e: Event) => {
+      const id = String((e as CustomEvent).detail?.communityId || "").trim()
+      if (id && id !== selectedCommunityId) return
+      setHubKey((k) => k + 1)
+      setDirectoryLoading(true)
+      // The directory loader is intentionally mounted once; this event only
+      // forces the selected hub to re-read its durable parent snapshot.
+      window.setTimeout(() => setDirectoryLoading(false), 150)
+    }
+    window.addEventListener("ghc:community-refresh", onRefresh as EventListener)
+    return () => window.removeEventListener("ghc:community-refresh", onRefresh as EventListener)
+  }, [selectedCommunityId])
   const [localBoard, setLocalBoard] = useState<
     Record<string, NonNullable<CommunityRow["boardPosts"]>>
   >(() => {
@@ -489,21 +594,59 @@ export function CommunitiesScreen() {
     return pool
       .filter((c) => {
         if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
+        if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
         if (!q) return true
-        const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""}`.toLowerCase()
+        const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""} ${c.privacy || ""}`.toLowerCase()
         return hay.includes(q)
       })
       .sort((a, b) => {
         if (sortBy === "name")
           return (a.groupName || a.participantName).localeCompare(b.groupName || b.participantName)
         if (sortBy === "active") return (b.members?.length || 0) - (a.members?.length || 0)
+        if (sortBy === "unread") {
+          const aUnread = Number(a.boardUnread || 0) + Number(a.chatUnread || 0) + Number(a.unreadCount || 0)
+          const bUnread = Number(b.boardUnread || 0) + Number(b.chatUnread || 0) + Number(b.unreadCount || 0)
+          return bUnread - aUnread || (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
+        }
         return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
       })
-  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, sortBy])
+  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, privacyFilter, sortBy])
+
+  const communityPulse = useMemo(() => {
+    const boardUnread = myCommunities.reduce((sum, c) => sum + Number(c.boardUnread || 0), 0)
+    const chatUnread = myCommunities.reduce((sum, c) => sum + Number(c.chatUnread || c.unreadCount || 0), 0)
+    const me = IdentityService.getCurrentUserId() || "current-user"
+    const requestsToReview = myCommunities.reduce((sum, c) => {
+      const role = c.groupRoles?.[me] || (c.createdBy === me ? "owner" : "member")
+      return role === "owner" || role === "admin" || role === "moderator"
+        ? sum + Number(c.pendingJoinRequests?.length || 0)
+        : sum
+    }, 0)
+    return { boardUnread, chatUnread, requestsToReview, total: boardUnread + chatUnread + requestsToReview }
+  }, [myCommunities])
 
   const selected = selectedCommunityId
-    ? communityGroups.find((c) => c.id === selectedCommunityId) ||
-      (createdSnapshot && createdSnapshot.id === selectedCommunityId ? createdSnapshot : null)
+    ? (() => {
+        const base = communityGroups.find((c) => c.id === selectedCommunityId) ||
+          (createdSnapshot && createdSnapshot.id === selectedCommunityId ? createdSnapshot : null)
+        const snapshot = platformSnapshots[selectedCommunityId]
+        if (!base || !snapshot) return base
+        return {
+          ...base,
+          groupName: snapshot.name || base.groupName,
+          participantName: snapshot.name || base.participantName,
+          description: snapshot.description ?? base.description,
+          privacy: snapshot.privacy ?? base.privacy,
+          category: snapshot.category ?? base.category,
+          members: Array.isArray(snapshot.members) ? snapshot.members : base.members,
+          createdBy: snapshot.createdBy || base.createdBy,
+          groupRoles: snapshot.role ? { ...(base.groupRoles || {}), [IdentityService.getCurrentUserId() || "current-user"]: snapshot.role } : base.groupRoles,
+          pendingJoinRequests: Array.isArray(snapshot.pendingJoinRequests) ? snapshot.pendingJoinRequests : base.pendingJoinRequests,
+          announcements: Array.isArray(snapshot.announcements) ? snapshot.announcements : base.announcements,
+          events: Array.isArray(snapshot.events) ? snapshot.events : base.events,
+          resources: Array.isArray(snapshot.resources) ? snapshot.resources : (base as any).resources,
+        } as CommunityRow
+      })()
     : null
 
   /** Open join-reason picker; membership only after authoritative join succeeds */
@@ -546,19 +689,40 @@ export function CommunitiesScreen() {
           /* non-authoritative */
         }
       }
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        addToast("You are offline — join when reconnected", "info")
+        return
+      }
       const ok = await joinCommunity(row.id)
       if (ok) {
         // Domain join / request succeeded. Toast authority is in joinCommunity
         // (Joined vs Request sent vs device-only) — never blanket "Joined" for pending.
         if (communityLocalCacheAllowed()) {
           const meId = IdentityService.getCurrentUserId()
-          const after = resolveMembershipState(row, meId)
+          const after = resolveMembershipState(
+            {
+              ...row,
+              members: Array.from(new Set([...(row.members || []), meId].filter(Boolean))),
+            },
+            meId
+          )
           if (after === "member" || after === "owner" || after === "admin" || after === "moderator") {
             setLocalJoined((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
           }
         }
         setHubKey((k) => k + 1)
         setJoinPickerRow(null)
+        setJoinGate(null)
+        // Open hub so Board/Chat are one step away after membership
+        setSelectedCommunityId(row.id)
+        setDirectory("my")
+        setStatusMsg("You're in — open Board or Chat to participate")
+        window.setTimeout(() => setStatusMsg(null), 2800)
+        try {
+          addToast("Welcome to the community", "success")
+        } catch {
+          /* */
+        }
         return true
       }
       setJoinError(userFacingJoinError("join_failed"))
@@ -576,6 +740,10 @@ export function CommunitiesScreen() {
 
   const handleLeave = async (id: string, name: string) => {
     if (leaveCommunity) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        addToast("You are offline — leave when reconnected", "info")
+        return
+      }
       const ok = await leaveCommunity(id)
       if (ok) {
         // Mirror cache only after domain leave succeeds (Studio Class D)
@@ -661,7 +829,9 @@ export function CommunitiesScreen() {
       selected.createdBy === me ||
       selected.createdBy === "current-user" ||
       Boolean(selected.groupRoles?.[me]) ||
-      Boolean(selected.groupRoles?.["current-user"])
+      Boolean(selected.groupRoles?.["current-user"]) ||
+      (selected.members || []).includes(me) ||
+      (selected.members || []).includes("current-user")
     const rules = normalizeRules(selected.rules)
     const rawRole =
       selected.createdBy === me ||
@@ -685,14 +855,14 @@ export function CommunitiesScreen() {
           ? "member"
           : "guest"
     return (
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-w-0 max-w-full min-h-0 flex-col">
         <PremiumCommunityHub
           key={hubKey}
           community={{
             id: selected.id,
             name: selected.groupName || selected.participantName,
             description: selected.description,
-            memberCount: selected.members?.length || 1,
+            memberCount: selected.memberCount || selected.members?.length || 1,
             privacy:
               selected.privacy === "private" || selected.privacy === "invite-only"
                 ? "private"
@@ -769,6 +939,22 @@ export function CommunitiesScreen() {
             const ok = await inviteCommunityMember(selected.id, userId)
             if (ok) setHubKey((k) => k + 1)
           }}
+          onSetRole={async (userId, role) => {
+            if (!ctx.setGroupRole) {
+              addToast("Role update unavailable", "error")
+              return
+            }
+            await ctx.setGroupRole(selected.id, userId, role)
+            setHubKey((k) => k + 1)
+          }}
+          onRemoveMember={async (userId) => {
+            if (!ctx.removeGroupMember) {
+              addToast("Remove unavailable", "error")
+              return
+            }
+            await ctx.removeGroupMember(selected.id, userId)
+            setHubKey((k) => k + 1)
+          }}
           onLeave={() =>
             handleLeave(selected.id, selected.groupName || selected.participantName)
           }
@@ -791,21 +977,30 @@ export function CommunitiesScreen() {
               return
             }
             const communityId = selected.id
+            const title = selected.groupName || selected.participantName || "Community"
             // Unmount heavy hub before switching tabs — reduces freeze risk
             setSelectedCommunityId(null)
             setCreatedSnapshot(null)
+            const openThread = () => {
+              window.dispatchEvent(
+                new CustomEvent("ghc:open-conversation", {
+                  detail: {
+                    conversationId: communityId,
+                    kind: "community",
+                    title,
+                  },
+                })
+              )
+            }
             try {
               window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
-              // Open the community conversation thread (not a DM-looking blank inbox)
-              window.setTimeout(() => {
-                window.dispatchEvent(
-                  new CustomEvent("ghc:open-conversation", {
-                    detail: { conversationId: communityId },
-                  })
-                )
-              }, 80)
+              // Retry open — Messages may mount after tab switch
+              window.setTimeout(openThread, 60)
+              window.setTimeout(openThread, 220)
+              window.setTimeout(openThread, 500)
             } catch {
               setTab?.("messages")
+              window.setTimeout(openThread, 100)
             }
             addToast("Opening community chat in Messages", "info")
           }}
@@ -884,7 +1079,7 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven communities">
       <CollapsingAppHeader
         title="Communities"
         compact={headerCompact}
@@ -915,15 +1110,18 @@ export function CommunitiesScreen() {
           </button>
         }
         actions={
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-emerald-600 px-3 text-[12px] font-bold text-white"
-            aria-label="Create community"
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            Create
-          </button>
+          <div className="flex items-center gap-1.5">
+            <PremiumSurfaceActions />
+            <button
+              type="button"
+              onClick={openCreateCommunity}
+              className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
+              aria-label="Create community"
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              Create
+            </button>
+          </div>
         }
         secondary={
           <>
@@ -938,7 +1136,7 @@ export function CommunitiesScreen() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name, city, topic…"
                 aria-label="Search communities"
-                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
                 <button
@@ -952,14 +1150,20 @@ export function CommunitiesScreen() {
               ) : null}
             </div>
 
-            <div className="mt-2 flex gap-1 rounded-xl bg-muted/60 p-1">
+            <div
+              className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+              role="tablist"
+              aria-label="Community directory"
+            >
               <button
                 type="button"
+                role="tab"
+                aria-selected={directory === "my"}
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Users size={14} aria-hidden />
@@ -967,11 +1171,13 @@ export function CommunitiesScreen() {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={directory === "discover"}
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Compass size={14} aria-hidden />
@@ -987,7 +1193,7 @@ export function CommunitiesScreen() {
                   onClick={() => setCategoryFilter(cat)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                     categoryFilter === cat
-                      ? "bg-emerald-600 text-white"
+                      ? "bg-[var(--gh-green)] text-white"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
@@ -1002,20 +1208,118 @@ export function CommunitiesScreen() {
                   className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground"
                 >
                   <option value="recent">Recent</option>
+                  <option value="unread">Needs attention</option>
                   <option value="active">Most members</option>
                   <option value="name">Name</option>
                 </select>
               </label>
             </div>
+            <div className="mt-1.5 flex items-center gap-2 overflow-x-auto scrollbar-hide" aria-label="Access filter">
+              {(["all", "public", "request", "invite"] as CommunityPrivacyFilter[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPrivacyFilter(id)}
+                  className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold transition ${
+                    privacyFilter === id
+                      ? "bg-sky-700 text-white"
+                      : "border border-border/70 bg-card text-muted-foreground"
+                  }`}
+                >
+                  {privacyFilterLabel(id)}
+                </button>
+              ))}
+            </div>
           </>
         }
       />
 
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusMsg || (directoryLoading ? "Loading communities" : "")}
+      </div>
+      {directoryDurable === false && !directoryLoading ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground" role="status">
+          Directory loaded without a durability signal — join/leave still call the live membership API.
+        </div>
+      ) : null}
+      {isOffline ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+          <p className="font-semibold">You&apos;re offline</p>
+          <p className="mt-0.5 text-[11px] leading-snug opacity-90">Showing communities already on this device. Directory updates when you reconnect.</p>
+        </div>
+      ) : null}
+      {directoryError && !directoryLoading ? (
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 px-3.5 py-2.5 text-[12px]" role="alert">
+          <p className="font-semibold text-destructive">{directoryError}</p>
+          <button type="button" className="mt-1 text-[11px] font-bold text-destructive underline" onClick={() => {
+            setDirectoryLoading(true)
+            setDirectoryError(null)
+            void import("@/lib/social/client").then(({ socialListCommunities }) => socialListCommunities(50)).then((res) => {
+              const rows: CommunityRow[] = []
+              for (const raw of res.communities || []) {
+                if (!raw || typeof raw !== "object") continue
+                const r = raw as Record<string, unknown>
+                const id = String(r.id || "").trim()
+                const name = String(r.name || "").trim()
+                if (!id || !name) continue
+                rows.push({
+                  id,
+                  conversationType: "group",
+                  groupName: name,
+                  participantName: name,
+                  participantId: String(r.createdBy || r.created_by || "").trim(),
+                  lastMessage: String(r.purpose || r.description || "").slice(0, 120),
+                  lastMessageTime: 0,
+                  members: [],
+                  createdBy: String(r.createdBy || r.created_by || "").trim(),
+                  kind: "community",
+                  communityId: id,
+                } as CommunityRow)
+              }
+              setRemoteDirectory(rows)
+              setDirectoryLoading(false)
+            }).catch(() => {
+              setDirectoryError("Could not load the community directory")
+              setDirectoryLoading(false)
+            })
+          }}>Try again</button>
+        </div>
+      ) : null}
       <div
         className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
         onScroll={onHeaderScroll}
       >
-        <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5">
+        <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5" role="region" aria-label="Community directory">
+          {myCommunities.length > 0 ? (
+            <section className="rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-sm" aria-label="Community action center">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-bold text-foreground">Your community pulse</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">See what needs your attention across every community without opening them one by one.</p>
+                </div>
+                {communityPulse.total > 0 ? (
+                  <span className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{communityPulse.total} to review</span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground">Caught up</span>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.boardUnread}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Board updates</span>
+                </button>
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.chatUnread}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Chat unread</span>
+                </button>
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.requestsToReview}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Requests</span>
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-teal-950/20">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-900 dark:text-emerald-100">
               <Sparkles size={14} aria-hidden />
@@ -1028,7 +1332,23 @@ export function CommunitiesScreen() {
             </p>
           </div>
 
-          {directory === "my" && myCommunities.length === 0 ? (
+          {directoryLoading ? (
+            <div className="space-y-3" aria-busy="true" aria-label="Loading communities">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse rounded-[1.25rem] border border-border/40 bg-card p-3.5 shadow-sm">
+                  <div className="flex gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-36 rounded bg-muted" />
+                      <div className="h-2.5 w-48 rounded bg-muted/70" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {!directoryLoading && directory === "my" && myCommunities.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center">
               <p className="text-sm font-semibold text-foreground">No communities joined yet</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
@@ -1038,13 +1358,13 @@ export function CommunitiesScreen() {
                 <button
                   type="button"
                   onClick={() => setDirectory("discover")}
-                  className="min-h-10 rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white"
+                  className="min-h-10 rounded-full bg-[var(--gh-green)] px-4 text-[12px] font-bold text-white"
                 >
                   Discover communities
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCreate(true)}
+                  onClick={openCreateCommunity}
                   className="min-h-10 rounded-full border border-border px-4 text-[12px] font-bold text-foreground"
                 >
                   Create one
@@ -1061,7 +1381,7 @@ export function CommunitiesScreen() {
                     onClick={() => setJoinGate(c)}
                     className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-2.5 text-left hover:border-emerald-300"
                   >
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--gh-green)] text-sm font-bold text-white">
                       {(c.groupName || "?")[0]}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1101,14 +1421,14 @@ export function CommunitiesScreen() {
                   <button
                     type="button"
                     onClick={() => setDirectory("discover")}
-                    className="rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white"
+                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Discover communities
                   </button>
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => setShowCreate(true)}
+                  onClick={openCreateCommunity}
                   className="rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
                 >
                   Create community
@@ -1118,7 +1438,13 @@ export function CommunitiesScreen() {
           ) : null}
 
           {visibleGroups.length > 0 ? (
-            visibleGroups.map((community) => {
+            <>
+            <p className="px-0.5 text-[11px] font-medium text-muted-foreground" aria-live="polite">
+              {visibleGroups.length}{" "}
+              {directory === "my" ? "in My communities" : "to discover"}
+              {searchQuery.trim() ? " matching search" : ""}
+            </p>
+            {visibleGroups.map((community) => {
               const joined = isJoined(community)
               const isSample = String(community.id).startsWith("demo-community-")
               const role =
@@ -1139,7 +1465,7 @@ export function CommunitiesScreen() {
                     "Open for posts, events and member chat"
                   }
                   lastMessageTime={community.lastMessageTime || Date.now()}
-                  memberCount={community.members?.length || 0}
+                  memberCount={community.memberCount || community.members?.length || 0}
                   onlineCount={0}
                   unreadCount={community.unreadCount || 0}
                   boardUnread={community.boardUnread || 0}
@@ -1155,11 +1481,12 @@ export function CommunitiesScreen() {
                   onJoin={!joined ? () => setJoinGate(community) : undefined}
                 />
               )
-            })
+            })}
+            </>
           ) : directory === "discover" ? (
             <EmptyState
               variant="communities"
-              title={searchQuery ? "No communities match" : "Find or start a community"}
+              title={searchQuery || privacyFilter !== "all" || categoryFilter !== "all" ? "No communities match" : "Find or start a community"}
               description={
                 searchQuery
                   ? `No results for “${searchQuery}”. Try another keyword — or create a community.`
@@ -1169,9 +1496,9 @@ export function CommunitiesScreen() {
                 searchQuery
                   ? {
                       label: "Create community",
-                      onClick: () => setShowCreate(true),
+                      onClick: openCreateCommunity,
                     }
-                  : { label: "Create community", onClick: () => setShowCreate(true) }
+                  : { label: "Create community", onClick: openCreateCommunity }
               }
             />
           ) : null}
@@ -1217,6 +1544,9 @@ export function CommunitiesScreen() {
             <p className="text-[13px] leading-relaxed text-foreground/90">
               {joinGate.description || "A space for posts, events, and member chat."}
             </p>
+            <p className="mt-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+              {privacyJoinHint(joinGate.privacy)}
+            </p>
             {normalizeRules(joinGate.rules).length > 0 ? (
               <div className="mt-4 rounded-2xl border border-border bg-muted/40 p-3">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -1236,21 +1566,30 @@ export function CommunitiesScreen() {
               <button
                 type="button"
                 onClick={() => setJoinGate(null)}
-                className="min-h-11 flex-1 rounded-2xl border border-border font-semibold text-foreground"
+                disabled={joinBusy}
+                className="gh-btn gh-btn-secondary min-h-11 flex-1 disabled:opacity-60"
               >
                 Not now
               </button>
               <button
                 type="button"
+                disabled={joinBusy}
                 onClick={() => {
                   const row = joinGate
                   setJoinGate(null)
                   if (!row) return
                   beginJoin(row)
                 }}
-                className="min-h-11 flex-1 rounded-2xl bg-emerald-600 font-bold text-white"
+                className="gh-btn gh-btn-primary min-h-11 flex-1 disabled:pointer-events-none disabled:opacity-60"
+                aria-busy={joinBusy}
               >
-                {joinGate.privacy === "invite-only" ? "Request to join" : "Join community"}
+                {joinBusy
+                  ? "Working…"
+                  : ["invite-only", "invite", "private", "approval", "request"].includes(
+                        String(joinGate.privacy || "").toLowerCase(),
+                      )
+                    ? "Request to join"
+                    : "Join community"}
               </button>
             </div>
           </div>
@@ -1260,10 +1599,20 @@ export function CommunitiesScreen() {
       <CreateGroupModal
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
+        error={createSubmitError}
         onSubmit={async (data: CreateGroupFormData) => {
+          setCreateSubmitError(null)
           const id = await createGroup(data)
+          if (!id) {
+            setCreateSubmitError("Payment or server confirmation did not complete. Your details are preserved; retry or switch the fee method. If a Pi payment may have succeeded, check payment status before trying again.")
+            return false
+          }
+          setCreateSubmitError(null)
           setShowCreate(false)
-          if (!id) return
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "community-create-fee" } }))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "community-create-fee" } }))
+          } catch { /* */ }
           // Creator is always a member — mirror join id so My list updates even when
           // identity id drifts between "current-user" and Pi uid before rehydrate.
           setLocalJoined((prev) => (prev.includes(id) ? prev : [...prev, id]))
@@ -1300,6 +1649,7 @@ export function CommunitiesScreen() {
           setSelectedCommunityId(id)
           setHubKey((k) => k + 1)
           // Toast already fired in createGroup — avoid double toast
+          return true
         }}
       />
 

@@ -118,11 +118,15 @@ export function createPostDomain(deps: {
       })
     },
 
-    async editPost(postId: string, content: string): Promise<MutationResult<{ postId: string; content: string }>> {
+    async editPost(
+      postId: string,
+      content: string,
+      media?: { images?: string[]; video?: string | null }
+    ): Promise<MutationResult<{ postId: string; content: string; media?: { images?: string[]; video?: string | null } }>> {
       return runMutation({
         name: "post.edit",
         actorId,
-        input: { postId, content },
+        input: { postId, content, media },
         validate: (i) => {
           if (!(i.content || "").trim()) return "Content cannot be empty"
           if (i.content.length > 5000) return "Content is too long"
@@ -134,7 +138,11 @@ export function createPostDomain(deps: {
           if (post.authorId !== actorId) return "You can only edit your own posts"
           return null
         },
-        mutate: (i) => ({ postId: i.postId, content: i.content.trim() }),
+        mutate: (i) => ({
+          postId: i.postId,
+          content: i.content.trim(),
+          ...(i.media ? { media: i.media } : {}),
+        }),
         eventType: "POST_UPDATED",
         eventPayload: (d) => d,
       })

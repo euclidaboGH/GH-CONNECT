@@ -3,6 +3,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getEntitlementAuthoritative,
   tryGetEntitlementAuthoritative,
+  reconcileMembershipFromPaymentHistory,
 } from "@/lib/server/membership/entitlement-store"
 
 export const runtime = "nodejs"
@@ -33,10 +34,27 @@ export async function GET(request: Request) {
       }
     )
   }
+  // Self-heal a paid entitlement if payment completed durably but the entitlement
+  // write was interrupted. Only the server selects a qualifying completed intent.
+  let finalResult = result
+  let recovered = false
+  if (result.entitlement.tier === "free") {
+    const reconciliation = await reconcileMembershipFromPaymentHistory(auth.userId)
+    if (!reconciliation.ok) {
+      return NextResponse.json(
+        { ok: false, error: "MEMBERSHIP_RECONCILIATION_UNAVAILABLE" },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+    if (reconciliation.entitlement) {
+      finalResult = { ok: true, entitlement: reconciliation.entitlement, source: reconciliation.recovered ? "db" : result.source }
+      recovered = reconciliation.recovered
+    }
+  }
   // Reference canonical helper for static authority checks / future strict mode
   void getEntitlementAuthoritative
   return NextResponse.json(
-    { ok: true, entitlement: result.entitlement, source: result.source },
+    { ok: true, entitlement: finalResult.entitlement, source: finalResult.source, recovered },
     {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate",

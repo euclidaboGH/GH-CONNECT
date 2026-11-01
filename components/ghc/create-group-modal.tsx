@@ -1,14 +1,21 @@
 "use client"
 
+import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
+
 import { onCloseTransientUI } from "@/lib/transient-ui"
 
 import { useState, useRef, useEffect } from "react"
-import { X, Upload, Users, AlertCircle, Loader } from "lucide-react"
+import { X, Upload, Users, AlertCircle, Loader, Loader2 } from "lucide-react"
 import { sanitizeText, sanitizeDisplayName } from "@/lib/sanitizer"
 import { compressImageFile } from "@/lib/media/compress-image"
+import { uploadDurableMedia, isMediaStorageUnavailable } from "@/lib/media/upload-client"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+import { quoteCommunityCreateFeeClient, type CommunityFeeRail } from "@/lib/community/create-fee-client"
 import { RULE_TEMPLATES } from "@/lib/domains/community-registry"
 
 export interface CreateGroupFormData {
+  /** Stable client-generated identity reused for payment retries. */
+  id?: string
   name: string
   description: string
   category: string
@@ -17,18 +24,20 @@ export interface CreateGroupFormData {
   welcomeMessage: string
   rules: string[]
   invitedMembers: string[]
+  /** Dual-rail create fee preference — server settles */
+  feeCurrency?: "GHC" | "PI"
 }
 
 interface CreateGroupModalProps {
   /** When false, modal is hidden. Defaults to true for conditional-render parents. */
   isOpen?: boolean
   onClose: () => void
-  onSubmit: (data: CreateGroupFormData) => Promise<void>
+  onSubmit: (data: CreateGroupFormData) => Promise<void | boolean>
   isLoading?: boolean
   error?: string | null
 }
 
-const CATEGORIES = ["General", "Sports", "Tech", "Music", "Art", "Business", "Education", "Gaming", "Other"]
+const CATEGORIES = ["General", "Agriculture", "Sports", "Tech", "Music", "Art", "Business", "Education", "Faith", "Health", "Local", "Gaming", "Climate", "Other"]
 const PRIVACY_OPTIONS = [
   { value: "public", label: "Public", desc: "Anyone can find & join" },
   { value: "private", label: "Private", desc: "Only invited members" },
@@ -46,11 +55,18 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     welcomeMessage: "",
     rules: [],
     invitedMembers: [],
+    feeCurrency: isPiOnlyCommerceClient() ? "PI" : "GHC",
   })
+  const [feeRail, setFeeRail] = useState<CommunityFeeRail>("GHC")
+  const [feePaymentConfirmed, setFeePaymentConfirmed] = useState(false)
+  const [coverUploading, setCoverUploading] = useState(false)
+  const feeQuote = quoteCommunityCreateFeeClient(feeRail)
   const [currentRule, setCurrentRule] = useState("")
   const [currentMember, setCurrentMember] = useState("")
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submittingRef = useRef(false)
+  const draftIdRef = useRef<string>("")
 
   const validateStep = (stepNum: number): boolean => {
     const errors: Record<string, string> = {}
@@ -122,6 +138,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file) return
+    setCoverUploading(true)
     try {
       // Prefer JPEG for Pi WebView compatibility (avoids dark/blank WebP decode issues)
       const compressedBase64 = await compressImageFile(file, {
@@ -129,16 +146,45 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         preferWebp: false,
         quality: 0.85,
       })
+      // Optimistic local preview while durable upload runs
       setFormData((prev) => ({ ...prev, coverImage: compressedBase64 }))
-      setValidationErrors((prev) => {
-        const { coverImage: _c, ...rest } = prev
-        return rest
-      })
+      try {
+        // Rebuild a File for durable upload from compressed data when possible
+        let uploadFile = file
+        if (typeof compressedBase64 === "string" && compressedBase64.startsWith("data:")) {
+          const res = await fetch(compressedBase64)
+          const blob = await res.blob()
+          uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg") || "cover.jpg", {
+            type: blob.type || "image/jpeg",
+          })
+        }
+        const uploaded = await uploadDurableMedia(uploadFile, { category: "images" })
+        if (uploaded.ok) {
+          const facade = toRelativeMediaFacadeUrl(uploaded.url) || uploaded.url
+          setFormData((prev) => ({ ...prev, coverImage: facade }))
+          setValidationErrors((prev) => {
+            const { coverImage: _c, ...rest } = prev
+            return rest
+          })
+        } else if (isMediaStorageUnavailable(uploaded.error)) {
+          setValidationErrors((prev) => ({ ...prev, coverImage: uploaded.userMessage || "Media storage unavailable — try again shortly" }))
+        } else {
+          setValidationErrors((prev) => ({ ...prev, coverImage: uploaded.userMessage || "Cover upload failed — try again" }))
+        }
+      } catch (upErr) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          coverImage:
+            upErr instanceof Error ? upErr.message : "Cover upload failed — check connection",
+        }))
+      }
     } catch (err) {
       setValidationErrors((prev) => ({
         ...prev,
         coverImage: err instanceof Error ? err.message : "Failed to process image",
       }))
+    } finally {
+      setCoverUploading(false)
     }
   }
 
@@ -209,10 +255,17 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
   }
 
   const handleSubmit = async () => {
+    if (isLoading || coverUploading || submittingRef.current) return
     if (validateStep(4)) {
+      submittingRef.current = true
       try {
-        await onSubmit(formData)
-        // Reset form on success
+        if (!draftIdRef.current) draftIdRef.current = `comm_${crypto.randomUUID()}`
+        const result = await onSubmit({ ...formData, id: formData.id || draftIdRef.current })
+        // A false result means payment/create failed; preserve every field and stay here.
+        if (result === false) return
+        // Reset form only after the parent confirms durable creation.
+        draftIdRef.current = ""
+        setFeePaymentConfirmed(false)
         setStep(1)
         setFormData({
           name: "",
@@ -223,26 +276,49 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
           welcomeMessage: "",
           rules: [],
           invitedMembers: [],
+          feeCurrency: isPiOnlyCommerceClient() ? "PI" : "GHC",
         })
+        setFeeRail("GHC")
       } catch (err) {
-        // Error is handled by parent component
+        // Parent owns the visible error; preserve the draft for a safe retry.
         console.error("[Create Group Error]", err)
+      } finally {
+        submittingRef.current = false
       }
     }
   }
 
   useEffect(() => {
     if (!isOpen) return
-    return onCloseTransientUI(() => onClose())
+    const onFeePaid = (event: Event) => {
+      const detail = (event as CustomEvent<{ communityId?: string; currency?: string }>).detail
+      if (!detail || detail.communityId !== draftIdRef.current || detail.currency !== "PI") return
+      setFeeRail("PI")
+      setFormData((prev) => ({ ...prev, feeCurrency: "PI" }))
+      setFeePaymentConfirmed(true)
+    }
+    window.addEventListener("ghc:community-fee-payment-confirmed", onFeePaid as EventListener)
+    return () => window.removeEventListener("ghc:community-fee-payment-confirmed", onFeePaid as EventListener)
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    return onCloseTransientUI((detail) => {
+      // Payment SDKs and nested overlays may emit transient events. Do not destroy
+      // the in-flight registration/payment draft; navigation can close it afterward.
+      if (submittingRef.current) return
+      if (detail?.scope && detail.scope !== "community-create") return
+      onClose()
+    })
   }, [isOpen, onClose])
 
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
-      <div className="w-full bg-white rounded-t-lg max-h-screen overflow-hidden flex flex-col">
+      <div className="w-full bg-card text-foreground rounded-t-2xl max-h-[100dvh] overflow-hidden flex flex-col">
         {/* Header — always has a clear Back / Close control (Step 1 closes, later steps go previous) */}
-        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-gray-200 bg-white z-10">
+        <div className="sticky top-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-border/60 bg-card/95 backdrop-blur z-10">
           <button
             type="button"
             onClick={() => {
@@ -252,7 +328,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 onClose()
               }
             }}
-            className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 transition active:scale-95 disabled:opacity-50"
+            className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold text-foreground hover:bg-muted transition active:scale-95 disabled:opacity-50"
             aria-label={step > 1 ? "Go back to previous step" : "Close create group"}
             disabled={isLoading}
           >
@@ -261,17 +337,17 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             </svg>
             <span className="hidden sm:inline">{step > 1 ? "Back" : "Close"}</span>
           </button>
-          <h2 id="create-group-title" className="flex-1 text-center font-bold text-gray-900 truncate">
+          <h2 id="create-group-title" className="flex-1 text-center font-bold text-foreground truncate">
             {step === 1 ? "Create community" : `Create community · ${step}/4`}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1 hover:bg-gray-100 transition"
+            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1 hover:bg-muted transition"
             aria-label="Close modal"
             disabled={isLoading}
           >
-            <X size={20} className="text-gray-600" />
+            <X size={20} className="text-muted-foreground" />
           </button>
         </div>
 
@@ -281,7 +357,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
-                className={`h-1 flex-1 rounded-full transition ${s <= step ? "bg-emerald-600" : "bg-gray-200"}`}
+                className={`h-1 flex-1 rounded-full transition ${s <= step ? "bg-emerald-600" : "bg-muted"}`}
               />
             ))}
           </div>
@@ -296,8 +372,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
         )}
 
         {/* Step Guidance */}
-        <div className="mx-4 mb-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-          <p className="text-xs font-semibold text-gray-700">
+        <div className="mx-4 mb-3 px-3 py-2 bg-muted/40 border border-border/70 rounded-lg">
+          <p className="text-xs font-semibold text-foreground/90">
             {step === 1 && "Basic Info - Name, category, and description help members discover your group"}
             {step === 2 && "Visual & Privacy - Add a cover image and choose who can join"}
             {step === 3 && "Welcome & Culture - Set the tone for your group community"}
@@ -312,7 +388,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-3 pt-3">
               {/* Group Name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
                   Group Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -324,21 +400,21 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   }
                   maxLength={50}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition ${
-                    validationErrors.name ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.name ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                   autoFocus
                 />
                 {validationErrors.name && <p className="text-xs text-red-600 mt-1">{validationErrors.name}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.name.length}/50</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.name.length}/50</p>
               </div>
 
               {/* Category - Quick selection */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1">Category</label>
+                <label className="block text-sm font-semibold text-foreground mb-1">Category</label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-background text-foreground"
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
@@ -350,7 +426,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
                   Description <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -362,11 +438,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   maxLength={500}
                   rows={2}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition resize-none ${
-                    validationErrors.description ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.description ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                 />
                 {validationErrors.description && <p className="text-xs text-red-600 mt-1">{validationErrors.description}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.description.length}/500</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.description.length}/500</p>
               </div>
 
               {/* Quick info */}
@@ -383,10 +459,12 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-4 pt-3">
               {/* Cover Image - Visual preview */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1">
-                  Cover Image <span className="text-xs text-gray-500">(optional)</span>
+                <label className="block text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
+                  Cover Image <span className="text-xs text-muted-foreground">(optional)</span>
                 </label>
-                {formData.coverImage ? (
+                {coverUploading ? (
+                  <div className="flex h-28 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Uploading cover…</div>
+                ) : formData.coverImage ? (
                   <div className="relative overflow-hidden rounded-lg bg-zinc-100">
                     <img
                       src={formData.coverImage}
@@ -406,11 +484,11 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 ) : (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:bg-emerald-50/30 transition flex flex-col items-center gap-2"
+                    className="w-full p-6 border-2 border-dashed border-border/80 rounded-lg hover:border-emerald-500 hover:bg-emerald-50/30 transition flex flex-col items-center gap-2"
                   >
-                    <Upload size={28} className="text-gray-400" />
-                    <span className="text-sm font-semibold text-gray-600">Click to upload image</span>
-                    <span className="text-xs text-gray-500">Any size · auto-compressed for performance</span>
+                    <Upload size={28} className="text-muted-foreground" />
+                    <span className="text-sm font-semibold text-muted-foreground">Click to upload image</span>
+                    <span className="text-xs text-muted-foreground">Any size · auto-compressed for performance</span>
                   </button>
                 )}
                 <input
@@ -426,7 +504,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               {/* Privacy Settings */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2.5">Privacy Setting <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-semibold text-foreground mb-2.5">Privacy Setting <span className="text-red-500">*</span></label>
                 <div className="space-y-2">
                   {PRIVACY_OPTIONS.map((option) => (
                     <button
@@ -435,18 +513,18 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       className={`w-full p-3 border rounded-lg text-left transition ${
                         formData.privacy === option.value
                           ? "border-emerald-500 bg-emerald-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          : "border-border/70 hover:border-border/80"
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          formData.privacy === option.value ? "border-emerald-500 bg-emerald-600" : "border-gray-300"
+                          formData.privacy === option.value ? "border-emerald-500 bg-emerald-600" : "border-border/80"
                         }`}>
                           {formData.privacy === option.value && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                         </div>
                         <div className="flex-1">
-                          <p className="font-semibold text-sm text-gray-900">{option.label}</p>
-                          <p className="text-xs text-gray-600">{option.desc}</p>
+                          <p className="font-semibold text-sm text-foreground">{option.label}</p>
+                          <p className="text-xs text-muted-foreground">{option.desc}</p>
                         </div>
                       </div>
                     </button>
@@ -461,8 +539,8 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
             <div className="space-y-4 pt-3">
               {/* Welcome Message - Optional but helpful */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1">
-                  Welcome Message <span className="text-xs text-gray-500">(optional)</span>
+                <label className="block text-sm font-semibold text-foreground mb-1 flex items-center gap-1">
+                  Welcome Message <span className="text-xs text-muted-foreground">(optional)</span>
                 </label>
                 <textarea
                   placeholder="Welcome to our group! Share what you'd like members to know..."
@@ -473,15 +551,15 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   maxLength={500}
                   rows={2}
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition resize-none ${
-                    validationErrors.welcomeMessage ? "border-red-300 focus:ring-red-500" : "border-gray-200 focus:ring-emerald-500"
+                    validationErrors.welcomeMessage ? "border-red-300 focus:ring-red-500" : "border-border/70 focus:ring-emerald-500"
                   }`}
                 />
                 {validationErrors.welcomeMessage && <p className="text-xs text-red-600 mt-1">{validationErrors.welcomeMessage}</p>}
-                <p className="text-xs text-gray-500 mt-1">{formData.welcomeMessage.length}/500</p>
+                <p className="text-xs text-muted-foreground mt-1">{formData.welcomeMessage.length}/500</p>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Group Rules (Max 5)</label>
+                <label className="block text-sm font-semibold text-foreground mb-2">Group Rules (Max 5)</label>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {RULE_TEMPLATES.map((pack, i) => (
                     <button
@@ -501,9 +579,9 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 </div>
                 <div className="space-y-2">
                   {formData.rules.map((rule, idx) => (
-                    <div key={idx} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg">
-                      <span className="text-sm font-semibold text-gray-600 flex-shrink-0 mt-0.5">{idx + 1}.</span>
-                      <p className="text-sm text-gray-700 flex-1">{rule}</p>
+                    <div key={idx} className="flex items-start gap-2 p-2 bg-muted/40 rounded-lg">
+                      <span className="text-sm font-semibold text-muted-foreground flex-shrink-0 mt-0.5">{idx + 1}.</span>
+                      <p className="text-sm text-foreground/90 flex-1">{rule}</p>
                       <button
                         onClick={() => removeRule(idx)}
                         className="p-1 hover:bg-red-100 rounded text-red-600"
@@ -528,7 +606,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       }
                     }}
                     maxLength={100}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     onClick={addRule}
@@ -552,16 +630,16 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1">
+                <label className="block text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
                   <Users size={16} />
-                  Invite Members <span className="text-xs text-gray-500">(max 10, optional)</span>
+                  Invite Members <span className="text-xs text-muted-foreground">(max 10, optional)</span>
                 </label>
 
                 {formData.invitedMembers.length > 0 && (
                   <div className="mb-3 space-y-1 p-2 bg-blue-50 rounded-lg">
                     {formData.invitedMembers.map((member, idx) => (
                       <div key={idx} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-700">{member}</span>
+                        <span className="text-foreground/90">{member}</span>
                         <button
                           onClick={() => removeMember(idx)}
                           className="p-0.5 hover:bg-red-100 rounded text-red-600"
@@ -587,7 +665,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                       }
                     }}
                     maxLength={50}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 px-3 py-2 border border-border/70 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     onClick={addMember}
@@ -599,7 +677,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                 </div>
                 {validationErrors.invitedMembers && <p className="text-xs text-red-600 mt-1">{validationErrors.invitedMembers}</p>}
 
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   {formData.invitedMembers.length > 0
                     ? `${formData.invitedMembers.length} member${formData.invitedMembers.length > 1 ? "s" : ""} invited`
                     : "Invite members to your group (optional)"}
@@ -608,22 +686,54 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
               <div className="p-3 bg-blue-50 rounded-lg">
                 <p className="text-xs text-blue-800">
-                  <span className="font-semibold">✓ Ready to create!</span> Review all details and click "Create Group" below.
+                  <span className="font-semibold">✓ Ready to create!</span> Review all details and click "Create community" below.
                 </p>
+                <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <p className="text-[12px] font-bold text-foreground">Creation fee (non-refundable)</p>
+                <div className="flex gap-2">
+                  {(["GHC", "PI"] as const).map((rail) => {
+                    const q = quoteCommunityCreateFeeClient(rail)
+                    return (
+                      <button
+                        key={rail}
+                        type="button"
+                        onClick={() => {
+                          if (feePaymentConfirmed && rail !== "PI") return
+                          setFeeRail(rail)
+                          setFormData((prev) => ({ ...prev, feeCurrency: rail }))
+                        }}
+                        disabled={feePaymentConfirmed && rail !== "PI"}
+                        className={`min-h-10 flex-1 rounded-xl border px-3 text-sm font-bold transition ${
+                          feeRail === rail
+                            ? "border-emerald-500 bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
+                            : "border-border/70 bg-card text-muted-foreground"
+                        }`}
+                      >
+                        {rail === "GHC" ? `₲ ${q.amount}` : `${q.amount} π`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {feePaymentConfirmed
+                    ? "Pi fee payment confirmed for this draft. Retry creation with Pi to finish without paying again."
+                    : `Debits available ${feeRail === "GHC" ? "GHC" : "Pi"} when rates are active on testnet/mainnet. Browsing and messaging stay free. Cover photos use durable private storage.`}
+                </p>
+              </div>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer with progress indicator and navigation buttons */}
-        <div className="sticky bottom-0 px-4 py-4 border-t border-gray-200 bg-white">
+        <div className="sticky bottom-0 px-4 py-4 border-t border-border/60 bg-card/95 backdrop-blur">
           {/* Progress indicator */}
           <div className="flex gap-1.5 mb-3">
             {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
                 className={`flex-1 h-1.5 rounded-full transition ${
-                  s <= step ? "bg-emerald-600" : "bg-gray-200"
+                  s <= step ? "bg-emerald-600" : "bg-muted"
                 }`}
               />
             ))}
@@ -631,14 +741,14 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
 
           {/* Step counter and buttons */}
           <div className="flex items-center gap-2 justify-between">
-            <span className="text-xs font-semibold text-gray-600">Step {step} of 4</span>
+            <span className="text-xs font-semibold text-muted-foreground">Step {step} of 4</span>
             
             <div className="flex gap-2 flex-1 justify-end">
               {step > 1 && (
                 <button
                   onClick={handlePrevious}
                   disabled={isLoading}
-                  className="px-4 py-2 border border-gray-300 rounded-lg font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition"
+                  className="px-4 py-2 border border-border/80 rounded-lg font-semibold text-foreground hover:bg-muted/40 disabled:opacity-50 transition"
                   aria-label="Go to previous step"
                 >
                   Back
@@ -657,12 +767,12 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={isLoading}
+                  disabled={isLoading || coverUploading}
                   className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                   aria-label="Create group"
                 >
                   {isLoading && <Loader size={16} className="animate-spin" />}
-                  {isLoading ? "Creating…" : "Create community"}
+                  {isLoading || coverUploading ? "Creating…" : `Create · ${feeQuote.label}`}
                 </button>
               )}
             </div>

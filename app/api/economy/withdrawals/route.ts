@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcWalletSnapshot } from "@/lib/server/economy/db"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   createWithdrawalRequest,
   fetchLockedGhc,
@@ -12,6 +13,7 @@ import {
   listWithdrawalsForUser,
   minGhcForWithdrawal,
   getApprovedGhcPerPi,
+  areGhcPiWithdrawalsEnabled,
 } from "@/lib/server/economy/withdrawal"
 
 export const runtime = "nodejs"
@@ -22,20 +24,41 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  if (!areGhcPiWithdrawalsEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GHC_WITHDRAWALS_DISABLED",
+        message: "GHC-to-Pi settlement is not available. GHC remains an in-app utility balance unless a separately governed settlement product is approved.",
+      },
+      { status: 503 }
+    )
+  }
   const snap = await rpcWalletSnapshot(auth.userId).catch(() => null)
-  const balance = Number(
-    (snap as { balance?: number } | null)?.balance ??
-      (snap as { available?: number } | null)?.available ??
-      0
-  )
+  const balanceRaw = (snap as { balance?: number } | null)?.balance
+  const balance = Number(balanceRaw)
+  if (!snap || !Number.isFinite(balance) || balance < 0) {
+    return NextResponse.json(
+      { ok: false, error: "WALLET_SNAPSHOT_UNAVAILABLE", message: "Withdrawal eligibility cannot be calculated safely right now." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
   const locked = await fetchLockedGhc(auth.userId)
+  if (locked === null) {
+    return NextResponse.json(
+      { ok: false, error: "WITHDRAWAL_LOCKS_UNAVAILABLE", message: "Withdrawal eligibility cannot be calculated until locked balances are available." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
   const quote = await getWithdrawalQuote(balance, locked)
   const items = await listWithdrawalsForUser(auth.userId)
-  return NextResponse.json({
-    ok: true,
-    quote,
-    withdrawals: items,
-  })
+  if (items === null) {
+    return NextResponse.json(
+      { ok: false, error: "WITHDRAWAL_HISTORY_UNAVAILABLE" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+  return NextResponse.json({ ok: true, quote, withdrawals: items }, { headers: { "Cache-Control": "no-store" } })
 }
 
 export async function POST(request: Request) {
@@ -43,7 +66,27 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const body = await request.json().catch(() => ({}))
+  if (!areGhcPiWithdrawalsEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GHC_WITHDRAWALS_DISABLED",
+        message: "GHC-to-Pi settlement is not available. GHC remains an in-app utility balance unless a separately governed settlement product is approved.",
+      },
+      { status: 503 }
+    )
+  }
+  // Withdrawal requests are financial operations: enforce a hard streaming limit
+  // before JSON parsing so oversized bodies cannot consume unbounded memory.
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    const status = parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json(
+      { ok: false, error: parsedBody.error, message: parsedBody.error === "REQUEST_TOO_LARGE" ? "Withdrawal request body is too large" : "Invalid withdrawal request body" },
+      { status, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+  const body = parsedBody.value
   const ghcAmount = Number(body.ghcAmount)
   const piWalletAddress = String(body.piWalletAddress || body.walletAddress || "").trim()
   // Require stable client key — Date.now() fallback would allow accidental duplicate requests

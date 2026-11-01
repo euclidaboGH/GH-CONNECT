@@ -150,6 +150,50 @@ function dayKey(d = new Date()): string {
   return lagosDayKey(d)
 }
 
+/** Milliseconds until next 00:00 Africa/Lagos (reward day rollover). */
+export function msUntilNextLagosMidnight(from = new Date()): number {
+  try {
+    // Approximate: format "now" in Lagos, then find next midnight by probing
+    const keyToday = lagosDayKey(from)
+    for (let h = 1; h <= 48; h++) {
+      const candidate = new Date(from.getTime() + h * 60 * 60 * 1000)
+      if (lagosDayKey(candidate) !== keyToday) {
+        // Binary refine within the hour that crossed
+        let lo = from.getTime() + (h - 1) * 60 * 60 * 1000
+        let hi = candidate.getTime()
+        while (hi - lo > 1000) {
+          const mid = Math.floor((lo + hi) / 2)
+          if (lagosDayKey(new Date(mid)) === keyToday) lo = mid
+          else hi = mid
+        }
+        return Math.max(0, hi - from.getTime())
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  // Fallback: local midnight + 1 day
+  const n = new Date(from)
+  n.setHours(24, 0, 0, 0)
+  return Math.max(0, n.getTime() - from.getTime())
+}
+
+/** Human countdown H:MM:SS or Xh Ym for next Lagos reward day. */
+export function formatCountdown(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0:00:00"
+  const totalSec = Math.floor(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h >= 24) {
+    const d = Math.floor(h / 24)
+    return `${d}d ${h % 24}h`
+  }
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+}
+
+
+
 function lagosMonthKey(d = new Date()): string {
   return lagosDayKey(d).slice(0, 7)
 }
@@ -383,6 +427,14 @@ export function getDailyStreak(
  * Uses Africa/Lagos reward day. Optional membershipTier selects the enhanced track.
  * Missed-day continuity may consume a streak shield (VIP/VVIP) instead of resetting.
  */
+/** Soft UI sync when server confirms already-claimed (does not mint GHC). */
+export function markDailyClaimedForUi(userId: string): void {
+  const s = readStreak(userId)
+  const today = dayKey()
+  if (s.lastClaimDayKey === today) return
+  writeStreak(userId, { ...s, lastClaimDayKey: today })
+}
+
 export function claimDailyStreak(
   userId: string,
   membershipTier?: string | null

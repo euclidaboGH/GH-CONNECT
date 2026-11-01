@@ -1,4 +1,5 @@
 // Community features engine for groups
+import { formatDateTime, getClientLocale, getClientTimeZone } from "@/lib/regional-context"
 // Announcements, polls, events, pinned resources, welcome messages, guidelines, recommendations
 
 export type AnnouncementType = "info" | "important" | "celebration" | "maintenance"
@@ -355,28 +356,20 @@ export function shouldExpireAnnouncement(announcement: Announcement): boolean {
   return Date.now() > announcement.expiresAt
 }
 
-export function formatEventDate(event: ScheduledEvent, locale: string = "en-US"): string {
+export function formatEventDate(event: ScheduledEvent, locale: string = getClientLocale(), timeZone: string = getClientTimeZone()): string {
   const start = new Date(event.startsAt)
   const end = new Date(event.endsAt)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return ""
 
-  const sameDay = start.toDateString() === end.toDateString()
-  const dateStr = start.toLocaleDateString(locale, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
-  const timeStr = start.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
-  const endTimeStr = end.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+  const dayKey = (value: Date) => new Intl.DateTimeFormat(locale, { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(value)
+  const sameDay = dayKey(start) === dayKey(end)
+  const dateStr = formatDateTime(start, { weekday: "short", month: "short", day: "numeric" }, { locale, timeZone })
+  const timeStr = formatDateTime(start, { hour: "2-digit", minute: "2-digit" }, { locale, timeZone })
+  const endTimeStr = formatDateTime(end, { hour: "2-digit", minute: "2-digit" }, { locale, timeZone })
 
-  if (sameDay) {
-    return `${dateStr}, ${timeStr} - ${endTimeStr}`
-  }
+  if (sameDay) return `${dateStr}, ${timeStr} - ${endTimeStr}`
 
-  const endDateStr = end.toLocaleDateString(locale, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
+  const endDateStr = formatDateTime(end, { weekday: "short", month: "short", day: "numeric" }, { locale, timeZone })
   return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`
 }
 

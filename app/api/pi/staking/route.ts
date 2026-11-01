@@ -49,6 +49,8 @@ export async function GET(request: Request) {
           "Staking Data API requires Pi app whitelist. Set PI_STAKING_API_ENABLED=true only after Platform access is granted.",
         ghUserId,
         effectiveStake: null,
+        engagementOnly: true,
+        notWalletBalance: true,
         tiers: [
           { id: "supporter", minEffective: 1, label: "Supporter" },
           { id: "advocate", minEffective: 100, label: "Advocate" },
@@ -70,6 +72,8 @@ export async function GET(request: Request) {
         "PI_STAKING_API_ENABLED is set but the Platform staking fetch is not implemented until official endpoint docs are confirmed.",
       ghUserId,
       effectiveStake: null,
+        engagementOnly: true,
+        notWalletBalance: true,
       ts: new Date().toISOString(),
     },
     { headers: { "Cache-Control": "no-store" } }

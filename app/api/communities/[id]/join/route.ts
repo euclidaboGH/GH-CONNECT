@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,6 +23,10 @@ export async function POST(_request: Request, ctx: Ctx) {
   if (!communityId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
+  const rl = checkRateLimit(`community-join:${auth.userId}`, 20, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+  }
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community join", { extra: { status: "unavailable" } })
     return NextResponse.json(nd.body, { status: nd.status })
@@ -37,10 +42,11 @@ export async function POST(_request: Request, ctx: Ctx) {
       code === "BANNED" ? 403 : code === "NOT_FOUND" ? 404 : 503
     return NextResponse.json({ ok: false, error: code }, { status })
   }
+  const status = data?.status || "active"
   return NextResponse.json({
     ok: true,
     durable: true,
-    status: data?.status || "active",
+    status,
   })
 }
 

@@ -24,6 +24,7 @@ export type NotificationCenterBucket =
   | "rewards"
   | "requests"
   | "community"
+  | "marketplace"
   | "system"
 
 export const NOTIFICATION_CENTER_BUCKETS: {
@@ -37,6 +38,7 @@ export const NOTIFICATION_CENTER_BUCKETS: {
   { id: "rewards", label: "Rewards" },
   { id: "requests", label: "Requests" },
   { id: "community", label: "Community" },
+  { id: "marketplace", label: "Market" },
   { id: "system", label: "System" },
 ]
 
@@ -55,6 +57,7 @@ export type NotificationDeepLink = {
     | "matches"
     | "profile"
     | "settings"
+    | "marketplace"
   tab?:
     | "home"
     | "discover"
@@ -66,8 +69,10 @@ export type NotificationDeepLink = {
     | "rewards"
     | "membership"
     | "settings"
+    | "marketplace"
   section?:
     | "post"
+    | "comments"
     | "conversation"
     | "transaction"
     | "transfer-request"
@@ -87,9 +92,13 @@ export type NotificationDeepLink = {
   greenHavenId?: string
   /** Marketplace deep-link target */
   listingId?: string
+  commentId?: string
 }
 
 const SOCIAL_TYPES = new Set<NotificationType>([
+  "upvote",
+  "downvote",
+  "comment_reply",
   "like",
   "comment",
   "follow",
@@ -153,6 +162,19 @@ export function bucketForNotification(n: Notification): Exclude<NotificationCent
   }
 
   if (
+    cat === "marketplace" ||
+    open === "marketplace" ||
+    data.listingId ||
+    n.type === "marketplace_listing" ||
+    n.type === "marketplace_order" ||
+    n.type === "marketplace_comment" ||
+    n.type === "marketplace_reaction" ||
+    /listing|marketplace|order sold|product/i.test(blobOf(n))
+  ) {
+    return "marketplace"
+  }
+
+  if (
     SOCIAL_TYPES.has(n.type) ||
     cat === "comments" ||
     cat === "matches" ||
@@ -187,7 +209,9 @@ export function filterByBucket(
 
 /** Resolve deep-link from notification data + type — never default to Settings. */
 export function resolveNotificationDeepLink(n: Notification): NotificationDeepLink {
-  const data = (n.data || {}) as Record<string, unknown>
+  const rawData = (n.data || {}) as Record<string, unknown>
+  const correlation = rawData.correlation && typeof rawData.correlation === "object" ? rawData.correlation as Record<string, unknown> : {}
+  const data = { ...rawData, ...correlation }
   if (data.deepLink && typeof data.deepLink === "object") {
     const forced = data.deepLink as NotificationDeepLink
     // Guard: social/share types must not be forced into settings
@@ -205,7 +229,15 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     id: data.id != null ? String(data.id) : n.id,
     postId: data.postId != null ? String(data.postId) : undefined,
     conversationId:
-      data.conversationId != null ? String(data.conversationId) : undefined,
+      data.conversationId != null
+        ? String(data.conversationId)
+        : data.threadId != null
+          ? String(data.threadId)
+          : data.entityType === "conversation" || data.entityType === "message"
+            ? data.entityId != null
+              ? String(data.entityId)
+              : undefined
+            : undefined,
     userId:
       data.userId != null
         ? String(data.userId)
@@ -273,6 +305,12 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.tab = "discover"
     return link
   }
+  if (open === "marketplace" || open === "market" || open === "orders") {
+    link.open = "marketplace"
+    link.tab = "home"
+    if (data.listingId) link.listingId = String(data.listingId)
+    return link
+  }
   if (open === "security" || open === "verification") {
     link.open = "settings"
     link.tab = "settings"
@@ -285,7 +323,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.tab = "settings"
     const rawSection = typeof data.section === "string" ? data.section : undefined
     if (
-      rawSection === "post" ||
+      rawSection === "post" || rawSection === "comments" ||
       rawSection === "conversation" ||
       rawSection === "transaction" ||
       rawSection === "transfer-request" ||
@@ -311,18 +349,73 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
   } else if (n.type === "match") {
     link.open = "matches"
     link.tab = "matches"
-  } else if (n.type === "friend_request") {
-    // Connection request inbox — not messages
+  } else if (
+    n.type === "friend_request" ||
+    n.type === "connection_request" ||
+    (n as { type?: string }).type === "connection_request" ||
+    (n as { type?: string }).type === "connection"
+  ) {
+    // Connection request inbox — Matches tab hosts the inbox overlay
     link.open = "matches"
     link.tab = "matches"
     link.section = "connection_requests"
+    if (!link.userId) {
+      const actor =
+        String((n.data as { actorUserId?: string; fromUserId?: string } | undefined)?.actorUserId ||
+          (n.data as { fromUserId?: string } | undefined)?.fromUserId ||
+          "")
+      if (actor) link.userId = actor
+    }
+  } else if ((n as { type?: string }).type === "connection_accept") {
+    // Open Matches; section must be a declared NotificationLink section (not tab name)
+    link.open = "matches"
+    link.tab = "matches"
+    link.section = "connection_requests"
+    if (!link.userId) {
+      const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
+      if (actor) link.userId = actor
+    }
   } else if (n.type === "follow") {
     link.open = "discover"
     link.tab = "discover"
-  } else if (n.type === "like" || n.type === "comment" || n.type === "share" || n.type === "mention" || n.type === "story_reply") {
+    if (!link.userId) {
+      const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
+      if (actor) link.userId = actor
+    }
+  } else if (
+    n.type === "like" ||
+    n.type === "post_like" ||
+    n.type === "comment" ||
+    n.type === "post_comment" ||
+    n.type === "comment_reply" ||
+    n.type === "share" ||
+    n.type === "mention" ||
+    n.type === "story_reply" ||
+    n.type === "curation" ||
+    n.type === "upvote" ||
+    n.type === "downvote"
+  ) {
     link.open = "feed"
     link.tab = "home"
-    link.section = "post"
+    const isComment =
+      n.type === "comment" || n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention" || n.type === "story_reply"
+    link.section = isComment ? "comments" : "post"
+    if (!link.postId) {
+      const d = (n.data || {}) as Record<string, unknown>
+      const pid = d.postId || d.entityId || d.post_id
+      if (pid) link.postId = String(pid)
+    }
+    } else if (
+    n.type === "marketplace_listing" ||
+    n.type === "marketplace_order" ||
+    n.type === "marketplace_comment" ||
+    n.type === "marketplace_reaction"
+  ) {
+    link.open = "marketplace"
+    link.tab = "home"
+    const d = (n.data || {}) as { listingId?: string; orderId?: string }
+    if (d.listingId) link.listingId = String(d.listingId)
+    if (d.orderId) (link as { orderId?: string }).orderId = String(d.orderId)
   } else if (n.type === "ghc_received" || n.type === "ghc_sent" || n.type === "payment") {
     link.open = "wallet"
     link.tab = "wallet"
@@ -385,6 +478,19 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
     // Primary surface via canonical navigation map
     if (surface === "wallet" || link.tab === "wallet") {
       openWallet()
+    } else if (surface === "marketplace" || link.listingId) {
+      navigateTo("marketplace", {
+        listingId: link.listingId || undefined,
+      })
+      try {
+        if ((link as { orderId?: string }).orderId) {
+          window.dispatchEvent(
+            new CustomEvent("ghc:open-marketplace", {
+              detail: { bucket: "orders", orderId: (link as { orderId?: string }).orderId },
+            }),
+          )
+        }
+      } catch { /* */ }
     } else if (surface === "rewards" || link.tab === "rewards") {
       navigateTo("rewards")
     } else if (surface === "membership" || link.tab === "membership") {
@@ -416,42 +522,55 @@ export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
       window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent("ghc:open-conversation", {
-            detail: { conversationId: link.conversationId },
+            detail: {
+              conversationId: link.conversationId,
+              peerUserId: link.userId,
+              kind: link.groupId ? "community" : "dm",
+            },
           })
         )
-      }, 60)
+      }, 120)
     }
     if (link.groupId && surface !== "communities" && link.tab !== "communities") {
       openCommunity(link.groupId)
     }
-    if (link.userId && (link.tab === "discover" || link.section === "friend-request" || link.section === "connection_requests")) {
+    // Discover profile only — not for connection_requests (inbox is the target)
+    if (link.userId && link.tab === "discover" && link.section !== "connection_requests" && link.section !== "friend-request") {
       window.dispatchEvent(
         new CustomEvent("ghc:open-profile", {
-          detail: {
-            userId: link.userId,
-            section: "connection_requests",
-            intents: (link as { intents?: string[] }).intents,
-          },
+          detail: { userId: link.userId },
         })
       )
     }
-    if (link.userId && (surface === "messages" || surface === "chat") && !link.conversationId) {
-      openChat(link.userId)
-    }
-    if (link.postId && (link.tab === "home" || link.open === "feed" || surface === "home" || surface === "feed")) {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-post", {
-          detail: { postId: link.postId },
-        })
-      )
+    if (link.userId && (surface === "messages" || surface === "chat" || link.tab === "messages") && !link.conversationId) {
+      window.setTimeout(() => {
+        openChat(link.userId!)
+      }, 120)
     }
 
     if (link.section === "friend-request" || link.section === "connection_requests") {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-connection-inbox", {
-          detail: { focus: "incoming", userId: link.userId },
-        })
-      )
+      // Matches tab must mount before inbox overlay listens
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("ghc:open-connection-inbox", {
+            detail: { focus: "incoming", userId: link.userId },
+          })
+        )
+      }, 120)
+    }
+
+    if (link.postId && (link.section === "post" || link.section === "comments" || link.open === "feed" || link.tab === "home" || surface === "home" || surface === "feed")) {
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("ghc:open-post", {
+            detail: {
+              postId: link.postId,
+              commentId: link.commentId,
+              action: link.section === "comments" ? "comment" : "focus",
+            },
+          })
+        )
+      }, 100)
     }
 
     window.dispatchEvent(new CustomEvent("ghc:notification-deep-link", { detail: link }))

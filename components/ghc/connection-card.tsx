@@ -13,6 +13,7 @@ import {
   type ConnectionCardAction,
 } from "@/lib/domains/adapters/connection-graph-adapter"
 import type { ConnectionIntentId } from "@/lib/connection-intents"
+import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
 
 
@@ -59,12 +60,12 @@ export function ConnectionCard({
 
   return (
     <article
-      className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm"
+      className="gh-card-interactive rounded-[1.35rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)] transition hover:shadow-[var(--gh-card-shadow-lg)]"
       aria-label={`${candidate.displayName}, ${stateLabel}`}
       data-connection-state={connectionState}
     >
       <div className="flex gap-3">
-        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-background dark:bg-emerald-950">
           {avatarUrl ? (
             <img
               src={avatarUrl}
@@ -104,7 +105,7 @@ export function ConnectionCard({
         <div className="mt-2 flex flex-wrap gap-1">
           {selectedIntent ? (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              Intent: {selectedIntent}
+              Intent: {formatIntentChip(String(selectedIntent))}
             </span>
           ) : null}
           {candidate.kind === "person"
@@ -128,9 +129,20 @@ export function ConnectionCard({
             disabled={busy || connectionState === "blocked"}
             onClick={() => onAction?.(action, candidate)}
             className={
-              action === "connect" || action === "accept"
-                ? "rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground disabled:opacity-50"
-                : "rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground disabled:opacity-50"
+              action === "connect" || action === "accept" || action === "like"
+                ? "rounded-full bg-primary px-3.5 py-2 text-[12px] font-bold text-primary-foreground shadow-sm disabled:opacity-50"
+                : action === "pass"
+                  ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
+                  : "rounded-full border border-border bg-background px-3.5 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+            }
+            title={
+              action === "like"
+                ? MATCH_CLARITY.likeHint
+                : action === "pass"
+                  ? MATCH_CLARITY.passHint
+                  : action === "connect"
+                    ? MATCH_CLARITY.connectHint
+                    : undefined
             }
           >
             {labelForAction(action)}
@@ -144,7 +156,11 @@ export function ConnectionCard({
 function labelForAction(action: ConnectionCardAction): string {
   switch (action) {
     case "connect":
-      return "Connect"
+      return MATCH_CLARITY.connectLabel
+    case "like":
+      return MATCH_CLARITY.likeLabel
+    case "pass":
+      return MATCH_CLARITY.passLabel
     case "accept":
       return "Accept"
     case "decline":

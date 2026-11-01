@@ -15,11 +15,15 @@ import {
   getListing,
   listActiveListings,
   listSellerListings,
+  serverListingToClient,
 } from "@/lib/server/marketplace/listing-store"
 import {
   calculateMarketplaceListingFee,
   listingFeeRequiresSettlement,
 } from "@/lib/server/marketplace/listing-fee"
+import { verifyListingFeePayment } from "@/lib/server/marketplace/verify-listing-fee-payment"
+import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -52,7 +56,9 @@ export async function POST(request: Request) {
     )
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 12 * 1024 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
 
   // Never trust client identity or fee fields
   void body.sellerId
@@ -69,6 +75,15 @@ export async function POST(request: Request) {
   const availability = Math.max(0, Math.min(9999, Math.floor(Number(body.availability) || 1)))
   let status = String(body.status || "draft")
   const kind = String(body.kind || "product").slice(0, 64)
+  const location = String(body.location || "").trim().slice(0, 120)
+  const category = String(body.category || body.cat || "Goods").trim().slice(0, 64)
+  const condition = String(body.condition || "not_applicable").trim().slice(0, 32)
+  const media = Array.isArray(body.media)
+    ? body.media.map((m: unknown) => String(m || "").trim()).filter(Boolean).slice(0, 12)
+    : []
+  const tags = Array.isArray(body.tags)
+    ? body.tags.map((x: unknown) => String(x || "").trim()).filter(Boolean).slice(0, 12)
+    : []
   const id =
     String(body.id || "").trim() ||
     `lst_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -102,23 +117,102 @@ export async function POST(request: Request) {
   }
 
   // Server listing fee (display + gate). Never accept client fee.
+  const preferredFee =
+    String(body.feeCurrency || body.preferredFeeCurrency || "").toUpperCase() === "PI"
+      ? "PI"
+      : String(body.feeCurrency || body.preferredFeeCurrency || "").toUpperCase() === "GHC"
+        ? "GHC"
+        : undefined
   const listingFee = calculateMarketplaceListingFee({
     sellerPrice: price,
     currency,
     kind,
+    preferredFeeCurrency: preferredFee,
   })
 
-  // If an approved non-zero fee is configured, do not allow client to force "active"
-  // without settlement — keep/force draft until a future fee-settlement flow marks paid.
-  // When rates are not configured (fee 0), preserve seller-chosen status (incl. active).
+  // Non-zero approved listing fee: activation requires verified durable payment intent.
+  // Client may supply listingFeePaymentId / feePaymentId; ownership, amount, status,
+  // purpose, and listing binding come only from server intent records.
+  // Zero-fee / rates not configured: leave status as seller requested (incl. active).
+  void body.feePaid
+  void body.feeAmount
+  void body.listingFee
   if (listingFeeRequiresSettlement(listingFee) && status === "active") {
-    // Without a verified fee payment reference, refuse silent activation.
     const feePaymentRef = String(body.listingFeePaymentId || body.feePaymentId || "").trim()
-    if (!feePaymentRef) {
-      status = "draft"
+    const referenceId = `marketplace_listing_fee_${id}`
+
+    if (listingFee.feeCurrency === "GHC") {
+      const settled = await settlePilotFee({
+        userId: auth.userId,
+        fee: {
+          feature: "marketplace_listing",
+          feeAmount: listingFee.feeAmount,
+          feeCurrency: "GHC",
+          ratesApproved: listingFee.ratesApproved,
+          code: String(listingFee.code),
+          basis: String(listingFee.basis),
+        },
+        referenceId,
+        reason: `Marketplace listing fee · ${title}`,
+        sourceEvent: "MARKETPLACE_LISTING_FEE",
+        paymentRef: feePaymentRef || null,
+        bindKey: "listingId",
+        bindValue: id,
+      })
+      if (!settled.ok) {
+        const err = settled.error || "LISTING_FEE_SETTLEMENT_FAILED"
+        return NextResponse.json(
+          {
+            ok: false,
+            error: err,
+            message:
+              err === "INSUFFICIENT_BALANCE"
+                ? "Insufficient available GHC to activate this listing."
+                : "Listing fee could not be settled from available GHC.",
+            listingFee: {
+              amount: listingFee.feeAmount,
+              currency: listingFee.feeCurrency,
+              ratesApproved: listingFee.ratesApproved,
+              code: listingFee.code,
+            },
+            expectedReferenceId: referenceId,
+          },
+          {
+            status:
+              err === "INSUFFICIENT_BALANCE"
+                ? 400
+                : err === "SERVER_UNAVAILABLE"
+                  ? 503
+                  : 402,
+          }
+        )
+      }
+    } else {
+      const verified = await verifyListingFeePayment({
+        sellerId: auth.userId,
+        listingId: id,
+        fee: listingFee,
+        paymentRef: feePaymentRef || null,
+      })
+      if (!verified.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: verified.error,
+            message:
+              "Listing fee payment must be a completed intent owned by you, matching the server fee amount/currency, and bound to this listing.",
+            listingFee: {
+              amount: listingFee.feeAmount,
+              currency: listingFee.feeCurrency,
+              ratesApproved: listingFee.ratesApproved,
+              code: listingFee.code,
+            },
+            expectedReferenceId: referenceId,
+          },
+          { status: verified.error === "LISTING_FEE_PAYMENT_REQUIRED" ? 402 : 403 }
+        )
+      }
     }
-    // Note: verifying feePaymentRef against durable Pi intents is a follow-up when
-    // rates are approved; until then activation stays draft when fee is required.
   }
 
   const saved = await upsertListing({
@@ -131,6 +225,11 @@ export async function POST(request: Request) {
     availability,
     status: status as "draft" | "active" | "paused" | "sold_out" | "removed",
     kind,
+    media,
+    location: location || undefined,
+    category: category || undefined,
+    condition: condition || undefined,
+    tags,
   })
   if (!saved.ok) {
     const durable =
@@ -150,15 +249,22 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    durable: true,
     listing: {
       id,
       sellerId: auth.userId,
       title,
+      description: String(body.description || "").slice(0, 4000),
       price,
       currency,
       availability,
       status,
       kind,
+      media,
+      location,
+      category,
+      condition,
+      tags,
     },
     /** Platform service charge — distinct from seller product price */
     listingFee: {
@@ -198,7 +304,7 @@ export async function GET(request: Request) {
       }
     }
     return NextResponse.json(
-      { ok: true, durable: listingsDurable(), listing },
+      { ok: true, durable: listingsDurable(), listing: serverListingToClient(listing) },
       { headers: { "Cache-Control": "no-store" } }
     )
   }
@@ -213,14 +319,22 @@ export async function GET(request: Request) {
     }
     const listings = await listSellerListings(auth.userId, limit)
     return NextResponse.json(
-      { ok: true, durable: listingsDurable(), listings },
+      {
+        ok: true,
+        durable: listingsDurable(),
+        listings: listings.map(serverListingToClient),
+      },
       { headers: { "Cache-Control": "no-store" } }
     )
   }
 
   const listings = await listActiveListings(limit)
   return NextResponse.json(
-    { ok: true, durable: listingsDurable(), listings },
+    {
+      ok: true,
+      durable: listingsDurable(),
+      listings: listings.map(serverListingToClient),
+    },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

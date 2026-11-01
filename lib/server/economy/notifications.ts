@@ -5,6 +5,7 @@
 
 import { hasPrivilegedDatabase, readGhcServerEnv, type GhcServerEnv } from "./env"
 import { getProcessGhcStore } from "./store"
+import { buildCorrelationEnvelope } from "./correlation"
 
 export type GhcNotifEventType =
   | "GHC_SENT"
@@ -94,7 +95,7 @@ export async function recordGhcNotification(input: {
           p_body: input.body,
           p_reference_id: input.referenceId ?? null,
           p_request_id: input.requestId ?? null,
-          p_payload: input.metadata || {},
+          p_payload: { ...(input.metadata || {}), correlation: buildCorrelationEnvelope({ kind: "transfer", event: input.eventType, counterpartyId: input.metadata?.counterpartyId ? String(input.metadata.counterpartyId) : undefined, requestId: input.requestId }) },
           p_dedupe_key: dedupeKey,
           p_expires_at: input.expiresAt ? new Date(input.expiresAt).toISOString() : null,
         }),
@@ -124,7 +125,7 @@ export async function recordGhcNotification(input: {
     body: input.body,
     referenceId: input.referenceId,
     requestId: input.requestId,
-    metadata: input.metadata || {},
+    metadata: { ...(input.metadata || {}), correlation: buildCorrelationEnvelope({ kind: "transfer", event: input.eventType, counterpartyId: input.metadata?.counterpartyId ? String(input.metadata.counterpartyId) : undefined, requestId: input.requestId }) },
     createdAt: Date.now(),
     readAt: null,
     expiresAt: input.expiresAt ?? null,

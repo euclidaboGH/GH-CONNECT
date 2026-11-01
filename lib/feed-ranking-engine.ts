@@ -76,8 +76,10 @@ export function calculateContributionScore(post: Post): number {
   const comments = post.engagement?.comments ?? post.comments?.length ?? 0
   const saves = post.engagement?.saves ?? 0
   const shares = post.engagement?.shares ?? 0
-  // Helpful discussion and saves outweigh passive likes
-  return comments * 3 + saves * 2.5 + shares * 2 + likes * 0.35
+  const up = Number((post as Post & { upvoteCount?: number }).upvoteCount ?? (post as any).upvote_count ?? 0)
+  const down = Number((post as Post & { downvoteCount?: number }).downvoteCount ?? (post as any).downvote_count ?? 0)
+  // Discussion & saves dominate; content upvotes beat passive likes; downvotes soft-penalize
+  return comments * 3 + saves * 2.5 + shares * 2 + up * 1.2 + likes * 0.2 - down * 0.8
 }
 
 // Calculate engagement score for ranking
@@ -149,6 +151,7 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
     .filter(
       (post) =>
         !context.blockedUserIds.includes(post.authorId) &&
+        !(context.mutedUserIds || []).includes(post.authorId) &&
         !post.isDraft &&
         !post.isScheduled &&
         matchesLocationLane(post, context)
@@ -337,37 +340,38 @@ export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPo
 }
 
 // Rank posts for "Nearby" feed (location-based)
-export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[] {
-  if (!context.geolocation) {
-    return []
-  }
+function haversineKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const toRad = (value: number) => (value * Math.PI) / 180
+  const earthRadiusKm = 6371
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLon = toRad(b.longitude - a.longitude)
+  const lat1 = toRad(a.latitude)
+  const lat2 = toRad(b.latitude)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)))
+}
 
-  const ranked = posts
+export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  if (!context.geolocation) return []
+
+  return posts
     .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post) => {
-      let score = 0
-
-      // Simulate location relevance (in production, would use actual coords)
-      score += 50
-
-      // Engagement boost
+      const coordinates = post.location
+      if (!coordinates || !Number.isFinite(coordinates.latitude) || !Number.isFinite(coordinates.longitude)) return null
+      const distanceKm = haversineKm(context.geolocation!, coordinates)
+      let score = Math.max(0, 60 - Math.min(distanceKm, 60))
       score += calculateEngagementScore(post) * 0.3
-
-      // Recent events boost
       const hoursOld = (Date.now() - post.createdAt) / (1000 * 60 * 60)
-      if (hoursOld < 24) {
-        score += 20
-      }
-
+      if (hoursOld < 24) score += 20
       const reason: PostVisibilityReason = {
-        reason: "Happening nearby",
+        reason: distanceKm < 1 ? "Happening very close to you" : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km away`,
         category: "nearby",
       }
       return { post, score, reason }
     })
+    .filter((item): item is RankedPost => Boolean(item))
     .sort((a, b) => b.score - a.score)
-
-  return ranked
 }
 
 // Rank posts for "Trending" feed
@@ -382,8 +386,9 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
       let score = engagementScore * Math.pow(0.8, Math.min(timeRecency, 24))
 
       const reason: PostVisibilityReason = {
-        reason: `Trending with ${post.likes} likes`,
+        reason: "Rising through recent discussion, saves and shares",
         category: "trending",
+        shortLabel: "Trending",
       }
       return { post, score, reason }
     })
@@ -397,12 +402,9 @@ export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[
   const ranked = posts
     .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
     .map((post): RankedPost => {
-      let score = Date.now() - post.createdAt
-
-      // Bonus for following
-      if (context.followingIds.includes(post.authorId)) {
-        score *= 1.2
-      }
+      // Newer timestamps sort first. A small following bonus must never invert chronology.
+      let score = post.createdAt || 0
+      if (context.followingIds.includes(post.authorId)) score += 1
 
       const reason: PostVisibilityReason = {
         reason: "Latest posts",
@@ -469,7 +471,40 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
     .sort((a, b) => b.score - a.score)
 }
 
+/** Prevent a single author from monopolising For You while preserving score order. */
+export function diversifyRankedFeed(items: RankedPost[], maxConsecutiveAuthor = 2): RankedPost[] {
+  if (items.length < 3) return items
+  const remaining = [...items]
+  const out: RankedPost[] = []
+  while (remaining.length) {
+    const recent = out.slice(-maxConsecutiveAuthor)
+    const blockedAuthor = recent.length === maxConsecutiveAuthor && recent.every((x) => x.post.authorId === recent[0].post.authorId)
+      ? recent[0].post.authorId
+      : null
+    let index = blockedAuthor ? remaining.findIndex((x) => x.post.authorId !== blockedAuthor) : 0
+    if (index < 0) index = 0
+    out.push(remaining.splice(index, 1)[0])
+  }
+  return out
+}
+
 // Main feed ranking function — one content system, mode = filter/rank strategy
+
+function rankSavedFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const saved = new Set((context.savedPostIds || []).map(String))
+  return posts
+    .filter((p) => saved.has(String(p.id)))
+    .map((post) => ({
+      post,
+      score: 100,
+      reason: {
+        reason: "Saved by you",
+        category: "saved",
+        shortLabel: "Saved",
+      },
+    }))
+}
+
 export function rankFeed(
   posts: Post[],
   filterType: FeedFilter,
@@ -477,7 +512,7 @@ export function rankFeed(
 ): RankedPost[] {
   switch (filterType) {
     case "for-you":
-      return rankForYouFeed(posts, context)
+      return diversifyRankedFeed(rankForYouFeed(posts, context))
     case "following":
       return rankFollowingFeed(posts, context)
     case "friends":
@@ -490,6 +525,8 @@ export function rankFeed(
       return rankTrendingFeed(posts, context)
     case "latest":
       return rankLatestFeed(posts, context)
+    case "saved":
+      return rankSavedFeed(posts, context)
     default:
       return rankForYouFeed(posts, context)
   }

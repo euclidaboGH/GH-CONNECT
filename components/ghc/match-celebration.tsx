@@ -57,7 +57,7 @@ export function MatchCelebration({
                 className="h-full w-full object-cover"
               />
             </div>
-            <span className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md">
+            <span className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--gh-green)] text-white shadow-md">
               <Heart size={18} fill="currentColor" />
             </span>
           </div>
@@ -74,7 +74,7 @@ export function MatchCelebration({
             <button
               type="button"
               onClick={onMessage}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--gh-green)] px-4 py-3.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 active:scale-[0.98]"
             >
               <MessageCircle size={18} />
               Message {userName.split(" ")[0]}

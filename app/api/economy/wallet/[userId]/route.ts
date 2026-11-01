@@ -114,6 +114,11 @@ export async function GET(
     }
     transactions = rows
     const reqs = await rpcListTransferRequests(userId, "all")
+    if (!reqs) {
+      return jsonErr("SERVER_UNAVAILABLE", "Failed to load transfer requests", 503, {
+        requestId: reqCtx.requestId,
+      })
+    }
     transferRequests = normalizeTransferRequests(reqs, userId)
   } else if (allowMemoryServer()) {
     transactions = getProcessGhcStore().listTransactions(userId)
@@ -131,6 +136,8 @@ export async function GET(
       snapshot = {
         userId: full.userId,
         balance: full.balance,
+        ledgerBalance: full.ledgerBalance,
+        locked: full.locked,
         pending: full.pending,
         lifetimeEarned: full.lifetimeEarned,
         lifetimeSpent: full.lifetimeSpent,
@@ -140,8 +147,13 @@ export async function GET(
     }
   }
 
+  const url = new URL(request.url)
+  const limitParam = Number(url.searchParams.get("limit") || 100)
+  const limitTx = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : 100, 1), 200)
+  const boundedTx = Array.isArray(transactions) ? transactions.slice(0, limitTx) : []
+
   return jsonOk({
-    transactions,
+    transactions: boundedTx,
     rewards: [],
     premium: null,
     transferRequests,

@@ -5,7 +5,7 @@
  * Uses unified adapter; session graph until durable migration applied.
  */
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Check, X, User, ArrowLeft, Inbox } from "lucide-react"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
@@ -135,11 +135,82 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
   const [tab, setTab] = useState<"incoming" | "outgoing">(initialTab)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [tick, setTick] = useState<number>(0)
+  const [durableAvailable, setDurableAvailable] = useState(false)
+  const [serverIncoming, setServerIncoming] = useState<ConnectionRequestInboxItem[]>([])
+  const [serverOutgoing, setServerOutgoing] = useState<ConnectionRequestInboxItem[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { socialFetchConnectionInbox } = await import("@/lib/social/client")
+        const remote = await socialFetchConnectionInbox()
+        if (cancelled || !remote.ok) return
+        if (remote.durable) setDurableAvailable(true)
+        const toItem = (
+          row: { fromUserId: string; toUserId: string; intents?: string[]; note?: string; source?: string; createdAt?: number },
+          direction: "incoming" | "outgoing"
+        ): ConnectionRequestInboxItem => ({
+          fromUserId: row.fromUserId,
+          toUserId: row.toUserId,
+          direction,
+          intents: (row.intents || []) as ConnectionRequestInboxItem["intents"],
+          intentLabels: [],
+          note: row.note,
+          source: row.source,
+          createdAt: row.createdAt,
+          state: direction === "incoming" ? "incoming_pending" : "outgoing_pending",
+          dataSource: remote.durable ? "server_durable" : "session_graph",
+        })
+        setServerIncoming((remote.incoming || []).map((r) => toItem(r, "incoming")))
+        setServerOutgoing((remote.outgoing || []).map((r) => toItem(r, "outgoing")))
+      } catch {
+        /* */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tick, meId])
+
+  // Re-fetch when app focuses or another surface reports a social mutation
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => setTick((n) => n + 1)
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") bump()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    window.addEventListener("focus", bump)
+    window.addEventListener("ghc:connection-inbox-updated", bump)
+    window.addEventListener("ghc:social-mutation", bump)
+    window.addEventListener("ghc:connection-updated", bump)
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      window.removeEventListener("focus", bump)
+      window.removeEventListener("ghc:connection-inbox-updated", bump)
+      window.removeEventListener("ghc:social-mutation", bump)
+      window.removeEventListener("ghc:connection-updated", bump)
+    }
+  }, [])
 
   const inbox = useMemo(() => {
     void tick
-    return buildConnectionRequestInbox(meId, { durableAvailable: false })
-  }, [meId, tick])
+    const session = buildConnectionRequestInbox(meId, { durableAvailable })
+    // Prefer server rows when present; merge session-only pairs
+    const key = (i: ConnectionRequestInboxItem) => `${i.fromUserId}→${i.toUserId}`
+    const inMap = new Map<string, ConnectionRequestInboxItem>()
+    for (const i of session.incoming) inMap.set(key(i), i)
+    for (const i of serverIncoming) inMap.set(key(i), { ...i, dataSource: durableAvailable ? "server_durable" : i.dataSource })
+    const outMap = new Map<string, ConnectionRequestInboxItem>()
+    for (const i of session.outgoing) outMap.set(key(i), i)
+    for (const i of serverOutgoing) outMap.set(key(i), { ...i, dataSource: durableAvailable ? "server_durable" : i.dataSource })
+    return {
+      incoming: Array.from(inMap.values()),
+      outgoing: Array.from(outMap.values()),
+      dataSource: durableAvailable ? ("server_durable" as const) : session.dataSource,
+    }
+  }, [meId, tick, durableAvailable, serverIncoming, serverOutgoing])
 
   const blocked = new Set(ghc.blockedUsers || [])
   const candMap = useMemo(() => {
@@ -174,7 +245,16 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
       const r = await acceptUnifiedConnectionRequest(meId, fromUserId)
       if (!r.ok) ghc.addToast?.(r.error || "Could not accept", "error")
       else {
-        ghc.addToast?.("Connected", "success")
+        // Optimistic remove so the card disappears before re-fetch
+        setServerIncoming((rows) => rows.filter((i) => i.fromUserId !== fromUserId))
+        setServerOutgoing((rows) =>
+          rows.filter((i) => !(i.fromUserId === meId && i.toUserId === fromUserId))
+        )
+        ghc.addToast?.("Connected — they can message you now", "success")
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "connection-accept" } }))
+          window.dispatchEvent(new CustomEvent("ghc:connection-changed", { detail: { userId: fromUserId, status: "accepted" } }))
+        } catch { /* */ }
         setTick((n) => n + 1)
       }
     } finally {
@@ -188,7 +268,12 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
       const r = await declineUnifiedConnectionRequest(meId, fromUserId)
       if (!r.ok) ghc.addToast?.(r.error || "Could not decline", "error")
       else {
+        setServerIncoming((rows) => rows.filter((i) => i.fromUserId !== fromUserId))
         ghc.addToast?.("Request declined", "info")
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "connection-decline" } }))
+          window.dispatchEvent(new CustomEvent("ghc:connection-changed", { detail: { userId: fromUserId, status: "declined" } }))
+        } catch { /* */ }
         setTick((n) => n + 1)
       }
     } finally {
@@ -297,8 +382,7 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
 
         {inbox.dataSource === "session_graph" ? (
           <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
-            Showing session graph requests. Multi-device durable inbox activates after the
-            connection-intent migration is applied.
+            Some connection requests are available only on this device right now.
           </p>
         ) : null}
       </div>

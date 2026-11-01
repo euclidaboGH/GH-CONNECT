@@ -9,6 +9,9 @@ export const ATTENTION_EVENT_TYPES = [
   "complete",
   "save",
   "share",
+  "progress_25",
+  "progress_50",
+  "progress_75",
 ] as const
 
 export type AttentionEventType = (typeof ATTENTION_EVENT_TYPES)[number]
@@ -25,14 +28,14 @@ export function isAttentionEventType(v: unknown): v is AttentionEventType {
 
 /**
  * Dedup window keys (server-computed; client window ignored for authority).
- * - view: UTC calendar day (simple, stable)
+ * - view: lifetime once per user per post (unique viewer)
  * - qualified_view: UTC calendar day
  * - complete: lifetime once per post
  * - save / share: UTC calendar day
  */
 export function attentionWindowKey(eventType: AttentionEventType, now = new Date()): string {
   const day = now.toISOString().slice(0, 10) // YYYY-MM-DD UTC
-  if (eventType === "complete") return "once"
+  if (eventType === "complete" || eventType === "view") return "once"
   return day
 }
 

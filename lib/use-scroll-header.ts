@@ -31,43 +31,41 @@ export function useScrollHeader(options?: {
   const [hidden, setHidden] = useState(false)
   const [scrollTop, setScrollTop] = useState(0)
   const lastY = useRef(0)
+  const frameRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const onScroll = useCallback(
     (e: React.UIEvent<HTMLElement>) => {
-      const y = (e.target as HTMLElement).scrollTop
-      setScrollTop(y)
-      setCompact(y > threshold)
+      const target = e.currentTarget
+      const y = target.scrollTop
+      if (frameRef.current !== null) return
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null
+        const currentY = target.scrollTop
+        const delta = currentY - lastY.current
+        const maxScroll = Math.max(0, target.scrollHeight - target.clientHeight)
+        const nearBottom = maxScroll > 0 && currentY >= maxScroll - 96
+        const nearTop = currentY <= threshold
 
-      if (hideOnScrollDown) {
-        const delta = y - lastY.current
-        const target = e.target as HTMLElement
-        const maxScroll = (target?.scrollHeight || 0) - (target?.clientHeight || 0)
-        if (Math.abs(delta) > 12) {
-          if (maxScroll > 0 && y >= maxScroll - 96) {
-            setHidden(false)
+        setScrollTop(currentY)
+        setCompact(currentY > threshold)
+
+        if (hideOnScrollDown && Math.abs(delta) > 10) {
+          const shouldHide = !nearTop && !nearBottom && delta > 0 && currentY > threshold + 28
+          const shouldReveal = nearTop || nearBottom || delta < -8
+          if (shouldHide) setHidden(true)
+          else if (shouldReveal) setHidden(false)
+
+          if (shouldHide || shouldReveal) {
             try {
-              window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-            } catch { /* */ }
-          } else if (y < threshold) {
-            setHidden(false)
-            try {
-              window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-            } catch { /* */ }
-          } else if (delta > 0 && y > threshold + 28) {
-            setHidden(true)
-            try {
-              window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true } }))
-            } catch { /* */ }
-          } else if (delta < -10) {
-            setHidden(false)
-            try {
-              window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
+              window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", {
+                detail: { hidden: shouldHide, source: "scroll-header" },
+              }))
             } catch { /* */ }
           }
         }
-      }
-      lastY.current = y
+        lastY.current = currentY
+      })
     },
     [threshold, hideOnScrollDown],
   )

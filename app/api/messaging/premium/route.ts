@@ -23,6 +23,8 @@ import {
 } from "@/lib/server/economy/store"
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
 
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -32,7 +34,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => ({}))
+  const parsedBody = await readBoundedJson(request, 64 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value
   const productId = String(body.productId || "").trim()
   const product = getMessagingPremiumProduct(productId)
   if (!product) {

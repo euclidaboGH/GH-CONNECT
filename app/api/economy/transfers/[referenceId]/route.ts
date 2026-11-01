@@ -16,7 +16,21 @@ export async function GET(
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
   const { referenceId: raw } = await ctx.params
-  const referenceId = decodeURIComponent(raw)
+  // Route params are normally decoded by Next.js already; decoding again can
+  // throw on malformed percent escapes. Validate before any database lookup.
+  let referenceId = raw
+  try {
+    referenceId = decodeURIComponent(raw)
+  } catch {
+    return jsonErr("INVALID_REFERENCE", "Invalid transfer reference", 400)
+  }
+  if (
+    referenceId.length < 1 ||
+    referenceId.length > 128 ||
+    /[\u0000-\u001f\u007f]/.test(referenceId)
+  ) {
+    return jsonErr("INVALID_REFERENCE", "Invalid transfer reference", 400)
+  }
 
   let found: { debit?: { userId: string }; credit?: { userId: string } } | null = null
 

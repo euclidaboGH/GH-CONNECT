@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
   Loader2,
+  Flame,
 } from "lucide-react"
 import { socialRecordAttention } from "@/lib/social/client"
 
@@ -40,18 +41,20 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
   const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<"latest" | "following" | "trending">("latest")
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(true)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const viewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const qualifiedSent = useRef<Set<string>>(new Set())
   const completeSent = useRef<Set<string>>(new Set())
+  const progressSent = useRef<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/social/short-video?limit=24", {
+      const res = await fetch(`/api/social/short-video?limit=24&mode=${encodeURIComponent(mode)}`, {
         credentials: "include",
         headers: { Accept: "application/json" },
       })
@@ -89,7 +92,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
     } finally {
       setLoading(false)
     }
-  }, [seedPosts])
+  }, [mode, seedPosts])
 
   useEffect(() => {
     if (!open) return
@@ -128,9 +131,17 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
   const onTimeUpdate = () => {
     const el = videoRef.current
     if (!el || !current?.id || !el.duration || !Number.isFinite(el.duration)) return
-    if (el.currentTime / el.duration >= 0.9 && !completeSent.current.has(current.id)) {
+    const ratio = el.currentTime / el.duration
+    for (const [threshold, eventType] of [[0.25, "progress_25"], [0.5, "progress_50"], [0.75, "progress_75"]] as const) {
+      const key = `${current.id}:${eventType}`
+      if (ratio >= threshold && !progressSent.current.has(key)) {
+        progressSent.current.add(key)
+        void socialRecordAttention(current.id, eventType, { dwellMs: Math.round(el.currentTime * 1000) })
+      }
+    }
+    if (ratio >= 0.9 && !completeSent.current.has(current.id)) {
       completeSent.current.add(current.id)
-      void socialRecordAttention(current.id, "complete")
+      void socialRecordAttention(current.id, "complete", { dwellMs: Math.round(el.currentTime * 1000) })
     }
   }
 
@@ -152,8 +163,21 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
       aria-modal="true"
       aria-label="Short videos"
     >
-      <header className="flex items-center justify-between px-3 py-2 safe-area-pt">
-        <p className="text-sm font-semibold tracking-wide">Short Video</p>
+      <header className="flex items-center gap-2 px-3 py-2 safe-area-pt">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold tracking-wide">GH Pulse</p>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto">
+            {([
+              ["latest", "Latest"],
+              ["following", "Following"],
+              ["trending", "Trending"],
+            ] as const).map(([value, label]) => (
+              <button key={value} type="button" onClick={() => { setMode(value); setIndex(0) }} className={`rounded-full px-3 py-1 text-[11px] font-semibold ${mode === value ? "bg-white text-black" : "bg-white/10 text-white/75"}`}>
+                {value === "trending" ? <Flame size={12} className="mr-1 inline" /> : null}{label}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -281,7 +305,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                 </div>
               </div>
               <p className="text-center text-[10px] text-white/50">
-                {posts.length ? `${index + 1} / ${posts.length}` : ""} · Chronological · Not ranked
+                {posts.length ? `${index + 1} / ${posts.length}` : ""} · {mode === "trending" ? "Server-signal discovery" : mode === "following" ? "People you follow" : "Newest Pulse posts"}
               </p>
             </div>
           </div>

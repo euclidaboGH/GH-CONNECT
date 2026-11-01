@@ -16,6 +16,7 @@ export type TransientCloseReason =
   | "open-other"
   | "manual"
   | "notification-close"
+  | "notification-escape"
 
 export type TransientCloseDetail = {
   reason?: TransientCloseReason

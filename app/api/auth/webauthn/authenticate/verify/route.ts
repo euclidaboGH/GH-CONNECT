@@ -15,6 +15,8 @@ import {
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 import { STEP_UP_TTL_MS } from "@/lib/server/identity/step-up-store"
 
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -44,7 +46,22 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json().catch(() => ({}))
+    const parsedBody = await readBoundedJson(request, 64 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value as {
+    response?: {
+      id?: unknown
+      rawId?: unknown
+      type?: unknown
+      response?: {
+        clientDataJSON?: unknown
+        authenticatorData?: unknown
+        signature?: unknown
+        userHandle?: unknown
+      }
+      clientExtensionResults?: unknown
+    }
+  }
     const response = body.response
     if (!response) {
       return NextResponse.json(
@@ -66,7 +83,7 @@ export async function POST(request: Request) {
     let challengeFromClient = ""
     try {
       const decoded = JSON.parse(
-        Buffer.from(response.response.clientDataJSON, "base64url").toString("utf8")
+        Buffer.from(String(response.response?.clientDataJSON || ""), "base64url").toString("utf8")
       ) as { challenge?: string }
       challengeFromClient = String(decoded.challenge || "")
     } catch {
@@ -106,8 +123,9 @@ export async function POST(request: Request) {
     }
 
     const cfg = getWebAuthnRpConfig()
+    const webAuthnResponse = response as Parameters<typeof verifyAuthenticationResponse>[0]["response"]
     const verification = await verifyAuthenticationResponse({
-      response,
+      response: webAuthnResponse,
       expectedChallenge: consumed.challenge,
       expectedOrigin: cfg.origin,
       expectedRPID: cfg.rpID,

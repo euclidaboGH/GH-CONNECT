@@ -2,17 +2,28 @@
 
 import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-connect-flow"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { captureReferralCodeFromLocation, flushPendingReferralAttribution } from "@/lib/referral/capture-ref"
+import { notificationSystem, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications"
+import { APP_RELEASE_VERSION, APP_RELEASE_SUMMARY } from "@/lib/app-release"
 
 import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
-import { useGHCShell, useGHCProfile, useGHCDiscovery } from "@/contexts/ghc-context"
+import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
+import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
-import { Newspaper, Compass, Plus, MessagesSquare, UserRound, Heart, Users } from "lucide-react"
+import { Compass, Heart, MessagesSquare, Newspaper, Plus, ShoppingBag, ShoppingCart, UserRound, Users, Wallet } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
 import { BrandLogo } from "./brand-logo"
 import { ThemeApplier } from "./theme-applier"
-import { OfflineBanner } from "./offline-banner"
+import { NetworkResilience } from "./network-resilience"
+import { DailyClaimPrompt } from "./daily-claim-prompt"
+import { SkipToContent } from "./skip-to-content"
+import { AccessibilityAnnouncer } from "./accessibility-announcer"
+import { SessionResumeToast } from "./session-resume-toast"
+import { getMarketplaceCart } from "@/lib/marketplace/cart"
+import { GlobalHotkeys } from "./global-hotkeys"
+import { GlobalInteractionDialog } from "./global-interaction-dialog"
 import { PaymentRecoveryListener } from "./payment-recovery-listener"
 import { afterFirstPaint } from "@/lib/mobile-performance"
 import { closeAllActionSheets } from "./action-sheet"
@@ -22,6 +33,11 @@ import { PRIMARY_TABS, resolveDestination, isPrimaryTab } from "@/lib/navigation
 import { navigateTo } from "@/lib/navigation/navigate"
 import { resolveUiOnboardingGate } from "@/lib/onboarding-local"
 import { CreatorStudioOverlay } from "./creator-studio-overlay"
+import ProfileStorySection from "./profile-story-section"
+import { PostComposer } from "./post-composer"
+import { socialGetProfile } from "@/lib/social/client"
+import { bootstrapRealtimeTransport, domainEvents, recoverRealtimeEvents, transportBridge } from "@/lib/realtime"
+import { emitSectionRefresh, type SectionRefreshId } from "@/lib/client/section-refresh"
 
 const CreateHubSheet = lazy(() =>
   import("./create-hub-sheet").then((m) => ({ default: m.CreateHubSheet }))
@@ -63,10 +79,15 @@ const PremiumWalletScreen = lazy(() =>
 const GreenHavenEcosystemLazy = lazy(() =>
   import("./greenhaven-ecosystem-screen").then((m) => ({ default: m.GreenHavenEcosystemScreen }))
 )
+const MarketplaceScreenLazy = lazy(() =>
+  import("./marketplace-screen").then((m) => ({ default: m.MarketplaceScreen }))
+)
 const MatchCelebrationLazy = lazy(() =>
   import("./match-celebration").then((m) => ({ default: m.MatchCelebration }))
 )
-
+const ProfilePreviewPageLazy = lazy(() =>
+  import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
+)
 function TabScreenFallback({ label }: { label: string }) {
   return (
     <div
@@ -77,23 +98,25 @@ function TabScreenFallback({ label }: { label: string }) {
     >
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-card/90 p-1.5" aria-hidden="true">
+            <img src="/gh-connect-logo.png" alt="" className="h-full w-full object-contain" width={36} height={36} />
+          </div>
           <div className="flex-1 space-y-1.5">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-            <div className="h-2.5 w-1/3 animate-pulse rounded bg-muted/70" />
+            <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />
+            <div className="h-2.5 w-1/3 gh-skeleton rounded bg-muted/70" />
           </div>
         </div>
-        <div className="h-16 animate-pulse rounded-2xl bg-muted/70" />
+        <div className="h-16 gh-skeleton rounded-2xl bg-muted/70" />
         <div className="space-y-2 rounded-2xl border border-border/40 p-3">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
-            <div className="h-2.5 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-8 gh-skeleton rounded-full bg-muted" />
+            <div className="h-2.5 w-24 gh-skeleton rounded bg-muted" />
           </div>
-          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
-          <div className="h-3 w-4/5 animate-pulse rounded bg-muted/60" />
-          <div className="mt-2 h-28 animate-pulse rounded-xl bg-muted/50" />
+          <div className="h-3 w-full gh-skeleton rounded bg-muted/80" />
+          <div className="h-3 w-4/5 gh-skeleton rounded bg-muted/60" />
+          <div className="mt-2 h-28 gh-skeleton rounded-xl bg-muted/50" />
         </div>
-        <div className="h-20 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-20 gh-skeleton rounded-2xl bg-muted/40" />
       </div>
       <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">Loading {label}…</p>
     </div>
@@ -164,16 +187,25 @@ function ScreenBoundary({ children, label, onReset, onDismiss }: { children: Rea
 
 // Memoized toast component (Quick Win: prevent unnecessary re-renders)
 const Toast = memo(({ message, type }: { message: string; type: string }) => {
-  const bgClass =
-    type === "success"
-      ? "bg-green-500"
-      : type === "error"
-        ? "bg-destructive"
-        : "bg-blue-500"
+  const isError = type === "error"
+  const isSuccess = type === "success"
+  const shell =
+    isSuccess
+      ? "border-emerald-200/80 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-50"
+      : isError
+        ? "border-destructive/30 bg-destructive text-destructive-foreground"
+        : "border-sky-200/80 bg-sky-50 text-sky-950 dark:border-sky-800 dark:bg-sky-950/90 dark:text-sky-50"
+  const dot =
+    isSuccess ? "bg-emerald-500" : isError ? "bg-white/90" : "bg-sky-500"
 
   return (
-    <div role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} className={`${bgClass} text-white px-4 py-2 rounded-full text-[14px] font-bold`}>
-      {message}
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      className={`gh-toast-item pointer-events-auto flex max-w-full items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-left shadow-lg shadow-black/12 backdrop-blur-md motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-200 ${shell}`}
+    >
+      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <p className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{message}</p>
     </div>
   )
 })
@@ -181,12 +213,12 @@ const Toast = memo(({ message, type }: { message: string; type: string }) => {
 Toast.displayName = "Toast"
 
 // Memoized navigation items to prevent recalculation
-/** Primary destinations only — secondary (Wallet, Rewards, Communities, Matches…) live under Profile */
+/** Canonical primary shell navigation — secondary social surfaces remain reachable from Home/Profile. */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "discover", icon: Compass, label: "Discover" },
-  { id: "create", icon: Plus, label: "Create" },
   { id: "messages", icon: MessagesSquare, label: "Messages" },
+  { id: "communities", icon: Users, label: "Communities" },
+  { id: "cart", icon: ShoppingCart, label: "Cart" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -234,11 +266,153 @@ function onTabScrollHideNav(e: UIEvent<HTMLElement>) {
 }
 
 export function GHConnectApp() {
-  const { ready, tab, setTab, toasts, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
+  // One realtime bootstrap for the whole application. Remote events invalidate the
+  // relevant screen instead of waiting for polling or requiring a manual refresh.
+  useEffect(() => {
+    bootstrapRealtimeTransport()
+    void recoverRealtimeEvents()
+
+    const sectionForEvent = (type: string): SectionRefreshId[] => {
+      if (/^(POST_|LIKE_|COMMENT_|STORY_)/.test(type)) return ["feed"]
+      if (/^(MESSAGE_|CONVERSATION_|TYPING_)/.test(type)) return ["messages", "notifications"]
+      if (/^(GROUP_|COMMUNITY_)/.test(type)) return ["communities", "notifications"]
+      if (/^MARKETPLACE_/.test(type)) return ["marketplace", "marketplace-orders", "notifications"]
+      if (/^(WALLET_|PAYMENT_|GHC_)/.test(type)) return ["wallet", "notifications"]
+      if (/^(REWARD_|ACHIEVEMENT_|CHALLENGE_|REFERRAL_)/.test(type)) return ["rewards", "wallet", "notifications"]
+      if (/^(FOLLOW_|FRIEND_|MATCH_|NOTIFICATION_)/.test(type)) return ["feed", "notifications"]
+      if (/^(PROFILE_|VERIFICATION_|PREMIUM_)/.test(type)) return ["profile", "notifications"]
+      return []
+    }
+
+    const off = domainEvents.on("*", (event) => {
+      if (event.origin !== "remote") return
+      for (const section of sectionForEvent(event.type)) {
+        emitSectionRefresh(section, { reason: "realtime", eventType: event.type }, { minIntervalMs: 120 })
+      }
+    })
+    const reconcile = () => {
+      void recoverRealtimeEvents()
+      for (const section of ["feed", "messages", "communities", "marketplace", "wallet", "notifications"] as SectionRefreshId[]) {
+        emitSectionRefresh(section, { reason: "realtime-reconcile" }, { minIntervalMs: 0 })
+      }
+    }
+    window.addEventListener("ghc:realtime-reconcile", reconcile)
+    return () => {
+      off()
+      window.removeEventListener("ghc:realtime-reconcile", reconcile)
+      transportBridge.disconnect()
+    }
+  }, [])
+
+  const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
-  const { candidates } = useGHCDiscovery()
+  const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
+  const { conversations } = useGHCMessaging()
+  const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
+  const [socialAttentionCount, setSocialAttentionCount] = useState(0)
+  const [economyAttentionCount, setEconomyAttentionCount] = useState(0)
+  const unreadMessageCount = useMemo(() => (Array.isArray(conversations) ? conversations : []).reduce(
+    (count, conversation) => count + (typeof (conversation as { unreadCount?: number }).unreadCount === "number"
+      ? Math.max(0, Number((conversation as { unreadCount?: number }).unreadCount) || 0)
+      : conversation.unread ? 1 : 0), 0), [conversations])
+  const unreadGroupCount = useMemo(() => (Array.isArray(conversations) ? conversations : []).reduce(
+    (count, conversation) => count + (conversation.conversationType === "group" &&
+      (conversation.unread || Number((conversation as { unreadCount?: number }).unreadCount || 0) > 0) ? 1 : 0), 0), [conversations])
+
+  // Section attention indicators use authenticated server counts plus local in-app
+  // alerts. Polling and event-driven refresh cover new activity without requiring a tap.
+  const refreshSectionAttention = useCallback(async () => {
+    const [socialResponse, economyResponse] = await Promise.all([
+      fetch("/api/social/notifications?countOnly=1", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
+      fetch("/api/economy/notifications/unread-count", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
+    ])
+    const [social, economy] = await Promise.all([
+      socialResponse?.json().catch(() => ({})) || {},
+      economyResponse?.json().catch(() => ({})) || {},
+    ]) as [{ ok?: boolean; unreadCount?: number }, { ok?: boolean; count?: number }]
+    if (social.ok && typeof social.unreadCount === "number") setSocialAttentionCount(Math.max(0, social.unreadCount))
+    if (economy.ok && typeof economy.count === "number") setEconomyAttentionCount(Math.max(0, economy.count))
+  }, [])
+
+  // Invite links: capture ?ref= and attribute once session is ready
+  useEffect(() => {
+    try {
+      captureReferralCodeFromLocation()
+    } catch {
+      /* */
+    }
+  }, [])
+
+  useEffect(() => {
+    const uid = String(profile?.id || IdentityService.getCurrentUserId() || "").trim()
+    if (!uid) return
+    void flushPendingReferralAttribution(() => IdentityService.getAuthHeaders?.() || {})
+  }, [profile?.id])
+
+  useEffect(() => {
+    void refreshSectionAttention()
+    const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
+    const onAttention = () => void refreshSectionAttention()
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshSectionAttention() }
+    window.addEventListener("focus", onAttention)
+    window.addEventListener("online", onAttention)
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onAttention as EventListener)
+    window.addEventListener("ghc:notification", onAttention)
+    window.addEventListener("ghc:new-message", onAttention)
+    window.addEventListener("ghc:post-engagement", onAttention)
+    window.addEventListener("ghc:daily-reward-claimed", onAttention)
+    window.addEventListener("ghc:community-updated", onAttention)
+    window.addEventListener("ghc:notifications-read", onAttention)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", onAttention)
+      window.removeEventListener("online", onAttention)
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onAttention as EventListener)
+      window.removeEventListener("ghc:notification", onAttention)
+      window.removeEventListener("ghc:new-message", onAttention)
+      window.removeEventListener("ghc:post-engagement", onAttention)
+      window.removeEventListener("ghc:daily-reward-claimed", onAttention)
+      window.removeEventListener("ghc:community-updated", onAttention)
+      window.removeEventListener("ghc:notifications-read", onAttention)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [refreshSectionAttention])
+
+  useEffect(() => {
+    if (!ready) return
+    const userId = String(profile?.id || IdentityService.getCurrentUserId() || "").trim()
+    if (!userId || userId === "current-user" || userId === "anonymous") return
+    try {
+      const key = `ghc:last-seen-release:${userId}`
+      const previousVersion = window.localStorage.getItem(key)
+      if (!previousVersion) {
+        // First visit on this device: establish a baseline without generating noise.
+        window.localStorage.setItem(key, APP_RELEASE_VERSION)
+        return
+      }
+      if (previousVersion !== APP_RELEASE_VERSION) {
+        notificationSystem.addNotification(
+          "system",
+          "GreenHaven has been updated",
+          APP_RELEASE_SUMMARY,
+          "✨",
+          {
+            dedupeKey: `app-release:${APP_RELEASE_VERSION}:${userId}`,
+            open: "home",
+            section: "updates",
+            releaseVersion: APP_RELEASE_VERSION,
+          },
+        )
+        window.localStorage.setItem(key, APP_RELEASE_VERSION)
+      }
+    } catch {
+      // Release notices are best-effort and never block app startup.
+    }
+  }, [ready, profile?.id])
+
   useEffect(() => {
     const refresh = () => {
       try {
@@ -248,28 +422,175 @@ export function GHConnectApp() {
       }
     }
     refresh()
-    const id = window.setInterval(refresh, 8000)
     window.addEventListener("ghc:open-connection-inbox", refresh)
+    window.addEventListener("ghc:connection-inbox-updated", refresh)
+    window.addEventListener("ghc:social-mutation", refresh)
+    window.addEventListener("ghc:connection-updated", refresh)
     return () => {
-      window.clearInterval(id)
       window.removeEventListener("ghc:open-connection-inbox", refresh)
+      window.removeEventListener("ghc:connection-inbox-updated", refresh)
+      window.removeEventListener("ghc:social-mutation", refresh)
+      window.removeEventListener("ghc:connection-updated", refresh)
     }
   }, [])
+
+  // Content queues (posts/stories/listings/deletes) — single-flight on reconnect.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const run = () => {
+      void import("@/lib/offline/reconnect-flush")
+        .then((m) => m.runReconnectFlush())
+        .catch(() => {})
+    }
+    const onVis = () => {
+      if (document.visibilityState === "visible") run()
+    }
+    window.addEventListener("online", run)
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.removeEventListener("online", run)
+      document.removeEventListener("visibilitychange", onVis)
+    }
+  }, [])
+
+
+  // One canonical peer-profile entry point for cards, messages, matches and notifications.
+  // The profile data is sourced from the authenticated discovery context; unknown IDs fail visibly.
+  useEffect(() => {
+    const openProfile = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: unknown; id?: unknown }>).detail
+      const userId = String(detail?.userId || detail?.id || "").trim()
+      if (!userId) return
+      if (userId === String(profile?.id || "")) {
+        startTransition(() => setTab("profile"))
+        return
+      }
+      const local = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
+      if (local) {
+        setPeerProfile(local)
+        return
+      }
+      // Profiles opened from Wallet/Activity/Notifications/Messaging must not depend
+      // on the current discovery result set. Hydrate the canonical public projection.
+      void socialGetProfile(userId).then((result) => {
+        if (!result.ok || !result.profile) {
+          addToast(result.error === "PROFILE_PRIVATE" ? "This profile is private." : "This profile is not available.", "info")
+          return
+        }
+        const row = result.profile
+        const photos = Array.isArray(row.photos) ? row.photos.map(String).filter(Boolean) : []
+        const city = String(row.city || "").trim()
+        const country = String(row.country || "").trim()
+        const hydrated: Candidate = {
+          id: userId,
+          name: String(row.displayName || row.username || "Member"),
+          age: Math.max(18, Number(row.age) || 18),
+          location: [city, country].filter(Boolean).join(", ") || "Global",
+          bio: String(row.bio || ""),
+          photo: photos[0] || "",
+          photos,
+          coverPhoto: row.coverPhoto ? String(row.coverPhoto) : null,
+          interests: Array.isArray(row.interests) ? row.interests.map(String).filter(Boolean) : [],
+          verified: Boolean(row.verified || row.isVerified),
+          online: Boolean(row.online || row.isOnline),
+          lastSeen: Number(row.lastActiveAt) || 0,
+          city: city || undefined, country: country || undefined,
+          profession: row.profession ? String(row.profession) : undefined,
+          education: row.education ? String(row.education) : undefined,
+          primaryMode: row.primaryMode ? String(row.primaryMode) : undefined,
+          joinedAt: typeof row.createdAt === "number" || typeof row.createdAt === "string" ? row.createdAt : undefined,
+          isSample: false,
+        }
+        setPeerProfile(hydrated)
+      }).catch(() => addToast("This profile could not be loaded right now.", "error"))
+    }
+    window.addEventListener("ghc:open-profile", openProfile as EventListener)
+    return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
+  }, [candidates, profile?.id, setTab, addToast])
+
+  // Deep links: primary tabs and canonical overlay destinations. Keep unrelated
+  // query parameters/hash intact (e.g. referral attribution and shared content).
+  // Overlay dispatch is deferred one task so the shell's event listeners have mounted.
+  useEffect(() => {
+    if (!ready || typeof window === "undefined") return
+    let overlayTimer: number | undefined
+    try {
+      const url = new URL(window.location.href)
+      const requested = url.searchParams.get("tab")
+      if (!requested) return
+      const destination = resolveDestination(requested)
+      if (destination && isPrimaryTab(destination)) {
+        startTransition(() => setTab(destination))
+      } else if (destination) {
+        overlayTimer = window.setTimeout(() => { navigateTo(destination) }, 0)
+      }
+      // Invalid destinations are discarded rather than left to repeatedly reopen.
+      url.searchParams.delete("tab")
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+    } catch {
+      /* malformed URLs must not interrupt app startup */
+    }
+    return () => { if (overlayTimer !== undefined) window.clearTimeout(overlayTimer) }
+  }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
-    "main" | "wallet" | "rewards" | "membership" | "help"
+    | "main"
+    | "wallet"
+    | "rewards"
+    | "membership"
+    | "help"
+    | "privacy"
+    | "notifications"
+    | "appearance"
+    | "device-lock"
   >("main")
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
   const [showCreateHub, setShowCreateHub] = useState(false)
+  const [showGlobalComposer, setShowGlobalComposer] = useState(false)
+  const [globalComposeMode, setGlobalComposeMode] = useState<"post" | "story">("post")
   const [showShortVideo, setShowShortVideo] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const [challengeOpen, setChallengeOpen] = useState(false)
   const [ecosystemOpen, setEcosystemOpen] = useState(false)
   /** Service id to focus when Ecosystem opens (e.g. marketplace) */
   const [ecosystemFocus, setEcosystemFocus] = useState<string | null>(null)
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false)
+  const [cartBadgeCount, setCartBadgeCount] = useState(0)
+  useEffect(() => {
+    const syncCartBadge = () => {
+      try {
+        const items = getMarketplaceCart()
+        setCartBadgeCount(
+          Array.isArray(items)
+            ? items.reduce((n, it) => n + Math.max(0, Number(it.quantity) || 0), 0)
+            : 0,
+        )
+      } catch {
+        setCartBadgeCount(0)
+      }
+    }
+    syncCartBadge()
+    window.addEventListener("ghc:marketplace-cart-changed", syncCartBadge)
+    window.addEventListener("focus", syncCartBadge)
+    return () => {
+      window.removeEventListener("ghc:marketplace-cart-changed", syncCartBadge)
+      window.removeEventListener("focus", syncCartBadge)
+    }
+  }, [])
+
+  const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
+  useEffect(() => {
+    const onTyping = (e: Event) => {
+      const detail = (e as CustomEvent<{ active?: boolean }>).detail
+      setBottomNavHidden(Boolean(detail?.active))
+    }
+    window.addEventListener("ghc:message-typing", onTyping as EventListener)
+    return () => window.removeEventListener("ghc:message-typing", onTyping as EventListener)
+  }, [])
+
   const openSettings = useCallback((section: typeof settingsInitialSection = "main") => {
     setSettingsInitialSection(section)
     setSettingsOpen(true)
@@ -284,6 +605,7 @@ export function GHConnectApp() {
     setSettingsInitialSection("main")
   }, [])
   const openWallet = useCallback(() => {
+    setMarketplaceOpen(false)
     setWalletOpen(true)
     setShowCreateHub(false)
     setBottomNavHidden(false)
@@ -303,16 +625,33 @@ export function GHConnectApp() {
       setSettingsOpen(false)
       setSettingsInitialSection("main")
       setWalletOpen(false)
+      setMarketplaceOpen(false)
       setShowCreateHub(false)
       setBottomNavHidden(false)
       setEcosystemFocus(focus)
       setEcosystemOpen(true)
     }
     window.addEventListener("ghc:open-ecosystem", openEco)
+    const openMarketplace = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      let listingId: string | null = null
+      if (detail && typeof detail === "object" && typeof (detail as { listingId?: unknown }).listingId === "string") {
+        listingId = String((detail as { listingId: string }).listingId).trim() || null
+      }
+      setSettingsOpen(false)
+      setWalletOpen(false)
+      setEcosystemOpen(false)
+      setShowCreateHub(false)
+      setBottomNavHidden(false)
+      setMarketplaceListingId(listingId)
+      setMarketplaceOpen(true)
+    }
+    window.addEventListener("ghc:open-marketplace", openMarketplace)
     const openShort = () => setShowShortVideo(true)
     window.addEventListener("ghc:open-short-video", openShort)
     return () => {
       window.removeEventListener("ghc:open-ecosystem", openEco)
+      window.removeEventListener("ghc:open-marketplace", openMarketplace)
       window.removeEventListener("ghc:open-short-video", openShort)
     }
   }, [])
@@ -324,7 +663,7 @@ export function GHConnectApp() {
     const onMembership = () => openSettings("membership")
     const onSettings = (e: Event) => {
       const section = (e as CustomEvent).detail?.section
-      const allowed = ["main", "wallet", "rewards", "membership", "help"] as const
+      const allowed = ["main", "wallet", "rewards", "membership", "help", "privacy", "notifications", "appearance", "device-lock"] as const
       const s = allowed.includes(section) ? section : "main"
       openSettings(s)
     }
@@ -342,6 +681,16 @@ export function GHConnectApp() {
       }
       startTransition(() => setTab("messages"))
     }
+    const onToast = (e: Event) => {
+      const d = (e as CustomEvent<{ message?: string; type?: string }>).detail || {}
+      const msg = String(d.message || "").trim()
+      if (!msg) return
+      try {
+        const t = (d.type === "success" || d.type === "error" || d.type === "info") ? d.type : "info"
+        addToast(msg, t)
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:toast", onToast)
     window.addEventListener("ghc:open-wallet", onWallet)
     window.addEventListener("ghc:open-rewards", onRewards)
     window.addEventListener("ghc:open-membership", onMembership)
@@ -367,6 +716,7 @@ export function GHConnectApp() {
     // still works when communities is already mounted (communities-screen listener).
     window.addEventListener("ghc:ensure-community-tab", onOpenCommunity)
     return () => {
+      window.removeEventListener("ghc:toast", onToast)
       window.removeEventListener("ghc:open-wallet", onWallet)
       window.removeEventListener("ghc:open-rewards", onRewards)
       window.removeEventListener("ghc:open-membership", onMembership)
@@ -374,7 +724,7 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:start-chat", onStartChat)
       window.removeEventListener("ghc:ensure-community-tab", onOpenCommunity)
     }
-  }, [openWallet, openSettings, startConversation, setTab])
+  }, [openWallet, openSettings, startConversation, setTab, addToast])
   /** Mount a tab once visited so switches stay instant without loading all 6 at boot */
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set(["home"]))
 
@@ -444,7 +794,16 @@ export function GHConnectApp() {
     }
     window.addEventListener("ghc:bottom-nav-visibility", onVis)
     const onCreateHub = () => setShowCreateHub(true)
+    const onOpenCompose = (event: Event) => {
+      const detail = (event as CustomEvent<{ mode?: unknown }>).detail || {}
+      const mode = detail.mode === "story" ? "story" : "post"
+      setGlobalComposeMode(mode)
+      setShowGlobalComposer(true)
+    }
+    const onCloseCompose = () => setShowGlobalComposer(false)
     window.addEventListener("ghc:open-create-hub", onCreateHub)
+    window.addEventListener("ghc:open-compose", onOpenCompose as EventListener)
+    window.addEventListener("ghc:close-compose", onCloseCompose)
     const onPoll = () => setPollOpen(true)
     const onChallenge = () => setChallengeOpen(true)
     window.addEventListener("ghc:open-poll", onPoll)
@@ -452,10 +811,30 @@ export function GHConnectApp() {
     return () => {
       window.removeEventListener("ghc:bottom-nav-visibility", onVis)
       window.removeEventListener("ghc:open-create-hub", onCreateHub)
+      window.removeEventListener("ghc:open-compose", onOpenCompose as EventListener)
+      window.removeEventListener("ghc:close-compose", onCloseCompose)
       window.removeEventListener("ghc:open-poll", onPoll)
       window.removeEventListener("ghc:open-challenge", onChallenge)
     }
   }, [])
+
+  // Cross-screen post routing: Profile/notifications can request a post even when
+  // the Feed screen is currently unmounted. Move to Home first, then replay the
+  // request after the feed has mounted. This prevents lost synchronous events.
+  useEffect(() => {
+    const onOpenPost = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail || {}
+      const postId = typeof detail.postId === "string" ? detail.postId.trim() : ""
+      if (!postId) return
+      const action = detail.action === "comment" || detail.action === "share" || detail.action === "insights" ? detail.action : undefined
+      startTransition(() => setTab("home"))
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action } }))
+      }, 180)
+    }
+    window.addEventListener("ghc:open-post", onOpenPost as EventListener)
+    return () => window.removeEventListener("ghc:open-post", onOpenPost as EventListener)
+  }, [setTab])
 
   // Browser back / page show: clear disposable overlays without wiping domain state
   useEffect(() => {
@@ -590,6 +969,11 @@ export function GHConnectApp() {
       (profile as { username?: string } | null | undefined)?.username ||
       (profile as { displayName?: string } | null | undefined)?.displayName ||
       null,
+    candidateUserIds: [
+      (profile as { id?: string } | null | undefined)?.id,
+      authLifecycle?.ghUserId,
+      authLifecycle?.piUid,
+    ],
   })
   // Authoritative gate only — never timeout-force registration for returning users
   const effectiveOnboarding = effectiveOnboardingRaw
@@ -701,6 +1085,37 @@ export function GHConnectApp() {
     )
   }
 
+  if (marketplaceOpen) {
+    return (
+      <>
+        {themeLayer}
+        <ConsentGate>
+          <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
+            <ScreenBoundary
+              label="Marketplace"
+              onDismiss={() => {
+                setMarketplaceOpen(false)
+                setMarketplaceListingId(null)
+              }}
+            >
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <Suspense fallback={<TabScreenFallback label="Marketplace" />}>
+                  <MarketplaceScreenLazy
+                    onBack={() => {
+                      setMarketplaceOpen(false)
+                      setMarketplaceListingId(null)
+                    }}
+                    initialListingId={marketplaceListingId}
+                  />
+                </Suspense>
+              </div>
+            </ScreenBoundary>
+          </div>
+        </ConsentGate>
+      </>
+    )
+  }
+
   /* Secondary full-screen flows — no bottom navigation in the tree */
   if (ecosystemOpen) {
     return (
@@ -737,15 +1152,22 @@ export function GHConnectApp() {
     <>
     {themeLayer}
     <ConsentGate>
+    <SkipToContent />
+    <AccessibilityAnnouncer label={NAV_ITEMS.find((item) => item.id === activeTab)?.label || "GreenHaven"} />
+    <GlobalHotkeys />
     <div
       className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full"
       data-nav-hidden={bottomNavHidden ? "true" : "false"}
       data-nav-in-flow="true"
     >
-      <OfflineBanner />
+      <DailyClaimPrompt />
+      <NetworkResilience />
       <PaymentRecoveryListener />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
+        id="ghc-main-content"
+        tabIndex={-1}
+        aria-label="GreenHaven main content"
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"
         onPointerDown={() => {
           if (bottomNavHidden) setBottomNavHidden(false)
@@ -753,18 +1175,18 @@ export function GHConnectApp() {
       >
         {/* Content fills the flex area above the nav. Modest pb only for last-item breathing room. */}
         {visitedTabs.has("home") && (
-        <div aria-hidden={activeTab !== "home"} className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
-                <EnhancedFeedScreen key={screenResetKeys.home || 0} />
+                <EnhancedFeedScreen key={screenResetKeys.home || 0} onCompose={() => setShowCreateHub(true)} />
               </Suspense>
             </ScreenBoundary>
           </div>
         </div>
         )}
         {visitedTabs.has("discover") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Discover" onReset={() => resetScreen("discover")}>
               <Suspense fallback={<TabScreenFallback label="Find" />}>
@@ -775,7 +1197,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("matches") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -789,7 +1211,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("communities") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -803,7 +1225,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("messages") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Messages" onReset={() => resetScreen("messages")}>
               <Suspense fallback={<TabScreenFallback label="Messages" />}>
@@ -814,7 +1236,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("profile") && (
-        <div className="absolute inset-0 transition-opacity duration-75" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full min-h-0 touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -829,16 +1251,25 @@ export function GHConnectApp() {
         )}
       </main>
 
+      {/* Global composer: mounted at app-shell level so Profile, Home,
+          notifications and other screens can open the same durable composer. */}
+      <PostComposer
+        open={showGlobalComposer}
+        onOpenChange={setShowGlobalComposer}
+        initialMode={globalComposeMode}
+      />
+
       {/* Bottom navigation — fixed to bottom edge so main can use full height.
           Auto-hides on scroll-down (translate off-screen); tap or scroll-up reveals.
           Hairline border only — no heavy shadow overlay. */}
       <nav
-        className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/60 bg-background px-1 pb-[max(0.2rem,env(safe-area-inset-bottom,0px))] pt-0.5 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
-          bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.5rem] opacity-100"
+        className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/50 bg-card/95 backdrop-blur-md px-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] pt-1 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
+          bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.75rem] opacity-100"
         }`}
         aria-label="Main navigation"
         role="navigation"
         aria-hidden={bottomNavHidden || showCreateHub}
+        inert={bottomNavHidden || showCreateHub}
         style={{
           minHeight: "var(--gh-bottom-nav-height)",
           /* Crisp edge — no soft gradient “shadow band” above the bar */
@@ -847,17 +1278,36 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
-            const isActive = id !== "create" && activeTab === id
+            const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
                 key={id}
                 type="button"
+                onPointerDown={() => {
+                  if (id === "cart" || !isPrimaryTab(id as any)) return
+                  try {
+                    window.dispatchEvent(new CustomEvent("ghc:prefetch-tab", { detail: id }))
+                  } catch { /* */ }
+                }}
                 onClick={() => {
-                  if (id === "create") {
-                    setShowCreateHub(true)
+                  // Cart is the commerce basket/checkout surface, separate from Marketplace browse and Orders.
+                  if (id === "cart") {
+                    setMarketplaceOpen(true)
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ghc:open-marketplace", {
+                          detail: { bucket: "cart", source: "bottom-cart" },
+                        }),
+                      )
+                    } catch { /* */ }
                     return
                   }
                   if (isActive) {
+                    if (id === "home" && socialAttentionCount > 0) {
+                      try {
+                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "connections" } }))
+                      } catch { /* */ }
+                    }
                     scrollActiveTabToTop()
                     return
                   }
@@ -877,29 +1327,45 @@ export function GHConnectApp() {
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
-                  className={`absolute inset-x-2 top-0 h-0.5 rounded-full bg-primary transition-opacity duration-150 ${
-                    isActive ? "opacity-100" : "opacity-0"
+                  className={`absolute inset-x-3 top-0 h-0.5 rounded-full transition-all duration-200 ${
+                    isActive ? "bg-primary opacity-100 scale-x-100" : "bg-transparent opacity-0 scale-x-50"
                   }`}
-                  aria-hidden="true"
+                  aria-hidden
                 />
                 <span
                   className={
-                    id === "create"
-                      ? "flex h-11 w-11 -translate-y-1 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+                    (id as string) === "create"
+                      ? "gh-create-fab flex h-12 w-12 -translate-y-2 items-center justify-center rounded-full text-white"
                       : `flex h-8 w-10 items-center justify-center rounded-lg transition-colors ${
                           isActive ? "bg-primary/10" : "bg-transparent"
                         }`
                   }
                 >
                   <span className="relative inline-flex">
+                    <span className="relative inline-flex">
                     <Icon
-                      size={id === "create" ? 22 : 20}
-                      strokeWidth={id === "create" ? 2.5 : isActive ? 2.5 : 2}
+                      size={(id as string) === "create" ? 22 : 20}
+                      strokeWidth={(id as string) === "create" ? 2.5 : isActive ? 2.5 : 2}
                       fill="none"
                       aria-hidden="true"
-                      className={id === "create" ? "text-white" : undefined}
+                      className={(id as string) === "create" ? "text-white" : undefined}
                     />
-                    {/* Connection-request badge was for matches tab; primary NAV_ITEMS has no matches id */}
+                    {id === "cart" && cartBadgeCount > 0 ? (
+                      <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-card">
+                        {cartBadgeCount > 99 ? "99+" : cartBadgeCount}
+                      </span>
+                    ) : null}
+                  </span>
+                    {((id === "home" && socialAttentionCount > 0) ||
+                      (id === "messages" && unreadMessageCount > 0) ||
+                      (id === "communities" && unreadGroupCount > 0) ||
+                      (id === "profile" && economyAttentionCount > 0)) ? (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
+                        aria-label="New activity"
+                        title="New activity — open this section to review"
+                      />
+                    ) : null}
                   </span>
                 </span>
                 <span
@@ -931,11 +1397,7 @@ export function GHConnectApp() {
             } else if (action === "challenge") {
               setChallengeOpen(true)
             } else if (action === "story") {
-              window.dispatchEvent(
-                new CustomEvent("ghc:open-compose", {
-                  detail: { mode: "story" },
-                })
-              )
+              window.dispatchEvent(new CustomEvent("ghc:open-story-creator"))
             } else {
               // Unified post: text + photo + video + files in one composer
               window.dispatchEvent(
@@ -994,9 +1456,41 @@ export function GHConnectApp() {
       />
       </Suspense>
 
-      <CreatorStudioOverlay />
+      {peerProfile ? (
+        <Suspense fallback={null}>
+          <ProfilePreviewPageLazy
+            candidate={peerProfile}
+            userInterests={Array.isArray(profile?.interests) ? profile.interests : []}
+            onBack={() => setPeerProfile(null)}
+            onMessage={() => {
+              const target = peerProfile
+              void startConversation(target.id, target.name, target.photo).then(() => {
+                setPeerProfile(null)
+                startTransition(() => setTab("messages"))
+              }).catch(() => addToast("Could not open this conversation. Please try again.", "error"))
+            }}
+            onLike={() => { void swipe(peerProfile.id, "like").catch(() => addToast("Could not send interest. Please try again.", "error")) }}
+            onPass={() => { void swipe(peerProfile.id, "pass").then(() => setPeerProfile(null)).catch(() => addToast("Could not update this preference.", "error")) }}
+            onFollow={() => {
+              const wasFollowing = following.includes(peerProfile.id)
+              void followUser(peerProfile.id).then(() => addToast(wasFollowing ? `Unfollowed ${peerProfile.name}` : `Following ${peerProfile.name}`, "success")).catch(() => addToast("Could not update this follow.", "error"))
+            }}
+            onBlock={() => { void blockUser(peerProfile.id).then(() => { setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
+            onReport={(reason) => { void reportUser(peerProfile.id, reason).then(() => addToast("Report submitted", "success")).catch(() => addToast("Could not submit report.", "error")) }}
+            isFollowing={following.includes(peerProfile.id)}
+            isMatched={matches.some((item) => item.userId === peerProfile.id || item.id === peerProfile.id)}
+          />
+        </Suspense>
+      ) : null}
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[var(--gh-bottom-content-inset)] z-40 mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3">
+      <GlobalInteractionDialog />
+      <CreatorStudioOverlay />
+      <ProfileStorySection creatorHost />
+
+      <div
+        className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3 pb-1"
+        aria-live="polite"
+      >
         {visibleToasts.map((toast) => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}

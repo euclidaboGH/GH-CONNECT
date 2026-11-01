@@ -7,6 +7,7 @@
 import { useState, useEffect, memo } from "react"
 import { Users, MessageSquare, LayoutGrid, ChevronRight } from "lucide-react"
 import { LazyImage } from "./lazy-image"
+import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
 
 interface GroupCardProps {
   id: string
@@ -101,9 +102,9 @@ function GroupCardContent({
       }}
       aria-label={`Open community ${groupName}, ${memberCount} members. Board and chat are separate.`}
     >
-      <article className="flex gap-3 rounded-[1.25rem] border border-border/60 bg-card p-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition hover:border-emerald-400/40 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)] active:scale-[0.995] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
+      <article className="gh-card-interactive flex gap-3 rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-[var(--gh-card-shadow)] transition hover:border-emerald-400/50 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.995]">
         {isPinned && (
-          <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-emerald-600" aria-hidden />
+          <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-[var(--gh-green)]" aria-hidden />
         )}
 
         {isSample && (
@@ -151,14 +152,11 @@ function GroupCardContent({
                 </span>
                 <span aria-hidden>·</span>
                 <span>{timeAgo || "—"}</span>
-                {role && role !== "guest" && role !== "member" && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span className="font-semibold capitalize text-emerald-700 dark:text-emerald-400">
-                      {role}
-                    </span>
-                  </>
-                )}
+                {role && role !== "guest" ? (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${communityRoleBadgeClass(role)}`}>
+                    {formatCommunityRole(role)}
+                  </span>
+                ) : null}
               </p>
             </div>
             <ChevronRight size={18} className="mt-0.5 shrink-0 text-muted-foreground/60" aria-hidden />
@@ -214,7 +212,7 @@ function GroupCardContent({
                   e.stopPropagation()
                   onJoin()
                 }}
-                className="ml-auto min-h-9 rounded-full bg-emerald-600 px-3 text-[11px] font-bold text-white"
+                className="ml-auto min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
               >
                 Preview & join
               </button>

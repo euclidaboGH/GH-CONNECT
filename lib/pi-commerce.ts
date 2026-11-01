@@ -13,8 +13,12 @@ import { ghPayPurchase } from "@/lib/gh-pay"
 
 export type CommerceProductKind =
   | "membership_vip_monthly"
+  | "membership_vip_four_months"
+  | "membership_vip_eight_months"
   | "membership_vip_yearly"
   | "membership_vvip_monthly"
+  | "membership_vvip_four_months"
+  | "membership_vvip_eight_months"
   | "membership_vvip_yearly"
   | "profile_boost"
   | "post_boost"

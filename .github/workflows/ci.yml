@@ -1,37 +1,96 @@
-name: CI
+name: GreenHaven CI
 
 on:
   push:
-    branches: [main, master]
   pull_request:
-    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greenhaven-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+  source-integrity:
+    name: Source integrity and static contracts
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version-file: ".nvmrc"
+          node-version: 24.15.0
           cache: npm
-
-      - name: Install
-        run: npm ci --legacy-peer-deps
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
+      - name: Check dependency lock integrity before install
+        run: node scripts/check-dependency-lock-integrity.mjs
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps --no-audit
+      - name: JSX safety
+        run: npm run check:jsx
+      - name: Bounded JSON runtime regression tests
+        run: npm run test:bounded-json-runtime
+      - name: Phase 17 CI governance contract
+        run: npm run check:phase17-ci-governance
+      - name: Phase 18 marketplace payment evidence binding
+        run: npm run check:phase18-marketplace-payment-binding
+      - name: Phase 19 marketplace RPC transport hardening
+        run: npm run check:phase19-marketplace-rpc-transport
+      - name: Marketplace integrity source contracts
+        run: node scripts/check-phase10-marketplace-integrity.mjs
+      - name: Cross-feature wallet reconciliation source contracts
+        run: node scripts/check-phase11-wallet-cross-feature-reconciliation.mjs
+      - name: Request boundary follow-up source contracts
+        run: node scripts/check-phase1-12-request-boundary-followup.mjs
+      - name: Release hygiene
+        run: npm run check:release-hygiene
+      - name: Deployment security headers
+        run: npm run check:security-headers
+      - name: API CSRF contract
+        run: npm run check:api-csrf
+      - name: Database RLS source coverage
+        run: node scripts/check-database-rls-coverage.mjs
+      - name: SECURITY DEFINER ACL source audit
+        run: node scripts/check-security-definer-acl.mjs
       - name: Production safety scan
         run: npm run test:safety
-
+      - name: Phase 15 payment recovery contracts
+        run: npm run check:phase15-payment-recovery
+      - name: Phase 16 payment lifecycle contracts
+        run: npm run check:phase16-payment-timeline
+      - name: Phase 7 treasury completion contracts
+        run: node scripts/check-phase7-treasury-completion.mjs
+      - name: Project truth
+        run: npm run check:project-truth
+      - name: Pi backend lock
+        run: npm run check:pi-backend-lock
+      - name: Clean migrations
+        run: npm run check:clean-migrations
+      - name: Migration release readiness
+        run: npm run check:migration-release-readiness
+      - name: Phase 3 database recovery source contracts
+        run: npm run check:phase3-database-recovery
+      - name: Phase 3 restored catalog gate contracts
+        run: npm run check:phase3-restore-catalog-gate
+      - name: Phase 3 restore evidence regression tests
+        run: npm run test:database-restore-evidence
+      - name: Phase 4 recovery release gate (source-only)
+        run: node scripts/check-phase4-recovery-release-gate.mjs
+      - name: Phase 4 recovery gate fail-closed regression tests
+        run: npm run test:phase4-recovery-release-gate
+      - name: Phase 4 cross-feature identity integration
+        run: npm run check:phase4-identity-integration
+      - name: Durable financial abuse-control contract
+        run: npm run check:pass44
+      - name: Comprehensive source-only contract suite
+        run: npm run verify:static
+      - name: Discovery-based production verification pack
+        run: npm run verify:production
+      - name: Economy gates remain operator-controlled
+        run: node scripts/verify-economy-stage1-gates.mjs
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
       - name: Production build
         run: npm run build
-        env:
-          # Build must not require live secrets; readiness fails closed at runtime
-          NEXT_TELEMETRY_DISABLED: "1"

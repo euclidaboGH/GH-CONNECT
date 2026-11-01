@@ -3,6 +3,8 @@
  * Does not treat localStorage as source of truth for cross-device data.
  */
 
+import { IdentityService } from "@/lib/identity/identity-service"
+
 export type ServerProfileHydrateResult = {
   ok: boolean
   exists: boolean
@@ -16,7 +18,7 @@ export async function fetchServerProfile(): Promise<ServerProfileHydrateResult> 
     const res = await fetch("/api/profile/me", {
       method: "GET",
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...IdentityService.getAuthHeaders() },
       cache: "no-store",
     })
     const body = await res.json().catch(() => ({}))
@@ -53,7 +55,7 @@ export async function persistServerProfile(
     const res = await fetch("/api/profile/me", {
       method: "PATCH",
       credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...IdentityService.getAuthHeaders() },
       body: JSON.stringify(partial),
       cache: "no-store",
     })

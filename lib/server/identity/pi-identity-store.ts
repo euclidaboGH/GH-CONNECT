@@ -14,6 +14,7 @@
  * No economics / payment changes.
  */
 
+import { randomUUID } from "node:crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
 export type PiIdentityRecord = {
@@ -58,8 +59,14 @@ function isProductionRuntime(): boolean {
   )
 }
 
-function newGhUserId(piAppUid: string): string {
-  return String(piAppUid).trim()
+/**
+ * Allocate an internal GH identity independently from the external Pi UID.
+ * The verified Pi UID remains the unique lookup key; this UUID is stable only
+ * while its mapping row exists. If an operator deliberately removes that row,
+ * the next verified sign-in creates a new GH identity.
+ */
+function newGhUserId(_piAppUid: string): string {
+  return randomUUID()
 }
 
 function memoryGetByPi(piAppUid: string): PiIdentityRecord | null {
@@ -260,6 +267,56 @@ export async function getByPiAppUid(piAppUid: string): Promise<PiIdentityRecord 
   return memoryGetByPi(key)
 }
 
+
+/**
+ * Lookup by current Pi display username (case-insensitive). Username can change;
+ * prefer pi_app_uid when available. Used for referral attribution convenience only.
+ */
+export async function getByPiUsername(username: string): Promise<PiIdentityRecord | null> {
+  const key = String(username || "").trim().replace(/^@/, "")
+  if (!key || key.length < 2) return null
+  if (dbConfigured()) {
+    try {
+      const env = readGhcServerEnv()
+      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
+        const base = env.supabaseUrl.replace(/\/$/, "")
+        const params = new URLSearchParams({
+          select: "*",
+          pi_username: `ilike.${key}`,
+          limit: "5",
+        })
+        const res = await fetch(`${base}/rest/v1/gh_pi_identities?${params}`, {
+          headers: {
+            apikey: env.supabaseServiceRoleKey,
+            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (res.ok) {
+          const rows = (await res.json()) as DbRow[]
+          if (Array.isArray(rows) && rows.length === 1) {
+            const rec = rowToRecord(rows[0])
+            memoryPut(rec)
+            return rec
+          }
+          // Ambiguous or empty — do not guess
+          if (Array.isArray(rows) && rows.length > 1) return null
+        }
+      }
+    } catch (err) {
+      console.error("[pi-identity] getByPiUsername", err instanceof Error ? err.message : "unknown")
+    }
+  }
+  // Memory fallback: exact case-insensitive match unique only
+  const matches: PiIdentityRecord[] = []
+  for (const rec of byPiUid.values()) {
+    if (rec.piUsername && rec.piUsername.toLowerCase() === key.toLowerCase()) matches.push(rec)
+  }
+  return matches.length === 1 ? matches[0] : null
+}
+
 export async function getByGhUserId(ghUserId: string): Promise<PiIdentityRecord | null> {
   const key = String(ghUserId || "").trim()
   if (!key) return null
@@ -280,8 +337,7 @@ export async function getByGhUserId(ghUserId: string): Promise<PiIdentityRecord 
  *
  * Conflict: if gh_user_id uniqueness would be violated by a different pi_app_uid
  * mapping to the same gh id with mismatched data — we do not auto-merge; we
- * keep pi_app_uid as primary key (new row) and log. Current scheme uses
- * ghUserId === piAppUid on create so conflict is rare.
+ * keep pi_app_uid as primary key (new row) and log. Internal GH IDs are random UUIDs.
  */
 export async function findOrCreateFromVerifiedPi(input: {
   piAppUid: string

@@ -17,7 +17,7 @@ export function AnnouncementCard({ announcement, onDismiss }: { announcement: An
   const typeStyles = {
     info: "bg-blue-50 border-blue-200 text-blue-900",
     important: "bg-red-50 border-red-200 text-red-900",
-    celebration: "bg-purple-50 border-purple-200 text-purple-900",
+    celebration: "bg-violet-50 border-violet-200 text-violet-900",
     maintenance: "bg-yellow-50 border-yellow-200 text-yellow-900",
   }
 
@@ -73,8 +73,8 @@ export function PollCard({
       <div className="flex items-start gap-2 mb-3">
         <div className="text-lg">📊</div>
         <div className="flex-1">
-          <h3 className="font-semibold text-sm text-gray-900">{poll.question}</h3>
-          <p className="text-xs text-gray-600 mt-0.5">{totalVotes} votes</p>
+          <h3 className="font-semibold text-sm text-foreground">{poll.question}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{totalVotes} votes</p>
         </div>
       </div>
 
@@ -91,20 +91,20 @@ export function PollCard({
               className={`w-full text-left p-2 rounded-lg border transition ${
                 userVotedThis
                   ? "bg-blue-100 border-blue-400"
-                  : "bg-white border-gray-200 hover:border-blue-300 disabled:opacity-60"
+                  : "bg-white border-border/70 hover:border-blue-300 disabled:opacity-60"
               }`}
             >
               <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{option.text}</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-1 overflow-hidden">
+                  <p className="text-sm font-medium text-foreground truncate">{option.text}</p>
+                  <div className="w-full bg-muted rounded-full h-2 mt-1 overflow-hidden">
                     <div
-                      className={`h-full transition-all ${userVotedThis ? "bg-blue-500" : "bg-blue-300"}`}
+                      className={`h-full transition-all ${userVotedThis ? "bg-[var(--gh-green)]" : "bg-emerald-300 dark:bg-emerald-800"}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-gray-600 flex-shrink-0 w-8 text-right">
+                <span className="text-xs font-semibold text-muted-foreground flex-shrink-0 w-8 text-right">
                   {option.votes}
                 </span>
               </div>
@@ -114,7 +114,7 @@ export function PollCard({
       </div>
 
       {!isActive && (
-        <p className="text-xs text-gray-600 mt-3 text-center">Poll is {poll.status}</p>
+        <p className="text-xs text-muted-foreground mt-3 text-center">Poll is {poll.status}</p>
       )}
     </div>
   )
@@ -150,7 +150,7 @@ export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend
         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{event.description}</p>
       ) : null}
 
-      <div className="space-y-1 text-xs text-gray-600 mb-3">
+      <div className="space-y-1 text-xs text-muted-foreground mb-3">
         {event.location && (
           <div className="flex items-center gap-2">
             <MapPin size={14} />
@@ -208,8 +208,8 @@ export function PinnedResourceCard({ resource, onRemove }: { resource: PinnedRes
         {resourceIcons[resource.resourceType as keyof typeof resourceIcons] || "📌"}
       </span>
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-sm text-gray-900">{resource.title}</h3>
-        <p className="text-xs text-gray-600 mt-1">{resource.description}</p>
+        <h3 className="font-semibold text-sm text-foreground">{resource.title}</h3>
+        <p className="text-xs text-muted-foreground mt-1">{resource.description}</p>
         {resource.url && (
           <a
             href={resource.url}
@@ -271,7 +271,7 @@ export function GuidelinesCard({ guideline }: { guideline: CommunityGuideline })
     behavior: "text-purple-700 bg-purple-50",
     content: "text-blue-700 bg-blue-50",
     technical: "text-orange-700 bg-orange-50",
-    general: "text-gray-700 bg-gray-50",
+    general: "text-foreground/90 bg-muted/40",
   }
 
   const priorityLabel = { 1: "Critical", 2: "Important", 3: "Nice to Know" }
@@ -304,30 +304,30 @@ export function UpcomingEventsSummary({ events }: { events: ScheduledEvent[] }) 
   if (upcoming.length === 0) return null
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <h3 className="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
+    <div className="bg-white rounded-lg border border-border/70 p-4">
+      <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
         <Calendar size={16} />
         Upcoming Events
       </h3>
       <div className="space-y-2">
         {upcoming.map((event) => (
           <div key={event.id} className="flex items-start gap-2 text-sm">
-            <span className="text-xs text-gray-500 min-w-fit">
+            <span className="text-xs text-muted-foreground min-w-fit">
               {new Date(event.startsAt).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
               })}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-900 truncate">{event.title}</p>
-              <p className="text-xs text-gray-600">
+              <p className="font-medium text-foreground truncate">{event.title}</p>
+              <p className="text-xs text-muted-foreground">
                 {new Date(event.startsAt).toLocaleTimeString("en-US", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
               </p>
             </div>
-            <ChevronRight size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <ChevronRight size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
           </div>
         ))}
       </div>
@@ -342,8 +342,8 @@ export function ActivePollsSummary({ polls }: { polls: Poll[] }) {
   if (active.length === 0) return null
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <h3 className="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
+    <div className="bg-white rounded-lg border border-border/70 p-4">
+      <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
         <MessageSquare size={16} />
         Active Polls
       </h3>
@@ -351,12 +351,12 @@ export function ActivePollsSummary({ polls }: { polls: Poll[] }) {
         {active.slice(0, 3).map((poll) => (
           <div key={poll.id} className="flex items-start gap-2 text-sm">
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-900 truncate">{poll.question}</p>
-              <p className="text-xs text-gray-600">
+              <p className="font-medium text-foreground truncate">{poll.question}</p>
+              <p className="text-xs text-muted-foreground">
                 {poll.options.reduce((sum, opt) => sum + opt.votes, 0)} votes
               </p>
             </div>
-            <ChevronRight size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <ChevronRight size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
           </div>
         ))}
       </div>
@@ -378,15 +378,15 @@ export function CommunityStats({
     <div className="grid grid-cols-3 gap-3">
       <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-3 border border-blue-200">
         <div className="text-2xl font-bold text-blue-600">{memberCount}</div>
-        <div className="text-xs text-gray-600 mt-1">Members</div>
+        <div className="text-xs text-muted-foreground mt-1">Members</div>
       </div>
       <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-3 border border-green-200">
         <div className="text-2xl font-bold text-green-600">{activeNow}</div>
-        <div className="text-xs text-gray-600 mt-1">Active Now</div>
+        <div className="text-xs text-muted-foreground mt-1">Active Now</div>
       </div>
-      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-3 border border-purple-200">
-        <div className="text-2xl font-bold text-purple-600">{lastWeekPosts}</div>
-        <div className="text-xs text-gray-600 mt-1">Posts This Week</div>
+      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-3 border border-emerald-200">
+        <div className="text-2xl font-bold text-emerald-700">{lastWeekPosts}</div>
+        <div className="text-xs text-muted-foreground mt-1">Posts This Week</div>
       </div>
     </div>
   )

@@ -1,5 +1,8 @@
 "use client"
 
+import { confirmDialog } from "@/lib/ui/global-interactions"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { X, Send, ChevronDown, ChevronUp, Heart, MessageCircle } from "lucide-react"
@@ -8,6 +11,7 @@ import type { Post, PostComment } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { buildCommentTree, countThread } from "@/lib/comment-thread-utils"
 import { LazyImage } from "./lazy-image"
+import { downloadMedia } from "@/lib/media/download-media"
 import { ReportChooser } from "./report-chooser"
 import { isOwnAuthor, canEditComment, canDeleteComment } from "@/lib/ownership"
 
@@ -37,8 +41,10 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     reportContent,
     blockUser,
     addToast,
-  } = useGHC()
+    loadPostComments,} = useGHC()
   const [text, setText] = useState("")
+  const [pendingMedia, setPendingMedia] = useState<Array<{ id: string; type: "image" | "video" | "file"; url: string; fileName?: string }>>([])
+  const [mediaBusy, setMediaBusy] = useState(false)
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
@@ -46,7 +52,9 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const submittingRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState<number>(40)
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({})
-  const [sortMode, setSortMode] = useState<"newest" | "oldest">("newest")
+  const [sortMode, setSortMode] = useState<"top" | "newest">("top")
+  const [commentsLoadError, setCommentsLoadError] = useState(false)
+  const [reloadVersion, setReloadVersion] = useState(0)
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -55,16 +63,70 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const tree = useMemo(() => {
     if (!post?.comments?.length) return [] as PostComment[]
     const built = buildCommentTree(post.comments)
+    const score = (comment: PostComment) => Object.values(comment.reactionCounts || {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0) + Math.max(0, Number(comment.replyCount || comment.replies?.length || 0))
     const sorted = [...built].sort((a, b) => {
       const ta = a.createdAt || 0
       const tb = b.createdAt || 0
-      return sortMode === "newest" ? tb - ta : ta - tb
+      if (sortMode === "newest") return tb - ta
+      if (Boolean(a.isPinned) !== Boolean(b.isPinned)) return a.isPinned ? -1 : 1
+      const qualityDelta = score(b) - score(a)
+      return qualityDelta !== 0 ? qualityDelta : tb - ta
     })
     const blockedSet = new Set(blockedUsers || [])
     return sorted.filter((c) => c.authorId && !blockedSet.has(c.authorId))
   }, [post, sortMode, blockedUsers])
 
+  
   useEffect(() => {
+    if (!open || !post?.id) return
+    let cancelled = false
+    setCommentsLoadError(false)
+    ;(async () => {
+      try {
+        const result = await loadPostComments?.(post.id)
+        if (!cancelled && result && result.ok === false) setCommentsLoadError(true)
+      } catch {
+        if (!cancelled) setCommentsLoadError(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, post?.id, loadPostComments, reloadVersion])
+
+  useEffect(() => {
+    if (!open || !post?.id) return
+    const onFocusComment = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ postId?: string; commentId?: string }>).detail
+      if (!detail?.commentId || detail.postId !== post.id) return
+      setExpandedThreads((prev) => ({ ...prev, [detail.commentId as string]: true }))
+      window.setTimeout(() => {
+        try {
+          const el = document.querySelector(`[data-comment-id="${CSS.escape(detail.commentId as string)}"]`) as HTMLElement | null
+          el?.scrollIntoView({ behavior: "smooth", block: "center" })
+        } catch { /* */ }
+      }, 120)
+    }
+    window.addEventListener("ghc:focus-comment", onFocusComment as EventListener)
+    return () => window.removeEventListener("ghc:focus-comment", onFocusComment as EventListener)
+  }, [open, post?.id])
+
+  useEffect(() => {
+    if (!open || !post?.id) return
+    const onMut = (ev: Event) => {
+      const d = (ev as CustomEvent<{ postId?: string; type?: string }>).detail
+      if (!d?.postId || d.postId !== post.id) return
+      void loadPostComments?.(post.id)
+    }
+    window.addEventListener("ghc:social-mutation", onMut as EventListener)
+    window.addEventListener("ghc:post-engagement", onMut as EventListener)
+    return () => {
+      window.removeEventListener("ghc:social-mutation", onMut as EventListener)
+      window.removeEventListener("ghc:post-engagement", onMut as EventListener)
+    }
+  }, [open, post?.id, loadPostComments])
+
+useEffect(() => {
     if (!open) return
     return onCloseTransientUI(() => onClose())
   }, [open, onClose])
@@ -111,19 +173,42 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
 
   const handleSubmit = async () => {
     const value = text.trim()
-    if (!value || busy || submittingRef.current || !post?.id) return
+    if ((!value && !pendingMedia.length) || busy || submittingRef.current || !post?.id) return
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      addToast("You are offline — comments need a connection so they reach the author", "info")
+      return
+    }
+    const media = pendingMedia.filter((m) => m.url && !m.url.startsWith("blob:") && !m.url.startsWith("data:"))
+    if (pendingMedia.length && media.length !== pendingMedia.length) {
+      addToast("Remove unfinished media uploads before commenting", "error")
+      return
+    }
     submittingRef.current = true
     setBusy(true)
     try {
-      await addComment(post.id, value, replyToId || undefined)
+      await addComment(post.id, value, replyToId || undefined, media.length ? media : undefined)
+      setPendingMedia([])
+      try {
+        await loadPostComments?.(post.id)
+      } catch {
+        /* */
+      }
       setText("")
       setReplyToId(null)
-      // Toast may also come from context — keep one friendly line if needed
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ghc:post-engagement", {
+            detail: { postId: post.id, kind: "comment" },
+          }),
+        )
+        window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { reason: "comment" } }))
+      } catch {
+        /* */
+      }
       requestAnimationFrame(() => {
         listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
       })
     } catch {
-      // Keep entered text for retry
       try {
         addToast("Could not post comment — your text was kept", "error")
       } catch {
@@ -153,11 +238,13 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
 
   const handleDelete = async (commentId: string) => {
     if (busy) return
-    if (!window.confirm("Delete this comment?")) return
+    if (!(await confirmDialog({ title: "Delete comment?", message: "This comment will be removed from the discussion.", confirmLabel: "Delete comment", danger: true }))) return
     setBusy(true)
     try {
       await deleteComment(post.id, commentId)
       addToast("Comment deleted", "info")
+    } catch {
+      addToast("Could not delete comment. Please try again.", "error")
     } finally {
       setBusy(false)
     }
@@ -171,13 +258,14 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     try {
       await addCommentReaction(post.id, c.id, emoji)
     } catch {
-      /* silent */
+      addToast("Could not save reaction. Please try again.", "error")
     }
   }
 
-  const reactionCount = (c: PostComment) => {
-    const reactions = c.reactions || {}
-    return Object.values(reactions).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
+  const reactionCount = (c: PostComment, emoji?: string) => {
+    const counts = c.reactionCounts || {}
+    if (emoji) return Math.max(0, Number(counts[emoji] || 0))
+    return Object.values(counts).reduce((sum, count) => sum + Math.max(0, Number(count || 0)), 0)
   }
 
   const renderComment = (c: PostComment, depth = 0) => {
@@ -186,11 +274,12 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     const isExpanded = expandedThreads[c.id] ?? depth === 0
     const showCollapse = depth === 0 && threadCount > 0
     const visibleReplies = isExpanded || depth > 0 ? replies : []
-    const liked = reactionCount(c) > 0
+    const heartCount = reactionCount(c, "❤️")
 
     return (
       <div
         key={c.id}
+        data-comment-id={c.id}
         className={`${depth > 0 ? "ml-3 border-l-2 border-emerald-200/80 pl-3" : ""} py-1.5`}
       >
         <div className="flex gap-2.5">
@@ -202,14 +291,14 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           <div className="min-w-0 flex-1">
             <div className="rounded-2xl bg-stone-50 px-3 py-2 ring-1 ring-stone-100">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-gray-900">{c.authorName}</span>
+                <span className="text-xs font-bold text-foreground">{c.authorName}</span>
                 {isCommentOwner(c) && (
                   <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
                     You
                   </span>
                 )}
-                <span className="text-[10px] text-gray-400">{timeAgo(c.createdAt)}</span>
-                {c.isEdited && <span className="text-[10px] text-gray-400">(edited)</span>}
+                <span className="text-[10px] text-muted-foreground">{timeAgo(c.createdAt)}</span>
+                {c.isEdited && <span className="text-[10px] text-muted-foreground">(edited)</span>}
                 {c.isPinned && (
                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
                     Pinned
@@ -221,7 +310,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                   <textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value.slice(0, 1000))}
-                    className="w-full resize-none rounded-lg border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full resize-none rounded-lg border border-border/70 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     rows={2}
                     autoFocus
                   />
@@ -239,26 +328,75 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                         setEditingId(null)
                         setEditText("")
                       }}
-                      className="rounded-lg bg-gray-200 px-3 py-1 text-xs font-bold text-gray-700"
+                      className="rounded-lg bg-gray-200 px-3 py-1 text-xs font-bold text-foreground/90"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800">{c.text}</p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}
+                      {Array.isArray(c.mediaAttachments) && c.mediaAttachments.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {c.mediaAttachments.slice(0, 4).map((m) => {
+                            const kind = String(m.type || "file")
+                            if (kind === "image" || kind === "gif") {
+                              return (
+                                <button
+                                  key={m.id || m.url}
+                                  type="button"
+                                  className="block overflow-hidden rounded-lg"
+                                  aria-label="Hold to download comment photo"
+                                  onContextMenu={(e) => { e.preventDefault(); if (m.url) void downloadMedia(m.url, { kind: "image" }) }}
+                                  onPointerDown={(e) => {
+                                    if (e.button !== 0) return
+                                    const el = e.currentTarget
+                                    const timer = window.setTimeout(() => { if (m.url) void downloadMedia(m.url, { kind: "image" }) }, 500)
+                                    const clear = () => window.clearTimeout(timer)
+                                    el.addEventListener("pointerup", clear, { once: true })
+                                    el.addEventListener("pointercancel", clear, { once: true })
+                                  }}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover pointer-events-none" />
+                                </button>
+                              )
+                            }
+                            if (kind === "video") {
+                              return (
+                                <div key={m.id || m.url} className="relative">
+                                  <video src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                                  <button type="button" className="mt-1 text-[10px] font-semibold text-primary" onClick={() => m.url && void downloadMedia(m.url, { kind: "video" })}>Download video</button>
+                                </div>
+                              )
+                            }
+                            return (
+                              <a
+                                key={m.id || m.url}
+                                href={m.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary underline"
+                              >
+                                {(m as { fileName?: string }).fileName || (kind === "voice" ? "Voice note" : "Attachment")}
+                              </a>
+                            )
+                          })}
+                        </div>
+                      ) : null}</p>
               )}
             </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-gray-500">
+            <div className="mt-1 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-semibold text-muted-foreground">
               <button
                 type="button"
-                className={`inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition ${liked ? "bg-rose-50 text-rose-600" : "hover:bg-muted hover:text-foreground"}`}
+                className={`inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 transition hover:bg-rose-50 hover:text-rose-600 ${c.viewerReactions?.includes("❤️") ? "bg-rose-50 text-rose-600" : ""}`}
                 onClick={() => void handleLikeComment(c)}
-                aria-label="Like comment"
+                aria-pressed={Boolean(c.viewerReactions?.includes("❤️"))}
+                aria-label={heartCount ? `React with heart; ${heartCount} heart reactions` : "React with heart"}
               >
-                <Heart size={14} className={liked ? "fill-current" : ""} />
-                {liked ? reactionCount(c) : "Like"}
+                <Heart size={14} />
+                {heartCount || "Like"}
               </button>
               <button
                 type="button"
@@ -297,9 +435,13 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                 label="Report"
                 targetType="comment"
                 targetId={c.id}
-                onSubmit={(reason) => {
-                  void reportContent("comment", c.id, reason)
-                  addToast("Report submitted", "success")
+                onSubmit={async (reason) => {
+                  try {
+                    await reportContent("comment", c.id, reason)
+                    addToast("Report submitted for review", "success")
+                  } catch {
+                    addToast("Could not submit report. Please try again.", "error")
+                  }
                 }}
                 onBlockAfterReport={(() => {
                   const authorId = c.authorId
@@ -318,11 +460,13 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
                   <button
                     key={emoji}
                     type="button"
-                    className="rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90"
+                    className={`inline-flex min-h-8 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-sm transition hover:bg-stone-100 active:scale-90 ${c.viewerReactions?.includes(emoji) ? "bg-emerald-50 ring-1 ring-emerald-400" : ""}`}
                     onClick={() => void handleLikeComment(c, emoji)}
-                    aria-label={`React ${emoji}`}
+                    aria-pressed={Boolean(c.viewerReactions?.includes(emoji))}
+                    aria-label={`React ${emoji}${reactionCount(c, emoji) ? `; ${reactionCount(c, emoji)} reactions` : ""}`}
+                    title={reactionCount(c, emoji) ? `${reactionCount(c, emoji)} reactions` : `React ${emoji}`}
                   >
-                    {emoji}
+                    {emoji}{reactionCount(c, emoji) > 0 ? <span className="text-[10px] text-muted-foreground">{reactionCount(c, emoji)}</span> : null}
                   </button>
                 ))}
               </div>
@@ -364,19 +508,19 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col rounded-t-2xl bg-white shadow-2xl"
+        className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-modal-shadow)] sm:mx-auto sm:max-w-2xl sm:rounded-[1.75rem]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-sheet-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
           <div>
-            <h3 id="comment-sheet-title" className="flex items-center gap-1.5 text-base font-bold text-gray-900">
+            <h3 id="comment-sheet-title" className="flex items-center gap-1.5 text-base font-bold text-foreground">
               <MessageCircle size={16} className="text-emerald-600" />
               Comments
             </h3>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-muted-foreground">
               {totalCount} · {post.authorName}&apos;s post
               {isPostOwner ? " · You own this post" : ""}
             </p>
@@ -384,16 +528,16 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSortMode((m) => (m === "newest" ? "oldest" : "newest"))}
-              className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-bold text-stone-600"
-              aria-label={`Sort by ${sortMode}`}
+              onClick={() => setSortMode((m) => (m === "top" ? "newest" : "top"))}
+              className="min-h-9 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-bold text-foreground transition hover:bg-muted"
+              aria-label={`Comment sort: ${sortMode === "top" ? "Top" : "Newest"}`}
             >
-              {sortMode === "newest" ? "Newest" : "Oldest"}
+              {sortMode === "top" ? "Top" : "Newest"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
               aria-label="Close comments"
             >
               <X size={20} />
@@ -402,13 +546,19 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
         </div>
 
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          {commentsLoadError ? (
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span>Comments could not be refreshed. Showing any comments already available.</span>
+              <button type="button" className="shrink-0 font-bold underline" onClick={() => setReloadVersion((n) => n + 1)}>Retry</button>
+            </div>
+          ) : null}
           {tree.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <MessageCircle size={22} />
               </div>
-              <p className="text-sm font-semibold text-stone-800">No comments yet</p>
-              <p className="mt-1 max-w-xs text-xs text-stone-500">
+              <p className="text-sm font-semibold text-foreground">No comments yet</p>
+              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
                 Be the first with a thoughtful reply. Quality comments help the conversation — spam does not.
               </p>
             </div>
@@ -428,17 +578,17 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
           )}
         </div>
 
-        <div className="border-t border-stone-100 bg-white px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+        <div className="border-t border-border/50 bg-card px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
           {replyParent && (
             <div className="mb-2 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                   Replying to
                 </p>
-                <p className="truncate text-xs font-semibold text-gray-800">
+                <p className="truncate text-xs font-semibold text-foreground">
                   {replyParent.authorName}
                   {replyParent.text ? (
-                    <span className="font-normal text-gray-500">
+                    <span className="font-normal text-muted-foreground">
                       {" "}
                       · {replyParent.text.slice(0, 48)}
                       {replyParent.text.length > 48 ? "…" : ""}
@@ -457,9 +607,9 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
             </div>
           )}
           <div className="mb-1.5 flex items-center justify-between">
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-muted-foreground">
               Comment as{" "}
-              <span className="font-bold text-gray-800">{profile.displayName || "You"}</span>
+              <span className="font-bold text-foreground">{profile.displayName || "You"}</span>
             </p>
             {text.length > 0 && (
               <span
@@ -471,7 +621,78 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
               </span>
             )}
           </div>
+          {pendingMedia.length > 0 ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {pendingMedia.map((m) => (
+                <div key={m.id} className="relative">
+                  {m.type === "image" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  ) : (
+                    <span className="rounded-lg border border-border px-2 py-1 text-[10px]">{m.fileName || m.type}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="absolute -right-1 -top-1 rounded-full bg-black/70 px-1 text-[10px] text-white"
+                    onClick={() => setPendingMedia((prev) => prev.filter((x) => x.id !== m.id))}
+                    aria-label="Remove attachment"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="flex items-end gap-2">
+            <button
+              type="button"
+              disabled={mediaBusy || pendingMedia.length >= 4}
+              className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 disabled:opacity-40"
+              aria-label="Attach media to comment"
+              onClick={() => {
+                const input = document.createElement("input")
+                input.type = "file"
+                input.accept = "image/*,video/*"
+                input.multiple = true
+                input.onchange = async () => {
+                  const files = Array.from(input.files || []).slice(0, 4 - pendingMedia.length)
+                  if (!files.length) return
+                  setMediaBusy(true)
+                  try {
+                    const { uploadDurableMedia } = await import("@/lib/media/upload-client")
+                    const next = [...pendingMedia]
+                    for (const file of files) {
+                      if (next.length >= 4) break
+                      const kind = file.type.startsWith("video/") ? "video" : "image"
+                      const up = await uploadDurableMedia(file, { category: file.type.startsWith("video/") ? "videos" : file.type.startsWith("image/") ? "images" : "documents", fileName: file.name })
+                      if (up.ok) {
+                        const rawUrl = "url" in up && typeof up.url === "string" ? up.url : ""
+                        const facade = toRelativeMediaFacadeUrl(rawUrl) || rawUrl
+                        if (!facade || facade.startsWith("blob:") || facade.startsWith("data:")) {
+                          addToast("Photo must finish uploading to the server before you can comment with it", "error")
+                          continue
+                        }
+                        next.push({
+                          id: `catt_${Date.now().toString(36)}_${next.length}`,
+                          type: kind as "image" | "video",
+                          url: facade,
+                          fileName: file.name,
+                        })
+                      } else {
+                        const fail = up as { ok: false; error?: string; userMessage?: string }
+                        addToast(fail.userMessage || fail.error || "Upload failed", "error")
+                      }
+                    }
+                    setPendingMedia(next)
+                  } finally {
+                    setMediaBusy(false)
+                  }
+                }
+                input.click()
+              }}
+            >
+              +
+            </button>
             <LazyImage
               src={profile.photos?.[0] || "/placeholder.svg?width=32&height=32"}
               alt={profile.displayName || "You"}
@@ -496,7 +717,7 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
             />
             <button
               type="button"
-              disabled={!text.trim() || busy}
+              disabled={(!text.trim() && !pendingMedia.length) || busy || mediaBusy}
               onClick={() => void handleSubmit()}
               className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition enabled:hover:bg-emerald-700 disabled:bg-gray-300"
               aria-label="Post comment"

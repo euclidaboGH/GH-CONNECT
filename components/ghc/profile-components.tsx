@@ -2,7 +2,8 @@
 
 import { useState, useEffect, type ReactNode } from "react"
 import { Camera,  Share2, MoreVertical, X, Edit2, Lock, HelpCircle, Eye, EyeOff, Heart, MessageCircle } from "lucide-react"
-import type { Post, Profile } from "@/lib/ghc-types"
+import type { Post, PostEditMedia, Profile } from "@/lib/ghc-types"
+import { INTERESTS } from "@/lib/ghc-data"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
 import { EnhancedPostCard } from "./enhanced-post-card"
@@ -355,7 +356,7 @@ export function ProfileHeaderActions({ onShare, onMoreClick, onEditCover }: { on
       <button
         type="button"
         onClick={onShare}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-gray-800 shadow-sm backdrop-blur transition hover:bg-white active:scale-95"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-foreground shadow-sm backdrop-blur transition hover:bg-card active:scale-95"
         title="Share profile"
         aria-label="Share profile"
       >
@@ -364,7 +365,7 @@ export function ProfileHeaderActions({ onShare, onMoreClick, onEditCover }: { on
       <button
         type="button"
         onClick={onMoreClick}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-gray-800 shadow-sm backdrop-blur transition hover:bg-white active:scale-95"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-foreground shadow-sm backdrop-blur transition hover:bg-card active:scale-95"
         title="More profile actions"
         aria-label="More profile actions"
       >
@@ -419,8 +420,8 @@ export function MoreOptionsMenu({
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-gray-900">{label}</span>
-          {hint ? <span className="block text-[11px] text-gray-500">{hint}</span> : null}
+          <span className="block font-semibold text-foreground">{label}</span>
+          {hint ? <span className="block text-[11px] text-muted-foreground">{hint}</span> : null}
         </span>
       </button>
     )
@@ -429,7 +430,7 @@ export function MoreOptionsMenu({
   return (
     <div className="fixed inset-0 z-50 flex items-end" role="dialog" aria-modal="true" aria-label="Profile actions">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative mx-auto w-full max-w-md space-y-0.5 rounded-t-3xl bg-white px-4 pb-6 pt-3 shadow-2xl sm:px-5">
+      <div className="relative mx-auto w-full max-w-md space-y-0.5 rounded-t-3xl bg-card px-4 pb-6 pt-3 shadow-2xl sm:px-5">
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-200" aria-hidden />
         <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wide text-stone-400">
           Profile
@@ -446,7 +447,7 @@ export function MoreOptionsMenu({
         <button
           type="button"
           onClick={onClose}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 font-semibold text-gray-900 transition hover:bg-gray-200 active:scale-[0.99]"
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 font-semibold text-foreground transition hover:bg-muted/80 active:scale-[0.99]"
         >
           <X size={18} />
           Close
@@ -472,8 +473,8 @@ export function ModeButtons({ selectedMode, onModeChange }: { selectedMode: stri
           onClick={() => onModeChange(mode.value)}
           className={`flex-1 h-12 rounded-full flex items-center justify-center text-2xl transition active:scale-90 ${
             selectedMode === mode.value
-              ? "bg-gradient-to-r from-pink-500 to-purple-500 shadow-lg shadow-pink-300/50"
-              : "bg-gray-100 hover:bg-gray-200"
+              ? "bg-gradient-to-r from-[var(--gh-green)] to-teal-600 shadow-lg shadow-emerald-300/40"
+              : "bg-muted hover:bg-muted/80"
           }`}
           title={mode.label}
         >
@@ -518,9 +519,9 @@ export function ResponsiveButton({
 }) {
   const baseStyles = "px-6 py-2.5 rounded-full font-bold text-sm transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
   const variantStyles = {
-    primary: "bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg",
-    secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200",
-    outline: "border-2 border-pink-500 text-pink-500 hover:bg-pink-50",
+    primary: "bg-gradient-to-r from-[var(--gh-green)] to-teal-600 text-white hover:shadow-lg",
+    secondary: "bg-muted text-foreground hover:bg-muted/80",
+    outline: "border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50",
   }
 
   return (
@@ -535,13 +536,13 @@ export function PreviewPublicProfileToggle({ isEnabled, onToggle }: { isEnabled:
   return (
     <button
       onClick={() => onToggle(!isEnabled)}
-      className="flex items-center gap-3 w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition active:scale-95"
+      className="flex items-center gap-3 w-full p-4 bg-muted/40 hover:bg-muted rounded-lg border border-border/70 transition active:scale-95"
     >
       <div className="flex-1 text-left">
-        <p className="font-semibold text-gray-900">Preview Public Profile</p>
-        <p className="text-sm text-gray-600">See how others view your profile</p>
+        <p className="font-semibold text-foreground">Preview Public Profile</p>
+        <p className="text-sm text-muted-foreground">See how others view your profile</p>
       </div>
-      {isEnabled ? <Eye size={20} className="text-purple-600" /> : <EyeOff size={20} className="text-gray-400" />}
+      {isEnabled ? <Eye size={20} className="text-emerald-700" /> : <EyeOff size={20} className="text-muted-foreground" />}
     </button>
   )
 }
@@ -570,7 +571,7 @@ export function OwnPostCard({
   onComment?: (postId: string) => void
   onShare?: (postId: string) => void
   onSave?: (postId: string) => void
-  onEdit?: (postId: string, content: string) => void
+  onEdit?: (postId: string, content: string, media?: PostEditMedia) => void
   onArchive?: (postId: string) => void
   onInsights?: (postId: string) => void
   onShowVisibilityReason?: (postId: string) => void
@@ -612,7 +613,7 @@ export function EditProfileModal({
   isOpen: boolean
   onClose: () => void
   profile: Profile
-  onSave: (updates: Partial<Profile>) => void
+  onSave: (updates: Partial<Profile>) => Promise<boolean | void> | boolean | void
   onChangeCover?: () => void
   onChangePhoto?: () => void
 }) {
@@ -632,6 +633,8 @@ export function EditProfileModal({
   )
   const [interests, setInterests] = useState(profile.interests)
   const [newInterest, setNewInterest] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Keep local form in sync when profile changes while modal is closed
   useEffect(() => {
@@ -659,33 +662,51 @@ export function EditProfileModal({
     }
   }
 
-  const handleSave = () => {
-    onSave({
-      displayName,
-      bio,
-      profession,
-      education,
-      hometown,
-      bornDate,
-      city,
-      country,
-      homeLocation: homeLoc,
-      locationPrivacy,
-      interests,
-    })
-    onClose()
+  const handleSave = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const saved = await onSave({
+        displayName,
+        bio,
+        profession,
+        education,
+        hometown,
+        bornDate,
+        city,
+        country,
+        homeLocation: homeLoc,
+        locationPrivacy,
+        interests,
+      })
+      // A failed persistence result keeps the editor open so the user can retry.
+      if (saved === false) return
+      onClose()
+    } catch {
+      setSaveError("Could not save your profile. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full bg-white rounded-t-3xl px-5 py-5 max-h-[85vh] overflow-y-auto space-y-4 sm:px-6">
+      <div className="fixed inset-0 bg-black/50" onClick={() => { if (!isSaving) onClose() }} aria-hidden="true" />
+      <div
+        className="relative w-full bg-card rounded-t-3xl px-5 py-5 max-h-[85vh] overflow-y-auto space-y-4 sm:px-6"
+        aria-busy={isSaving}
+        onKeyDownCapture={(event) => {
+          if (isSaving && event.key === "Escape") event.stopPropagation()
+        }}
+      >
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Edit Profile</h2>
+          <h2 className="text-xl font-bold text-foreground">Edit Profile</h2>
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+            onClick={() => { if (!isSaving) onClose() }}
+            disabled={isSaving}
+            className="rounded-full p-2 text-muted-foreground hover:bg-muted disabled:opacity-50"
             aria-label="Close"
           >
             <X size={20} />
@@ -721,12 +742,12 @@ export function EditProfileModal({
 
         {/* Name */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">Display Name</label>
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">Display Name</label>
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full rounded-lg border border-border/70 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             placeholder="Your name"
             maxLength={60}
           />
@@ -734,11 +755,11 @@ export function EditProfileModal({
 
         {/* Bio */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">Bio</label>
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">Bio</label>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full resize-none rounded-lg border border-border/70 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             rows={3}
             placeholder="Tell people about yourself..."
             maxLength={500}
@@ -746,32 +767,32 @@ export function EditProfileModal({
         </div>
 
         {/* About details — systematic like Facebook */}
-        <div className="space-y-3 rounded-2xl bg-gray-50 p-3.5 ring-1 ring-gray-100">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-400">About details</p>
+        <div className="space-y-3 rounded-[1.25rem] bg-muted/40 p-3.5 ring-1 ring-border/50">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">About details</p>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600">Work / Profession</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Work / Profession</label>
             <input
               type="text"
               value={profession}
               onChange={(e) => setProfession(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               placeholder="e.g. Software Engineer"
               maxLength={80}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600">Education</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Education</label>
             <input
               type="text"
               value={education}
               onChange={(e) => setEducation(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               placeholder="e.g. University of Lagos"
               maxLength={100}
             />
           </div>
-          <div className="rounded-xl border border-stone-100 bg-white p-2">
-            <p className="mb-2 text-xs font-semibold text-gray-600">Home location</p>
+          <div className="rounded-xl border border-stone-100 bg-card p-2">
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">Home location</p>
             <LocationPicker
               variant="light"
               idPrefix="edit-profile"
@@ -788,78 +809,121 @@ export function EditProfileModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600">Hometown</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Hometown</label>
             <input
               type="text"
               value={hometown}
               onChange={(e) => setHometown(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               placeholder="Where you're from"
               maxLength={80}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600">Birthday</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Birthday</label>
             <input
               type="text"
               value={bornDate}
               onChange={(e) => setBornDate(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               placeholder="e.g. 26 February 1995"
               maxLength={40}
             />
           </div>
         </div>
 
-        {/* Interests */}
+        {/* Interests — catalog chips + optional custom */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">Interests</label>
-          <div className="mb-3 flex gap-2">
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">Interests</label>
+          <p className="mb-2 text-[11px] text-muted-foreground">Tap to select (saved with your profile)</p>
+          <div className="mb-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-border/50 bg-muted/20 p-2">
+            {Object.entries(INTERESTS).map(([category, items]) => (
+              <div key={category}>
+                <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{category}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(items as string[]).map((interest) => {
+                    const selected = interests.includes(interest)
+                    return (
+                      <button
+                        key={interest}
+                        type="button"
+                        onClick={() =>
+                          setInterests(
+                            selected
+                              ? interests.filter((i) => i !== interest)
+                              : [...interests, interest].slice(0, 24),
+                          )
+                        }
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                          selected
+                            ? "bg-[var(--gh-green)] text-white"
+                            : "bg-card text-foreground ring-1 ring-border/60"
+                        }`}
+                      >
+                        {interest}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mb-2 flex gap-2">
             <input
               type="text"
               value={newInterest}
               onChange={(e) => setNewInterest(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleAddInterest()}
-              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Add an interest"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  handleAddInterest()
+                }
+              }}
+              className="flex-1 rounded-lg border border-border/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              placeholder="Custom interest"
               maxLength={30}
             />
             <button
               type="button"
               onClick={handleAddInterest}
-              className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white transition hover:bg-purple-700 active:scale-90"
+              className="rounded-lg bg-[var(--gh-green)] px-3 py-2 text-sm font-semibold text-white"
             >
               Add
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {interests.map((interest) => (
-              <button
-                key={interest}
-                type="button"
-                onClick={() => setInterests(interests.filter((i) => i !== interest))}
-                className="flex items-center gap-1 rounded-full bg-pink-100 px-3 py-1 text-sm font-semibold text-pink-700 transition hover:bg-pink-200 active:scale-90"
-              >
-                {interest}
-                <X size={14} />
-              </button>
-            ))}
-          </div>
+          {interests.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {interests.map((interest) => (
+                <button
+                  key={interest}
+                  type="button"
+                  onClick={() => setInterests(interests.filter((i) => i !== interest))}
+                  className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-200"
+                >
+                  {interest}
+                  <X size={12} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">No interests selected yet</p>
+          )}
         </div>
-
-        {/* Buttons */}
+{/* Buttons */}
         <div className="flex gap-3 pt-2 pb-2">
           <button
             type="button"
-            onClick={handleSave}
-            className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-pink-500 py-3 font-bold text-white transition active:scale-95"
+            onClick={() => { void handleSave() }}
+            disabled={isSaving}
+            className="flex-1 rounded-xl bg-gradient-to-r from-[var(--gh-green)] to-teal-600 py-3 font-bold text-white transition active:scale-95 disabled:cursor-wait disabled:opacity-60"
           >
-            Save Changes
+            {isSaving ? "Saving…" : "Save Changes"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl bg-gray-100 py-3 font-bold text-gray-900 transition hover:bg-gray-200 active:scale-95"
+            disabled={isSaving}
+            className="flex-1 rounded-xl bg-muted py-3 font-bold text-foreground transition hover:bg-muted/80 active:scale-95 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -879,8 +943,8 @@ export function AchievementsSection({ verified = false, completionPercentage = 7
   ]
 
   return (
-    <div className="px-4 py-4 border-t border-gray-200">
-      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Achievements</p>
+    <div className="px-4 py-4 border-t border-border/70">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Achievements</p>
       <div className="grid grid-cols-4 gap-2">
         {achievements.map((achievement, idx) => (
           <div
@@ -888,12 +952,12 @@ export function AchievementsSection({ verified = false, completionPercentage = 7
             className={`p-3 rounded-lg text-center transition ${
               achievement.unlocked
                 ? "bg-yellow-50 border border-yellow-300"
-                : "bg-gray-100 border border-gray-300 opacity-50"
+                : "bg-muted border border-border/70 opacity-50"
             }`}
             title={achievement.description}
           >
             <div className="text-2xl mb-1">{achievement.icon}</div>
-            <p className="text-xs font-bold text-gray-900">{achievement.label}</p>
+            <p className="text-xs font-bold text-foreground">{achievement.label}</p>
           </div>
         ))}
       </div>
@@ -914,18 +978,18 @@ export function SocialLinksSection({
   const platforms = ["instagram", "twitter", "linkedin", "facebook"]
   
   return (
-    <div className="px-4 py-4 border-t border-gray-200">
-      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Social Links</p>
+    <div className="px-4 py-4 border-t border-border/70">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Social Links</p>
       <div className="space-y-2">
         {platforms.map((platform) => (
-          <div key={platform} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+          <div key={platform} className="flex items-center gap-2 p-2 bg-muted/40 rounded-lg">
             <span className="text-xl">
               {platform === "instagram" && "📷"}
               {platform === "twitter" && "🐦"}
               {platform === "linkedin" && "💼"}
               {platform === "facebook" && "👤"}
             </span>
-            <span className="text-sm font-semibold text-gray-700 capitalize flex-1">{platform}</span>
+            <span className="text-sm font-semibold text-foreground capitalize flex-1">{platform}</span>
             {socialLinks?.[platform] ? (
               <button
                 onClick={() => onRemoveLink?.(platform)}
@@ -954,21 +1018,21 @@ export function ActivityHistorySection({ activities = [] }: { activities?: Array
   
   if (recentActivities.length === 0) {
     return (
-      <div className="px-4 py-4 border-t border-gray-200">
-        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Recent Activity</p>
-        <div className="text-center py-4 text-gray-500 text-sm">No recent activity</div>
+      <div className="px-4 py-4 border-t border-border/70">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Recent Activity</p>
+        <div className="text-center py-4 text-muted-foreground text-sm">No recent activity</div>
       </div>
     )
   }
 
   return (
-    <div className="px-4 py-4 border-t border-gray-200">
-      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Recent Activity</p>
+    <div className="px-4 py-4 border-t border-border/70">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Recent Activity</p>
       <div className="space-y-2">
         {recentActivities.map((activity, idx) => (
-          <div key={idx} className="text-sm p-2 bg-gray-50 rounded-lg">
-            <p className="font-semibold text-gray-900">{activity.description}</p>
-            <p className="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleDateString()}</p>
+          <div key={idx} className="text-sm p-2 bg-muted/40 rounded-lg">
+            <p className="font-semibold text-foreground">{activity.description}</p>
+            <p className="text-xs text-muted-foreground">{new Date(activity.timestamp).toLocaleDateString()}</p>
           </div>
         ))}
       </div>
@@ -985,11 +1049,11 @@ export function PrivacyControlsSection({
   onVisibilityChange?: (visibility: string) => void
 }) {
   return (
-    <div className="px-4 py-4 border-t border-gray-200">
-      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Privacy</p>
+    <div className="px-4 py-4 border-t border-border/70">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Privacy</p>
       <div className="space-y-2">
         {(["everyone", "matches-only", "hidden"] as const).map((visibility) => (
-          <label key={visibility} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+          <label key={visibility} className="flex items-center gap-3 p-2 bg-muted/40 rounded-lg cursor-pointer hover:bg-muted">
             <input
               type="radio"
               name="visibility"
@@ -998,7 +1062,7 @@ export function PrivacyControlsSection({
               onChange={() => onVisibilityChange?.(visibility)}
               className="w-4 h-4"
             />
-            <span className="text-sm font-semibold text-gray-900 capitalize">{visibility.replace("-", " ")}</span>
+            <span className="text-sm font-semibold text-foreground capitalize">{visibility.replace("-", " ")}</span>
           </label>
         ))}
       </div>
@@ -1009,14 +1073,14 @@ export function PrivacyControlsSection({
 // Saved Posts Section
 export function SavedPostsSection({ savedCount = 0, onViewSaved }: { savedCount?: number; onViewSaved?: () => void }) {
   return (
-    <div className="px-4 py-4 border-t border-gray-200">
+    <div className="px-4 py-4 border-t border-border/70">
       <button
         onClick={onViewSaved}
-        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition active:scale-95"
+        className="w-full flex items-center justify-between p-4 bg-muted/40 hover:bg-muted rounded-lg border border-border/70 transition active:scale-95"
       >
         <div className="text-left">
-          <p className="font-semibold text-gray-900">Saved Posts</p>
-          <p className="text-sm text-gray-600">{savedCount} posts saved</p>
+          <p className="font-semibold text-foreground">Saved Posts</p>
+          <p className="text-sm text-muted-foreground">{savedCount} posts saved</p>
         </div>
         <span className="text-2xl">💾</span>
       </button>
@@ -1064,13 +1128,13 @@ export function ExpandableBio({ bio = "" }: { bio?: string }) {
   
   return (
     <div>
-      <p className={`text-sm leading-6 text-gray-700 ${!expanded ? "line-clamp-3" : ""}`}>
+      <p className={`text-sm leading-6 text-foreground/90 ${!expanded ? "line-clamp-3" : ""}`}>
         {displayBio}
       </p>
       {isLong && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-2 rounded-full px-2 py-1 text-xs font-bold text-purple-600 transition hover:bg-purple-50 hover:text-purple-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+          className="mt-2 rounded-full px-2 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-expanded={expanded}
         >
           {expanded ? "See less" : "See more"}
@@ -1085,13 +1149,13 @@ export function ProfileStatsRow({ postsCount = 0, followingCount = 0 }: { postsC
   return (
     <div className="flex gap-4 mb-4">
       <div className="flex-1 flex items-center gap-2">
-        <span className="text-sm text-gray-600">Posts</span>
-        <span className="font-bold text-gray-900">{postsCount}</span>
+        <span className="text-sm text-muted-foreground">Posts</span>
+        <span className="font-bold text-foreground">{postsCount}</span>
       </div>
       <div className="w-px bg-gray-200"></div>
       <div className="flex-1 flex items-center gap-2">
-        <span className="text-sm text-gray-600">Following</span>
-        <span className="font-bold text-gray-900">{followingCount}</span>
+        <span className="text-sm text-muted-foreground">Following</span>
+        <span className="font-bold text-foreground">{followingCount}</span>
       </div>
     </div>
   )

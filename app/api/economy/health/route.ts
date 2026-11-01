@@ -4,6 +4,7 @@
  */
 import { jsonOk } from "@/lib/server/economy/http"
 import { hasPrivilegedDatabase, readGhcServerEnv, requiredEnvChecklist } from "@/lib/server/economy/env"
+import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
 
 export async function GET() {
   const env = readGhcServerEnv()
@@ -34,6 +35,7 @@ export async function GET() {
     membershipEntitlementsAssumedReady: false,
     marketplaceAssumedReady: false,
     schemaProbe: "not_performed",
+    testnetUnlock: testnetUnlockSnapshot(),
     realtimeConfigured: process.env.GHC_REALTIME_CONFIGURED === "1",
     authConfigured,
     piAuthReady,
@@ -59,12 +61,12 @@ export async function GET() {
       "ghc_resolve_public_id",
     ],
     migrations: [
-      "supabase/migrations/20260821_ghc_economy_ledger.sql",
+      "supabase/migrations/20261022010001_ghc_economy_ledger.sql",
       "supabase/migrations/20260822_ghc_public_identities.sql",
       "supabase/migrations/20260822_ghc_notification_events.sql",
       "supabase/migrations/20260822_ghc_economy_events_rls.sql",
       "supabase/migrations/20260822_ghc_transfer_request_rpcs.sql",
-      "supabase/migrations/20260822_ghc_account_and_claim.sql",
+      "supabase/migrations/20261022010007_ghc_account_and_claim.sql",
       "supabase/migrations/20260822_ghc_rls_tighten_events.sql",
     ],
     note: databaseConfigured

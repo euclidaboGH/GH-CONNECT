@@ -16,6 +16,17 @@ export type NotificationType =
   | "reward"
   | "payment"
   | "mention"
+  | "post_like"
+  | "post_comment"
+  | "connection_request"
+  | "curation"
+  | "upvote"
+  | "downvote"
+  | "comment_reply"
+  | "marketplace_listing"
+  | "marketplace_order"
+  | "marketplace_comment"
+  | "marketplace_reaction"
 
 export interface Notification {
   id: string
@@ -28,8 +39,10 @@ export interface Notification {
   data?: Record<string, any>
 }
 
+export const NOTIFICATIONS_CHANGED_EVENT = "ghc:notifications-changed" as const
+
 const NOTIFICATIONS_KEY = "ghc_notifications"
-const MAX_NOTIFICATIONS = 100
+const MAX_NOTIFICATIONS = 300
 
 export const notificationSystem = {
   // Add notification
@@ -78,6 +91,10 @@ export const notificationSystem = {
       const trimmed = notifs.slice(-MAX_NOTIFICATIONS)
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(trimmed))
 
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "add", type } }))
+      } catch { /* */ }
+
       // Try to show browser notification if allowed
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification(title, {
@@ -124,8 +141,13 @@ export const notificationSystem = {
     const set = new Set([...blockedUserIds, ...mutedUserIds])
     if (!set.size) return all
     return all.filter((n) => {
-      const from = (n.data?.fromUserId || n.data?.userId || n.data?.actorId) as string | undefined
-      if (from && set.has(from)) return false
+      const from = (
+        n.data?.fromUserId ||
+        n.data?.userId ||
+        n.data?.actorId ||
+        n.data?.actorUserId
+      ) as string | undefined
+      if (from && set.has(String(from))) return false
       return true
     })
   },
@@ -150,6 +172,9 @@ export const notificationSystem = {
       const updated = notifs.map((n) => (n.id === notifId ? { ...n, read: true } : n))
 
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read" } }))
+      } catch { /* */ }
     } catch (e) {
       console.warn("[v0] Failed to mark as read:", e)
     }
@@ -165,6 +190,9 @@ export const notificationSystem = {
       const updated = notifs.map((n) => ({ ...n, read: true }))
 
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read-all" } }))
+      } catch { /* */ }
     } catch (e) {
       console.warn("[v0] Failed to mark all as read:", e)
     }
@@ -174,14 +202,33 @@ export const notificationSystem = {
   deleteNotification: (notifId: string): void => {
     try {
       const stored = localStorage.getItem(NOTIFICATIONS_KEY)
-      if (!stored) return
-
-      const notifs: Notification[] = JSON.parse(stored)
+      const notifs: Notification[] = stored ? JSON.parse(stored) : []
       const updated = notifs.filter((n) => n.id !== notifId)
-
       localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        const delKey = "ghc_notifications_deleted"
+        const deleted: string[] = JSON.parse(localStorage.getItem(delKey) || "[]")
+        if (notifId && !deleted.includes(notifId)) {
+          deleted.push(notifId)
+          localStorage.setItem(delKey, JSON.stringify(deleted.slice(-500)))
+        }
+      } catch { /* */ }
+      try {
+        window.dispatchEvent(
+          new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "delete", id: notifId } }),
+        )
+      } catch { /* */ }
     } catch (e) {
-      console.warn("[v0] Failed to delete notification:", e)
+      console.warn("[ghc] Failed to delete notification:", e)
+    }
+  },
+
+  isDeleted: (notifId: string): boolean => {
+    try {
+      const deleted: string[] = JSON.parse(localStorage.getItem("ghc_notifications_deleted") || "[]")
+      return deleted.includes(notifId)
+    } catch {
+      return false
     }
   },
 
@@ -196,4 +243,82 @@ export const notificationSystem = {
     }
     return false
   },
+}
+
+
+/** Phase 5 — in-app reward notification (no balance invention). */
+export function notifyRewardClaimed(input: {
+  title?: string
+  message: string
+  amountLabel?: string
+}): void {
+  notificationSystem.addNotification(
+    "reward",
+    input.title || "Daily reward",
+    input.message,
+    "🎁",
+    { kind: "daily_claim", amountLabel: input.amountLabel },
+  )
+}
+
+/** Local mirror when you receive engagement on your content (author-only). */
+export function notifyContentEngagement(input: {
+  kind: "comment" | "like" | "curation" | "upvote" | "downvote" | "comment_reply"
+  title: string
+  message: string
+  postId?: string
+  fromUserId?: string
+  actorId?: string
+}): void {
+  const typeMap: Record<string, NotificationType> = {
+    comment: "post_comment",
+    like: "post_like",
+    curation: "curation",
+    upvote: "upvote",
+    downvote: "downvote",
+    comment_reply: "comment_reply",
+  }
+  const type = typeMap[input.kind] || "system"
+  const icon =
+    input.kind === "upvote" ? "⬆️" :
+    input.kind === "downvote" ? "⬇️" :
+    input.kind === "like" ? "❤️" :
+    input.kind === "comment" || input.kind === "comment_reply" ? "💬" : "🔔"
+  notificationSystem.addNotification(type, input.title, input.message, icon, {
+    postId: input.postId,
+    fromUserId: input.fromUserId,
+    actorId: input.actorId || input.fromUserId,
+    kind: input.kind,
+    category: "social",
+    open: "feed",
+  })
+}
+
+export function notifyMarketplaceEvent(input: {
+  kind: "listing" | "order" | "comment" | "reaction"
+  title: string
+  message: string
+  listingId?: string
+}): void {
+  const type =
+    input.kind === "listing" ? "marketplace_listing" :
+    input.kind === "order" ? "marketplace_order" :
+    input.kind === "comment" ? "marketplace_comment" : "marketplace_reaction"
+  notificationSystem.addNotification(type, input.title, input.message, "🛒", {
+    listingId: input.listingId,
+    kind: `marketplace_${input.kind}`,
+    category: "marketplace",
+    open: "marketplace",
+  })
+}
+
+/** Soft-request browser notification permission once (fail-soft). */
+export function requestBrowserNotificationPermission(): void {
+  if (typeof window === "undefined" || !("Notification" in window)) return
+  if (Notification.permission !== "default") return
+  try {
+    void Notification.requestPermission()
+  } catch {
+    /* */
+  }
 }

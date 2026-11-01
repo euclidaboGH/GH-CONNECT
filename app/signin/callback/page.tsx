@@ -31,6 +31,7 @@ export default function PiSignInCallbackPage() {
       }
 
       try {
+        try { window.localStorage.removeItem("gh_signed_out") } catch { /* */ }
         const res = await fetch("/api/auth/pi", {
           method: "POST",
           credentials: "include",

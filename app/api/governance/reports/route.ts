@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,9 +25,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}))
-    const report = body?.report
-    if (!report?.communityId || !report?.id) {
+    const parsed = await readBoundedJson(req, 12 * 1024)
+    if (!parsed.ok) {
+      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+      return NextResponse.json({ ok: false, error: parsed.error }, { status })
+    }
+    const candidate = parsed.value.report
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return NextResponse.json({ ok: false, error: "invalid_report" }, { status: 400 })
+    }
+    const report = candidate as Record<string, unknown>
+    const communityId = typeof report.communityId === "string" ? report.communityId.trim() : ""
+    const reportId = typeof report.id === "string" ? report.id.trim() : ""
+    if (!communityId || communityId.length > 128 || !reportId || reportId.length > 160) {
       return NextResponse.json({ ok: false, error: "invalid_report" }, { status: 400 })
     }
 
@@ -41,7 +52,7 @@ export async function POST(req: NextRequest) {
       message: dbConfigured
         ? "Server received report. Persist after governance migration is applied."
         : "No DB credentials — not durable.",
-      reportId: report.id,
+      reportId,
     })
   } catch {
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 })

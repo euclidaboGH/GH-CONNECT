@@ -6,13 +6,16 @@ import Script from "next/script"
 import { AppWrapper } from "@/components/app-wrapper"
 import "./globals.css"
 
+const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
+
 export const metadata: Metadata = {
+  ...(appUrl ? { metadataBase: new URL(appUrl.startsWith("http") ? appUrl : `https://${appUrl}`) } : {}),
   title: {
     default: "GreenHaven",
     template: "%s · GreenHaven",
   },
   description:
-    "GreenHaven — global social, matching, community and GHC utility platform on Pi Network",
+    "GreenHaven is a Pi Browser social app: profiles, communities, messaging, and marketplace utility with π payments. Internal GHC rewards are optional and separate from π.",
   applicationName: "GreenHaven",
   authors: [{ name: "GreenHaven" }],
   generator: "GreenHaven",
@@ -37,7 +40,7 @@ export const metadata: Metadata = {
     siteName: "GreenHaven",
     title: "GreenHaven",
     description:
-      "Connect worldwide for friendships, dating, networking, and meaningful relationships on Pi Network",
+      "Social, communities, messaging and marketplace for Pioneers — π payments in-app, built for Pi Browser.",
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -47,8 +50,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#059669" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },

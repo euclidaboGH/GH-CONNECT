@@ -57,6 +57,22 @@ function now() {
   return Date.now()
 }
 
+
+/** Profile media must be durable https (or empty). Reject blob:/data: so other devices never see dead URLs. */
+function isPersistableMediaUrl(url: string): boolean {
+  const u = String(url || "").trim()
+  if (!u) return false
+  if (u.startsWith("blob:") || u.startsWith("data:")) return false
+  if (u.startsWith("https://") || u.startsWith("http://")) return true
+  // Allow relative public paths already hosted by the app
+  if (u.startsWith("/")) return true
+  return false
+}
+
+function filterPersistableUrls(urls: string[], max: number): string[] {
+  return urls.filter(isPersistableMediaUrl).slice(0, max)
+}
+
 function asStringArray(v: unknown, max: number): string[] {
   if (!Array.isArray(v)) return []
   return v
@@ -77,7 +93,8 @@ function clipStr(v: unknown, max: number): string | null {
 export function sanitizeProfileInput(
   ghUserId: string,
   input: Record<string, unknown>,
-  existing?: ServerProfileRecord | null
+  existing?: ServerProfileRecord | null,
+  options: { allowOnboardedChange?: boolean } = {}
 ): ServerProfileRecord {
   const interests = asStringArray(input.interests, MAX_INTERESTS)
   const connectionIntents = asStringArray(
@@ -85,7 +102,7 @@ export function sanitizeProfileInput(
     20
   )
   const skills = asStringArray(input.skills, 30)
-  const photos = asStringArray(input.photos, MAX_PHOTOS)
+  const photos = filterPersistableUrls(asStringArray(input.photos, MAX_PHOTOS), MAX_PHOTOS)
 
   let age: number | null = null
   if (typeof input.age === "number" && Number.isFinite(input.age)) {
@@ -95,11 +112,11 @@ export function sanitizeProfileInput(
     age = existing.age
   }
 
-  const onboarded =
-    input.onboarded === true ||
-    input.onboarded === false
-      ? Boolean(input.onboarded)
-      : existing?.onboarded ?? false
+  // Onboarding completion is an identity lifecycle decision, not a profile
+  // field. Public profile PATCH requests cannot set or clear it.
+  const onboarded = options.allowOnboardedChange && typeof input.onboarded === "boolean"
+    ? input.onboarded
+    : existing?.onboarded ?? false
 
   // Never accept client balance / tier
   const payloadIn =
@@ -115,6 +132,17 @@ export function sanitizeProfileInput(
     "entitlement",
     "pendingBalance",
     "lifetimeEarned",
+    // Canonical identity/profile fields must never be shadowed through profilePayload.
+    "id",
+    "userId",
+    "ghUserId",
+    "displayName",
+    "username",
+    "photos",
+    "coverPhoto",
+    "onboarded",
+    "createdAt",
+    "updatedAt",
   ])
   const profilePayload: Record<string, unknown> = {
     ...(existing?.profilePayload || {}),
@@ -131,7 +159,8 @@ export function sanitizeProfileInput(
       return sanitizeProfileInput(
         ghUserId,
         { ...input, profilePayload: existing?.profilePayload || {} },
-        existing
+        existing,
+        options
       )
     }
   } catch {
@@ -174,9 +203,17 @@ export function sanitizeProfileInput(
     coverPhoto:
       input.coverPhoto === null || input.cover_photo === null
         ? null
-        : clipStr(input.coverPhoto ?? input.cover_photo, 2000) ??
-          existing?.coverPhoto ??
-          null,
+        : (() => {
+            const raw = clipStr(input.coverPhoto ?? input.cover_photo, 2000)
+            if (raw && isPersistableMediaUrl(raw)) return raw
+            if (raw && (raw.startsWith("blob:") || raw.startsWith("data:"))) {
+              // Drop non-durable; keep existing durable cover if any
+              return existing?.coverPhoto && isPersistableMediaUrl(existing.coverPhoto)
+                ? existing.coverPhoto
+                : null
+            }
+            return existing?.coverPhoto ?? null
+          })(),
     profilePayload,
     onboarded,
     schemaVersion: 1,
@@ -326,12 +363,13 @@ export async function getServerProfile(
  */
 export async function upsertServerProfile(
   ghUserId: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  options: { allowOnboardedChange?: boolean } = {}
 ): Promise<ServerProfileRecord | null> {
   const key = String(ghUserId || "").trim()
   if (!key) return null
   const existing = await getServerProfile(key)
-  const next = sanitizeProfileInput(key, input, existing)
+  const next = sanitizeProfileInput(key, input, existing, options)
 
   if (dbConfigured()) {
     const saved = await dbUpsert(next)
@@ -357,6 +395,9 @@ export function serverProfileToClientPartial(
   rec: ServerProfileRecord
 ): Record<string, unknown> {
   return {
+    // Extensible presentation fields come first; canonical server-owned fields below
+    // intentionally win if an older payload contains colliding keys.
+    ...rec.profilePayload,
     id: rec.ghUserId,
     displayName: rec.displayName || "",
     username: rec.username,
@@ -377,7 +418,6 @@ export function serverProfileToClientPartial(
     coverPhoto: rec.coverPhoto,
     onboarded: rec.onboarded,
     createdAt: rec.createdAt,
-    ...rec.profilePayload,
   }
 }
 

@@ -30,6 +30,11 @@ type HealthBody = {
 export function FoundationStatusCard() {
   const [data, setData] = useState<HealthBody | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [mediaHealth, setMediaHealth] = useState<{
+    ok?: boolean
+    bucketReachable?: boolean | null
+    error?: string | null
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -45,6 +50,24 @@ export function FoundationStatusCard() {
         }
       } catch {
         if (!cancelled) setError("Could not reach /api/health")
+      }
+      try {
+        const mres = await fetch("/api/media/health", { cache: "no-store", credentials: "include" })
+        const mjson = (await mres.json().catch(() => ({}))) as {
+          ok?: boolean
+          bucketReachable?: boolean | null
+          bucketError?: string | null
+          error?: string
+        }
+        if (!cancelled) {
+          setMediaHealth({
+            ok: mjson.ok !== false && mres.ok,
+            bucketReachable: mjson.bucketReachable,
+            error: mjson.bucketError || mjson.error || null,
+          })
+        }
+      } catch {
+        if (!cancelled) setMediaHealth({ ok: false, bucketReachable: null, error: "unreachable" })
       }
     })()
     return () => {
@@ -99,6 +122,19 @@ export function FoundationStatusCard() {
         </span>
         {data.environment?.isProduction ? " · production" : " · non-production"}
       </p>
+      {mediaHealth ? (
+        <p className="mt-1.5 opacity-90">
+          Media storage:{" "}
+          <span className="font-semibold">
+            {mediaHealth.ok && mediaHealth.bucketReachable !== false
+              ? "reachable"
+              : mediaHealth.bucketReachable === false
+                ? "bucket issue"
+                : "check failed"}
+          </span>
+          {mediaHealth.error ? ` · ${mediaHealth.error}` : ""}
+        </p>
+      ) : null}
       {blockers.length > 0 ? (
         <ul className="mt-2 list-disc space-y-1 pl-4">
           {blockers.slice(0, 4).map((b) => (

@@ -76,6 +76,8 @@ export interface MarketplaceOrder {
   notes?: string
   /** Payment is separate — never auto-complete on payment request alone */
   paymentStatus?: "none" | "requested" | "pending" | "held" | "captured" | "verified" | "refunded"
+  /** Durable seller delivery state; buyer confirmation is gated on delivered/service_active. */
+  deliveryStatus?: "not_started" | "processing" | "shipped" | "delivered" | "service_active" | "completed"
   /** Server order id when mirrored to /api/marketplace/orders */
   serverOrderId?: string
   paymentMethod?: "ghc" | "pi" | "none"
@@ -549,6 +551,7 @@ export function createMarketplaceDomain(deps: {
               quantity: local.quantity,
               unitPrice: local.unitPrice,
               currency: local.currency,
+              idempotencyKey: `market-order-${local.id}`,
             }),
           })
           const created = await createRes.json().catch(() => ({}))

@@ -15,6 +15,8 @@ import {
   type AttentionEventType,
 } from "@/lib/social/attention"
 
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -49,19 +51,9 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
 
-  let body: {
-    eventType?: string
-    dwellMs?: number
-    // Explicitly ignore any client identity fields
-    userId?: string
-    actorId?: string
-    viewerId?: string
-  } = {}
-  try {
-    body = (await request.json()) as typeof body
-  } catch {
-    body = {}
-  }
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const body = parsedBody.value as { eventType?: string; dwellMs?: number; userId?: string; actorId?: string; viewerId?: string }
 
   if (!isAttentionEventType(body.eventType)) {
     return NextResponse.json({ ok: false, error: "INVALID_EVENT_TYPE" }, { status: 400 })

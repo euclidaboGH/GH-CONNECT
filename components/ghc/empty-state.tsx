@@ -14,6 +14,7 @@ import {
   Heart,
   Inbox,
   Search,
+  Package,
   type LucideIcon,
 } from "lucide-react"
 
@@ -29,6 +30,7 @@ export type EmptyVariant =
   | "posts"
   | "wallet"
   | "notifications"
+  | "marketplace"
   | "generic"
 
 const PRESETS: Record<
@@ -82,7 +84,7 @@ const PRESETS: Record<
   transactions: {
     icon: Inbox,
     title: "No transactions yet",
-    description: "Your GHC activity will appear here when you earn, send, or receive.",
+    description: "Your GHC activity will appear here when you receive, send, or use GHC.",
     gradient: "from-emerald-600 to-teal-500",
   },
   posts: {
@@ -94,14 +96,20 @@ const PRESETS: Record<
   wallet: {
     icon: Inbox,
     title: "Wallet is ready",
-    description: "Earn GHC from rewards or receive from friends. Activity shows up here.",
+    description: "Receive or use GHC when available. Your account activity appears here.",
     gradient: "from-emerald-700 to-teal-600",
   },
   notifications: {
     icon: Inbox,
     title: "You're all caught up",
-    description: "Likes, messages, rewards, and wallet alerts will land here.",
+    description: "Likes, messages, account activity, and other updates will appear here.",
     gradient: "from-slate-500 to-slate-600",
+  },
+  marketplace: {
+    icon: Package,
+    title: "Marketplace is open",
+    description: "Browse listings from real sellers, or publish your own with a clear delivery mode.",
+    gradient: "from-emerald-600 to-teal-600",
   },
   generic: {
     icon: Inbox,
@@ -133,36 +141,39 @@ export function EmptyState({
 
   return (
     <div
-      className={`flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
+      className={`gh-empty-state flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
       role="status"
+      aria-live="polite"
     >
       <div
-        className={`relative mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-gradient-to-br ${preset.gradient} text-white shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-500/10 dark:shadow-none`}
+        className={`gh-empty-state-icon relative mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white shadow-md shadow-black/10`}
       >
-        <Icon size={30} strokeWidth={2} aria-hidden />
+        <Icon size={28} strokeWidth={2} aria-hidden />
       </div>
-      <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+      <h3 className="gh-type-title text-[17px] tracking-tight">
         {title || preset.title}
       </h3>
-      <p className="mt-2 max-w-[17rem] text-[13px] leading-relaxed text-muted-foreground">
+      <p className="gh-type-body mt-2 max-w-[17rem] text-muted-foreground">
         {description || preset.description}
       </p>
       {(action || secondaryAction) && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
           {action && (
             <button
+              aria-label={action.label}
               type="button"
               onClick={action.onClick}
-              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.97]"
+              className="gh-btn gh-btn-primary min-h-11 rounded-full px-6 text-[13px] font-bold"
             >
               {action.label}
             </button>
           )}
           {secondaryAction && (
             <button
+              aria-label={secondaryAction.label}
               type="button"
               onClick={secondaryAction.onClick}
-              className="rounded-full border border-border bg-card px-6 py-2.5 text-sm font-bold text-foreground transition hover:bg-muted active:scale-[0.97]"
+              className="gh-btn gh-btn-secondary min-h-11 rounded-full px-6 text-[13px] font-semibold"
             >
               {secondaryAction.label}
             </button>

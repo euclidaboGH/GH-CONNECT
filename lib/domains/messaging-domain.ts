@@ -39,12 +39,8 @@ import {
   isDurableMessagingEnabled,
   shouldAttemptDurableMessaging,
 } from "../messaging/durable-flag"
-import { apiSendMessage } from "../messaging/server-messaging-sync"
-import {
-  canMessageUser,
-  buildPermissionContext,
-  type PermissionContext,
-} from "../permission-engine"
+import { apiSendMessageWithRetry } from "../messaging/server-messaging-sync"
+import type { PermissionContext } from "../permission-engine"
 import { canCommunityAction, normalizeRole } from "./community-domain"
 
 /** Canonical product conversation types */
@@ -122,9 +118,17 @@ export function createMessagingDomain(deps: {
 
   function kindOf(c: Conversation | undefined): ConversationKind {
     if (!c) return "private"
-    if (c.conversationType === "group") {
-      const meta = (c as any).communityId || (c as any).kind
-      if (meta === "community" || (c as any).communityId) return "community"
+    const anyC = c as any
+    const explicitCommunity =
+      anyC.kind === "community" ||
+      anyC.isCommunity === true ||
+      Boolean(anyC.communityId) ||
+      String(c.id || "").startsWith("comm_") ||
+      String(c.id || "").startsWith("community")
+    if (c.conversationType === "group" || explicitCommunity) {
+      if (explicitCommunity) return "community"
+      // Product communities are often stored as conversationType=group with a name
+      if (anyC.groupName || anyC.category || anyC.boardPosts) return "community"
       return "group"
     }
     return "private"
@@ -159,37 +163,53 @@ export function createMessagingDomain(deps: {
       if (!other) return { allowed: false, reason: "Missing recipient" }
       if (deps.isBlocked(other)) return { allowed: false, reason: "You can't message this user" }
 
-      const pctx =
-        deps.getPermissionContext?.() ||
-        buildPermissionContext({
-          currentUserId: actorId,
-          blockedUsers: [],
-        })
-      if (!canMessageUser({ ...pctx, blockedByMe: pctx.blockedByMe }, other)) {
-        return { allowed: false, reason: "Messaging not allowed by privacy settings" }
-      }
+      // `who can message you` is the recipient's preference, not the sender's.
+      // The durable server re-checks the recipient's saved preference on every send.
       return { allowed: true }
     }
 
-    // PRIVATE_GROUP / COMMUNITY — membership required
-    const members: string[] = (conv as any).members || []
-    const isMember =
-      deps.isMember?.(input.conversationId, actorId) ??
-      (members.includes(actorId) ||
-        conv.createdBy === actorId ||
-        Boolean((conv as any).groupRoles?.[actorId]))
+    // PRIVATE_GROUP / COMMUNITY — prefer local membership when known.
+    // When the members list is empty/unknown (common after create before hydrate),
+    // allow the send through so the durable server can auto-heal membership.
+    const members: string[] = Array.isArray((conv as any).members) ? (conv as any).members : []
+    const rolesMap = (conv as any).groupRoles || {}
+    const listedAsMember =
+      members.includes(actorId) ||
+      conv.createdBy === actorId ||
+      Boolean(rolesMap[actorId]) ||
+      Boolean(deps.isMember?.(input.conversationId, actorId))
+    const membershipUnknown = members.length === 0 && !conv.createdBy && !rolesMap[actorId]
 
-    if (!isMember && members.length > 0) {
-      return { allowed: false, reason: "You are not a member of this conversation" }
+    // Groups & communities: never hard-block solely on incomplete client member lists.
+    // Durable messaging API is authoritative and auto-heals membership on send.
+    if (type === "PRIVATE_GROUP" || type === "COMMUNITY") {
+      if (!listedAsMember && !membershipUnknown && conv.createdBy && conv.createdBy !== actorId) {
+        // Positive non-membership only when we have a non-empty members list that excludes actor
+        if (members.length > 0 && !members.includes(actorId) && !rolesMap[actorId]) {
+          // Still allow community chats through — server will FORBIDDEN if truly not a member
+          if (type === "PRIVATE_GROUP") {
+            return { allowed: false, reason: "You are not a member of this group" }
+          }
+        }
+      }
     }
+    const isMember =
+      listedAsMember ||
+      membershipUnknown ||
+      type === "COMMUNITY" ||
+      conv.createdBy === actorId ||
+      members.length === 0
 
     if (type === "COMMUNITY") {
-      const roles = (conv as any).groupRoles || {}
       const role = normalizeRole(
-        roles[actorId] || (conv.createdBy === actorId ? "owner" : "member")
+        rolesMap[actorId] ||
+          (conv.createdBy === actorId ? "owner" : isMember ? "member" : "member")
       )
       if (!canCommunityAction(role, "chat")) {
-        return { allowed: false, reason: "Community chat not permitted for your role" }
+        // Default members can chat — only block explicit restricted roles
+        if (role !== "member" && role !== "owner" && role !== "admin" && role !== "moderator") {
+          return { allowed: false, reason: "Community chat not permitted for your role" }
+        }
       }
     }
 
@@ -216,6 +236,7 @@ export function createMessagingDomain(deps: {
       text: string
       recipientId?: string
       replyToId?: string
+      sharedPostId?: string
       /** Offline path starts as sending */
       offline?: boolean
     }): Promise<MutationResult<DomainMessage & { uiMessage?: Message }>> {
@@ -237,22 +258,77 @@ export function createMessagingDomain(deps: {
           })
           return gate.allowed ? null : gate.reason
         },
-        mutate: (i) => {
-          const initialStatus: MessageStatus = i.offline ? "sending" : "sent"
-          const prepared =
-            prepareMessageForSending(i.text.trim(), actorId, i.conversationId) ||
-            ({
-              id: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        mutate: async (i) => {
+          // Offline: local "sending" only — offline-message-flush will retry.
+          // Online: server-first — no permanent "sent" without durable API ok.
+          const online = shouldAttemptDurableMessaging(i.offline)
+          const clientId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+          if (online) {
+            const res = await apiSendMessageWithRetry(
+              i.conversationId,
+              i.text.trim(),
+              clientId,
+              i.replyToId,
+              i.sharedPostId
+            )
+            const ok = Boolean(res && ((res as { ok?: boolean }).ok || (res as { httpOk?: boolean }).httpOk))
+            const durable = (res as { durable?: boolean }).durable
+            // Accept explicit durable true, or ok without durable:false (legacy API)
+            const accepted = ok && durable !== false
+            if (!accepted) {
+              const err =
+                (res as { error?: string })?.error ||
+                (res as { message?: string })?.message ||
+                "MESSAGE_NOT_DURABLE"
+              throw new Error(err)
+            }
+            const serverId = String(
+              (res as { message?: { id?: string } }).message?.id ||
+                (res as { id?: string }).id ||
+                clientId
+            )
+            const uiMessage: Message = {
+              id: serverId,
               senderId: actorId,
               text: i.text.trim(),
               createdAt: Date.now(),
-              status: initialStatus,
+              status: "sent",
+              replyTo: i.replyToId,
+              sharedPostId: i.sharedPostId,
+            }
+            const msg: DomainMessage & { uiMessage?: Message } = {
+              id: uiMessage.id,
+              conversationId: i.conversationId,
+              senderId: actorId,
+              text: uiMessage.text,
+              replyToId: i.replyToId,
+              createdAt: uiMessage.createdAt || Date.now(),
+              status: "sent",
+              uiMessage,
+            }
+            if (deps.repository) {
+              deps.repository.append(i.conversationId, uiMessage)
+            }
+            return msg
+          }
+
+          // Offline path — queue later via offline-message-flush
+          const prepared =
+            prepareMessageForSending(i.text.trim(), actorId, i.conversationId) ||
+            ({
+              id: clientId,
+              senderId: actorId,
+              text: i.text.trim(),
+              createdAt: Date.now(),
+              status: "sending" as MessageStatus,
             } as Message)
 
           const uiMessage: Message = {
             ...prepared,
-            status: initialStatus,
+            status: "sending",
             replyTo: i.replyToId || prepared.replyTo,
+            sharedPostId: i.sharedPostId || prepared.sharedPostId,
           }
 
           const msg: DomainMessage & { uiMessage?: Message } = {
@@ -262,42 +338,12 @@ export function createMessagingDomain(deps: {
             text: uiMessage.text,
             replyToId: i.replyToId,
             createdAt: uiMessage.createdAt || Date.now(),
-            status: initialStatus,
+            status: "sending",
             uiMessage,
           }
 
           if (deps.repository) {
             deps.repository.append(i.conversationId, uiMessage)
-          }
-
-          // Durable path: always attempt when online. Permanent success when API ok.
-          // clientMessageId = uiMessage.id for idempotent dedupe on the server.
-          // Flag still gates *requiring* durable success for production ops.
-          if (shouldAttemptDurableMessaging(i.offline)) {
-            void apiSendMessage(i.conversationId, uiMessage.text, uiMessage.id).then((res) => {
-              const ok = Boolean(res && (res as { ok?: boolean }).ok)
-              if (!ok) {
-                try {
-                  console.warn(
-                    "[messaging] durable send deferred/failed",
-                    (res as { error?: string })?.error || "unknown"
-                  )
-                } catch {
-                  /* */
-                }
-                // When flag requires durable and send failed, mark local failed for retry UX
-                if (isDurableMessagingEnabled() && deps.repository) {
-                  try {
-                    deps.repository.update(i.conversationId, uiMessage.id, {
-                      ...uiMessage,
-                      status: "failed",
-                    })
-                  } catch {
-                    /* */
-                  }
-                }
-              }
-            })
           }
 
           return msg
@@ -534,14 +580,6 @@ export function createMessagingDomain(deps: {
           if (i.kind === "private" && i.participantId && deps.isBlocked(i.participantId)) {
             return "Cannot start chat with blocked user"
           }
-          if (i.kind === "private" && i.participantId) {
-            const pctx =
-              deps.getPermissionContext?.() ||
-              buildPermissionContext({ currentUserId: actorId, blockedUsers: [] })
-            if (!canMessageUser(pctx, i.participantId)) {
-              return "Messaging not allowed by privacy settings"
-            }
-          }
           if ((i.kind === "group" || i.kind === "community") && !(i.name || "").trim()) {
             return "Group name required"
           }
@@ -551,7 +589,7 @@ export function createMessagingDomain(deps: {
           const now = Date.now()
           let id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 
-          // Private DMs: prefer durable conversation id from server (membership rows).
+          // Private DMs: server-first durable conversation id (no local-only id when online).
           if (i.kind === "private" && i.participantId) {
             try {
               const { apiCreateDirectConversation } = await import(
@@ -560,12 +598,25 @@ export function createMessagingDomain(deps: {
               const res = await apiCreateDirectConversation(i.participantId)
               if (res.httpOk && res.ok && res.conversation?.id) {
                 id = String(res.conversation.id)
-              } else if (res.error === "BLOCKED" || res.status === 403) {
-                throw new Error("Cannot start chat with this user")
+              } else if (res.error === "PRIVACY_SETTINGS_UNCONFIGURED") {
+                throw new Error("Cannot start chat: this user needs to open GreenHaven once to sync their privacy settings")
+              } else if (res.error === "BLOCKED" || res.error === "PRIVACY_RESTRICTED" || res.status === 403) {
+                throw new Error("Cannot start chat: this user’s messaging privacy settings do not allow it")
+              } else if (shouldAttemptDurableMessaging(false)) {
+                // Online but server did not confirm — do not invent a local-only conversation
+                throw new Error(
+                  res.error
+                    ? `Cannot start chat: ${res.error}`
+                    : "Cannot start chat: a secure conversation could not be created. Please retry when the connection recovers."
+                )
               }
-              // If durable unavailable (studio/offline), keep local id for optimistic UX.
             } catch (e) {
-              if (e instanceof Error && e.message.includes("Cannot start")) throw e
+              if (e instanceof Error && e.message.startsWith("Cannot start chat:")) throw e
+              if (shouldAttemptDurableMessaging(false)) {
+                throw e instanceof Error
+                  ? e
+                  : new Error("Cannot start chat: connection error")
+              }
             }
           }
 

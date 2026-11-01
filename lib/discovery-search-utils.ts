@@ -3,8 +3,8 @@
  * Provides search, history, and personalization features
  */
 
-import type { Candidate, Post } from "./ghc-types"
-import { RecentSearch } from "./discovery-features-engine"
+import type { Candidate, Conversation, Message, Post } from "./ghc-types"
+import type { RecentSearch } from "./discovery-features-engine"
 
 // Search cache entry shape (distinct from the exported SearchCache class below)
 interface SearchCacheEntry {
@@ -19,66 +19,69 @@ const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 /**
  * Execute multi-type search
  */
+export interface DiscoverySearchCommunity {
+  name?: string | null
+  description?: string | null
+}
+
+export interface DiscoverySearchBusiness {
+  name?: string | null
+  category?: string | null
+}
+
 export interface SearchResult {
   people: Candidate[]
   posts: Post[]
-  communities: any[]
-  businesses: any[]
+  communities: DiscoverySearchCommunity[]
+  businesses: DiscoverySearchBusiness[]
+}
+
+function timestampOf(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    // Support epoch seconds from older profile adapters and epoch milliseconds from the app.
+    return value < 100_000_000_000 ? value * 1000 : value
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric) && numeric > 0) return numeric < 100_000_000_000 ? numeric * 1000 : numeric
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function normalizeSearchText(value: unknown): string {
+  return typeof value === "string" ? value.normalize("NFKC").toLocaleLowerCase().trim() : ""
 }
 
 export function performSearch(
   query: string,
   candidates: Candidate[],
   posts: Post[],
-  communities: any[] = [],
-  businesses: any[] = []
+  communities: DiscoverySearchCommunity[] = [],
+  businesses: DiscoverySearchBusiness[] = []
 ): SearchResult {
-  const lowerQuery = query.toLowerCase().trim()
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return { people: [], posts: [], communities: [], businesses: [] }
 
-  if (!lowerQuery) {
-    return {
-      people: [],
-      posts: [],
-      communities: [],
-      businesses: [],
-    }
-  }
+  const people = candidates.filter((candidate) => {
+    const name = normalizeSearchText(candidate.name)
+    const bio = normalizeSearchText(candidate.bio)
+    const interests = Array.isArray(candidate.interests) ? candidate.interests : []
+    return name.includes(normalizedQuery) || bio.includes(normalizedQuery) || interests.some((interest) => normalizeSearchText(interest).includes(normalizedQuery))
+  })
 
-  // Search people
-  const people = candidates.filter(
-    (c) =>
-      c.name.toLowerCase().includes(lowerQuery) ||
-      c.interests.some((i) => i.toLowerCase().includes(lowerQuery)) ||
-      (c.bio?.toLowerCase().includes(lowerQuery) ?? false)
+  const postsResults = posts.filter((post) =>
+    normalizeSearchText(post.content).includes(normalizedQuery) || normalizeSearchText(post.authorName).includes(normalizedQuery)
+  )
+  const communitiesResults = communities.filter((community) =>
+    normalizeSearchText(community.name).includes(normalizedQuery) || normalizeSearchText(community.description).includes(normalizedQuery)
+  )
+  const businessesResults = businesses.filter((business) =>
+    normalizeSearchText(business.name).includes(normalizedQuery) || normalizeSearchText(business.category).includes(normalizedQuery)
   )
 
-  // Search posts
-  const postsResults = posts.filter(
-    (p) =>
-      p.content.toLowerCase().includes(lowerQuery) ||
-      p.authorName.toLowerCase().includes(lowerQuery)
-  )
-
-  // Filter supplied communities by name/description (caller provides list)
-  const communitiesResults = communities.filter(
-    (c) =>
-      c.name?.toLowerCase().includes(lowerQuery) ||
-      c.description?.toLowerCase().includes(lowerQuery)
-  )
-
-  // Filter supplied businesses by name/category (caller provides list)
-  const businessesResults = businesses.filter(
-    (b) =>
-      b.name?.toLowerCase().includes(lowerQuery) ||
-      b.category?.toLowerCase().includes(lowerQuery)
-  )
-
-  return {
-    people,
-    posts: postsResults,
-    communities: communitiesResults,
-    businesses: businessesResults,
-  }
+  return { people, posts: postsResults, communities: communitiesResults, businesses: businessesResults }
 }
 
 /**
@@ -94,7 +97,8 @@ export function scoreSearchResults<T extends Candidate>(
   candidates: T[],
   query: string
 ): ScoredResult<T>[] {
-  const lowerQuery = query.toLowerCase()
+  const lowerQuery = normalizeSearchText(query)
+  if (!lowerQuery) return []
 
   return candidates
     .map((candidate) => {
@@ -102,32 +106,36 @@ export function scoreSearchResults<T extends Candidate>(
       let matchType: "name" | "interest" | "bio" | "location" = "name"
 
       // Name match (highest priority)
-      if (candidate.name.toLowerCase().includes(lowerQuery)) {
+      if (normalizeSearchText(candidate.name).includes(lowerQuery)) {
         score = 100
         matchType = "name"
       }
       // Interest match
-      else if (candidate.interests.some((i) => i.toLowerCase().includes(lowerQuery))) {
+      else if ((candidate.interests ?? []).some((i) => normalizeSearchText(i).includes(lowerQuery))) {
         score = 80
         matchType = "interest"
       }
       // Bio match
-      else if ((candidate.bio?.toLowerCase() ?? "").includes(lowerQuery)) {
+      else if (normalizeSearchText(candidate.bio).includes(lowerQuery)) {
         score = 60
         matchType = "bio"
       }
       // Location match
-      else if (candidate.location.toLowerCase().includes(lowerQuery)) {
+      else if (normalizeSearchText(candidate.location).includes(lowerQuery)) {
         score = 40
         matchType = "location"
       }
 
-      // Apply recency bonus
-      const age = Date.now() - (candidate as any).joinedAt
-      if (age < 7 * 24 * 60 * 60 * 1000) score += 20
+      // Do not let recency or verification turn a non-match into a search result.
+      if (score === 0) return { item: candidate, score, matchType }
 
-      // Apply verification bonus
-      if ((candidate as any).isVerified) score += 15
+      // Apply recency bonus only after a real query match exists.
+      const joinedAt = timestampOf(candidate.joinedAt)
+      const age = joinedAt === null ? null : Date.now() - joinedAt
+      if (age !== null && age >= 0 && age < 7 * 24 * 60 * 60 * 1000) score += 20
+
+      // Apply verification bonus; canonical verification remains supported alongside legacy aliases.
+      if (candidate.verified || candidate.isVerified) score += 15
 
       return {
         item: candidate,
@@ -148,23 +156,35 @@ export class SearchHistoryManager {
 
   getHistory(): RecentSearch[] {
     try {
-      const stored = localStorage.getItem(this.storageKey)
-      return stored ? JSON.parse(stored) : []
+      if (typeof window === "undefined") return []
+      const stored = window.localStorage.getItem(this.storageKey)
+      if (!stored) return []
+      const parsed: unknown = JSON.parse(stored)
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((item): item is RecentSearch => {
+        if (!item || typeof item !== "object") return false
+        const value = item as Partial<RecentSearch>
+        return typeof value.id === "string" && typeof value.query === "string" &&
+          ["person", "community", "business", "event"].includes(String(value.type)) &&
+          typeof value.timestamp === "number" && Number.isFinite(value.timestamp)
+      })
     } catch {
       return []
     }
   }
 
   addSearch(query: string, type: "person" | "community" | "business" | "event" = "person"): void {
+    const normalizedQuery = query.normalize("NFKC").trim().replace(/\s+/g, " ").slice(0, 160)
+    if (!normalizedQuery) return
     const history = this.getHistory()
 
     // Avoid duplicates - remove if exists
-    const filtered = history.filter((s) => s.query !== query)
+    const filtered = history.filter((s) => normalizeSearchText(s.query) !== normalizeSearchText(normalizedQuery))
 
     // Add new search
     const newSearch: RecentSearch = {
       id: `search-${Date.now()}`,
-      query,
+      query: normalizedQuery,
       type,
       timestamp: Date.now(),
     }
@@ -220,8 +240,9 @@ export function getPersonalizedRecommendations(
   const recommendations: PersonalizedRecommendation[] = []
 
   // Same interests
-  const sameInterests = allCandidates.filter((c) =>
-    c.interests.some((i) => userInterests.includes(i))
+  const interestSet = new Set(userInterests.map(normalizeSearchText).filter(Boolean))
+  const sameInterests = allCandidates.filter((candidate) =>
+    (candidate.interests ?? []).some((interest) => interestSet.has(normalizeSearchText(interest)))
   )
   if (sameInterests.length > 0) {
     recommendations.push({
@@ -232,7 +253,8 @@ export function getPersonalizedRecommendations(
   }
 
   // Same location
-  const sameLocation = allCandidates.filter((c) => c.location === userLocation)
+  const normalizedLocation = normalizeSearchText(userLocation)
+  const sameLocation = allCandidates.filter((candidate) => normalizeSearchText(candidate.location) === normalizedLocation && Boolean(normalizedLocation))
   if (sameLocation.length > 0) {
     recommendations.push({
       candidates: sameLocation,
@@ -255,7 +277,7 @@ export function getPersonalizedRecommendations(
   }
 
   // Verified users
-  const verified = allCandidates.filter((c) => (c as any).isVerified)
+  const verified = allCandidates.filter((c) => c.verified || c.isVerified)
   if (verified.length > 0) {
     recommendations.push({
       candidates: verified,
@@ -266,10 +288,10 @@ export function getPersonalizedRecommendations(
 
   // New members
   const newMembers = allCandidates.filter((c) => {
-    const joinedAt = (c as any).joinedAt
-    if (!joinedAt) return false
+    const joinedAt = timestampOf(c.joinedAt)
+    if (joinedAt === null) return false
     const daysSinceJoined = (Date.now() - joinedAt) / (24 * 60 * 60 * 1000)
-    return daysSinceJoined < 7
+    return daysSinceJoined >= 0 && daysSinceJoined < 7
   })
   if (newMembers.length > 0) {
     recommendations.push({
@@ -291,7 +313,7 @@ export function filterByProfession(
 ): Candidate[] {
   if (professions.length === 0) return candidates
   return candidates.filter((c) =>
-    professions.some((p) => (c as any).profession?.toLowerCase().includes(p.toLowerCase()))
+    professions.some((p) => c.profession?.toLowerCase().includes(p.toLowerCase()))
   )
 }
 
@@ -301,7 +323,7 @@ export function filterByEducation(
 ): Candidate[] {
   if (educationLevels.length === 0) return candidates
   return candidates.filter((c) =>
-    educationLevels.some((e) => (c as any).education?.toLowerCase().includes(e.toLowerCase()))
+    educationLevels.some((e) => c.education?.toLowerCase().includes(e.toLowerCase()))
   )
 }
 
@@ -354,31 +376,40 @@ export interface MessageSearchResult {
   preview: string
 }
 
-export function searchMessages(
-  query: string,
-  conversations: any[]
-): MessageSearchResult[] {
+/**
+ * Search durable conversation messages using the canonical Message.text and
+ * Message.createdAt fields. Legacy content/timestamp aliases are read only for
+ * compatibility with older local records; malformed records are ignored.
+ */
+export function searchMessages(query: string, conversations: Conversation[]): MessageSearchResult[] {
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return []
   const results: MessageSearchResult[] = []
-  const lowerQuery = query.toLowerCase()
 
-  conversations.forEach((conv) => {
-    if ((conv.messages || []).length === 0) return
+  for (const conversation of conversations) {
+    if (!Array.isArray(conversation.messages)) continue
+    for (const message of conversation.messages) {
+      const legacy = message as Message & { content?: string; timestamp?: number; senderName?: string }
+      const content = typeof message.text === "string" ? message.text : (typeof legacy.content === "string" ? legacy.content : "")
+      if (!content || !normalizeSearchText(content).includes(normalizedQuery)) continue
+      const timestamp = Number.isFinite(message.createdAt) ? message.createdAt : (Number.isFinite(legacy.timestamp) ? Number(legacy.timestamp) : 0)
+      const senderName = typeof legacy.senderName === "string" && legacy.senderName.trim()
+        ? legacy.senderName.trim()
+        : conversation.conversationType === "group"
+          ? "Group member"
+          : (message.senderId === conversation.participantId ? conversation.participantName : "You")
+      results.push({
+        id: message.id,
+        conversationId: conversation.id,
+        content,
+        senderName,
+        timestamp,
+        preview: content.slice(0, 100),
+      })
+    }
+  }
 
-    conv.messages.forEach((msg: any) => {
-      if (msg.content?.toLowerCase().includes(lowerQuery)) {
-        results.push({
-          id: msg.id,
-          conversationId: conv.id,
-          content: msg.content,
-          senderName: msg.senderName,
-          timestamp: msg.timestamp,
-          preview: msg.content.substring(0, 100),
-        })
-      }
-    })
-  })
-
-  return results.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20)
+  return results.sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id)).slice(0, 20)
 }
 
 /**
@@ -386,26 +417,51 @@ export function searchMessages(
  */
 export class SearchCache {
   private cache: Map<string, SearchCacheEntry> = new Map()
+  private readonly maxEntries = 100
 
   get(query: string): SearchResult | null {
-    const cached = this.cache.get(query)
+    const key = normalizeSearchText(query)
+    if (!key) return null
+    const cached = this.cache.get(key)
     if (!cached) return null
 
     if (Date.now() - cached.timestamp > cached.ttl) {
-      this.cache.delete(query)
+      this.cache.delete(key)
       return null
     }
 
-    return cached.results
+    // Refresh insertion order and return independent arrays so callers cannot mutate
+    // the cache's collection structure for later searches.
+    this.cache.delete(key)
+    this.cache.set(key, cached)
+    return {
+      people: [...cached.results.people],
+      posts: [...cached.results.posts],
+      communities: [...cached.results.communities],
+      businesses: [...cached.results.businesses],
+    }
   }
 
   set(query: string, results: SearchResult, ttl: number = CACHE_TTL): void {
-    this.cache.set(query, {
-      query,
-      results,
+    const key = normalizeSearchText(query)
+    if (!key || !Number.isFinite(ttl) || ttl <= 0) return
+    this.cache.delete(key)
+    this.cache.set(key, {
+      query: key,
+      results: {
+        people: [...results.people],
+        posts: [...results.posts],
+        communities: [...results.communities],
+        businesses: [...results.businesses],
+      },
       timestamp: Date.now(),
       ttl,
     })
+    while (this.cache.size > this.maxEntries) {
+      const oldestKey = this.cache.keys().next().value
+      if (typeof oldestKey !== "string") break
+      this.cache.delete(oldestKey)
+    }
   }
 
   clear(): void {

@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from "next/server"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   getServerProfile,
@@ -26,6 +27,10 @@ export async function GET(request: Request) {
       )
     }
 
+    const limit = checkRateLimit(`profile-read:${auth.userId}`, 120, 60_000)
+    if (!limit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec) } })
+    }
     const rec = await getServerProfile(auth.userId)
     return NextResponse.json(
       {
@@ -58,8 +63,21 @@ export async function PATCH(request: Request) {
       )
     }
 
-    const body = await request.json().catch(() => ({}))
-    if (!body || typeof body !== "object") {
+    const limit = checkRateLimit(`profile-write:${auth.userId}`, 30, 60_000)
+    if (!limit.ok) {
+      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec) } })
+    }
+    const contentLength = Number(request.headers.get("content-length") || 0)
+    if (Number.isFinite(contentLength) && contentLength > 65_536) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
+    const rawBody = await request.text()
+    if (rawBody.length > 65_536) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
+    let body: unknown
+    try { body = JSON.parse(rawBody) } catch { body = null }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
         { ok: false, error: "INVALID_BODY" },
         { status: 400, headers: { "Cache-Control": "no-store" } }
@@ -78,6 +96,8 @@ export async function PATCH(request: Request) {
     delete input.balance
     delete input.membership
     delete input.tier
+    // Lifecycle state is changed only by /api/auth/onboarding-complete.
+    delete input.onboarded
 
     const saved = await upsertServerProfile(auth.userId, input)
     if (!saved) {

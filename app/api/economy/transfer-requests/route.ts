@@ -1,4 +1,5 @@
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { createTransferRequest, getProcessGhcStore } from "@/lib/server/economy/store"
 import { rpcCreateTransferRequest, rpcListTransferRequests } from "@/lib/server/economy/db"
 import { allowMemoryServer, isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
@@ -7,12 +8,15 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return jsonErr("TRANSFER_FAILED", "Invalid JSON", 400)
+  const parsedBody = await readBoundedJson(request, 8192)
+  if (!parsedBody.ok) {
+    return jsonErr(
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "TRANSFER_FAILED",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? "Request body exceeds the allowed size" : "Invalid transfer request body",
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
   }
+  const body = parsedBody.value
 
   const payerId = String(body.fromUserId || body.payerId || "").trim()
   const referenceId = String(body.referenceId || "").trim()

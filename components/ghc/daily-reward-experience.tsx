@@ -2,28 +2,36 @@
 
 /**
  * Home/Feed Daily Reward experience
- * — Premium bottom sheet after short delay when claimable
- * — Claimable feed card only while reward is available (hidden after claim)
+ * — Compact bottom sheet available from the feed card / Rewards Centre
+ * — Claimable feed control is a compact pill (not a rectangular demo card)
  * — Claim history / streak details live in Rewards Centre, not on the feed
  * — One claim per Africa/Lagos reward day
  * — Membership-aware track + streak shields
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Gift, X, Sparkles, Check, Shield } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  ChevronRight, Gift, X, Sparkles, Check, Shield } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import {
   getDailyStreak,
   claimDailyStreak,
+  markDailyClaimedForUi,
   markDailyRewardDismissed,
-  wasDailyRewardDismissed,
+  msUntilNextLagosMidnight,
+  lagosDayKey,
+  formatCountdown,
   trackForTier,
+  ghcForCycleDay,
   type MembershipTierForTrack,
 } from "@/lib/domains/reward-level-domain"
 import { GhcCoinIcon } from "./ghc-coin-icon"
+import { notifyRewardClaimed } from "@/lib/notifications"
 import { IdentityService } from "@/lib/identity/identity-service"
 import type { Profile } from "@/lib/ghc-types"
+import { useDailyClaimStatus } from "./use-daily-claim-status"
+import { postDailyClaim } from "@/lib/rewards/claim-daily-client"
 
 function resolveUserId(profile?: Profile | null): string {
   const fromIdentity = IdentityService.getCurrentUserId()
@@ -52,145 +60,6 @@ function resolveTier(): MembershipTierForTrack {
     /* */
   }
   return "free"
-}
-
-async function creditDailyToWallet(
-  userId: string,
-  amount: number,
-  cycleDay: number,
-  rewardDayKey: string
-): Promise<{
-  ok: boolean
-  error?: string
-  serverAmount?: number
-  alreadyClaimed?: boolean
-  cycleDay?: number
-}> {
-  const ref = `daily_checkin:${userId}:${rewardDayKey}`
-  // Prefer server evaluate+claim — amount is NEVER taken from the client
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(IdentityService.getAuthHeaders?.() || {}),
-    }
-    const dailyRes = await fetch("/api/economy/rewards/daily", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        rewardDayKey,
-        cycleDay,
-      }),
-    })
-    if (dailyRes.ok) {
-      const data = (await dailyRes.json().catch(() => ({}))) as {
-        ok?: boolean
-        amount?: number
-        alreadyClaimed?: boolean
-        idempotent?: boolean
-        cycleDay?: number
-      }
-      return {
-        ok: true,
-        serverAmount: Number(data.amount) || undefined,
-        alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
-        cycleDay: data.cycleDay != null ? Number(data.cycleDay) : undefined,
-      }
-    }
-    // 409 already claimed today — safe idempotent success
-    if (dailyRes.status === 409) {
-      return { ok: true, alreadyClaimed: true }
-    }
-
-    const evalRes = await fetch("/api/economy/rewards/evaluate", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        sourceEvent: "DAILY_CHECKIN",
-        referenceId: ref,
-        metadata: { cycleDay, uiPreviewAmount: amount },
-      }),
-    })
-    if (evalRes.ok) {
-      const data = (await evalRes.json().catch(() => ({}))) as {
-        ok?: boolean
-        holdId?: string
-        amount?: number
-        rewards?: Array<{ id: string }>
-      }
-      const holdId =
-        data.holdId ||
-        data.rewards?.[0]?.id ||
-        ""
-      if (holdId) {
-        const claimRes = await fetch("/api/economy/rewards/claim", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ holdId }),
-        })
-        if (claimRes.ok) {
-          const claimed = (await claimRes.json().catch(() => ({}))) as { amount?: number }
-          return { ok: true, serverAmount: Number(claimed.amount || data.amount) || undefined }
-        }
-      }
-      // Evaluate succeeded with idempotent/no hold — treat as ok
-      return { ok: true, serverAmount: Number(data.amount) || undefined }
-    }
-  } catch {
-    /* fall through */
-  }
-
-  // Domain path is studio-only fallback — never report success without a server credit
-  // when the daily API was unavailable. Prevents "claimed" UI without ledger write.
-  try {
-    const eco = getBoundDomainServices()?.economy as {
-      evaluateReward?: (input: {
-        sourceEvent: string
-        referenceId?: string
-        metadata?: Record<string, unknown>
-      }) => Promise<{
-        ok: boolean
-        data?: { rewards?: Array<{ id: string; amount: number }> }
-        error?: string
-      }>
-      claimReward?: (id: string) => Promise<{ ok: boolean; error?: string }>
-    } | null
-
-    if (!eco?.evaluateReward) {
-      return {
-        ok: false,
-        error: "Daily reward service unavailable. Check connection and try again.",
-      }
-    }
-
-    const evaluated = await eco.evaluateReward({
-      sourceEvent: "DAILY_CHECKIN",
-      referenceId: ref,
-      metadata: { cycleDay, uiPreviewAmount: amount },
-    })
-
-    if (!evaluated?.ok) {
-      if (String(evaluated?.error || "").toLowerCase().includes("duplicate")) {
-        return { ok: true, alreadyClaimed: true }
-      }
-      return {
-        ok: false,
-        error: evaluated?.error || "Claim could not be completed",
-      }
-    }
-
-    const rewards = evaluated.data?.rewards || []
-    for (const r of rewards) {
-      if (eco.claimReward) {
-        await eco.claimReward(r.id)
-      }
-    }
-    return { ok: true, serverAmount: rewards[0]?.amount }
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Claim failed — please retry",
-    }
-  }
 }
 
 /** Compact progress strip: 1 ✓ — 2 ● — 3 … — 7 🎁 */
@@ -247,33 +116,77 @@ export function DailyRewardFeedCard({
   const tier = resolveTier()
   const [tick, setTick] = useState<number>(0)
   const [claiming, setClaiming] = useState(false)
+  const [justClaimedFlash, setJustClaimedFlash] = useState(false)
+  const claimInFlightRef = useRef(false)
+  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId)
+  const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
+  useEffect(() => {
+    const id = window.setInterval(() => setCountdownLabel(formatCountdown(msUntilNextLagosMidnight())), 1000)
+    return () => window.clearInterval(id)
+  }, [])
 
-  const daily = useMemo(() => {
+  const localDaily = useMemo(() => {
     void tick
     void refreshKey
+    void statusRevision
     return getDailyStreak(userId, tier)
-  }, [userId, tier, tick, refreshKey])
+  }, [userId, tier, tick, refreshKey, statusRevision])
+  const daily = useMemo(() => {
+    // Local browser state can lag behind a server-side claim day (e.g. after
+    // reinstall, another device, or a stale tab). Until the server confirms
+    // today's status, keep the claim visible. The POST endpoint is idempotent,
+    // so a repeat attempt cannot mint a second reward.
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) {
+      const previewDay = Math.max(1, Math.min(7, localDaily.displayCycleDay || 1))
+      return {
+        ...localDaily,
+        canClaimToday: true,
+        displayCycleDay: previewDay,
+        todayGhc: Math.max(0, localDaily.todayGhc || ghcForCycleDay(previewDay, tier)),
+      }
+    }
+    const cycleDay = serverStatus.cycleDay
+    return {
+      ...localDaily,
+      canClaimToday: serverStatus.claimable,
+      displayCycleDay: cycleDay,
+      todayGhc: serverStatus.claimable ? ghcForCycleDay(cycleDay, tier) : 0,
+    }
+  }, [localDaily, serverStatus, tier])
 
   const handleClaim = useCallback(async () => {
-    if (claiming || !daily.canClaimToday) return
+    if (claimInFlightRef.current || claiming || !daily.canClaimToday) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ghc.addToast?.("You are offline — claim when reconnected", "info")
+      return
+    }
+    claimInFlightRef.current = true
     setClaiming(true)
     try {
       // Server is authoritative — never optimistically credit from client preview
-      const server = await creditDailyToWallet(
-        userId,
-        daily.todayGhc,
-        daily.displayCycleDay,
-        daily.rewardDayKey
-      )
+      const server = await postDailyClaim()
       if (!server.ok) {
-        ghc.addToast?.(server.error || "Claim failed", "error")
-        setTick((t) => t + 1)
+        ghc.addToast?.(server.error || "Claim failed — your reward is still available to retry", "error")
+        void refreshServerStatus()
+        setJustClaimedFlash(true)
+      window.setTimeout(() => setJustClaimedFlash(false), 4000)
+      setTick((t) => t + 1)
         return
       }
-      // Local streak UX only after server success (does not invent wallet balance)
-      const res = claimDailyStreak(userId, tier)
+      // Only advance local streak/XP after a newly completed server claim.
+      // An idempotent repeat marks the day locally but must not award XP twice.
+      const res = server.alreadyClaimed
+        ? (markDailyClaimedForUi(userId), {
+            ok: true,
+            ghc: 0,
+            xp: 0,
+            streakDays: daily.streakDays,
+            cycleDay: server.cycleDay ?? daily.displayCycleDay,
+          })
+        : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
+      const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
       // Re-hydrate wallet from server ledger — never optimistically add GHC
       try {
@@ -282,7 +195,7 @@ export function DailyRewardFeedCard({
         )
         await syncWalletAfterServerClaim({
           userId,
-          claimedAmount: server.serverAmount ?? null,
+          claimedAmount: null,
           alreadyClaimed: server.alreadyClaimed,
           referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
@@ -291,8 +204,8 @@ export function DailyRewardFeedCard({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC`
-          : `+${amt} GHC · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
+          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       setTick((t) => t + 1)
@@ -305,65 +218,113 @@ export function DailyRewardFeedCard({
               cycleDay: day,
               server: true,
               serverAmount: server.serverAmount,
+              pending: server.pending !== false,
+              redeemableAt: server.redeemableAt,
               alreadyClaimed: server.alreadyClaimed,
             },
           })
         )
+        if (!server.alreadyClaimed && amt) {
+          try {
+            notifyRewardClaimed({
+              message: `Day ${day}/7 claim pending for 48 hours · ₲ ${Number(amt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              amountLabel: String(amt),
+            })
+          } catch { /* */ }
+        }
       } catch {
         /* */
       }
     } finally {
+      claimInFlightRef.current = false
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, userId, tier, ghc])
+  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, daily.streakDays, userId, tier, ghc, refreshServerStatus])
 
-  // Feed only shows the card while a claim is still available.
-  // After claim, hide entirely — streak / history live in Rewards Centre.
-  if (!daily.canClaimToday) return null
+  // After claim: compact status pill only (no long rectangular prototype card).
+  if (!daily.canClaimToday) {
+    return (
+      <div
+        className="mx-1 flex items-center gap-2.5 rounded-full border border-emerald-200/70 bg-emerald-50/90 px-3 py-2 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40"
+        role="status"
+        aria-label="Daily GHC reward already claimed"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-inner">
+          <Gift size={16} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">{justClaimedFlash ? "Claimed — pending 48h" : "GHC daily claimed"}</p>
+          <p className="text-[10px] tabular-nums text-emerald-900/70 dark:text-emerald-200/70">
+            Next in <span className="font-semibold">{countdownLabel}</span>
+          </p>
+        </div>
+        {onOpenFull ? (
+          <button
+            type="button"
+            onClick={onOpenFull}
+            className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-bold text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-900/60 dark:text-emerald-100 dark:ring-emerald-800"
+          >
+            Details
+          </button>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-card to-amber-50/40 shadow-sm dark:border-emerald-900 dark:from-emerald-950/40 dark:to-card">
-      <div className="flex items-stretch gap-3 p-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
-          <Gift size={22} strokeWidth={2.25} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-            Daily reward · Day {daily.displayCycleDay}/7
-          </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-foreground">
-            <GhcCoinIcon size={16} />
-            {daily.todayGhc} GHC waiting
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Next: {daily.nextDayPreview} GHC · keep your streak
-          </p>
-        </div>
+    <div
+      className="mx-1 overflow-hidden rounded-full border border-emerald-500/25 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-700 p-[1px] shadow-md shadow-emerald-700/20"
+      aria-label="Claim daily GHC reward"
+    >
+      <div className="flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-700 px-2.5 py-2 pl-2 text-white">
         <button
           type="button"
           disabled={claiming}
           onClick={() => void handleClaim()}
-          className="shrink-0 self-center rounded-full bg-emerald-700 px-3.5 py-2.5 text-[12px] font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-60"
+          className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 ring-2 ring-white/40 transition active:scale-95 disabled:opacity-60"
+          aria-label={claiming ? "Claiming daily reward" : `Claim ${daily.todayGhc} GHC`}
+        >
+          {claiming ? (
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          ) : (
+            <GhcCoinIcon size={26} />
+          )}
+          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-amber-400 px-1.5 text-[9px] font-black leading-4 text-amber-950">
+            {daily.displayCycleDay}/7
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={claiming}
+          onClick={() => void handleClaim()}
+          className="min-w-0 flex-1 text-left disabled:opacity-70"
+        >
+          <p className="text-[13px] font-bold leading-tight tracking-tight">
+            Claim {daily.todayGhc} GHC
+          </p>
+          <p className="text-[10px] font-medium text-white/80">
+            Daily utility · Day {daily.displayCycleDay}/7 · not Pi
+          </p>
+        </button>
+        <button
+          type="button"
+          disabled={claiming}
+          onClick={() => void handleClaim()}
+          className="shrink-0 rounded-full bg-white px-3.5 py-2 text-[12px] font-bold text-emerald-800 shadow-sm transition active:scale-[0.98] disabled:opacity-60"
         >
           {claiming ? "…" : "Claim"}
         </button>
+        {onOpenFull ? (
+          <button
+            type="button"
+            onClick={onOpenFull}
+            className="shrink-0 rounded-full p-2 text-white/80 hover:bg-white/10 hover:text-white"
+            aria-label="Open reward details"
+          >
+            <ChevronRight size={18} />
+          </button>
+        ) : null}
       </div>
-      <div className="border-t border-emerald-100/80 px-3 py-2 dark:border-emerald-900/50">
-        <StreakProgressStrip
-          cycleDay={daily.displayCycleDay}
-          claimedToday={false}
-          tier={tier}
-        />
-      </div>
-      {onOpenFull ? (
-        <button
-          type="button"
-          onClick={onOpenFull}
-          className="w-full border-t border-emerald-100/80 py-1.5 text-center text-[10px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:text-emerald-300"
-        >
-          Open full reward
-        </button>
-      ) : null}
     </div>
   )
 }
@@ -381,29 +342,79 @@ export function DailyRewardSheet({
   const userId = resolveUserId(ghc.profile)
   const tier = resolveTier()
   const [claiming, setClaiming] = useState(false)
-  const daily = useMemo(() => {
+  const claimInFlightRef = useRef(false)
+  const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId, open)
+
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:daily-reward-sheet-visibility", { detail: { open } }))
+    } catch {
+      /* non-browser render */
+    }
+    return () => {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:daily-reward-sheet-visibility", { detail: { open: false } }))
+      } catch {
+        /* non-browser render */
+      }
+    }
+  }, [open])
+  const localDaily = useMemo(() => {
     // Recompute when sheet opens so claimability is current
     void open
+    void statusRevision
     return getDailyStreak(userId, tier)
-  }, [userId, tier, open])
+  }, [userId, tier, open, statusRevision])
+  const daily = useMemo(() => {
+    // Local browser state can lag behind a server-side claim day (e.g. after
+    // reinstall, another device, or a stale tab). Until the server confirms
+    // today's status, keep the claim visible. The POST endpoint is idempotent,
+    // so a repeat attempt cannot mint a second reward.
+    if (!serverStatus || serverStatus.dayKey !== localDaily.rewardDayKey) {
+      const previewDay = Math.max(1, Math.min(7, localDaily.displayCycleDay || 1))
+      return {
+        ...localDaily,
+        canClaimToday: true,
+        displayCycleDay: previewDay,
+        todayGhc: Math.max(0, localDaily.todayGhc || ghcForCycleDay(previewDay, tier)),
+      }
+    }
+    const cycleDay = serverStatus.cycleDay
+    return {
+      ...localDaily,
+      canClaimToday: serverStatus.claimable,
+      displayCycleDay: cycleDay,
+      todayGhc: serverStatus.claimable ? ghcForCycleDay(cycleDay, tier) : 0,
+    }
+  }, [localDaily, serverStatus, tier])
 
   const handleClaim = useCallback(async () => {
-    if (claiming || !daily.canClaimToday) return
+    if (claimInFlightRef.current || claiming || !daily.canClaimToday) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ghc.addToast?.("You are offline — claim when reconnected", "info")
+      return
+    }
+    claimInFlightRef.current = true
     setClaiming(true)
     try {
-      const server = await creditDailyToWallet(
-        userId,
-        daily.todayGhc,
-        daily.displayCycleDay,
-        daily.rewardDayKey
-      )
+      const server = await postDailyClaim()
       if (!server.ok) {
-        ghc.addToast?.(server.error || "Claim failed", "error")
+        ghc.addToast?.(server.error || "Claim failed — your reward is still available to retry", "error")
+        void refreshServerStatus()
         return
       }
-      const res = claimDailyStreak(userId, tier)
+      const res = server.alreadyClaimed
+        ? (markDailyClaimedForUi(userId), {
+            ok: true,
+            ghc: 0,
+            xp: 0,
+            streakDays: daily.streakDays,
+            cycleDay: server.cycleDay ?? daily.displayCycleDay,
+          })
+        : claimDailyStreak(userId, tier)
       const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
       const day = server.cycleDay ?? res.cycleDay
+      const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
       try {
         const { syncWalletAfterServerClaim } = await import(
@@ -411,7 +422,7 @@ export function DailyRewardSheet({
         )
         await syncWalletAfterServerClaim({
           userId,
-          claimedAmount: server.serverAmount ?? null,
+          claimedAmount: null,
           alreadyClaimed: server.alreadyClaimed,
           referenceId: `daily_checkin:${userId}:${daily.rewardDayKey}`,
         })
@@ -420,8 +431,8 @@ export function DailyRewardSheet({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC`
-          : `+${amt} GHC added · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
+          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
         "success"
       )
       try {
@@ -432,6 +443,8 @@ export function DailyRewardSheet({
               ghc: amt,
               server: true,
               serverAmount: server.serverAmount,
+              pending: server.pending !== false,
+              redeemableAt: server.redeemableAt,
               alreadyClaimed: server.alreadyClaimed,
             },
           })
@@ -442,9 +455,10 @@ export function DailyRewardSheet({
       onClaimed?.()
       onClose()
     } finally {
+      claimInFlightRef.current = false
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, userId, tier, ghc, onClose, onClaimed])
+  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, daily.streakDays, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
 
   const handleDismiss = useCallback(() => {
     markDailyRewardDismissed(userId)
@@ -529,7 +543,7 @@ export function DailyRewardSheet({
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:bg-emerald-800 disabled:opacity-60"
           >
             <Gift size={18} />
-            {claiming ? "Claiming…" : `Claim Daily Reward · ${daily.todayGhc} GHC`}
+            {claiming ? "Claiming…" : `Claim GHC · ${daily.todayGhc} GHC`}
           </button>
           <button
             type="button"
@@ -539,7 +553,7 @@ export function DailyRewardSheet({
             Maybe later
           </button>
           <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-            One claim per day · resets 00:00 Africa/Lagos · GHC is in-app utility, not Pi
+            GHC daily utility only · once per Lagos day · not Pi Network cashback
           </p>
         </div>
         <div className="h-[env(safe-area-inset-bottom,0px)]" />
@@ -556,13 +570,27 @@ export function DailyRewardHomeExperience() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState<number>(0)
 
+  // DailyClaimPrompt owns the single automatic popup. The feed card and Rewards
+  // Centre remain manual entry points for this detailed sheet.
+
   useEffect(() => {
-    const daily = getDailyStreak(userId, tier)
-    if (!daily.canClaimToday) return
-    if (wasDailyRewardDismissed(userId)) return
-    const t = window.setTimeout(() => setSheetOpen(true), 1600)
-    return () => window.clearTimeout(t)
-  }, [userId, tier])
+    let observedDay = lagosDayKey()
+    const checkRewardDay = () => {
+      const currentDay = lagosDayKey()
+      if (currentDay !== observedDay) {
+        observedDay = currentDay
+        setRefreshKey((key) => key + 1)
+      }
+    }
+    const id = window.setInterval(checkRewardDay, 30_000)
+    window.addEventListener("focus", checkRewardDay)
+    document.addEventListener("visibilitychange", checkRewardDay)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener("focus", checkRewardDay)
+      document.removeEventListener("visibilitychange", checkRewardDay)
+    }
+  }, [])
 
   useEffect(() => {
     const onClaimed = () => setRefreshKey((k) => k + 1)

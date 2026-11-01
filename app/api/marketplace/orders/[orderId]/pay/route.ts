@@ -6,9 +6,12 @@
  * Amount = durable order.totalAmount only (never client).
  */
 import { NextResponse } from "next/server"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
   loadOrder,
+  claimOrderForPayment,
+  releaseOrderPaymentClaim,
   transitionOrder,
   saveOrder,
   marketplaceOrdersDurable,
@@ -20,9 +23,71 @@ import {
 } from "@/lib/server/economy/store"
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
+import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+
+async function recordPlatformCommission(order: {
+  id: string
+  totalAmount: number
+  currency: string
+  paymentMethod: string
+  buyerId: string
+  paymentIntentId?: string
+  verifiedAt?: string
+}) {
+  try {
+    const split = splitMarketplaceCommission({ grossAmount: order.totalAmount, currency: order.currency })
+    if ("error" in split) return { reconciliationRequired: true, error: split.error }
+    const fee = split.platformFeeMinor
+    if (!(fee > 0)) return split
+    // Only verified PI company revenue is journaled; GHC utility fees are not PI revenue.
+    if (String(order.currency).toUpperCase() === "PI" && order.paymentMethod === "pi") {
+      const revenueJournal = await appendVerifiedCompanyRevenueEvent({
+        idempotencyKey: `mkt_fee:${order.id}`,
+        sourceProvider: "pi",
+        sourceEventId: order.id,
+        eventType: "marketplace_fee",
+        currency: "PI",
+        grossAmountMinor: Math.round(split.grossMinor * 1e7),
+        companyRevenueMinor: Math.round(fee * 1e7),
+        sourceReference: `order:${order.id}`,
+        verifiedAt: order.verifiedAt || "",
+        payingUserId: order.buyerId,
+        cashbackEligible: true,
+        metadata: { order_id: order.id, payment_intent_id: order.paymentIntentId || "" },
+      })
+      return { ...split, revenueJournal, reconciliationRequired: !revenueJournal.ok }
+    }
+    return split
+  } catch {
+    // Payment is already verified: never make a journal outage trigger a second payment.
+    return { reconciliationRequired: true, error: "REVENUE_RECONCILIATION_UNAVAILABLE" }
+  }
+}
+
+function isRevenueReconciliationPending(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" &&
+    (value as { reconciliationRequired?: unknown }).reconciliationRequired === true)
+}
+
+function reconciliationPendingResponse(order: unknown, commission: unknown) {
+  return NextResponse.json({
+    ok: false,
+    error: "REVENUE_RECONCILIATION_PENDING",
+    paymentVerified: true,
+    paymentActionRequired: false,
+    reconciliationPending: true,
+    retryable: true,
+    order,
+    commission,
+    message: "Payment is verified. Retry this order endpoint to reconcile the revenue journal; do not submit a new payment.",
+  }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } })
+}
 
 async function rpcGhcSpend(input: {
   userId: string
@@ -42,9 +107,12 @@ async function rpcGhcSpend(input: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           apikey: env.supabaseServiceRoleKey,
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           p_user_id: input.userId,
           p_amount: input.amount,
@@ -109,6 +177,51 @@ export async function POST(
     return NextResponse.json({ ok: true, order, idempotent: true, recovered: true })
   }
 
+  // A Pi payment may already be verified while the revenue journal write failed or timed out.
+  // Re-run the idempotent journal append before returning NOT_PAYABLE; this never submits a new payment.
+  if (
+    order.paymentStatus === "verified" && order.paymentMethod === "pi" && order.paymentIntentId
+  ) {
+    const priorIntent = await loadPaymentIntent(order.paymentIntentId)
+    if (
+      priorIntent && priorIntent.userId === auth.userId && priorIntent.provider === "pi" &&
+      priorIntent.currency === "PI" && (priorIntent.status === "COMPLETED" || priorIntent.status === "FULFILLED") &&
+      priorIntent.purpose === "marketplace" &&
+      [order.id, `market_order_${order.id}`].includes(String(priorIntent.referenceId || "")) &&
+      Math.abs(priorIntent.amount - order.totalAmount) <= 0.001
+    ) {
+      // Repair an interrupted order transition using only the existing state machine.
+      // This recovery path never submits a new provider payment.
+      if (["created", "payment_pending"].includes(order.status)) {
+        if (order.status === "created") {
+          const pending = await transitionOrder(order.id, "payment_pending", auth.userId, "pi_recovery")
+          if (!pending.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+        }
+        const verified = await transitionOrder(order.id, "payment_verified", auth.userId, "pi_recovery")
+        if (!verified.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      }
+      if (order.status === "payment_verified" || ["created", "payment_pending"].includes(order.status)) {
+        const confirmed = await transitionOrder(order.id, "confirmed", "system", "pi_recovery")
+        if (!confirmed.ok) return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      } else if (!["confirmed", "fulfilling", "completed"].includes(order.status)) {
+        return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_REQUIRED", paymentVerified: true, retryable: false }, { status: 409, headers: { "Cache-Control": "no-store" } })
+      }
+      const commission = await recordPlatformCommission({
+        id: order.id,
+        totalAmount: order.totalAmount,
+        currency: "PI",
+        paymentMethod: "pi",
+        buyerId: order.buyerId,
+        paymentIntentId: priorIntent.id,
+        verifiedAt: priorIntent.completedAt ? new Date(priorIntent.completedAt).toISOString() : "",
+      })
+      const refreshedOrder = await loadOrder(order.id)
+      if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
+      return NextResponse.json({ ok: true, order: refreshedOrder || order, idempotent: true, recovered: true, commission, durableOrders: marketplaceOrdersDurable() }, { headers: { "Cache-Control": "no-store" } })
+    }
+    return NextResponse.json({ ok: false, error: "PAYMENT_VERIFIED_RECONCILIATION_REQUIRED", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+
   if (order.status !== "payment_pending" && order.status !== "created") {
     return NextResponse.json(
       { ok: false, error: "NOT_PAYABLE", status: order.status },
@@ -116,8 +229,20 @@ export async function POST(
     )
   }
 
-  const body = await request.json().catch(() => ({}))
-  const method = String(body.method || "").toLowerCase()
+  const parsed = await readBoundedJson(request, 8 * 1024)
+  if (!parsed.ok) {
+    const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    return NextResponse.json({ ok: false, error: parsed.error }, { status, headers: { "Cache-Control": "no-store" } })
+  }
+  const body = parsed.value
+  const method = typeof body.method === "string" ? body.method.toLowerCase() : ""
+  const orderCurrency = String(order.currency || "GHC").toUpperCase()
+  if (!(["GHC", "PI"].includes(orderCurrency)) || method !== orderCurrency.toLowerCase()) {
+    return NextResponse.json(
+      { ok: false, error: "PAYMENT_CURRENCY_MISMATCH", expected: orderCurrency },
+      { status: 409 }
+    )
+  }
   // Ignore client amount/balance claims
   void body.amount
   void body.balance
@@ -131,6 +256,16 @@ export async function POST(
 
     const referenceId = `market_order_${order.id}`
     const reason = `Marketplace order ${order.listingTitle || order.id}`
+
+    // Atomically claim the live stock reservation before the ledger spend. This prevents
+    // the expiry worker from releasing stock while payment is being processed.
+    const claim = await claimOrderForPayment(order.id, auth.userId, "ghc")
+    if (!claim.ok) {
+      const status = claim.error === "NOT_FOUND" ? 404 :
+        claim.error === "FORBIDDEN" ? 403 :
+        claim.error === "PAYMENT_IN_PROGRESS" || claim.error === "NOT_PAYABLE" || claim.error === "RESERVATION_EXPIRED" ? 409 : 503
+      return NextResponse.json({ ok: false, error: claim.error }, { status })
+    }
 
     let spendOk = false
     let spendTx: unknown = null
@@ -175,7 +310,21 @@ export async function POST(
       )
     }
 
+    if (spendOk && isDatabaseConfigured()) {
+      await attachLedgerCorrelation({
+        userId: auth.userId,
+        referenceId,
+        envelope: buildCorrelationEnvelope({ kind: "marketplace", event: "MARKETPLACE_PURCHASE", orderId: order.id, listingId: order.listingId }),
+      })
+    }
+
     if (!spendOk) {
+      // Release only on a definite insufficient-balance result. A transport/server error
+      // may have happened after the ledger committed; keep the claim for idempotent recovery
+      // rather than releasing stock while the payment outcome is ambiguous.
+      if (spendError === "INSUFFICIENT_BALANCE") {
+        await releaseOrderPaymentClaim(order.id, auth.userId, spendError)
+      }
       const status = spendError === "INSUFFICIENT_BALANCE" ? 402 : 400
       return NextResponse.json({ ok: false, error: spendError }, { status })
     }
@@ -202,19 +351,27 @@ export async function POST(
     }
     await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
 
+    const commission = await recordPlatformCommission({
+      id: order.id,
+      totalAmount: order.totalAmount,
+      currency: String(order.currency || "GHC"),
+      paymentMethod: "ghc",
+      buyerId: order.buyerId,
+    })
     return NextResponse.json({
       ok: true,
       order: await loadOrder(order.id),
       spend: spendTx,
       idempotent,
+      commission,
       durableOrders: marketplaceOrdersDurable(),
     })
   }
 
   if (method === "pi") {
     const intentId = String(body.intentId || "").trim()
-    const paymentId = String(body.paymentId || "").trim()
-    const txid = String(body.txid || "").trim()
+    // Provider identifiers supplied by the browser are untrusted metadata. The
+    // completed server-side intent is the only accepted source of payment IDs.
 
     if (!intentId) {
       return NextResponse.json(
@@ -227,13 +384,27 @@ export async function POST(
     if (!intent || intent.userId !== auth.userId) {
       return NextResponse.json({ ok: false, error: "INTENT_NOT_FOUND" }, { status: 404 })
     }
+    // A completed intent is not sufficient by itself: bind it to this marketplace
+    // order so one same-user/same-amount intent cannot pay for multiple orders.
+    if (
+      intent.provider !== "pi" ||
+      intent.currency !== "PI" ||
+      intent.purpose !== "marketplace" ||
+      ![order.id, `market_order_${order.id}`].includes(String(intent.referenceId || ""))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "PAYMENT_INTENT_ORDER_MISMATCH" },
+        { status: 409 }
+      )
+    }
     if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
       return NextResponse.json(
         { ok: false, error: "PAYMENT_NOT_COMPLETED", status: intent.status },
         { status: 409 }
       )
     }
-    if (Math.abs(intent.amount - order.totalAmount) > 0.001 && order.currency === "PI") {
+    if (orderCurrency !== "PI" || !Number.isFinite(intent.amount) ||
+      Math.abs(intent.amount - order.totalAmount) > 0.001) {
       return NextResponse.json(
         {
           ok: false,
@@ -245,11 +416,21 @@ export async function POST(
       )
     }
 
+    // The Pi intent must already be completed and amount-matched before claiming the
+    // reservation. Once claimed, the expiry worker cannot release this stock mid-fulfilment.
+    const claim = await claimOrderForPayment(order.id, auth.userId, "pi")
+    if (!claim.ok) {
+      const status = claim.error === "NOT_FOUND" ? 404 :
+        claim.error === "FORBIDDEN" ? 403 :
+        claim.error === "PAYMENT_IN_PROGRESS" || claim.error === "NOT_PAYABLE" || claim.error === "RESERVATION_EXPIRED" ? 409 : 503
+      return NextResponse.json({ ok: false, error: claim.error }, { status })
+    }
+
     order.paymentMethod = "pi"
     order.paymentStatus = "verified"
     order.paymentIntentId = intentId
-    order.paymentId = intent.providerPaymentId || paymentId
-    order.txid = intent.txid || txid
+    order.paymentId = intent.providerPaymentId || undefined
+    order.txid = intent.txid || undefined
     order.updatedAt = Date.now()
     order.audit = [
       ...(order.audit || []),
@@ -263,14 +444,32 @@ export async function POST(
       )
     }
 
-    await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
-    await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
+    const verifiedTransition = await transitionOrder(order.id, "payment_verified", auth.userId, "pi")
+    if (!verifiedTransition.ok) {
+      return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
+    const confirmedTransition = await transitionOrder(order.id, "confirmed", "system", "payment_auto_confirm")
+    if (!confirmedTransition.ok) {
+      return NextResponse.json({ ok: false, error: "ORDER_STATE_RECONCILIATION_PENDING", paymentVerified: true, retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
 
+    const commission = await recordPlatformCommission({
+      id: order.id,
+      totalAmount: order.totalAmount,
+      currency: String(order.currency || "PI"),
+      paymentMethod: "pi",
+      buyerId: order.buyerId,
+      paymentIntentId: intent.id,
+      verifiedAt: intent.completedAt ? new Date(intent.completedAt).toISOString() : "",
+    })
+    const refreshedOrder = await loadOrder(order.id)
+    if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
     return NextResponse.json({
       ok: true,
-      order: await loadOrder(order.id),
+      order: refreshedOrder || order,
+      commission,
       durableOrders: marketplaceOrdersDurable(),
-    })
+    }, { headers: { "Cache-Control": "no-store" } })
   }
 
   return NextResponse.json({ ok: false, error: "INVALID_METHOD" }, { status: 400 })
