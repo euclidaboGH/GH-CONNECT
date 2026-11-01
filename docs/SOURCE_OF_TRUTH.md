@@ -29,7 +29,7 @@ For implementation prompts:
 
 - Package version: `0.265.0`.
 - Node requirement: `^24.15.0`; `.nvmrc` is `24.15.0`.
-- Canonical Supabase migrations: **170 SQL files**.
+- Canonical Supabase migrations: **172 SQL files**.
 - Duplicate migration numeric prefixes: **0**.
 - Migration source manifest: synchronized with the canonical directory.
 - The latest repository archive was corrected to place the Next.js `app/` directory at repository root after a Vercel packaging failure caused by an extra wrapper directory.

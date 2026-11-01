@@ -28,6 +28,7 @@ import {
   Ban,
   Lock,
   Users,
+  ArrowLeft,
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
 import { useRegionalContext } from "@/contexts/regional-context"
@@ -36,6 +37,7 @@ import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
 import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
 import { AccountSecuritySignals } from "@/components/ghc/account-security-signals"
+import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
 import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
 import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
 import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
@@ -337,6 +339,25 @@ export function SettingsScreen({
     } finally {
       setThemeBusy(false)
     }
+  }
+
+  if (section === "pi-payout-auth") {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2.5">
+          <button type="button" onClick={goBackOneLevel} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Back">
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="text-[16px] font-bold">Pi payout authorization</h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
+          <PiPayoutAuthorizationCard />
+          <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+            GreenHaven never moves Pi without this consent. Authorization is stored server-side and checked on every withdrawal request. Revoking blocks future payouts only.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   if (section === "wallet") {
@@ -1256,6 +1277,13 @@ export function SettingsScreen({
           icon: <Gift size={20} strokeWidth={1.75} />,
           action: () => goToSection("rewards"),
           keywords: "rewards challenges earn pending claim",
+        },
+        {
+          title: "Pi payout authorization",
+          subtitle: "Required consent for A2U withdrawals",
+          icon: <Shield size={20} strokeWidth={1.75} />,
+          action: () => goToSection("pi-payout-auth"),
+          keywords: "pi wallet authorization a2u payout withdraw consent identity",
         },
         {
           title: "Invite friends",

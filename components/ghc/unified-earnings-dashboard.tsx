@@ -41,6 +41,11 @@ type Withdrawable = {
   piWalletLinked?: boolean
   linkedPiUsername?: string | null
   linkedPiAppUid?: string | null
+  walletAuthorization?: {
+    authorizationActive?: boolean
+    hasMapping?: boolean
+    error?: string
+  } | null
   error?: string
 }
 
@@ -242,6 +247,10 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       } else {
         setFailed(false)
         setSnap(wJson)
+        const wa = wJson.walletAuthorization
+        if (wa && typeof wa.authorizationActive === "boolean") {
+          setWalletAuthActive(wa.authorizationActive)
+        }
       }
       if (sRes.ok && sJson?.ok && Array.isArray(sJson.entries)) {
         setEntries(sJson.entries)
@@ -293,10 +302,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     const onRefresh = () => void refresh()
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
+    window.addEventListener("ghc:wallet-auth-changed", onRefresh)
     return () => {
       ac.abort()
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
+      window.removeEventListener("ghc:wallet-auth-changed", onRefresh)
     }
   }, [refresh])
 
@@ -330,10 +341,10 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         if (body?.error === "IDENTITY_MAPPING_REQUIRED") setWalletAuthActive(false)
         return
       }
-      setWalletAuthActive(true)
+      // Do not mark active until GET/withdrawable snapshot confirms (refresh below).
       setPayoutMsg(
         body.message ||
-          "Pi wallet authorized for App-to-User payouts to your linked identity. You can withdraw now.",
+          "Authorization submitted. Confirming server record…",
       )
       try {
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "wallet-auth-granted" } }))
@@ -342,6 +353,9 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             detail: { message: "Pi payouts authorized for your linked wallet", type: "success" },
           }),
         )
+        window.dispatchEvent(new CustomEvent("ghc:wallet-auth-changed", { detail: { active: true } }))
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
       } catch { /* */ }
       void refresh()
     } catch {
@@ -762,7 +776,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
                 requestingPayout ||
                 authorizingWallet ||
                 snap.eligible !== true ||
-                snap.piWalletLinked !== true
+                snap.piWalletLinked !== true ||
+                walletAuthActive === null
               }
               className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
             >

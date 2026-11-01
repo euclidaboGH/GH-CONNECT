@@ -184,7 +184,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'ok', true,
-    'hasMapping', FOUND OR v_map.pi_app_uid IS NOT NULL,
+    'hasMapping', v_map.gh_user_id IS NOT NULL,
     'mappedPiAppUid', v_map.pi_app_uid,
     'mappedUsername', v_map.pi_username,
     'authorizationActive', v_row.id IS NOT NULL AND v_row.status = 'active',

@@ -1,13 +1,13 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.270.1`
+**Current source version:** `0.271.2`
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
 
 ## Current release baseline
 
 - Node: `24.15.0` / `^24.15.0`
-- Supabase migrations: **171 canonical SQL files**
+- Supabase migrations: **172 canonical SQL files**
 - Duplicate migration numeric prefixes: **0**
 - Static/source audit: **57/57** consolidated checks passing (2026-11-01; source-only)
 - Pass 41: marketplace loaders now protect against stale responses and preserve last-known data on transient failures; feed requests use latest-request-wins cancellation

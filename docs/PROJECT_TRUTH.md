@@ -1,15 +1,15 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.270.1`
+**Current source version:** `0.271.2`
 **Current status:** **NOT APPROVED** for production release.
 
 ## Current authoritative metadata
 
 - Package and lockfile version: `0.265.0`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
-- Canonical Supabase migrations: **171** SQL files.
+- Canonical Supabase migrations: **172** SQL files.
 - Duplicate migration numeric prefixes: **0**.
-- Migration source manifest: synchronized with all 171 canonical migrations.
+- Migration source manifest: synchronized with all 172 canonical migrations.
 - No local secret `.env` file is included; `.env.example` is the only env template.
 
 ## Current source/audit status
