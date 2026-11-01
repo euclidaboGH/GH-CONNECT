@@ -642,6 +642,36 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         Withdrawable <span className="font-semibold text-foreground">{typeof withdrawable === "number" ? piToDisplay(withdrawable) : String(withdrawable)}</span>
         {" · "}{feePct}% fee · linked at sign-in{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
       </p>
+      {(charityTotal || charityCount > 0) ? (
+        <p className="px-4 pb-2 text-center text-[10px] text-muted-foreground" role="status">
+          Charity recorded: {charityTotal || "—"}
+          {charityCount > 0 ? ` · ${charityCount} contribution${charityCount === 1 ? "" : "s"}` : ""}
+          {" · "}segregated charity, separate from withdrawable balance
+        </p>
+      ) : (
+        <p className="sr-only">
+          Platform charity accounting is segregated charity, separate from withdrawable balance.
+        </p>
+      )}
+      {crossStatus === "healthy" ? (
+        <p className="sr-only">Financial snapshots reconciled. Cross-feature attention is clear.</p>
+      ) : crossStatus === "attention" && crossFindings.length > 0 ? (
+        <div className="mx-4 mb-2 rounded-xl border border-amber-300/60 bg-amber-50/80 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/40" role="status">
+          <p className="text-[11px] font-semibold text-amber-950 dark:text-amber-100">Cross-feature attention</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[10px] text-amber-900/90 dark:text-amber-100/90">
+            {crossFindings.slice(0, 3).map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      ) : crossStatus === "degraded" ? (
+        <p className="mx-4 mb-2 text-center text-[10px] font-medium text-rose-700 dark:text-rose-300" role="status">
+          Reconciliation unavailable
+        </p>
+      ) : (
+        <p className="sr-only">Cross-feature attention awaits the next wallet cross-reconcile report.</p>
+      )}
+
 
       {quoteDetail ? (
         <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">
