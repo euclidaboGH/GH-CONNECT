@@ -4,7 +4,7 @@ import path from "node:path"
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8")
 const checks = [
-  ["release metadata", /APP_RELEASE_VERSION = "0\.256\.0"/.test(read("lib/app-release.ts"))],
+  ["release metadata", read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${JSON.parse(read("package.json")).version}"`)],
   ["outcome panel exists", fs.existsSync(path.join(root, "components/ghc/home-outcome-panel.tsx"))],
   ["outcome panel combines action and journey", /Your next outcome/.test(read("components/ghc/home-outcome-panel.tsx")) && /journey\.steps/.test(read("components/ghc/home-outcome-panel.tsx"))],
   ["outcome progress accessibility", /role="progressbar"/.test(read("components/ghc/home-outcome-panel.tsx"))],

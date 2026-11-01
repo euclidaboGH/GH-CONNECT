@@ -7,7 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const source = readFileSync(join(root, 'app/api/payments/intents/route.ts'), 'utf8')
 const checks = [
   ['payment-intent creation is authenticated', source.indexOf('resolveAuthenticatedUser') < source.indexOf('createPaymentIntent(')],
-  ['creation requests are rate limited per user', source.includes('payment-intent:create:${auth.userId}') && source.includes('checkRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000)')],
+  ['creation requests are rate limited per user', source.includes('payment-intent:create:${auth.userId}') && (source.includes('checkDurableRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000') || source.includes('checkRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000)'))],
   ['intent listing is rate limited per user', source.includes('payment-intent:list:${auth.userId}')],
   ['raw body is bounded before JSON parsing', source.indexOf('rawBody.length > MAX_INTENT_BODY_CHARS') < source.indexOf('JSON.parse(rawBody)')],
   ['non-object JSON bodies are rejected', source.includes('Array.isArray(parsed)') && source.includes('INVALID_JSON_BODY')],

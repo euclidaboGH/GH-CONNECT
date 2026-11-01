@@ -3,7 +3,7 @@ const read=(p)=>fs.readFileSync(p,"utf8");
 const screen=read("components/ghc/marketplace-screen.tsx");
 const pkg=JSON.parse(read("package.json"));
 const checks=[
- ["version 0.227.0",pkg.version==="0.227.0"],
+ ["release version synchronized", fs.readFileSync("lib/app-release.ts","utf8").includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
  ["seller centre command center",screen.includes("SellerCommandCenter")&&screen.includes("Seller Centre")],
  ["seller attention metric",screen.includes("Needs attention")&&screen.includes("needsAttention")],
  ["seller order management",screen.includes("Manage seller orders")&&screen.includes('setOrderRoleFilter("selling")')],

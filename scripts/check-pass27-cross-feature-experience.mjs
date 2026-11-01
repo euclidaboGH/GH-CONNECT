@@ -7,8 +7,8 @@ const model = read("lib/home-cross-feature.ts")
 const card = read("components/ghc/home-cross-feature-path.tsx")
 const pkg = read("package.json")
 const checks = [
-  ["release metadata", /APP_RELEASE_VERSION = "0\.249\.0"/.test(read("lib/app-release.ts"))],
-  ["package version synchronized", /"version": "0\.249\.0"/.test(pkg) && /"version": "0\.249\.0"/.test(read("package-lock.json"))],
+  ["release metadata", read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${JSON.parse(read("package.json")).version}"`)],
+  ["package version synchronized", JSON.parse(read("package.json")).version === JSON.parse(read("package-lock.json")).version],
   ["cross-feature model exists", fs.existsSync(path.join(root, "lib/home-cross-feature.ts"))],
   ["authoritative wallet state is used", /walletReady|pendingGhc|lockedGhc/.test(model)],
   ["authoritative daily claim state is used", /dailyClaimable|claimable/.test(model) && /useDailyClaimStatus/.test(home)],

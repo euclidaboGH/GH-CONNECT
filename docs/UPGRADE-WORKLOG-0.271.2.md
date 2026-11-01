@@ -10,3 +10,5 @@
 Source-level / source-only verification only; inventory is not applied-state evidence.
 
 Supported runtime: Node.js 24.15.0.
+
+Document date: 2026-11-01.

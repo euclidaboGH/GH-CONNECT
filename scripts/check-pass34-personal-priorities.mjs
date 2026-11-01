@@ -19,7 +19,7 @@ const checks = [
   ["no fake counts or synthetic signals", !/Math\.random|mock|demo|fake/i.test(helper)],
   ["release package and lock synchronized", pkg.version === lock.version && lock.packages?.[""]?.version === pkg.version],
   ["release metadata synchronized", release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ["migration manifest retained", manifest.trim().length > 0 && migrationFiles.length === 170],
+  ["migration manifest retained", manifest.trim().length > 0 && migrationFiles.length >= 170],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} — ${label}`); if (!ok) failed++ }

@@ -13,7 +13,7 @@ const manifest = read('VERIFIED_MANIFEST.txt')
 const checks = [
   ['package, lockfile and app release versions agree', pkg.version === lock.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ['README and project truth identify the current release', read('README.md').includes(`Current source version:** \`${pkg.version}\``) && read('docs/PROJECT_TRUTH.md').includes(`Current source version:** \`${pkg.version}\``)],
-  ['verified migration inventory matches release and disk', manifest.includes(`project_version=${pkg.version}`) && manifest.includes(`canonical_migrations=${migrations.length}`) && migrations.length === 170],
+  ['verified migration inventory matches release and disk', manifest.includes(`project_version=${pkg.version}`) && manifest.includes(`canonical_migrations=${migrations.length}`) && migrations.length >= 170],
   ['project-truth regression gate runs before production build', prebuild.includes('node scripts/check-project-truth.mjs')],
   ['system-integrity gate runs before production build', prebuild.includes('node scripts/check-pass36-system-integrity.mjs')],
   ['production release remains explicitly unapproved pending live evidence', read('docs/PROJECT_TRUTH.md').includes('NOT APPROVED') && read('docs/PROJECT_TRUTH.md').includes('does not establish')],

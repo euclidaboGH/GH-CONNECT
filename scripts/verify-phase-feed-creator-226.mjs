@@ -3,7 +3,7 @@ const feed = fs.readFileSync('components/ghc/enhanced-feed-screen.tsx','utf8')
 const studio = fs.readFileSync('components/ghc/creator-studio-panel.tsx','utf8')
 const pkg = JSON.parse(fs.readFileSync('package.json','utf8'))
 const checks = [
- ['version 0.226.0', pkg.version === '0.226.0'],
+ ['release version synchronized', fs.readFileSync('lib/app-release.ts','utf8').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
  ['feed controls', feed.includes('Your feed, your priorities')],
  ['location lanes', feed.includes('Nearby') && feed.includes('Worldwide')],
  ['intent controls', feed.includes('Professional') && feed.includes('Matching')],

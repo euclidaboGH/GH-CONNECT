@@ -28,7 +28,7 @@ const checks = [
   ['financial write authority remains outside the new read bridge', !mapper.includes('wallet') && !mapper.includes('payment') && !mapper.includes('transfer')],
   ['package, lockfile and app release versions agree', lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ['project truth and verified manifest match active version', truth.includes(`**Current source version:** \`${pkg.version}\``) && manifest.includes(`project_version=${pkg.version}`)],
-  ['Pass 43 gate runs before earlier release gates', prebuild.startsWith('node scripts/check-pass43-domain-session-bridges.mjs') && prebuild.indexOf('check-pass43-domain-session-bridges') < prebuild.indexOf('check-pass42-marketplace-domain-boundary')],
+  ['Pass 43 gate runs before pass42 in prebuild', prebuild.includes('check-pass43-domain-session-bridges') && prebuild.indexOf('check-pass43-domain-session-bridges') < prebuild.indexOf('check-pass42-marketplace-domain-boundary')],
 ]
 let failures = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failures++ }

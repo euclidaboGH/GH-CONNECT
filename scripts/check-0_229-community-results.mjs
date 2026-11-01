@@ -3,7 +3,7 @@ const screen=fs.readFileSync('components/ghc/communities-screen.tsx','utf8')
 const hub=fs.readFileSync('components/ghc/premium-community-hub.tsx','utf8')
 const pkg=JSON.parse(fs.readFileSync('package.json','utf8'))
 const checks=[
- ['version 0.229.0',pkg.version==='0.229.0'],
+ ['release version synchronized', fs.readFileSync('lib/app-release.ts','utf8').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
  ['community pulse action center',screen.includes('Your community pulse')],
  ['board update aggregate',screen.includes('boardUnread')],
  ['chat unread aggregate',screen.includes('chatUnread')],

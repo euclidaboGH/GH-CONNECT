@@ -4,7 +4,7 @@ const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
 const wallet=fs.readFileSync("features/wallet/wallet-screen.tsx","utf8");
 const rewards=fs.readFileSync("components/ghc/rewards-centre-screen.tsx","utf8");
 const membership=fs.readFileSync("components/ghc/premium-membership-screen.tsx","utf8");
-add("version 0.228.0",pkg.version==="0.228.0");
+add("release version synchronized", fs.readFileSync("lib/app-release.ts","utf8").includes(`APP_RELEASE_VERSION = "${pkg.version}"`));
 add("wallet money and benefits command centre",wallet.includes("Money & benefits"));
 add("wallet links rewards",wallet.includes('navigateSettingsSection("rewards")'));
 add("wallet links membership",wallet.includes('navigateSettingsSection("membership")'));

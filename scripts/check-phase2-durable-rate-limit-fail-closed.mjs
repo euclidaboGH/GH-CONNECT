@@ -5,7 +5,7 @@ const control = fs.readFileSync('lib/server/security/control-plane.ts', 'utf8')
 const auth = fs.readFileSync('app/api/auth/pi/route.ts', 'utf8')
 const checks = [
   ['durable limiter exposes explicit unavailable policy', /onUnavailable\?: "local" \| "deny"/.test(control)],
-  ['fail-closed mode denies when durable RPC is unavailable', /options\.onUnavailable === "deny"[\s\S]*?return \{ ok: false, retryAfterSec: 5 \}/.test(control)],
+  ['fail-closed mode denies when durable RPC is unavailable', /options\.onUnavailable === "deny"[\s\S]*?return \{ ok: false, retryAfterSec: 5(?:, unavailable: true)? \}/.test(control)],
   ['local fallback is retained only as an explicit compatibility path', /return localRateLimit\(key, limit, windowMs\)/.test(control)],
   ['Pi authentication opts into fail-closed durable rate limiting', /checkDurableRateLimit\([\s\S]*?onUnavailable: "deny"/.test(auth)],
   ['rate-limit rejection returns retry guidance', /"Retry-After": String\(rate\.retryAfterSec\)/.test(auth)],

@@ -4,7 +4,7 @@ import path from "node:path"
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8")
 const checks = [
-  ["release metadata", /APP_RELEASE_VERSION = "0\.256\.0"/.test(read("lib/app-release.ts"))],
+  ["release metadata", read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${JSON.parse(read("package.json")).version}"`)],
   ["journey progress UI", /aria-label="Journey foundations"/.test(read("components/ghc/home-journey-card.tsx"))],
   ["journey progress accessibility", /role="progressbar"/.test(read("components/ghc/home-journey-card.tsx"))],
   ["journey next action", /Next: \{journey\.next\.title\}/.test(read("components/ghc/home-journey-card.tsx"))],
