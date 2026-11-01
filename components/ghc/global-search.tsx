@@ -15,13 +15,13 @@ import { runUniversalSearch, groupSearchResults } from "@/lib/domains/adapters/u
 import { resolveCommunitySearchAction } from "@/lib/domains/adapters/community-search-actions"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { resolveUserIntents } from "@/lib/connection-intents"
-import { Calendar, Briefcase, Sparkles } from "lucide-react"
+import { Calendar, Briefcase, Sparkles, ArrowRight, SlidersHorizontal } from "lucide-react"
 import { navigateTo, openCommunity, openChat } from "@/lib/navigation/navigate"
 import { openListing } from "@/lib/marketplace/commerce-actions"
 import { piLocalGet, piLocalSet } from "@/lib/pi-local-storage"
 import { POST_SYNC_EVENT, readPostSyncDetail } from "@/lib/social/post-sync"
 
-type SearchTab = "all" | "people" | "posts" | "communities" | "events" | "activities" | "services" | "ids"
+type SearchTab = "all" | "people" | "creators" | "posts" | "videos" | "communities" | "events" | "activities" | "services" | "ids"
 
 const RECENT_KEY = "ghc-search-recent-v1"
 const MAX_RECENT = 8
@@ -141,9 +141,13 @@ export function GlobalSearchModal({
     const cat =
       tab === "people"
         ? "people"
-        : tab === "posts"
-          ? "posts"
-          : "all"
+        : tab === "creators"
+          ? "creators"
+          : tab === "posts"
+            ? "posts"
+            : tab === "videos"
+              ? "videos"
+              : "all"
     const ac = new AbortController()
     void (async () => {
       try {
@@ -211,7 +215,7 @@ export function GlobalSearchModal({
 
   const people = useMemo(() => {
     if (!q || stale) return []
-    if (serverOk && serverPeople.length > 0) {
+    if (serverOk) {
       return serverPeople
         .filter((p) => p.userId && !blocked.has(String(p.userId)) && !muted.has(String(p.userId)))
         .map((p) => ({
@@ -265,11 +269,21 @@ export function GlobalSearchModal({
 
   const postHits = useMemo(() => {
     if (!q || stale) return []
+    if (serverOk) {
+      return serverPosts
+        .filter((p) => p?.id)
+        .map((p) => ({
+          id: String(p.id),
+          content: String(p.content || ""),
+          authorName: String(p.authorName || "Member"),
+          authorId: "",
+        }))
+        .slice(0, 16)
+    }
     return (posts || [])
       .filter((p) => p && !(p as { deletedAt?: number }).deletedAt)
       .filter((p) => !blocked.has(p.authorId) && !muted.has(p.authorId))
       .filter((p) => {
-        // Private / followers-only posts: only show public in global search
         const vis = (p as { visibility?: string }).visibility || "public"
         if (vis === "private") return false
         const content = (p.content || "").toLowerCase()
@@ -277,7 +291,17 @@ export function GlobalSearchModal({
         return content.includes(q) || author.includes(q) || (q.startsWith("#") && content.includes(q.slice(1)))
       })
       .slice(0, 16)
-  }, [posts, q, blocked, muted, stale])
+  }, [posts, q, blocked, muted, stale, serverOk, serverPosts])
+
+  const videoHits = useMemo(() => {
+    if (!q || stale || !serverOk) return []
+    return serverVideos.filter((p) => p?.id).slice(0, 12)
+  }, [q, stale, serverOk, serverVideos])
+
+  const creatorHits = useMemo(() => {
+    if (!q || stale || !serverOk) return []
+    return serverCreators.filter((p) => p?.userId).slice(0, 12)
+  }, [q, stale, serverOk, serverCreators])
 
   const communities = useMemo(() => {
     if (!q || stale) return []
@@ -342,15 +366,46 @@ export function GlobalSearchModal({
   if (!open) return null
 
   const showPeople = tab === "all" || tab === "people"
+  const showCreators = tab === "all" || tab === "creators"
   const showPosts = tab === "all" || tab === "posts"
+  const showVideos = tab === "all" || tab === "videos"
   const showCommunities = tab === "all" || tab === "communities"
   const showEvents = tab === "all" || tab === "events"
   const showActivities = tab === "all" || tab === "activities"
   const showServices = tab === "all" || tab === "services"
   const showIds = tab === "all" || tab === "ids"
+  const resultCounts = {
+    people: people.length || universal.groups.people.length,
+    creators: creatorHits.length,
+    posts: postHits.length,
+    videos: videoHits.length,
+    communities: communities.length || universal.groups.communities.length,
+    events: universal.groups.events.length,
+    activities: universal.groups.activities.length,
+    services: universal.groups.services.length,
+    ids: idHits.length,
+  }
+  const totalResults = Object.values(resultCounts).reduce((sum, count) => sum + count, 0)
+  const leadingResult = Object.entries(resultCounts)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1])[0]
+  const resultOutcome = !q
+    ? null
+    : totalResults > 0
+      ? {
+          title: `${totalResults} relevant result${totalResults === 1 ? "" : "s"} found`,
+          detail: leadingResult ? `${leadingResult[1]} in ${leadingResult[0]}. Use the categories to narrow the result set without losing your search.` : "Use the categories to narrow your search.",
+        }
+      : {
+          title: "No visible matches yet",
+          detail: "Try a broader name, interest, location, GreenHaven ID, community, service or activity. Privacy and block rules stay enforced.",
+        }
+
   const hasAny =
     (showPeople && (people.length > 0 || universal.groups.people.length > 0)) ||
+    (showCreators && creatorHits.length > 0) ||
     (showPosts && postHits.length > 0) ||
+    (showVideos && videoHits.length > 0) ||
     (showCommunities && (communities.length > 0 || universal.groups.communities.length > 0)) ||
     (showEvents && universal.groups.events.length > 0) ||
     (showActivities && universal.groups.activities.length > 0) ||
@@ -405,11 +460,16 @@ export function GlobalSearchModal({
           </button>
         </div>
 
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 pt-2 text-[10px] font-semibold text-muted-foreground">
+          <SlidersHorizontal size={12} /> Search across GreenHaven
+        </div>
         <div className="flex gap-1 overflow-x-auto border-b border-border/60 px-3 py-2 scrollbar-hide">
           {tabBtn("all", "All")}
           {tabBtn("people", "People")}
+          {tabBtn("creators", "Creators")}
           {tabBtn("ids", "IDs")}
           {tabBtn("posts", "Posts")}
+          {tabBtn("videos", "Videos")}
           {tabBtn("communities", "Communities")}
           {tabBtn("events", "Events")}
           {tabBtn("activities", "Activities")}
@@ -457,11 +517,40 @@ export function GlobalSearchModal({
             </div>
           )}
 
+          {q && !stale && resultOutcome && (
+            <section className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3" aria-label="Search outcome">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                  <Search size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-foreground">{resultOutcome.title}</p>
+                  <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{resultOutcome.detail}</p>
+                  {hasAny ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {Object.entries(resultCounts).filter(([, count]) => count > 0).slice(0, 5).map(([key, count]) => (
+                        <button key={key} type="button" onClick={() => setSearchTab(key as SearchTab)} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-bold capitalize text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
+                          {key} <span className="text-muted-foreground">{count}</span><ArrowRight size={10} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          )}
+
           {q && !hasAny && !stale && (
-            <div className="py-10 text-center">
-              <p className="text-sm font-semibold">
+            <div className="py-8 text-center">
+              <p className="text-sm font-semibold">No results for “{debouncedQuery}”</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Private, blocked, or hidden profiles are not shown. Try another spelling or category.
+              </p>
+            </div>
+          )}
+
           {(showEvents || showActivities || showServices) && (
-            <div className="space-y-3 px-3 pb-4">
+            <div className="space-y-3 pb-4">
               {showEvents && universal.groups.events.length > 0 && (
                 <section aria-label="Events">
                   <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -470,13 +559,7 @@ export function GlobalSearchModal({
                   <ul className="space-y-1">
                     {universal.groups.events.map((h) => (
                       <li key={`ev-${h.id}`}>
-                        <button
-                          type="button"
-                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
-                          onClick={() => closeAnd(() => {
-                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
-                          })}
-                        >
+                        <button type="button" className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60" onClick={() => closeAnd(() => { try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ } })}>
                           <span className="text-sm font-semibold">{h.title}</span>
                           {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
                           {h.explanation ? <span className="text-[10px] text-primary/90">{h.explanation}</span> : null}
@@ -494,13 +577,7 @@ export function GlobalSearchModal({
                   <ul className="space-y-1">
                     {universal.groups.activities.map((h) => (
                       <li key={`act-${h.id}`}>
-                        <button
-                          type="button"
-                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
-                          onClick={() => closeAnd(() => {
-                            try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ }
-                          })}
-                        >
+                        <button type="button" className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60" onClick={() => closeAnd(() => { try { window.dispatchEvent(new CustomEvent("ghc:navigate", { detail: { tab: "communities" } })) } catch { /* */ } })}>
                           <span className="text-sm font-semibold">{h.title}</span>
                           {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
                         </button>
@@ -517,13 +594,7 @@ export function GlobalSearchModal({
                   <ul className="space-y-1">
                     {universal.groups.services.map((h) => (
                       <li key={`svc-${h.id}`}>
-                        <button
-                          type="button"
-                          className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60"
-                          onClick={() => closeAnd(() => {
-                            try { openListing(String(h.id)) } catch { /* */ }
-                          })}
-                        >
+                        <button type="button" className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted/60" onClick={() => closeAnd(() => { try { openListing(String(h.id)) } catch { /* */ } })}>
                           <span className="text-sm font-semibold">{h.title}</span>
                           {h.subtitle ? <span className="text-[11px] text-muted-foreground">{h.subtitle}</span> : null}
                         </button>
@@ -532,12 +603,6 @@ export function GlobalSearchModal({
                   </ul>
                 </section>
               )}
-            </div>
-          )}
-No results for “{debouncedQuery}”</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Private, blocked, or hidden profiles are not shown. Try another spelling or category.
-              </p>
             </div>
           )}
 
@@ -581,6 +646,42 @@ No results for “{debouncedQuery}”</p>
                             .join(" · ")}
                         </p>
                       </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {showCreators && creatorHits.length > 0 && (
+            <section className="mb-4" aria-label="Creators">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <Sparkles size={12} /> Creators
+              </p>
+              <ul className="space-y-1">
+                {creatorHits.map((creator) => (
+                  <li key={`creator-${creator.userId}`}>
+                    <button type="button" onClick={() => closeAnd(() => onSelectPerson?.(String(creator.userId)))} className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted">
+                      <span className="text-sm font-semibold">{creator.displayName || "Creator"}</span>
+                      {creator.bio ? <span className="line-clamp-2 text-[11px] text-muted-foreground">{creator.bio}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {showVideos && videoHits.length > 0 && (
+            <section className="mb-4" aria-label="Videos">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <Newspaper size={12} /> Videos
+              </p>
+              <ul className="space-y-1">
+                {videoHits.map((video) => (
+                  <li key={`video-${video.id}`}>
+                    <button type="button" onClick={() => closeAnd(() => onSelectPost?.(String(video.id)))} className="flex w-full flex-col rounded-xl px-2 py-2 text-left hover:bg-muted">
+                      <span className="line-clamp-2 text-sm font-semibold">{video.content || "Video post"}</span>
+                      {video.authorName ? <span className="text-[11px] text-muted-foreground">{video.authorName}</span> : null}
                     </button>
                   </li>
                 ))}

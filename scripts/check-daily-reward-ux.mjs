@@ -23,7 +23,7 @@ const checks = [
   ["popover close control is disabled while a claim is in flight", /disabled=\{claiming\}/.test(prompt) && /aria-label="Close"/.test(prompt)],
   ["daily claim uses canonical server endpoint and no client amount", /fetch\("\/api\/economy\/rewards\/daily"/.test(client) && /body: JSON\.stringify\(\{\}\)/.test(client)],
   ["server rejects unauthenticated claim requests", /resolveAuthenticatedUser\(request\.headers\)/.test(route) && /AUTH_REQUIRED/.test(route)],
-  ["server rate-limits repeated daily claim attempts", /checkRateLimit\(`daily_claim:\$\{auth\.userId\}`/.test(route)],
+  ["server uses durable fail-closed rate limits for repeated daily claim attempts", /await checkDurableRateLimit\(`daily_claim:\$\{auth\.userId\}`, 10, 60_000, \{ onUnavailable: "deny" \}\)/.test(route)],
   ["server requires atomic durable claim RPC and fails closed", /rpcExecuteDailyClaimV12/.test(route) && /GHC_DAILY_CLAIM_MIGRATION_REQUIRED/.test(route)],
   ["daily claim remains pending and is not optimistic spendable credit", /pending: true/.test(route) && /pending entitlements, not spendable wallet credits/.test(route) && /syncWalletAfterServerClaim/.test(prompt)],
   ["shared status coordinator refreshes on focus, online and claim events", /addEventListener\("focus"/.test(statusStore) && /addEventListener\("online"/.test(statusStore) && /ghc:daily-reward-claimed/.test(statusStore)],

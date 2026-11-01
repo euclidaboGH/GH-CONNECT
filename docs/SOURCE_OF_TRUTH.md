@@ -1,6 +1,6 @@
 # GreenHaven — Source of Truth & Prompt Execution Rules
 
-**Current source version:** `0.222.0`
+**Current source version:** `0.265.0`
 **Status:** source-audited; NOT APPROVED as a production release until the explicit runtime, database, provider and operator gates are completed.
 
 ## Authority order
@@ -11,7 +11,7 @@ When documents disagree, use this order and stop to reconcile conflicts rather t
 2. **Current package/runtime metadata**: `package.json`, `package-lock.json`, `.nvmrc`, `vercel.json`.
 3. **`docs/SOURCE_OF_TRUTH.md`** for project-wide release boundaries and prompt execution rules.
 4. **`docs/PROJECT_TRUTH.md`** for current release metadata and verification limits.
-5. **Current dated 2026-10-31 release/audit documents** for the specific feature they cover.
+5. **Current dated release/audit documents** (including the Phase 1 foundation audit) for the specific feature they cover.
 6. **Referenced legacy verification documents** exist only because older regression scripts still validate them. They are historical fixtures, not current design authority.
 
 ## Prompt execution rule
@@ -27,7 +27,7 @@ For implementation prompts:
 
 ## Current release facts
 
-- Package version: `0.222.0`.
+- Package version: `0.265.0`.
 - Node requirement: `^24.15.0`; `.nvmrc` is `24.15.0`.
 - Canonical Supabase migrations: **170 SQL files**.
 - Duplicate migration numeric prefixes: **0**.
@@ -38,7 +38,7 @@ For implementation prompts:
 
 ## Current feature authorities
 
-- Wallet / notification / premium UI: use the current 0.222.0 audit documents and executable wallet/notification source.
+- Wallet / notification / premium UI: use the current feature audit documents and executable wallet/notification source.
 - Feed / post / curation / comments: use the current post-curation production document and executable social source.
 - Community + Chat: Community membership and Chat membership are separate states; owner-controlled chat creation and approval ordering are authoritative in the current migrations/source.
 - Regional context: server timestamps remain authoritative; viewer locale/timezone formats presentation; precise location is explicit opt-in and feature-scoped.

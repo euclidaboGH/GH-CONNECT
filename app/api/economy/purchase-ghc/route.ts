@@ -19,7 +19,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import {
   getGhcPack,
   listGhcPacks,
@@ -104,24 +104,24 @@ export async function POST(request: Request) {
     )
   }
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`purchase_ghc:${auth.userId}`, 20, 60_000)
+  const rl = await checkDurableRateLimit(`purchase_ghc:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many purchase attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Purchase protection is temporarily unavailable" : `Too many purchase attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
   // Soft daily purchase rate limit (count attempts, not only success)
   const dayKey = lagosDayKey()
-  const dayRl = checkRateLimit(
+  const dayRl = await checkDurableRateLimit(
     `purchase_ghc_day:${auth.userId}:${dayKey}`,
     packPurchaseLimits().maxPurchasesPerDay,
-    24 * 60 * 60 * 1000
+    24 * 60 * 60 * 1000,
+    { onUnavailable: "deny" },
   )
   if (!dayRl.ok) {
     return jsonErr(
-      "DAILY_PACK_CAP",
-      `Daily pack purchase limit reached (${packPurchaseLimits().maxPurchasesPerDay}). Retry tomorrow.`,
-      429
+      durableRateLimitCode(dayRl) === "RATE_LIMIT_UNAVAILABLE" ? "RATE_LIMIT_UNAVAILABLE" : "DAILY_PACK_CAP",
+      dayRl.unavailable ? "Daily purchase protection is temporarily unavailable" : `Daily pack purchase limit reached (${packPurchaseLimits().maxPurchasesPerDay}). Retry tomorrow.`,
+      durableRateLimitStatus(dayRl)
     )
   }
 

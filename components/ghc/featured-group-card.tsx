@@ -35,7 +35,7 @@ function FeaturedGroupCardContent({
   lastMessageTime = Date.now(),
 }: FeaturedGroupCardProps) {
   return (
-    <div className="relative rounded-xl overflow-hidden bg-card shadow-md hover:shadow-lg transition-shadow border border-border/70/50">
+    <div className="gh-card-interactive relative overflow-hidden rounded-[1.35rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)] transition hover:shadow-[var(--gh-card-shadow-lg)]">
       {/* Cover Image */}
       <div className="relative h-40 bg-gradient-to-br from-emerald-600 to-teal-700 overflow-hidden">
         {coverImage ? (
@@ -110,10 +110,10 @@ function FeaturedGroupCardContent({
         <button
           onClick={onJoin}
           disabled={isJoined}
-          className={`w-full px-4 py-2 rounded-lg font-semibold text-sm transition active:scale-95 ${
+          className={`w-full rounded-full px-4 py-2.5 text-sm font-bold transition active:scale-95 ${
             isJoined
-              ? "bg-muted text-muted-foreground cursor-default"
-              : "bg-[var(--gh-green)] text-white hover:brightness-105 active:brightness-95"
+              ? "cursor-default bg-muted text-muted-foreground"
+              : "bg-[var(--gh-green)] text-white shadow-sm hover:brightness-105 active:brightness-95"
           }`}
           aria-label={isJoined ? `Joined ${name}` : `Join ${name}`}
         >

@@ -169,3 +169,4 @@ filename,classification,bytes
 20261030010015_phase26_operational_execution_paths.sql,REQUIRED,14744
 20261031010001_gh_community_chat_governance.sql,REQUIRED,7625
 20261031010002_gh_community_chat_review_membership_order.sql,REVIEW_REQUIRED,2744
+20261101010001_gh_security_control_plane_retention.sql,REVIEW_REQUIRED,3393

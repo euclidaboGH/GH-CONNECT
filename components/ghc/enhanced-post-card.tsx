@@ -476,7 +476,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card mb-3 max-w-full cursor-pointer overflow-x-hidden overflow-hidden bg-card text-card-foreground focus-visible:outline-none"
+      data-post-id={post.id} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -958,9 +958,13 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — mobile-safe density: never clip share/save */}
+      {/* Primary actions — separate quality curation from everyday response actions. */}
+      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
+        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
+      </div>
       <div
-        className="border-t border-border/40 px-2 py-2 sm:px-3"
+        className="px-2 pb-2 pt-1 sm:px-3"
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >

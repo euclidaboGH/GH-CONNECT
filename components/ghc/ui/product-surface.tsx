@@ -69,7 +69,7 @@ export function EconomyActionStrip({
           key={item.id}
           type="button"
           onClick={item.onClick}
-          className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl border border-border/70 bg-card px-1.5 py-2 text-center shadow-sm transition hover:border-emerald-300/70 active:scale-[0.98]"
+          className="gh-card-interactive flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl border border-border/70 bg-card px-1.5 py-2.5 text-center shadow-[var(--gh-card-shadow)] transition hover:border-emerald-300/70 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.98]"
         >
           <span
             className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-black ${accentMap[item.accent || "slate"]}`}

@@ -15,7 +15,7 @@ const MAX_BUCKETS = 50_000
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
-  | { ok: false; retryAfterSec: number }
+  | { ok: false; retryAfterSec: number; unavailable?: true }
 
 function pruneExpiredBuckets(now: number): void {
   for (const [key, bucket] of buckets) {

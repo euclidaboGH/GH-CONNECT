@@ -26,7 +26,15 @@ import { Users, MessagesSquare, Compass, ArrowRight, Sparkles, Camera, Video, Pe
 import { resolveHomeNextAction } from "@/lib/domains/adapters/home-next-action"
 import { buildHomeActivationChecklist } from "@/lib/domains/adapters/home-activation-checklist"
 import { HomeActivationChecklist } from "@/components/ghc/home-activation-checklist"
+import { buildHomeJourney } from "@/lib/home-journey"
+import { buildHomeResultMetrics } from "@/lib/home-results"
+import { HomeResultsStrip } from "@/components/ghc/home-results-strip"
+import { HomeOutcomePanel } from "@/components/ghc/home-outcome-panel"
 import { navigateTo, openCommunity } from "@/lib/navigation/navigate"
+import { HomeCrossFeaturePath } from "@/components/ghc/home-cross-feature-path"
+import { buildHomeCrossFeatureSignals } from "@/lib/home-cross-feature"
+import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
+import { useDailyClaimStatus } from "@/components/ghc/use-daily-claim-status"
 
 function timeGreeting(now = new Date()): string {
   const h = now.getHours()
@@ -223,6 +231,21 @@ export function HomeCommandCentre({
     [avatar, hasBio, interestsCount, myCommunities.length, hasOwnPost]
   )
 
+  const journey = useMemo(() => buildHomeJourney({
+    profileComplete: Boolean(completion === null && profile?.displayName?.trim() && avatar),
+    hasDiscoverySignals: friendsOrFollowing > 0 || interestsCount > 0 || myCommunities.length > 0,
+    hasConnection: friendsOrFollowing > 0,
+    hasParticipation: hasOwnPost || myCommunities.length > 0,
+  }), [completion, profile?.displayName, avatar, friendsOrFollowing, interestsCount, myCommunities.length, hasOwnPost])
+
+  const resultMetrics = useMemo(() => buildHomeResultMetrics({
+    profileCompletionPercent: completion,
+    friendsCount: summary.ok ? summary.data.friendsCount : 0,
+    followingCount: summary.ok ? summary.data.followingCount : 0,
+    messagesNeedingAttention: attentionCount,
+    communitiesCount: myCommunities.length,
+  }), [completion, summary, attentionCount, myCommunities.length])
+
   const nextAction = resolveHomeNextAction({
     profileCompletionPercent: completion,
     messagesNeedingAttention: attentionCount,
@@ -232,12 +255,23 @@ export function HomeCommandCentre({
     hasPhoto: Boolean(avatar),
   })
 
-  // One primary activation surface: checklist when incomplete; otherwise high-urgency next step only.
-  // Avoid stacking "Discover" + checklist + profile CTAs.
-  const showNextStep =
-    activationChecklist.complete &&
-    (nextAction.urgency === "high" ||
-      (nextAction.id === "open_messages" && attentionCount > 0))
+  const walletRead = useWalletRead()
+  const dailyClaim = useDailyClaimStatus(meId || "", Boolean(meId))
+  const crossFeatureSignals = useMemo(() => buildHomeCrossFeatureSignals({
+    messagesNeedingAttention: attentionCount,
+    communityInvites: invites.length,
+    communitySignals: communityPulse.items.length,
+    communitiesCount: myCommunities.length,
+    friendsOrFollowing,
+    profileCompletion: completion,
+    hasOwnPost,
+    interestsCount,
+    dailyClaimable: Boolean(dailyClaim.status?.claimable),
+    walletReady: walletRead.snapshot.source === "server" && walletRead.snapshot.status === "ready",
+    pendingGhc: walletRead.snapshot.pendingGhc,
+    lockedGhc: walletRead.snapshot.lockedGhc,
+  }), [attentionCount, invites.length, communityPulse.items.length, myCommunities.length, friendsOrFollowing, completion, hasOwnPost, interestsCount, dailyClaim.status, walletRead.snapshot])
+
 
   return (
     <section className="space-y-3" aria-label="Home command centre">
@@ -359,41 +393,46 @@ export function HomeCommandCentre({
         <HomeActivationChecklist checklist={activationChecklist} />
       ) : null}
 
-      {showNextStep ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (nextAction.event) {
-              try {
-                if (nextAction.event === "ghc:open-wallet") {
-                  navigateTo("wallet")
-                  return
-                }
-                window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} }))
-              } catch {
-                /* */
-              }
+      <HomeResultsStrip
+        metrics={resultMetrics}
+        onOpen={(id) => {
+          if (id === "identity") goTab("profile")
+          else if (id === "network") goTab("discover")
+          else if (id === "messages") goTab("messages")
+          else goTab("communities")
+        }}
+      />
+
+      <HomeOutcomePanel
+        action={nextAction}
+        journey={journey}
+        onAction={() => {
+          if (nextAction.event) {
+            if (nextAction.event === "ghc:open-wallet") {
+              navigateTo("wallet")
               return
             }
-            if (nextAction.target !== "home") goTab(nextAction.target)
-          }}
-          className="flex w-full items-center gap-2.5 rounded-xl border border-border/50 bg-muted/30 px-2.5 py-2 text-left transition active:scale-[0.99] hover:bg-muted/50"
-          aria-label={`${nextAction.title}. ${nextAction.cta}`}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-[12px] font-semibold text-foreground">
-              {nextAction.title}
-            </span>
-            <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground line-clamp-1">
-              {nextAction.body}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-            {nextAction.cta}
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </span>
-        </button>
-      ) : null}
+            try { window.dispatchEvent(new CustomEvent(nextAction.event, { detail: {} })) } catch { /* */ }
+            return
+          }
+          if (nextAction.target === "home") {
+            try { window.dispatchEvent(new CustomEvent("ghc:focus-feed")) } catch { /* */ }
+            return
+          }
+          goTab(nextAction.target)
+        }}
+      />
+
+      <HomeCrossFeaturePath
+        signals={crossFeatureSignals}
+        onOpen={(signal) => {
+          if (signal.target === "home") {
+            try { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post" } })) } catch { /* */ }
+            return
+          }
+          goTab(signal.target)
+        }}
+      />
 
       {invites.length > 0 ? (
         <div className="space-y-2" aria-label={`${invites.length} community invitations`}>

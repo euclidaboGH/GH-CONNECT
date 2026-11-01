@@ -16,12 +16,12 @@ import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
 import { BrandLogo } from "./brand-logo"
 import { ThemeApplier } from "./theme-applier"
-import { OfflineBanner } from "./offline-banner"
+import { NetworkResilience } from "./network-resilience"
 import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { AccessibilityAnnouncer } from "./accessibility-announcer"
 import { SessionResumeToast } from "./session-resume-toast"
-import { NetworkStatusStrip } from "./network-status-strip"
+import { getMarketplaceCart } from "@/lib/marketplace/cart"
 import { GlobalHotkeys } from "./global-hotkeys"
 import { GlobalInteractionDialog } from "./global-interaction-dialog"
 import { PaymentRecoveryListener } from "./payment-recovery-listener"
@@ -102,21 +102,21 @@ function TabScreenFallback({ label }: { label: string }) {
             <img src="/gh-connect-logo.png" alt="" className="h-full w-full object-contain" width={36} height={36} />
           </div>
           <div className="flex-1 space-y-1.5">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-            <div className="h-2.5 w-1/3 animate-pulse rounded bg-muted/70" />
+            <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />
+            <div className="h-2.5 w-1/3 gh-skeleton rounded bg-muted/70" />
           </div>
         </div>
-        <div className="h-16 animate-pulse rounded-2xl bg-muted/70" />
+        <div className="h-16 gh-skeleton rounded-2xl bg-muted/70" />
         <div className="space-y-2 rounded-2xl border border-border/40 p-3">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
-            <div className="h-2.5 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-8 gh-skeleton rounded-full bg-muted" />
+            <div className="h-2.5 w-24 gh-skeleton rounded bg-muted" />
           </div>
-          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
-          <div className="h-3 w-4/5 animate-pulse rounded bg-muted/60" />
-          <div className="mt-2 h-28 animate-pulse rounded-xl bg-muted/50" />
+          <div className="h-3 w-full gh-skeleton rounded bg-muted/80" />
+          <div className="h-3 w-4/5 gh-skeleton rounded bg-muted/60" />
+          <div className="mt-2 h-28 gh-skeleton rounded-xl bg-muted/50" />
         </div>
-        <div className="h-20 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-20 gh-skeleton rounded-2xl bg-muted/40" />
       </div>
       <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">Loading {label}…</p>
     </div>
@@ -202,9 +202,9 @@ const Toast = memo(({ message, type }: { message: string; type: string }) => {
     <div
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
-      className={`pointer-events-auto flex max-w-full items-start gap-2.5 rounded-2xl border px-3.5 py-2.5 text-left shadow-lg shadow-black/10 backdrop-blur-md ${shell}`}
+      className={`gh-toast-item pointer-events-auto flex max-w-full items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-left shadow-lg shadow-black/12 backdrop-blur-md motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-200 ${shell}`}
     >
-      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} aria-hidden />
       <p className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{message}</p>
     </div>
   )
@@ -216,10 +216,9 @@ Toast.displayName = "Toast"
 /** Canonical primary shell navigation — secondary social surfaces remain reachable from Home/Profile. */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
-  { id: "discover", icon: Compass, label: "Discovery" },
+  { id: "messages", icon: MessagesSquare, label: "Messages" },
   { id: "communities", icon: Users, label: "Communities" },
   { id: "cart", icon: ShoppingCart, label: "Cart" },
-  { id: "messages", icon: MessagesSquare, label: "Messages" },
   { id: "profile", icon: UserRound, label: "Profile" },
 ] as const
 
@@ -557,6 +556,29 @@ export function GHConnectApp() {
   /** Service id to focus when Ecosystem opens (e.g. marketplace) */
   const [ecosystemFocus, setEcosystemFocus] = useState<string | null>(null)
   const [marketplaceOpen, setMarketplaceOpen] = useState(false)
+  const [cartBadgeCount, setCartBadgeCount] = useState(0)
+  useEffect(() => {
+    const syncCartBadge = () => {
+      try {
+        const items = getMarketplaceCart()
+        setCartBadgeCount(
+          Array.isArray(items)
+            ? items.reduce((n, it) => n + Math.max(0, Number(it.quantity) || 0), 0)
+            : 0,
+        )
+      } catch {
+        setCartBadgeCount(0)
+      }
+    }
+    syncCartBadge()
+    window.addEventListener("ghc:marketplace-cart-changed", syncCartBadge)
+    window.addEventListener("focus", syncCartBadge)
+    return () => {
+      window.removeEventListener("ghc:marketplace-cart-changed", syncCartBadge)
+      window.removeEventListener("focus", syncCartBadge)
+    }
+  }, [])
+
   const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
@@ -1139,7 +1161,7 @@ export function GHConnectApp() {
       data-nav-in-flow="true"
     >
       <DailyClaimPrompt />
-      <OfflineBanner />
+      <NetworkResilience />
       <PaymentRecoveryListener />
       {/* Main content — tap reveals bottom nav when it was auto-hidden */}
       <main
@@ -1153,7 +1175,7 @@ export function GHConnectApp() {
       >
         {/* Content fills the flex area above the nav. Modest pb only for last-item breathing room. */}
         {visitedTabs.has("home") && (
-        <div aria-hidden={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
@@ -1164,7 +1186,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("discover") && (
-        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Discover" onReset={() => resetScreen("discover")}>
               <Suspense fallback={<TabScreenFallback label="Find" />}>
@@ -1175,7 +1197,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("matches") && (
-        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1189,7 +1211,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("communities") && (
-        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1203,7 +1225,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("messages") && (
-        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Messages" onReset={() => resetScreen("messages")}>
               <Suspense fallback={<TabScreenFallback label="Messages" />}>
@@ -1214,7 +1236,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("profile") && (
-        <div className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full min-h-0 touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1247,6 +1269,7 @@ export function GHConnectApp() {
         aria-label="Main navigation"
         role="navigation"
         aria-hidden={bottomNavHidden || showCreateHub}
+        inert={bottomNavHidden || showCreateHub}
         style={{
           minHeight: "var(--gh-bottom-nav-height)",
           /* Crisp edge — no soft gradient “shadow band” above the bar */
@@ -1304,10 +1327,10 @@ export function GHConnectApp() {
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
-                  className={`absolute inset-x-2 top-0 h-0.5 rounded-full bg-primary transition-opacity duration-150 ${
-                    isActive ? "opacity-100" : "opacity-0"
+                  className={`absolute inset-x-3 top-0 h-0.5 rounded-full transition-all duration-200 ${
+                    isActive ? "bg-primary opacity-100 scale-x-100" : "bg-transparent opacity-0 scale-x-50"
                   }`}
-                  aria-hidden="true"
+                  aria-hidden
                 />
                 <span
                   className={
@@ -1319,6 +1342,7 @@ export function GHConnectApp() {
                   }
                 >
                   <span className="relative inline-flex">
+                    <span className="relative inline-flex">
                     <Icon
                       size={(id as string) === "create" ? 22 : 20}
                       strokeWidth={(id as string) === "create" ? 2.5 : isActive ? 2.5 : 2}
@@ -1326,6 +1350,12 @@ export function GHConnectApp() {
                       aria-hidden="true"
                       className={(id as string) === "create" ? "text-white" : undefined}
                     />
+                    {id === "cart" && cartBadgeCount > 0 ? (
+                      <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-card">
+                        {cartBadgeCount > 99 ? "99+" : cartBadgeCount}
+                      </span>
+                    ) : null}
+                  </span>
                     {((id === "home" && socialAttentionCount > 0) ||
                       (id === "messages" && unreadMessageCount > 0) ||
                       (id === "communities" && unreadGroupCount > 0) ||
@@ -1461,7 +1491,6 @@ export function GHConnectApp() {
         className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3 pb-1"
         aria-live="polite"
       >
-        <NetworkStatusStrip />
         {visibleToasts.map((toast) => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}

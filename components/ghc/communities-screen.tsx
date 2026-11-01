@@ -310,7 +310,7 @@ export function CommunitiesScreen() {
   )
   const [directory, setDirectory] = useState<DirectoryTab>("discover")
   const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<"recent" | "active" | "name">("recent")
+  const [sortBy, setSortBy] = useState<"recent" | "active" | "unread" | "name">("recent")
   const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "request" | "invite">("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showCreate, setShowCreate] = useState(false)
@@ -603,9 +603,27 @@ export function CommunitiesScreen() {
         if (sortBy === "name")
           return (a.groupName || a.participantName).localeCompare(b.groupName || b.participantName)
         if (sortBy === "active") return (b.members?.length || 0) - (a.members?.length || 0)
+        if (sortBy === "unread") {
+          const aUnread = Number(a.boardUnread || 0) + Number(a.chatUnread || 0) + Number(a.unreadCount || 0)
+          const bUnread = Number(b.boardUnread || 0) + Number(b.chatUnread || 0) + Number(b.unreadCount || 0)
+          return bUnread - aUnread || (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
+        }
         return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
       })
   }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, privacyFilter, sortBy])
+
+  const communityPulse = useMemo(() => {
+    const boardUnread = myCommunities.reduce((sum, c) => sum + Number(c.boardUnread || 0), 0)
+    const chatUnread = myCommunities.reduce((sum, c) => sum + Number(c.chatUnread || c.unreadCount || 0), 0)
+    const me = IdentityService.getCurrentUserId() || "current-user"
+    const requestsToReview = myCommunities.reduce((sum, c) => {
+      const role = c.groupRoles?.[me] || (c.createdBy === me ? "owner" : "member")
+      return role === "owner" || role === "admin" || role === "moderator"
+        ? sum + Number(c.pendingJoinRequests?.length || 0)
+        : sum
+    }, 0)
+    return { boardUnread, chatUnread, requestsToReview, total: boardUnread + chatUnread + requestsToReview }
+  }, [myCommunities])
 
   const selected = selectedCommunityId
     ? (() => {
@@ -1142,7 +1160,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "my"}
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -1156,7 +1174,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "discover"}
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -1190,6 +1208,7 @@ export function CommunitiesScreen() {
                   className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground"
                 >
                   <option value="recent">Recent</option>
+                  <option value="unread">Needs attention</option>
                   <option value="active">Most members</option>
                   <option value="name">Name</option>
                 </select>
@@ -1271,6 +1290,36 @@ export function CommunitiesScreen() {
         onScroll={onHeaderScroll}
       >
         <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5" role="region" aria-label="Community directory">
+          {myCommunities.length > 0 ? (
+            <section className="rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-sm" aria-label="Community action center">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-bold text-foreground">Your community pulse</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">See what needs your attention across every community without opening them one by one.</p>
+                </div>
+                {communityPulse.total > 0 ? (
+                  <span className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{communityPulse.total} to review</span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground">Caught up</span>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.boardUnread}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Board updates</span>
+                </button>
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.chatUnread}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Chat unread</span>
+                </button>
+                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                  <span className="block text-sm font-extrabold text-foreground">{communityPulse.requestsToReview}</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Requests</span>
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-teal-950/20">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-900 dark:text-emerald-100">
               <Sparkles size={14} aria-hidden />

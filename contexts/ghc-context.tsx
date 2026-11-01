@@ -2,6 +2,8 @@
 
 import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
 import { broadcastPostSync } from "@/lib/social/post-sync"
+import { mapRemoteFeedPosts } from "@/lib/social/map-remote-feed-posts"
+import { reconcileFeedPosts } from "@/lib/social/reconcile-feed-posts"
 import { emitSocialMutation, SOCIAL_MUTATION_EVENT } from "@/lib/social/social-events"
 import { isLikelyServerUserId } from "@/lib/social/is-server-user-id"
 import {
@@ -43,7 +45,16 @@ import {
   setActiveLocalProfileId,
   findLocalProfile,
 } from "@/lib/local-profiles"
+import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import { usePiAuth } from "./pi-auth-context"
+import { useFeedDomain } from "./domains/feed-provider"
+import { useConnectionsDomain } from "./domains/connections-provider"
+import { useDiscoveryDomain } from "./domains/discovery-provider"
+import {
+  mapSessionFeedPosts,
+  mapSessionDiscoveryCandidates,
+  summarizeSessionConnections,
+} from "@/lib/domains/adapters/session-domain-mappers"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
 import {
@@ -567,87 +578,12 @@ function createDefaultExtendedState(
 
 
 /** Phase 2: map API feed rows → Post (snake_case + camelCase tolerant). */
-function mapRemoteFeedPosts(feedPosts: Partial<Post>[] | Record<string, unknown>[]): Post[] {
-  return (feedPosts || []).map((raw) => {
-    const p = raw as Record<string, unknown>
-    const id = String(p.id || p.post_id || "")
-    const authorId = String(p.authorId || p.author_id || "")
-    const imagesRaw = p.images ?? p.image_urls ?? p.media
-    const images = Array.isArray(imagesRaw)
-      ? imagesRaw.map(String).filter(Boolean)
-      : typeof imagesRaw === "string" && imagesRaw
-        ? [imagesRaw]
-        : []
-    const commentsRaw = p.comments
-    const comments = Array.isArray(commentsRaw) ? (commentsRaw as Post["comments"]) : []
-    const commentCount = Number(p.commentCount ?? p.comment_count ?? ((p.engagement && typeof p.engagement === "object") ? (p.engagement as Record<string, unknown>).comments : undefined) ?? comments.length) || 0
-    const reactionCounts = p.reactionCounts && typeof p.reactionCounts === "object"
-      ? Object.fromEntries(Object.entries(p.reactionCounts as Record<string, unknown>).map(([key, value]) => [key, Math.max(0, Number(value) || 0)]))
-      : {}
-    const viewerReactions = Array.isArray(p.viewerReactions) ? p.viewerReactions.map(String) : []
-    const visibilityRaw = String(p.visibility || p.visible_to || "public").toLowerCase()
-    const visibility = (
-      ["public", "followers", "mutuals", "private"].includes(visibilityRaw)
-        ? visibilityRaw
-        : "public"
-    ) as Post["visibility"]
-    const likes = Number(p.likes ?? p.like_count ?? p.likeCount ?? 0) || 0
-    const shares = Number(p.shares ?? p.share_count ?? 0) || 0
-    const viewCount = Number(p.viewCount ?? p.view_count ?? 0) || 0
-    const upvoteCount = Number(p.upvoteCount ?? p.upvote_count ?? 0) || 0
-    const downvoteCount = Number(p.downvoteCount ?? p.downvote_count ?? 0) || 0
-    const viewerCurationRaw = String(p.viewerCurationChoice ?? p.viewer_curation_choice ?? p.curationChoice ?? "").toLowerCase()
-    const viewerCurationChoice =
-      viewerCurationRaw === "upvote" || viewerCurationRaw === "downvote" ? viewerCurationRaw : undefined
-    const createdAt = Number(p.createdAt ?? p.created_at ?? Date.now()) || Date.now()
-    const deletedAtRaw = p.deletedAt ?? p.deleted_at
-    const deletedAt =
-      deletedAtRaw != null && deletedAtRaw !== ""
-        ? Number(deletedAtRaw)
-        : null
-    return {
-      id,
-      authorId,
-      authorName: String(p.authorName || p.author_name || "Member"),
-      authorPhoto: String(p.authorPhoto || p.author_photo || ""),
-      content: String(p.content || p.body || ""),
-      images,
-      video: (p.video as string | null) ?? (p.video_url as string | null) ?? null,
-      pdf: (p.pdf as string | null) ?? null,
-      pdfName: (p.pdfName as string | null) ?? (p.pdf_name as string | null) ?? null,
-      likes,
-      comments,
-      createdAt,
-      engagement: normalizeEngagementMetrics(
-        p.engagement && typeof p.engagement === "object" ? p.engagement as Post["engagement"] : undefined,
-        { likes, comments: commentCount, shares, views: viewCount },
-      ),
-      reactionCounts,
-      viewerReactions,
-      visibility,
-      deletedAt: Number.isFinite(deletedAt as number) ? (deletedAt as number) : null,
-      isEdited: Boolean(p.isEdited ?? p.is_edited),
-      editedAt: p.editedAt || p.edited_at ? Number(p.editedAt || p.edited_at) : undefined,
-      hashtags: Array.isArray(p.hashtags) ? p.hashtags.map(String) : undefined,
-      mentions: Array.isArray(p.mentions) ? p.mentions.map(String) : undefined,
-      communityId: p.communityId || p.community_id ? String(p.communityId || p.community_id) : undefined,
-      communityName: p.communityName || p.community_name ? String(p.communityName || p.community_name) : undefined,
-      listingId: p.listingId || p.listing_id ? String(p.listingId || p.listing_id) : undefined,
-      listingKind: (p.listingKind || p.listing_kind) as Post["listingKind"],
-      contentType: (p.contentType || p.content_type) as Post["contentType"],
-      shares: shares || undefined,
-      viewCount: viewCount || undefined,
-      upvoteCount,
-      downvoteCount,
-      viewerCurationChoice,
-      quoteOf: p.quoteOf || p.quote_of_post_id ? String(p.quoteOf || p.quote_of_post_id) : undefined,
-    } as Post
-  }).filter((p) => Boolean(p.id))
-}
-
-
 export function GHCProvider({ children }: { children: ReactNode }) {
   const { sdk, signOut: piSignOut } = usePiAuth()
+  // Activate the domain read seams against the canonical, policy-filtered session.
+  const feedDomain = useFeedDomain()
+  const connectionsDomain = useConnectionsDomain()
+  const discoveryDomain = useDiscoveryDomain()
   const [identityUserId, setIdentityUserId] = useState(() => IdentityService.getCurrentUserId())
   useEffect(() => {
     return IdentityService.subscribe((id) => setIdentityUserId(id.userId))
@@ -682,6 +618,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
   const postsSnapshotRef = useRef(state.posts)
   const feedRequestRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
+  useEffect(() => () => {
+    feedRequestRef.current.controller?.abort()
+    feedRequestRef.current = { generation: feedRequestRef.current.generation + 1, controller: null }
+  }, [])
   // Keep a current snapshot without making refreshFeed's callback identity change
   // on every feed update (which can retrigger consumer effects).
   useEffect(() => {
@@ -1081,27 +1021,27 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           socialFetchStories,
           socialFetchFollows,
         } = await import("@/lib/social/client")
-        const [feed, stories, follows] = await Promise.all([
+        // Each durable social surface is an independent domain. A timeout in one
+        // endpoint must not prevent the other successful domains from hydrating.
+        const [feedResult, storiesResult, followsResult] = await Promise.allSettled([
           socialFetchFeed({ limit: 40 }),
           socialFetchStories(),
           socialFetchFollows(),
         ])
         if (cancelled) return
+        const feed = feedResult.status === "fulfilled" ? feedResult.value : null
+        const stories = storiesResult.status === "fulfilled" ? storiesResult.value : null
+        const follows = followsResult.status === "fulfilled" ? followsResult.value : null
         setState((s) => {
           const next = { ...s }
           // Phase 1 multi-user: merge any successful feed payload.
           // Prefer durable remote posts; still merge non-durable remote when present
           // so multi-device sessions share whatever the API returned.
-          if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
+          if (feed?.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
             const remotePosts = mapRemoteFeedPosts(feed.posts)
-            const remoteIds = new Set(remotePosts.map((p) => p.id))
-            const localOnly = s.posts.filter(
-              (p) => !remoteIds.has(p.id) && !p.deletedAt
-            )
-            // Durable remote is authoritative ordering; local-only kept for offline drafts
-            next.posts = [...remotePosts, ...localOnly].sort(
-              (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-            )
+            // Centralized reconciliation keeps remote ordering, preserves local-only
+            // optimistic records, removes duplicates, and excludes deleted local rows.
+            next.posts = reconcileFeedPosts(s.posts, remotePosts, "replace")
             const liked = feed.posts
               .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
               .map((p) => String(p.id))
@@ -1110,14 +1050,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 new Set([...(s.likedPostIds || []), ...liked])
               )
             }
-          } else if (feed.ok === false && feed.error) {
+          } else if (feed?.ok === false && feed.error) {
             try {
               console.warn("[ghc] social feed hydrate failed", feed.error)
             } catch {
               /* */
             }
           }
-          if (stories.ok && Array.isArray(stories.stories) && stories.stories.length > 0) {
+          if (stories?.ok && Array.isArray(stories.stories) && stories.stories.length > 0) {
             next.stories = stories.stories.map((st) => ({
               id: String(st.id),
               ownerId: st.ownerId ? String(st.ownerId) : undefined,
@@ -1133,7 +1073,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             }))
           }
           // Phase 1: accept follow graph whenever API succeeds (durable preferred)
-          if (follows.ok) {
+          if (follows?.ok) {
             if (Array.isArray(follows.following) && (follows.durable || follows.following.length > 0)) {
               next.following = follows.following.map(String)
             }
@@ -1189,11 +1129,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                       : existing?.comments,
                   } as Post
                 })
-                const remoteIds = new Set(mapped.map((p) => p.id))
-                const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
-                next.posts = [...mapped, ...localOnly].sort(
-                  (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-                )
+                next.posts = reconcileFeedPosts(s.posts, mapped, "replace")
               }
               if (inbox.ok && (inbox.durable || inbox.incoming.length > 0 || inbox.outgoing.length > 0)) {
                 const candName = (uid: string) => {
@@ -1371,11 +1307,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             let next = { ...s }
             if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
               const remotePosts = mapRemoteFeedPosts(feed.posts)
-              const remoteIds = new Set(remotePosts.map((p) => p.id))
-              const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
-              next.posts = [...remotePosts, ...localOnly].sort(
-                (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-              )
+              next.posts = reconcileFeedPosts(s.posts, remotePosts, "replace")
             }
             if (inbox.ok && (inbox.durable || inbox.incoming.length > 0 || inbox.outgoing.length > 0)) {
               const myId = String(s.profile?.id || "").trim()
@@ -2773,13 +2705,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
             const remotePosts = mapRemoteFeedPosts(feed.posts)
             setState((s) => {
-              const remoteIds = new Set(remotePosts.map((p) => p.id))
-              const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
               return {
                 ...s,
-                posts: [...remotePosts, ...localOnly].sort(
-                  (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-                ),
+                posts: reconcileFeedPosts(s.posts, remotePosts, "replace"),
               }
             })
           }
@@ -5319,13 +5247,9 @@ const dismissMatchCelebration = useCallback(() => {
             if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
               const remotePosts = mapRemoteFeedPosts(feed.posts)
               setState((s) => {
-                const remoteIds = new Set(remotePosts.map((p) => p.id))
-                const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
                 return {
                   ...s,
-                  posts: [...remotePosts, ...localOnly].sort(
-                    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-                  ),
+                  posts: reconcileFeedPosts(s.posts, remotePosts, "replace"),
                 }
               })
             }
@@ -7822,10 +7746,10 @@ const dismissMatchCelebration = useCallback(() => {
   }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
     try {
       const { socialFetchFeed } = await import("@/lib/social/client")
-      // A fresh top-level refresh supersedes any older top-level refresh. Append
-      // requests keep their own generation so a late page cannot overwrite newer state.
+      // Feed requests are latest-wins. A newer refresh/page supersedes the previous
+      // request so overlapping pagination cannot commit out of order or waste bandwidth.
       const generation = feedRequestRef.current.generation + 1
-      if (!opts?.append) feedRequestRef.current.controller?.abort()
+      feedRequestRef.current.controller?.abort()
       const controller = new AbortController()
       feedRequestRef.current = { generation, controller }
       const feed = await socialFetchFeed({
@@ -7849,11 +7773,7 @@ const dismissMatchCelebration = useCallback(() => {
           : remotePosts.length
         setState((s) => {
           if (opts?.append) {
-            const existingIds = new Set(s.posts.map((p) => p.id))
-            const onlyNew = remotePosts.filter((p) => !existingIds.has(p.id))
-            const nextPosts = [...s.posts, ...onlyNew].sort(
-              (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-            )
+            const nextPosts = reconcileFeedPosts(s.posts, remotePosts, "append")
             const liked = feed.posts
               .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
               .map((p) => String(p.id))
@@ -7862,11 +7782,7 @@ const dismissMatchCelebration = useCallback(() => {
               : s.likedPostIds
             return { ...s, posts: nextPosts, likedPostIds: nextLiked }
           }
-          const remoteIds = new Set(remotePosts.map((p) => p.id))
-          const localOnly = s.posts.filter((p) => !remoteIds.has(p.id) && !p.deletedAt)
-          const nextPosts = [...remotePosts, ...localOnly].sort(
-            (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-          )
+          const nextPosts = reconcileFeedPosts(s.posts, remotePosts, "replace")
           const liked = feed.posts
             .filter((p) => (p as { likedByMe?: boolean }).likedByMe)
             .map((p) => String(p.id))
@@ -7962,6 +7878,38 @@ const dismissMatchCelebration = useCallback(() => {
       state.stories,
     ]
   )
+
+  const domainSessionRef = useRef({
+    posts: [] as Post[],
+    candidates: [] as Candidate[],
+    friends: [] as string[],
+    following: [] as string[],
+    followers: [] as string[],
+    friendRequests: [] as FriendRequest[],
+    currentUserId: "",
+  })
+  domainSessionRef.current = {
+    posts: visibleSession.posts,
+    candidates: visibleSession.candidates,
+    friends: state.friends || [],
+    following: state.following || [],
+    followers: state.followers || [],
+    friendRequests: state.friendRequests || [],
+    currentUserId: String(state.profile?.id || ""),
+  }
+
+  useEffect(() => {
+    feedDomain.bindPostsGetter(() => mapSessionFeedPosts(domainSessionRef.current.posts))
+    connectionsDomain.bindCountsGetter(() => summarizeSessionConnections(domainSessionRef.current))
+    discoveryDomain.bindCandidatesGetter(() =>
+      mapSessionDiscoveryCandidates(domainSessionRef.current.candidates, isDemoDataAllowed())
+    )
+    return () => {
+      feedDomain.bindPostsGetter(() => [])
+      connectionsDomain.bindCountsGetter(() => ({}))
+      discoveryDomain.bindCandidatesGetter(() => [])
+    }
+  }, [feedDomain.bindPostsGetter, connectionsDomain.bindCountsGetter, discoveryDomain.bindCandidatesGetter])
 
   // Stable context value — prevents every consumer re-rendering when only parent re-renders
   const contextValue = useMemo(

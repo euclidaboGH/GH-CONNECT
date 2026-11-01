@@ -57,7 +57,7 @@ export function RecommendedGroupsSection({
       // Limit initial render to first 4, then expand
       return recs
     } catch (err) {
-      console.error("[v0] Recommendation generation error:", err)
+      console.error("[ghc] Recommendation generation error:", err)
       setError("Failed to generate recommendations. Please try again.")
       return []
     }
@@ -82,7 +82,7 @@ export function RecommendedGroupsSection({
         }
       } catch (err) {
         setError("Failed to load recommendations")
-        console.error("[v0] Failed to load recommendations:", err)
+        console.error("[ghc] Failed to load recommendations:", err)
       } finally {
         setIsLoading(false)
       }
@@ -117,7 +117,7 @@ export function RecommendedGroupsSection({
         newJoinedStates.delete(groupId)
         setJoinedStates(newJoinedStates)
 
-        console.error("[v0] Failed to join group:", err)
+        console.error("[ghc] Failed to join group:", err)
       }
     },
     [joinedStates, recommendations, onJoinGroup, onJoinSuccess]

@@ -15,7 +15,7 @@ import {
   executeAuthoritativeClaimPending,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 const MAX_REWARD_CLAIM_BODY_BYTES = 4_096
 
@@ -23,10 +23,9 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`pending_claim:${auth.userId}`, 30, 60_000)
+  const rl = await checkDurableRateLimit(`pending_claim:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Reward protection is temporarily unavailable" : `Too many claim attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
   const declaredLength = Number(request.headers.get("content-length") || 0)

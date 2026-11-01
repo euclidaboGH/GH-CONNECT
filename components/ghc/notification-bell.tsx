@@ -51,6 +51,8 @@ import {
   notificationChannelKey,
   type NotificationThread,
 } from "@/lib/notification-channels"
+import { buildAttentionSignals, resolvePrimaryAttention, type AttentionSignal } from "@/lib/unified-attention"
+import { AttentionCommandCard } from "@/components/ghc/attention-command-card"
 
 const ICON: Partial<Record<NotificationType, React.ReactNode>> = {
   like: <Heart size={15} className="text-rose-500" />,
@@ -131,7 +133,7 @@ export function NotificationBell({
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
-  const [readFilter, setReadFilter] = useState<"all" | "unread">("all")
+  const [readFilter, setReadFilter] = useState<"all" | "unread" | "priority">("all")
   const [isOffline, setIsOffline] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
@@ -481,9 +483,30 @@ export function NotificationBell({
     return () => window.removeEventListener("keydown", onKey)
   }, [open])
 
+  const attentionSignals = useMemo(() => buildAttentionSignals(items), [items])
+  const primaryAttention = useMemo(() => resolvePrimaryAttention(attentionSignals), [attentionSignals])
+  const openAttention = useCallback((signal: AttentionSignal) => {
+    setOpen(false)
+    if (signal.open === "wallet") window.dispatchEvent(new CustomEvent("ghc:open-wallet"))
+    else if (signal.open === "rewards") window.dispatchEvent(new CustomEvent("ghc:open-rewards"))
+    else if (signal.open === "messages") window.dispatchEvent(new CustomEvent("ghc:open-messages"))
+    else if (signal.open === "communities") window.dispatchEvent(new CustomEvent("ghc:open-communities"))
+    else if (signal.open === "marketplace") window.dispatchEvent(new CustomEvent("ghc:open-marketplace"))
+    else if (signal.open === "matches") window.dispatchEvent(new CustomEvent("ghc:open-matches"))
+    else window.dispatchEvent(new CustomEvent("ghc:open-settings"))
+  }, [])
+
   const filtered = useMemo(() => {
     const bucketed = filterByBucket(items, bucket)
-    return readFilter === "unread" ? bucketed.filter((n) => !n.read) : bucketed
+    if (readFilter === "unread") return bucketed.filter((n) => !n.read)
+    if (readFilter === "priority") {
+      const priorityTypes = new Set([
+        "message", "friend_request", "marketplace_order", "payment", "ghc_received",
+        "reward", "system", "mention", "comment_reply",
+      ])
+      return bucketed.filter((n) => !n.read && priorityTypes.has(n.type))
+    }
+    return bucketed
   }, [items, bucket, readFilter])
   const bucketUnreadCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -774,20 +797,21 @@ export function NotificationBell({
               })}
             </div>
             <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2" aria-label="Notification read filter">
-              {(["all", "unread"] as const).map((mode) => (
+              {(["all", "unread", "priority"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setReadFilter(mode)}
                   className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${readFilter === mode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
                 >
-                  {mode === "all" ? "All" : `Unread${bucketUnreadCounts[bucket] ? ` (${bucketUnreadCounts[bucket]})` : ""}`}
+                  {mode === "all" ? "All" : mode === "priority" ? "Priority" : `Unread${bucketUnreadCounts[bucket] ? ` (${bucketUnreadCounts[bucket]})` : ""}`}
                 </button>
               ))}
               <span className="ml-auto text-[10px] text-muted-foreground">{listLoading ? "Syncing…" : "Up to date"}</span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto [content-visibility:auto] overscroll-contain">
+              <AttentionCommandCard signal={bucket === "all" && readFilter === "all" ? primaryAttention : null} onOpen={openAttention} />
               {filtered.length > 0 ? (
                 <p className="px-4 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
                   {filtered.length} notification{filtered.length === 1 ? "" : "s"}

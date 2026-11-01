@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { getWithdrawableBalance } from "@/lib/server/earnings/unified-ledger"
+import { getWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,9 +26,17 @@ export async function GET(request: Request) {
     const status = snapshot.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : 409
     return NextResponse.json({ ok: false, error: snapshot.error }, { status, headers: noStore })
   }
+  const walletAuth = await getWalletAuthorization(auth.userId)
   return NextResponse.json(
     {
       ...snapshot,
+      walletAuthorization: {
+        active: walletAuth.authorizationActive === true,
+        available: walletAuth.ok === true && walletAuth.error !== "WALLET_AUTHORIZATION_UNAVAILABLE",
+        error: walletAuth.error || null,
+        authorizedPiAppUid: walletAuth.authorizedPiAppUid || null,
+        consentedAt: walletAuth.consentedAt || null,
+      },
       policy: {
         rounding: "floor_atomic",
         withdrawalFeeBps: 300,

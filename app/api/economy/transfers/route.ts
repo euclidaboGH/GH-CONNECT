@@ -18,7 +18,7 @@ import {
 } from "@/lib/server/economy/http"
 import { notifyTransferCompleted } from "@/lib/server/economy/notifications"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
 import { isValidGreenHavenIdFormat, normalizeGreenHavenId } from "@/lib/domains/greenhaven-id"
@@ -37,10 +37,9 @@ export async function POST(request: Request) {
     return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
   }
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`transfer:${auth.userId}`, 30, 60_000)
+  const rl = await checkDurableRateLimit(`transfer:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many transfers; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Transfer protection is temporarily unavailable" : `Too many transfers; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
   // Enforce the limit while streaming. Content-Length alone is not trustworthy

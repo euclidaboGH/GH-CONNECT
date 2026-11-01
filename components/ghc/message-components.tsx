@@ -151,10 +151,10 @@ function ConversationItemBase({
 
   return (
     <div
-      className={`group border-b border-border/30 transition-colors ${isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/35" : "bg-card hover:bg-muted/35"}`}
+      className={`group border-b border-border/25 transition-colors ${isSelected ? "bg-emerald-50/80 dark:bg-emerald-950/40" : "bg-card hover:bg-muted/40"}`}
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}
     >
-      <div className="flex min-h-[72px] w-full items-center px-3.5 py-3 text-left transition active:bg-emerald-50/50 sm:px-4">
+      <div className="flex min-h-[76px] w-full items-center px-3.5 py-3.5 text-left transition active:bg-emerald-50/50 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="relative shrink-0">
             <button
@@ -506,7 +506,7 @@ function MessageBubbleBase({
 
         {(message as any).isDeleted || (message as any).isDeletedForEveryone || (message as any).deletedForEveryone ? (
           <div
-            className={`max-w-[min(82vw,24rem)] px-4 py-2.5 rounded-2xl text-sm italic shadow-sm ${
+            className={`max-w-[min(82vw,24rem)] px-3.5 py-2.5 rounded-[1.15rem] text-[14px] leading-snug italic shadow-sm ${
               isSentByCurrentUser ? "bg-emerald-100 text-emerald-700 rounded-br-none" : "bg-muted text-muted-foreground rounded-bl-none"
             }`}
           >
@@ -595,10 +595,10 @@ function MessageBubbleBase({
                   message.status === "sent" ? (message.deliveredAt ? "Delivered to some recipients; waiting on others" : "Sent, not yet delivered") : "Message status"
                 }
               >
-                {message.status === "read" ? "Seen ✓✓" :
-                  message.status === "delivered" ? "Delivered ✓✓" :
-                  message.status === "sending" ? "…" :
-                  message.status === "sent" ? (message.deliveredAt ? "Partly delivered ✓" : "Sent · not delivered ✓") : ""}
+                {message.status === "read" ? "Read" :
+                  message.status === "delivered" ? "Delivered" :
+                  message.status === "sending" ? "Sending…" :
+                  message.status === "sent" ? (message.deliveredAt ? "Sent" : "Sent") : ""}
               </span>
             ) : null}
           </p>

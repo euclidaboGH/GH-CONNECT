@@ -12,8 +12,9 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    // The digest is safe for correlation; message is restricted to local server logs.
-    console.error("[app/error]", error?.digest ?? "", error?.message)
+    // Never mirror raw exception messages into the browser console. The digest
+    // is sufficient for correlating this boundary with server-side diagnostics.
+    console.error("[app/error]", error?.digest ?? "unavailable")
   }, [error])
 
   return (

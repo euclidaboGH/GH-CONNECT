@@ -20,7 +20,7 @@ import { onCloseTransientUI } from "@/lib/transient-ui"
 import { asArray } from "@/lib/safe-data"
 import { resolveUserIntents } from "@/lib/connection-intents"
 import { filterValidMatches } from "@/lib/regression-guards"
-import { Heart } from "lucide-react"
+import { Heart, Target, MessageCircle, UserPlus, Compass } from "lucide-react"
 import type { MatchEntry, Like, Candidate, MatchIntention } from "@/lib/ghc-types"
 import {
   EmptyMatchesState,
@@ -364,7 +364,39 @@ export function MatchScreen() {
         }
       />
 
-      <div className="px-3 pt-2">
+      <div className="px-3 pt-2 space-y-2">
+        <section className="rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-[var(--gh-card-shadow)]" aria-label="Match action centre">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"><Target size={15} /></span>
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">Your match opportunities</h2>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">Turn mutual interest into a deliberate next step. You stay in control of every connection.</p>
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={handleStartSwiping} className="shrink-0 rounded-full border border-border/70 bg-background px-3 py-1.5 text-[10px] font-bold text-foreground transition hover:bg-muted">Find people</button>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-muted/35 px-2.5 py-2.5">
+              <div className="flex items-center gap-1.5 text-muted-foreground"><Heart size={12} /><span className="text-[9px] font-bold uppercase tracking-wide">Matches</span></div>
+              <p className="mt-1 text-lg font-black leading-none text-foreground">{baseAll.length}</p>
+            </div>
+            <button type="button" onClick={() => setActiveTab("likes_you")} className="rounded-xl bg-muted/35 px-2.5 py-2.5 text-left transition hover:bg-muted/60">
+              <div className="flex items-center gap-1.5 text-muted-foreground"><Compass size={12} /><span className="text-[9px] font-bold uppercase tracking-wide">Likes you</span></div>
+              <p className="mt-1 text-lg font-black leading-none text-foreground">{likesYouRows.length}</p>
+            </button>
+            <button type="button" onClick={() => setShowRequestInbox(true)} className="rounded-xl bg-muted/35 px-2.5 py-2.5 text-left transition hover:bg-muted/60">
+              <div className="flex items-center gap-1.5 text-muted-foreground"><UserPlus size={12} /><span className="text-[9px] font-bold uppercase tracking-wide">Requests</span></div>
+              <p className="mt-1 text-[11px] font-extrabold leading-tight text-foreground">Review</p>
+            </button>
+          </div>
+          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+            <MessageCircle size={13} className="shrink-0 text-emerald-800 dark:text-emerald-200" />
+            <p className="text-[10px] leading-relaxed text-emerald-950 dark:text-emerald-100">Best next step: review mutual matches, open the profile for context, then Connect with a clear intent when there is a genuine reason to continue.</p>
+          </div>
+        </section>
         <p className="text-[11px] leading-snug text-muted-foreground">{MATCH_CLARITY.matchesIntro}</p>
       </div>
       <div className="sr-only" role="status" aria-live="polite">

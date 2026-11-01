@@ -2,7 +2,7 @@
 import { randomUUID, timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 import { resolvePiSandbox } from "@/lib/pi-env"
@@ -38,8 +38,8 @@ export async function POST(request:Request) {
   const auth=await resolveAuthenticatedUser(request.headers)
   if(!auth) return reply({ok:false,error:"AUTH_REQUIRED"},401)
   if(!secretOk(request)) return reply({ok:false,error:"FORBIDDEN"},403)
-  const rl=checkRateLimit(`pi-earnings-execute:${auth.userId}`,2,60_000)
-  if(!rl.ok) return reply({ok:false,error:"RATE_LIMITED"},429)
+  const rl=await checkDurableRateLimit(`pi-earnings-execute:${auth.userId}`,2,60_000,{onUnavailable:"deny"})
+  if(!rl.ok) return reply({ok:false,error:durableRateLimitCode(rl),retryAfterSec:rl.retryAfterSec},durableRateLimitStatus(rl))
   if(process.env.PI_EARNINGS_PAYOUT_EXECUTION_ENABLED!=="true" || process.env.PI_A2U_ENABLED!=="true" || process.env.PI_A2U_TESTNET_ONLY!=="true" || process.env.PI_NETWORK!=="testnet" || process.env.PI_ENV!=="production" || !resolvePiSandbox()) return reply({ok:false,error:"PI_EARNINGS_EXECUTION_DISABLED"},503)
   const apiKey=String(process.env.PI_API_KEY||process.env.PI_SERVER_API_KEY||"").trim()
   const seed=String(process.env.PI_WALLET_PRIVATE_SEED||"").trim()

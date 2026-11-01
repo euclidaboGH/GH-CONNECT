@@ -8,7 +8,7 @@ import { getRequestContext } from "@/lib/server/foundation/request-context"
 import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
 import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
 import { ASSET_POLICY } from "@/lib/asset-separation"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,12 +42,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: NO_STORE })
   }
 
-  pruneRateLimitBuckets()
-  const limit = checkRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000)
+  const limit = await checkDurableRateLimit(`payment-intent:create:${auth.userId}`, 12, 60_000, { onUnavailable: "deny" })
   if (!limit.ok) {
     return NextResponse.json(
-      { ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec },
-      { status: 429, headers: { ...NO_STORE, "Retry-After": String(limit.retryAfterSec) } },
+      { ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec },
+      { status: durableRateLimitStatus(limit), headers: { ...NO_STORE, "Retry-After": String(limit.retryAfterSec) } },
     )
   }
 
@@ -185,12 +184,11 @@ export async function GET(request: Request) {
       { status: 401, headers: { "x-request-id": reqCtx.requestId } }
     )
   }
-  pruneRateLimitBuckets()
-  const limit = checkRateLimit(`payment-intent:list:${auth.userId}`, 60, 60_000)
+  const limit = await checkDurableRateLimit(`payment-intent:list:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
   if (!limit.ok) {
     return NextResponse.json(
-      { ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec },
-      { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec), "x-request-id": reqCtx.requestId } },
+      { ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec },
+      { status: durableRateLimitStatus(limit), headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec), "x-request-id": reqCtx.requestId } },
     )
   }
 

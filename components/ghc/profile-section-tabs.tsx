@@ -31,7 +31,7 @@ export function ProfileSectionTabs({
 }) {
   return (
     <nav
-      className="gh-profile-nav sticky top-0 z-[2] mt-3 flex w-full gap-0.5 overflow-x-auto border-y border-border/50 bg-background/95 px-2 py-1.5 backdrop-blur-md"
+      className="gh-profile-nav sticky top-0 z-[2] mt-3 flex w-full gap-1 overflow-x-auto border-y border-border/40 bg-background/95 px-2 py-2 backdrop-blur-md scrollbar-hide"
       aria-label="Profile sections"
       role="tablist"
     >
@@ -47,7 +47,7 @@ export function ProfileSectionTabs({
             onClick={() => onChange(tab.id)}
             className={
               selected
-                ? "shrink-0 rounded-full bg-emerald-600 px-3.5 py-2 text-[12px] font-bold text-white shadow-sm transition"
+                ? "shrink-0 rounded-full bg-emerald-600 px-3.5 py-2 text-[12px] font-bold text-white shadow-sm shadow-emerald-600/25 transition"
                 : "shrink-0 rounded-full px-3.5 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
             }
           >

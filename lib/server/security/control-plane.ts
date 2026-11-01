@@ -1,11 +1,10 @@
 import { createHash, randomUUID } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { checkRateLimit as localRateLimit, type RateLimitResult } from "@/lib/server/economy/rate-limit"
-
-type DurableRateLimit = { ok?: boolean; remaining?: number; retryAfterSec?: number }
+import { assertDurableRateLimitInput, getDurableRateLimitFailure, parseDurableRateLimitResult } from "@/lib/server/security/rate-limit-contract"
 
 function hashKey(key: string): string {
-  return createHash("sha256").update(String(key).slice(0, 512), "utf8").digest("hex")
+  return createHash("sha256").update(key, "utf8").digest("hex")
 }
 
 async function rpc(name: string, body: Record<string, unknown>): Promise<unknown | null> {
@@ -34,19 +33,18 @@ export async function checkDurableRateLimit(
   windowMs: number,
   options: { onUnavailable?: "local" | "deny" } = {},
 ): Promise<RateLimitResult> {
+  assertDurableRateLimitInput(key, limit, windowMs)
+
   const result = await rpc("gh_security_rate_limit_consume", {
     p_bucket_key: hashKey(key), p_limit: limit, p_window_ms: windowMs,
-  }) as DurableRateLimit | null
-  if (result && typeof result.ok === "boolean") {
-    return result.ok
-      ? { ok: true, remaining: Number(result.remaining || 0) }
-      : { ok: false, retryAfterSec: Math.max(1, Number(result.retryAfterSec || 1)) }
-  }
+  })
+  const parsed = parseDurableRateLimitResult(result)
+  if (parsed) return parsed
   // Authentication and other abuse-sensitive entry points can opt into a
   // fail-closed policy. A local fallback is not equivalent to a durable limit
   // in a multi-instance deployment and must never be presented as such.
   if (options.onUnavailable === "deny") {
-    return { ok: false, retryAfterSec: 5 }
+    return { ok: false, retryAfterSec: 5, unavailable: true }
   }
   return localRateLimit(key, limit, windowMs)
 }
@@ -77,7 +75,7 @@ export async function appendSecurityEvent(input: {
     p_request_id: input.requestId ?? null,
     p_correlation_id: input.correlationId ?? null,
     p_metadata: input.metadata ?? {},
-    p_expires_at: input.expiresAt ?? null,
+    p_expires_at: input.expiresAt ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
   })
 }
 
@@ -85,4 +83,13 @@ export function requestCorrelationId(request: Request): string {
   const supplied = request.headers.get("x-request-id") || request.headers.get("x-correlation-id") || ""
   if (/^[A-Za-z0-9._:-]{8,160}$/.test(supplied)) return supplied
   return `req_${randomUUID()}`
+}
+
+/** Distinguishes an exhausted quota from an unavailable durable limiter. */
+export function durableRateLimitStatus(result: Extract<RateLimitResult, { ok: false }>): 429 | 503 {
+  return getDurableRateLimitFailure(result).status
+}
+
+export function durableRateLimitCode(result: Extract<RateLimitResult, { ok: false }>): "RATE_LIMITED" | "RATE_LIMIT_UNAVAILABLE" {
+  return getDurableRateLimitFailure(result).code
 }

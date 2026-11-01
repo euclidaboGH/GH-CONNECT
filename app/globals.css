@@ -2987,3 +2987,172 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: no-preference) {
   .gh-bottom-nav { transition: max-height 180ms ease-out, opacity 140ms ease-out, transform 180ms ease-out; }
 }
+
+/* WORLD-CLASS PASS 14 — unified product language and result-oriented surfaces.
+   Shared primitives keep hierarchy, spacing, focus and card behavior consistent across features. */
+:root {
+  --gh-product-radius: 1.35rem;
+  --gh-product-line: color-mix(in oklab, var(--border) 72%, transparent);
+  --gh-product-surface: color-mix(in oklab, var(--card) 97%, var(--background));
+  --gh-product-raised: 0 1px 2px rgb(16 24 20 / .025), 0 10px 30px rgb(16 24 20 / .055);
+  --gh-product-hover: 0 2px 5px rgb(16 24 20 / .035), 0 14px 34px rgb(16 24 20 / .075);
+}
+.dark {
+  --gh-product-raised: 0 1px 2px rgb(0 0 0 / .16), 0 10px 30px rgb(0 0 0 / .18);
+  --gh-product-hover: 0 2px 5px rgb(0 0 0 / .18), 0 14px 36px rgb(0 0 0 / .24);
+}
+.gh-page-chrome {
+  min-height: 3.75rem;
+  border-bottom: 1px solid var(--gh-product-line);
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+.gh-secondary-control {
+  border: 1px solid var(--gh-product-line);
+  background: color-mix(in oklab, var(--card) 94%, transparent);
+}
+.gh-section-heading { padding-inline: .125rem; }
+.gh-section-eyebrow {
+  margin: 0 0 .2rem;
+  color: var(--gh-ref-green-700);
+  font-size: .65rem;
+  font-weight: 800;
+  letter-spacing: .095em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.gh-section-title {
+  color: var(--foreground);
+  font-size: clamp(.9rem, 2.2vw, 1.05rem);
+  font-weight: 850;
+  letter-spacing: -.025em;
+  line-height: 1.2;
+}
+.gh-section-description {
+  max-width: 42rem;
+  margin-top: .25rem;
+  color: var(--muted-foreground);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+.gh-result-card {
+  border: 1px solid var(--gh-product-line);
+  border-radius: var(--gh-product-radius);
+  background: var(--gh-product-surface);
+  box-shadow: var(--gh-product-raised);
+}
+@media (hover:hover) and (pointer:fine) {
+  .gh-result-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--gh-ref-green-700) 24%, var(--gh-product-line));
+    box-shadow: var(--gh-product-hover);
+  }
+}
+@media (min-width: 760px) {
+  .gh-page-chrome { padding-inline: clamp(1rem, 3vw, 1.5rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-result-card { transition: none !important; }
+  .gh-result-card:hover { transform: none; }
+}
+
+
+/* Pass 16 — unified social loop: calmer feed rhythm, clearer interaction hierarchy. */
+.gh-premium-feed-list.gh-feed-column {
+  width: min(100%, 48rem);
+  margin-inline: auto;
+}
+.gh-premium-feed-toolbar {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 68%, transparent);
+}
+.gh-post-card {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.gh-post-action-context {
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .gh-post-card:hover {
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+}
+@media (max-width: 420px) {
+  .gh-post-action-context p:last-child { display: none; }
+  .gh-premium-feed-toolbar { padding-inline: .5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-post-card { transition: none !important; }
+}
+
+
+/* Pass 46 — cohesive interaction quality and mobile accessibility. */
+:root {
+  color-scheme: light;
+  --gh-focus-ring: 0 0 0 3px color-mix(in oklab, var(--primary) 28%, transparent);
+  --gh-motion-fast: 140ms;
+  --gh-motion-normal: 220ms;
+}
+.dark { color-scheme: dark; }
+html { scroll-behavior: smooth; text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+body { min-height: 100dvh; text-rendering: optimizeLegibility; -webkit-tap-highlight-color: transparent; }
+button, [role="button"], a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+:where(button, [role="button"], a, input, textarea, select, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 2px;
+  box-shadow: var(--gh-focus-ring);
+}
+:where(button, [role="button"], a) { touch-action: manipulation; }
+:where(button, [role="button"]) { transition: background-color var(--gh-motion-fast) ease, border-color var(--gh-motion-fast) ease, color var(--gh-motion-fast) ease, box-shadow var(--gh-motion-fast) ease, transform var(--gh-motion-fast) ease; }
+:where(button, [role="button"]):active:not(:disabled) { transform: scale(.985); }
+:where(button, input, textarea, select):disabled { cursor: not-allowed; opacity: .58; }
+::selection { color: var(--primary-foreground); background: color-mix(in oklab, var(--primary) 72%, transparent); }
+img, video { max-width: 100%; }
+img { height: auto; }
+:where(input, textarea, select) { min-width: 0; }
+:where(textarea) { resize: vertical; }
+:where([data-loading="true"], .gh-skeleton) { position: relative; overflow: hidden; }
+.gh-skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 7%, transparent), transparent); animation: gh-skeleton-shimmer 1.35s ease-in-out infinite; }
+@keyframes gh-skeleton-shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(button, [role="button"]):hover:not(:disabled) { filter: brightness(.985); }
+}
+
+
+/* —— Feel-better pass 0.267.0 —— */
+.gh-toast-host {
+  --gh-toast-bottom-inset: calc(var(--gh-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+.gh-bottom-nav button[aria-current="page"] {
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-toast-item {
+    animation: none !important;
+  }
+}
+.gh-tab-panel {
+  transition: opacity 180ms ease-out;
+}
+
+.gh-card-interactive {
+  transition: box-shadow 180ms ease, border-color 180ms ease, transform 120ms ease;
+}
+.gh-card-interactive:active {
+  transform: scale(0.99);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-card-interactive:active { transform: none; }
+}
+
+/* 0.270 feel-better */
+.gh-hub-scroll {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-hub-scroll { scroll-behavior: auto; }
+}

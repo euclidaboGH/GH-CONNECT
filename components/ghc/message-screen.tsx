@@ -20,15 +20,16 @@ import {
   EmptyMessagesState,
 } from "./message-components"
 import type { Conversation, Message } from "@/lib/ghc-types"
-import { Users, MessageCircle } from "lucide-react"
+import { Users, MessageCircle, ArrowRight, ShieldCheck, Sparkles } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib/messaging/server-messaging-sync"
+import { buildRelationshipOutcome } from "@/lib/relationship-outcomes"
 
 const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
 
-type InboxFilter = "all" | "dms" | "unread" | "communities"
+type InboxFilter = "all" | "dms" | "unread" | "requests" | "communities"
 type PeerPresence = { userId: string; online: boolean; lastSeenAt: number | null; isTyping: boolean }
 
 function formatLastSeen(lastSeenAt: number | null | undefined): string {
@@ -57,13 +58,13 @@ export function MessageScreen() {
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
-  const { deleteMessage, replyToMessage } = useGHC()
+  const { deleteMessage, replyToMessage, matches, friends } = useGHC()
   const ghc = {
     pinConversation: messaging.pinConversation,
     archiveConversation: messaging.archiveConversation,
     muteConversation: messaging.muteConversation,
-    matches: [] as string[],
-    friends: [] as string[],
+    matches: Array.isArray(matches) ? matches : [],
+    friends: Array.isArray(friends) ? friends : [],
   }
 
   const conversations = useMemo(
@@ -77,6 +78,7 @@ export function MessageScreen() {
   const [filter, setFilter] = useState<InboxFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  const [draftConversationId, setDraftConversationId] = useState<string | null>(null)
   const lastScreenSendRef = useRef<{ key: string; at: number }>({ key: "", at: 0 })
   const [sending, setSending] = useState(false)
   const [windowSize, setWindowSize] = useState(MESSAGE_WINDOW)
@@ -282,6 +284,32 @@ export function MessageScreen() {
     })
   }, [conversations])
 
+  // Restore a conversation-specific draft instead of losing useful work when users move around the app.
+  useEffect(() => {
+    if (!selectedId || typeof window === "undefined") return
+    try {
+      const saved = window.localStorage.getItem(`ghc.message-draft.${selectedId}`) || ""
+      setDraft(saved)
+      setDraftConversationId(selectedId)
+    } catch {
+      setDraftConversationId(selectedId)
+    }
+  }, [selectedId])
+
+  useEffect(() => {
+    if (!selectedId || draftConversationId !== selectedId || typeof window === "undefined") return
+    const key = `ghc.message-draft.${selectedId}`
+    try {
+      if (draft.trim()) window.localStorage.setItem(key, draft)
+      else window.localStorage.removeItem(key)
+    } catch { /* storage is best-effort */ }
+  }, [draft, selectedId, draftConversationId])
+
+  const requestCount = useMemo(
+    () => conversations.filter((c) => c && !c.isArchived && Boolean((c as Conversation & { isRequest?: boolean }).isRequest)).length,
+    [conversations],
+  )
+
   const unreadCount = useMemo(
     () =>
       conversations.filter(
@@ -290,11 +318,30 @@ export function MessageScreen() {
     [conversations],
   )
 
+  const communityConversationCount = useMemo(
+    () => conversations.filter((c) => c && !c.isArchived && isCommunityConversation(c)).length,
+    [conversations],
+  )
+
+  const relationshipOutcome = useMemo(
+    () => buildRelationshipOutcome({
+      unreadCount,
+      requestCount,
+      conversationCount: conversations.filter((c) => c && !c.isArchived).length,
+      communityConversationCount,
+      connectionCount: ghc.friends.length,
+      matchCount: ghc.matches.length,
+    }),
+    [unreadCount, requestCount, conversations, communityConversationCount, ghc.friends.length, ghc.matches.length],
+  )
+
   const list = useMemo(() => {
     const q = queryDebounced.trim().toLowerCase()
     let rows = conversations.filter((c) => c && !c.isArchived)
     if (filter === "unread") {
       rows = rows.filter((c) => Boolean(c.unread) || (c.unreadCount || 0) > 0)
+    } else if (filter === "requests") {
+      rows = rows.filter((c) => Boolean((c as Conversation & { isRequest?: boolean }).isRequest))
     } else if (filter === "communities") {
       rows = rows.filter(isCommunityConversation)
     } else if (filter === "dms") {
@@ -424,6 +471,7 @@ export function MessageScreen() {
     startTransition(() => {
       setSelectedId(id)
       setDraft("")
+      try { window.localStorage.removeItem(`ghc.message-draft.${selectedId}`) } catch { /* */ }
       setReplyToId(null)
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
@@ -799,6 +847,7 @@ export function MessageScreen() {
     { id: "all", label: "All" },
     { id: "dms", label: "DMs" },
     { id: "unread", label: "Unread", count: unreadCount },
+    { id: "requests", label: "Requests", count: requestCount },
     { id: "communities", label: "Communities" },
   ]
 
@@ -808,16 +857,16 @@ export function MessageScreen() {
       <div className="px-3 pt-2" role="status">
         {isOffline ? (
           <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            Offline — messages queue on this device and sync when you reconnect.
+            Offline — existing conversations remain available where cached. Reconnect before sending new messages or attachments.
           </p>
         ) : null}
       </div>
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-[15px] font-bold tracking-tight text-foreground">Messages</h1>
+            <h1 className="text-[17px] font-bold tracking-tight text-foreground">Messages</h1>
             <p className="text-[11px] text-muted-foreground">
-              Conversations and community chats
+              People, requests and community conversations in one place
             </p>
           </div>
           {unreadCount > 0 ? (
@@ -830,12 +879,30 @@ export function MessageScreen() {
           <ConversationSearchBar searchQuery={query} onSearchChange={setQuery} />
         </div>
 
+        <section className="mt-2.5 rounded-[1.15rem] border border-border/60 bg-background/75 p-3 shadow-sm" aria-label="Relationship action centre">
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900/50">
+              {relationshipOutcome.tone === "attention" ? <MessageCircle size={15} aria-hidden /> : relationshipOutcome.tone === "progress" ? <Sparkles size={15} aria-hidden /> : <ShieldCheck size={15} aria-hidden />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] font-extrabold text-foreground">{relationshipOutcome.title}</p>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{relationshipOutcome.badge}</span>
+              </div>
+              <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">{relationshipOutcome.detail}</p>
+              <button type="button" onClick={() => relationshipOutcome.action === "requests" ? setFilter("requests") : relationshipOutcome.action === "unread" ? setFilter("unread") : relationshipOutcome.action === "communities" ? setFilter("communities") : navigateTo("discover")} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--gh-green)] px-3 text-[10.5px] font-bold text-white shadow-sm transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
+                {relationshipOutcome.actionLabel}<ArrowRight size={12} aria-hidden />
+              </button>
+            </div>
+          </div>
+        </section>
+
         <div
           className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
           role="tablist"
           aria-label="Inbox filters"
           onKeyDown={(e) => {
-            const order: InboxFilter[] = ["all", "dms", "unread", "communities"]
+            const order: InboxFilter[] = ["all", "dms", "unread", "requests", "communities"]
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
             e.preventDefault()
             const idx = order.indexOf(filter)
@@ -853,10 +920,10 @@ export function MessageScreen() {
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
-              className={`flex flex-1 items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-bold transition ${
+              className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[11px] font-bold transition active:scale-[0.98] ${
                 filter === f.id
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border/60"
+                  : "text-muted-foreground hover:bg-card/50 hover:text-foreground"
               }`}
             >
               {f.id === "communities" ? <Users size={12} aria-hidden /> : null}
@@ -886,6 +953,20 @@ export function MessageScreen() {
                 className="mt-3 rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white shadow-sm"
               >
                 View all chats
+              </button>
+            </div>
+          ) : filter === "requests" ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <p className="text-[14px] font-bold">No message requests</p>
+              <p className="mt-1 max-w-xs text-[12px] leading-relaxed text-muted-foreground">
+                New conversations from people outside your accepted network will stay separated here so your main inbox remains focused.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFilter("all")}
+                className="mt-3 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground shadow-sm"
+              >
+                Back to inbox
               </button>
             </div>
           ) : filter === "dms" ? (
@@ -929,6 +1010,7 @@ export function MessageScreen() {
           <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground" aria-live="polite">
             {list.length} conversation{list.length === 1 ? "" : "s"}
             {queryDebounced.trim() ? " matching search" : ""}
+            {requestCount > 0 && filter === "all" ? ` · ${requestCount} request${requestCount === 1 ? "" : "s"}` : ""}
           </p>
           <ul className="contain-content" role="list" aria-label="Conversations">
             {list.map((c) => (

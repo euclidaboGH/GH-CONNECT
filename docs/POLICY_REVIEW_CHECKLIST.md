@@ -1,3 +1,6 @@
+> **LEGACY VERIFICATION FIXTURE — HISTORICAL RELEASE RECORD, NOT CURRENT PRODUCT AUTHORITY.**
+> Consult `docs/SOURCE_OF_TRUTH.md` and `docs/PROJECT_TRUTH.md` for current authority. Preserve this file for historical traceability only.
+
 # Policy review checklist
 
 Run this checklist before publishing material product changes that affect data or money.

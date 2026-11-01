@@ -39,6 +39,7 @@ import {
 } from "@/lib/domains/adapters/unified-connection-request"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
 import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
+import { buildDiscoveryOutcome } from "@/lib/discovery-outcome"
 import {
   submitConnectionFromPicker,
   userFacingConnectError,
@@ -203,6 +204,13 @@ export function DiscoveryGridScreen() {
     graphSnap.outgoingFriendRequestIds,
     graphSnap.incomingFriendRequestIds,
   ])
+
+  const discoveryOutcome = useMemo(() => buildDiscoveryOutcome({
+    visiblePeople: adapted.list.length,
+    selectedIntentCount: selectedIntents.length,
+    hasQuery: Boolean(query.trim()),
+    onlineOnly,
+  }), [adapted.list.length, selectedIntents.length, query, onlineOnly])
 
   const connectionStateFor = useCallback(
     (id: string): ConnectionUiState => normalizeConnectionState(id, graphSnap),
@@ -474,6 +482,17 @@ export function DiscoveryGridScreen() {
         </div>
       </div>
 
+
+      <section className="mx-3 mt-2 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-label="Discovery outcome">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Discovery outcome</p>
+            <p className="mt-1 text-[13px] font-bold text-foreground">{discoveryOutcome.title}</p>
+            <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{discoveryOutcome.detail}</p>
+          </div>
+          <span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${discoveryOutcome.state === "ready" ? "bg-emerald-500" : discoveryOutcome.state === "attention" ? "bg-amber-500" : "bg-muted-foreground/40"}`} aria-hidden />
+        </div>
+      </section>
 
       <div className="sr-only" role="status" aria-live="polite">
         {statusMsg || (loading ? "Loading discovery" : "")}

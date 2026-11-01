@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { resolvePiSandbox } from "@/lib/pi-env"
 import type { PiBackendPayment } from "pi-backend"
@@ -38,8 +38,8 @@ type Begin = { ok?: boolean; error?: string; retryable?: boolean; alreadyPaid?: 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rate = checkRateLimit(`pi-cashback-claim:${auth.userId}`, 1, 30_000)
-  if (!rate.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rate.retryAfterSec }, 429)
+  const rate = await checkDurableRateLimit(`pi-cashback-claim:${auth.userId}`, 1, 30_000, { onUnavailable: "deny" })
+  if (!rate.ok) return reply({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, durableRateLimitStatus(rate))
 
   // Fail closed: never permit a cashback claim on Mainnet through this Testnet release.
   if (process.env.PI_A2U_ENABLED !== "true" || process.env.PI_A2U_TESTNET_ONLY !== "true" || !resolvePiSandbox() || process.env.PI_ENV !== "production") {

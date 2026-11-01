@@ -1,15 +1,24 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.222.0`
+**Current source version:** `0.270.1`
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
 
 ## Current release baseline
 
 - Node: `24.15.0` / `^24.15.0`
-- Supabase migrations: **170 canonical SQL files**
+- Supabase migrations: **171 canonical SQL files**
 - Duplicate migration numeric prefixes: **0**
-- Static/source audit: current release gates passing
+- Static/source audit: **57/57** consolidated checks passing (2026-11-01; source-only)
+- Pass 41: marketplace loaders now protect against stale responses and preserve last-known data on transient failures; feed requests use latest-request-wins cancellation
+- Pass 42: marketplace API record normalization is centralized in runtime-tested domain mappers for listings, saved items and durable orders
+- Phase 1 foundation pass: release-truth metadata, documentation hygiene, and the marketplace shared-mapper regression contract reconciled; see `docs/PHASE-1-FOUNDATION-UPGRADE-0.265.0.md`.
+- Pass 43: Feed, Connections and Discovery read seams are connected to the policy-filtered GHC session; production discovery now requires explicit server-hydrated candidate provenance
+- Pass 44: 10 high-impact financial/payment routes use awaited, fail-closed durable rate limits
+- Pass 45: bounded retention for expired security-control-plane state, 90-day default security-event expiry, and strict limiter input/RPC response validation
+- Pass 46: correct 429/503 durable-limiter failure semantics, fail-closed social mute/block writes, and app-wide keyboard/reduced-motion/mobile interaction polish; no Cloudflare/R2 integration
+- Pass 47: global offline/reconnect feedback, consistent feed/tab loading surfaces, and safer root-level error diagnostics
+- Pass 48: inactive tab panels and hidden bottom navigation are made inert, preventing keyboard focus from entering visually hidden app surfaces
 - Production status: **NOT APPROVED** until supported-runtime build, live backend/provider evidence and migration reconciliation are completed
 
 ## Source of truth

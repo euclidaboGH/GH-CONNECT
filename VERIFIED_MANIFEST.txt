@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.222.0
+project_version=0.270.1
 manifest_format_version=1
-canonical_migrations=170
+canonical_migrations=171
 classification_required=111
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=56
+classification_review_required=57
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -192,3 +192,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=14744 path=supabase/migrations/20261030010015_phase26_operational_execution_paths.sql
 [REQUIRED] size=7625 path=supabase/migrations/20261031010001_gh_community_chat_governance.sql
 [REVIEW_REQUIRED] size=2744 path=supabase/migrations/20261031010002_gh_community_chat_review_membership_order.sql
+[REVIEW_REQUIRED] size=3393 path=supabase/migrations/20261101010001_gh_security_control_plane_retention.sql

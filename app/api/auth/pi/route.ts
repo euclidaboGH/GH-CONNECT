@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server"
 import { verifyPiAccessToken } from "@/lib/server/economy/auth"
-import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId } from "@/lib/server/security/control-plane"
+import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { createHash } from "node:crypto"
 import {
   findOrCreateFromVerifiedPi,
@@ -40,10 +40,10 @@ export async function POST(request: Request) {
     const correlationId = requestCorrelationId(request)
     const rate = await checkDurableRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000, { onUnavailable: "deny" })
     if (!rate.ok) {
-      void appendSecurityEvent({ eventType: "auth.pi.rate_limited", outcome: "blocked", reasonCode: "RATE_LIMITED", correlationId })
+      void appendSecurityEvent({ eventType: "auth.pi.rate_limited", outcome: "blocked", reasonCode: durableRateLimitCode(rate), correlationId })
       return NextResponse.json(
-        { ok: false, error: "RATE_LIMITED", retryAfterSec: rate.retryAfterSec },
-        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rate.retryAfterSec) } }
+        { ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec },
+        { status: durableRateLimitStatus(rate), headers: { "Cache-Control": "no-store", "Retry-After": String(rate.retryAfterSec) } }
       )
     }
     const contentLength = Number(request.headers.get("content-length") || 0)

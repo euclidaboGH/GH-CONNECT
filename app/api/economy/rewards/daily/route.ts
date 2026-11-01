@@ -33,7 +33,7 @@ import { recordGhcNotification } from "@/lib/server/economy/notifications"
 import {
   commitDailyClaimState,
 } from "@/lib/server/economy/claim-engine"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -84,10 +84,9 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`daily_claim:${auth.userId}`, 10, 60_000)
+  const rl = await checkDurableRateLimit(`daily_claim:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many claim attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Reward protection is temporarily unavailable" : `Too many claim attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
   const parsedBody = await readBoundedJson(request, 4096)

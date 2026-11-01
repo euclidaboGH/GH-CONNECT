@@ -78,6 +78,18 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
     } catch { setMsg("Network error") } finally { setBusy(false) }
   }
 
+  const engagementTotal = totals.likes + totals.comments + totals.shares
+  const engagementRate = totals.views > 0 ? (engagementTotal / totals.views) * 100 : 0
+  const nextBestAction = filteredPosts.length === 0
+    ? "Publish your first useful post to start building measurable creator performance."
+    : totals.qualified === 0
+      ? "Improve the opening, clarity and usefulness of your next post to earn qualified attention."
+      : totals.comments === 0
+        ? "Invite a specific response or question in your next post to turn attention into conversation."
+        : totals.shares === 0
+          ? "Create something practical people will want to save or share with their network."
+          : "Review your strongest post below and build the next post around what already resonates."
+
   const openPost = (postId: string) => {
     window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
     window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId, action: "insights" } }))
@@ -103,6 +115,12 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
         <div className="rounded-2xl border border-border bg-card p-3"><p className="text-sm font-bold">↑ {totals.up} / ↓ {totals.down}</p><p className="mt-3 text-[10px] text-muted-foreground">Curation signals</p></div>
         <div className="rounded-2xl border border-border bg-card p-3"><Wallet size={16}/><p className="mt-2 text-lg font-bold">{economy ? fmt(economy.available ?? economy.balance) : "—"}</p><p className="text-[10px] text-muted-foreground">Available GHC</p></div>
       </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-2xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Engagement rate</p><p className="mt-1 text-xl font-bold">{engagementRate.toFixed(1)}%</p><p className="mt-1 text-[10px] text-muted-foreground">Interactions ÷ recorded views</p></div>
+        <div className="rounded-2xl border border-border bg-card p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Meaningful actions</p><p className="mt-1 text-xl font-bold">{engagementTotal.toLocaleString()}</p><p className="mt-1 text-[10px] text-muted-foreground">Likes, comments and shares</p></div>
+      </div>
+      <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Next best action</p><p className="mt-1 text-sm font-semibold leading-5 text-foreground">{nextBestAction}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Guidance is based only on the performance records shown here; it does not predict rewards or earnings.</p></div>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-3"><p className="text-lg font-bold">{fmt(creatorEconomy?.rewardAuthor)}</p><p className="text-[10px] text-muted-foreground">Author reward recorded</p></div>
         <div className="rounded-2xl border border-border bg-card p-3"><p className="text-lg font-bold">{fmt(creatorEconomy?.rewardCuration)}</p><p className="text-[10px] text-muted-foreground">Curation allocation</p></div>

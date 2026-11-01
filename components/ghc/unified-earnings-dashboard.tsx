@@ -6,6 +6,7 @@
  * Never invents balances. Explains ineligible / review / fee states clearly.
  */
 
+import { confirmDialog } from "@/lib/ui/global-interactions"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import {
@@ -92,10 +93,36 @@ function reasonLabel(code: string): string {
     case "LINKED_PI_IDENTITY_REQUIRED":
       return "Sign in with Pi so your wallet is linked to this account."
     case "WALLET_AUTHORIZATION_REQUIRED":
-      return "Authorize Pi wallet payouts in Identity settings."
+      return "Authorize Pi wallet payouts once — then you can withdraw to your linked Pi wallet."
+    case "WALLET_AUTHORIZATION_UNAVAILABLE":
+      return "Payout authorization service is temporarily unavailable. Try again shortly."
+    case "IDENTITY_MAPPING_REQUIRED":
+      return "Sign in with Pi so GreenHaven can verify your identity before authorizing payouts."
+    case "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED":
+      return "PI withdrawals are not enabled on this deployment yet (operator Testnet gate)."
+    case "INSUFFICIENT_WITHDRAWABLE_BALANCE":
+    case "INSUFFICIENT_BALANCE":
+      return "Your available earnings are insufficient for this withdrawal."
+    case "PAYOUT_PENDING":
+    case "PAYOUT_ALREADY_PENDING":
+      return "Your withdrawal is being processed. Check transaction history for updates."
+    case "PAYOUT_FAILED":
+      return "The withdrawal could not be completed. No duplicate charge was applied; you can try again later."
+    case "DUPLICATE_IDEMPOTENCY_KEY":
+      return "This withdrawal request was already submitted. Check history instead of retrying with the same request."
+    case "RATE_LIMITED":
+      return "Too many attempts. Please wait a moment and try again."
+    case "AUTH_REQUIRED":
+      return "Sign in again to continue with withdrawals."
     default:
       return code.replace(/_/g, " ").toLowerCase()
   }
+}
+
+function humanizeApiError(code?: string | null, message?: string | null): string {
+  if (message && message.trim() && !/^[A-Z][A-Z0-9_]{3,}$/.test(message.trim())) return message.trim()
+  if (code) return reasonLabel(code)
+  return "Something went wrong. No transfer was started."
 }
 
 function statusTone(status?: string): string {
@@ -131,6 +158,9 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [quoting, setQuoting] = useState(false)
   const [requestingPayout, setRequestingPayout] = useState(false)
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null)
+  const [walletAuthActive, setWalletAuthActive] = useState<boolean | null>(null)
+  const [walletAuthLoading, setWalletAuthLoading] = useState(false)
+  const [authorizingWallet, setAuthorizingWallet] = useState(false)
   const [charityTotal, setCharityTotal] = useState<string | null>(null)
   const [charityCount, setCharityCount] = useState(0)
   const [crossFindings, setCrossFindings] = useState<string[]>([])
@@ -218,6 +248,35 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       } else {
         setEntries([])
       }
+
+      // Explicit A2U payout consent status (separate from Pi identity link)
+      try {
+        setWalletAuthLoading(true)
+        const aRes = await fetch("/api/identity/wallet-authorization", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal,
+        })
+        const aJson = (await aRes.json().catch(() => null)) as {
+          ok?: boolean
+          authorizationActive?: boolean
+          error?: string
+        } | null
+        if (!signal?.aborted) {
+          if (aRes.ok && aJson?.ok) {
+            setWalletAuthActive(aJson.authorizationActive === true)
+          } else if (aJson?.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
+            setWalletAuthActive(null)
+          } else {
+            setWalletAuthActive(false)
+          }
+        }
+      } catch {
+        if (!signal?.aborted) setWalletAuthActive(null)
+      } finally {
+        if (!signal?.aborted) setWalletAuthLoading(false)
+      }
     } catch {
       if (!signal?.aborted) {
         setFailed(true)
@@ -246,6 +305,87 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     quoteSequence.current += 1
   }, [])
 
+
+
+  const onAuthorizeWallet = async () => {
+    if (authorizingWallet) return
+    setAuthorizingWallet(true)
+    setPayoutMsg(null)
+    try {
+      const res = await fetch("/api/identity/wallet-authorization", {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+        cache: "no-store",
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        error?: string
+        message?: string
+        status?: string
+      } | null
+      if (!res.ok || !body?.ok) {
+        setPayoutMsg(humanizeApiError(body?.error, body?.message))
+        if (body?.error === "IDENTITY_MAPPING_REQUIRED") setWalletAuthActive(false)
+        return
+      }
+      setWalletAuthActive(true)
+      setPayoutMsg(
+        body.message ||
+          "Pi wallet authorized for App-to-User payouts to your linked identity. You can withdraw now.",
+      )
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "wallet-auth-granted" } }))
+        window.dispatchEvent(
+          new CustomEvent("ghc:toast", {
+            detail: { message: "Pi payouts authorized for your linked wallet", type: "success" },
+          }),
+        )
+      } catch { /* */ }
+      void refresh()
+    } catch {
+      setPayoutMsg("Network error while authorizing Pi payouts. No transfer was started.")
+    } finally {
+      setAuthorizingWallet(false)
+    }
+  }
+
+
+  const onRevokeWalletAuth = async () => {
+    if (authorizingWallet) return
+    const ok = await confirmDialog({
+      title: "Revoke Pi payout authorization?",
+      message: "Future withdrawals will be blocked until you authorize again. Already submitted payouts are not reversed.",
+      confirmLabel: "Revoke",
+      cancelLabel: "Keep authorized",
+      danger: true,
+    })
+    if (!ok) return
+    setAuthorizingWallet(true)
+    setPayoutMsg(null)
+    try {
+      const res = await fetch("/api/identity/wallet-authorization", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "user_revoked" }),
+        cache: "no-store",
+      })
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; message?: string; revoked?: boolean } | null
+      if (!res.ok || !body?.ok) {
+        setPayoutMsg(humanizeApiError(body?.error, body?.message))
+        return
+      }
+      setWalletAuthActive(false)
+      setPayoutMsg("Pi payout authorization revoked. Withdrawals are blocked until you authorize again.")
+      void refresh()
+    } catch {
+      setPayoutMsg("Network error while revoking authorization.")
+    } finally {
+      setAuthorizingWallet(false)
+    }
+  }
 
   const onRequestPayout = async () => {
     if (requestingPayout) return
@@ -288,7 +428,13 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         return
       }
       if (!res.ok || !body?.ok) {
-        setPayoutMsg(body?.message || body?.error || "Could not create a payout request. No transfer was started.")
+        const code = body?.error || ""
+        if (code === "WALLET_AUTHORIZATION_REQUIRED") {
+          setWalletAuthActive(false)
+          setPayoutMsg(reasonLabel("WALLET_AUTHORIZATION_REQUIRED"))
+          return
+        }
+        setPayoutMsg(humanizeApiError(body?.error, body?.message) || "Could not create a payout request. No transfer was started.")
         return
       }
       setPayoutMsg(
@@ -559,6 +705,41 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </div>
           ) : null}
 
+          {snap.piWalletLinked === true && walletAuthActive === false ? (
+            <div className="mb-2 w-full rounded-2xl border border-amber-200/90 bg-amber-50/95 px-3 py-3 dark:border-amber-900 dark:bg-amber-950/40" role="status">
+              <p className="text-[13px] font-bold text-amber-950 dark:text-amber-100">Authorize Pi payouts</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+                Your Pi identity is linked{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}, but GreenHaven still needs one explicit consent
+                before App-to-User withdrawals can reserve and send PI to that wallet. This does not move funds by itself.
+              </p>
+              <button
+                type="button"
+                disabled={authorizingWallet || walletAuthLoading}
+                onClick={() => void onAuthorizeWallet()}
+                className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-amber-800 px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-amber-900 disabled:opacity-50 sm:w-auto"
+              >
+                {authorizingWallet ? "Authorizing…" : "Authorize Pi wallet for payouts"}
+              </button>
+            </div>
+          ) : null}
+
+          {walletAuthActive === true ? (
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/90 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
+              <p className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-100">
+                Pi payouts authorized for your linked wallet
+                {snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}.
+              </p>
+              <button
+                type="button"
+                disabled={authorizingWallet}
+                onClick={() => void onRevokeWalletAuth()}
+                className="text-[11px] font-bold text-emerald-900 underline-offset-2 hover:underline disabled:opacity-50 dark:text-emerald-100"
+              >
+                Revoke
+              </button>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="button"
@@ -570,21 +751,41 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </button>
             <button
               type="button"
-              onClick={() => void onRequestPayout()}
-              disabled={requestingPayout || snap.eligible !== true || snap.piWalletLinked !== true}
+              onClick={() => {
+                if (walletAuthActive === false) {
+                  void onAuthorizeWallet()
+                  return
+                }
+                void onRequestPayout()
+              }}
+              disabled={
+                requestingPayout ||
+                authorizingWallet ||
+                snap.eligible !== true ||
+                snap.piWalletLinked !== true
+              }
               className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
             >
-              {requestingPayout ? "Submitting request…" : "Withdraw to Pi wallet"}
+              {authorizingWallet
+                ? "Authorizing…"
+                : requestingPayout
+                  ? "Submitting request…"
+                  : walletAuthActive === false
+                    ? "Authorize & withdraw"
+                    : "Withdraw to Pi wallet"}
             </button>
           </div>
           {payoutMsg ? (
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-700" role="status">{payoutMsg}</p>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-700 dark:text-slate-200" role="status">
+              {/^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? reasonLabel(payoutMsg.trim()) : payoutMsg}
+            </p>
           ) : (
             <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-              Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement.
-              Destination is your KYC’d Pi wallet linked at sign-in
-              {snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}.
-              The client never invents a paid result.
+              {walletAuthActive === false
+                ? "Authorize once, then preview the 3% fee and submit a withdrawal request. Funds only move after the server A2U worker verifies the transfer."
+                : "Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement. Destination is your KYC’d Pi wallet linked at sign-in"}
+              {walletAuthActive !== false && snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
+              {walletAuthActive !== false ? ". The client never invents a paid result." : ""}
             </p>
           )}
 

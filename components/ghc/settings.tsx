@@ -44,6 +44,8 @@ import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
+import { getPrivacyHealth } from "@/lib/privacy-health"
+import { matchSettingsSearch } from "@/lib/settings-search"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -575,6 +577,23 @@ export function SettingsScreen({
           <h2 className="text-[14px] font-bold tracking-tight">Privacy & Safety</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
+          {(() => {
+            const health = getPrivacyHealth(settings as any)
+            return (
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--gh-card-shadow)]" aria-label={`Privacy posture: ${health.label}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[15px] font-bold">Privacy posture</p>
+                    <p className="mt-1 text-[12px] text-muted-foreground">A practical summary of the controls you have enabled. GreenHaven does not use this score as a trust badge.</p>
+                  </div>
+                  <div className="shrink-0 rounded-full border border-border px-3 py-1 text-[12px] font-bold">{health.label}</div>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${health.score}%` }} /></div>
+                <p className="mt-2 text-[12px] text-muted-foreground">{health.score}/100 privacy posture</p>
+                {health.recommendations[0] ? <p className="mt-2 rounded-xl bg-muted/50 px-3 py-2 text-[12px] leading-relaxed"><span className="font-semibold">Recommended:</span> {health.recommendations[0]}</p> : null}
+              </div>
+            )
+          })()}
           <div>
             <p className="text-[14px] font-bold mb-3">Online Status</p>
             <select
@@ -664,7 +683,7 @@ export function SettingsScreen({
                   role="switch"
                   aria-checked={Boolean(on)}
                   onClick={() => handleSelect(key as any, (!on) as any)}
-                  className={`relative h-7 w-12 rounded-full transition ${on ? "bg-emerald-600" : "bg-muted-foreground/30"}`}
+                  className={`relative min-h-11 min-w-12 rounded-full transition ${on ? "bg-emerald-600" : "bg-muted-foreground/30"}`}
                 >
                   <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${on ? "left-5" : "left-0.5"}`} />
                 </button>
@@ -1332,19 +1351,17 @@ export function SettingsScreen({
     },
   ]
 
-  const q = settingsQuery.trim().toLowerCase()
   const filteredGroups = groups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter(
-        (it) =>
-          !q ||
-          it.title.toLowerCase().includes(q) ||
-          (it.subtitle || "").toLowerCase().includes(q) ||
-          (it.keywords || "").includes(q),
-      ),
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => ({ item, score: matchSettingsSearch(settingsQuery, item) }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => entry.item),
     }))
-    .filter((g) => g.items.length > 0)
+    .filter((group) => group.items.length > 0)
+  const settingsResultCount = filteredGroups.reduce((count, group) => count + group.items.length, 0)
 
   return (
     <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven settings">
@@ -1367,15 +1384,24 @@ export function SettingsScreen({
             type="search"
             value={settingsQuery}
             onChange={(e) => setSettingsQuery(e.target.value)}
-            placeholder="Search settings…"
-            className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-3 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
+            placeholder="Search wallet, privacy, messages, language…"
+            className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-11 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
             aria-label="Search settings"
+            aria-describedby="settings-search-hint"
           />
+          {settingsQuery ? (
+            <button type="button" onClick={() => setSettingsQuery("")} className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Clear settings search">
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)]">
         <div className="space-y-5 px-4 py-4">
+          <p id="settings-search-hint" className="text-[11px] text-muted-foreground" aria-live="polite">
+            {settingsQuery.trim() ? `${settingsResultCount} matching setting${settingsResultCount === 1 ? "" : "s"}` : "Find account controls by feature or task."}
+          </p>
           {filteredGroups.length === 0 ? (
             <p className="px-2 text-[13px] text-muted-foreground">No settings match “{settingsQuery}”.</p>
           ) : (

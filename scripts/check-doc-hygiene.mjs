@@ -3,9 +3,16 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = process.cwd()
+const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const docsRoot = join(root, 'docs')
 const required = new Set([
   'docs/SOURCE_OF_TRUTH.md',
+  'docs/PHASE-1-FOUNDATION-UPGRADE-0.265.0.md',
+  'docs/PASS-44-DURABLE-ABUSE-CONTROL-HARDENING-2026-11-01.md',
+  'docs/PASS-45-SECURITY-CONTROL-PLANE-RETENTION-2026-11-01.md',
+  'docs/PASS-46-APP-EXPERIENCE-AND-SECURITY-RESILIENCE-2026-11-01.md',
+  'docs/PASS-47-APP-EXPERIENCE-COHESION-2026-11-01.md',
+  'docs/PASS-48-ACCESSIBLE-NAVIGATION-2026-11-01.md',
   'docs/PROJECT_TRUTH.md',
   'docs/MIGRATION_CHECKLIST.md',
   'docs/POLICY_REVIEW_CHECKLIST.md',
@@ -31,15 +38,18 @@ const walk=(dir)=>{
       const s=readFileSync(p,'utf8')
       if(!required.has(rel) && !s.startsWith('> **LEGACY VERIFICATION FIXTURE')) {
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
-        if(!/2026-10-31|0\.222\.0/.test(s)) failures.push(`unclassified documentation: ${rel}`)
+        // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
+        const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
+        const datedCurrent = /2026-10-31|2026-11-01|0\.222\.0|0\.26[5-9]|0\.270/.test(s) || /0\.270\.\d/.test(s)
+        if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }
   }
 }
 walk(docsRoot)
 for(const p of required) if(!existsSync(join(root,p))) failures.push(`missing canonical document: ${p}`)
-if(!readFileSync(join(root,'README.md'),'utf8').includes('Current source version:** `0.222.0`')) failures.push('README current version marker missing')
-if(!readFileSync(join(root,'docs/PROJECT_TRUTH.md'),'utf8').includes('Current source version:** `0.222.0`')) failures.push('PROJECT_TRUTH current version marker missing')
+if(!readFileSync(join(root,'README.md'),'utf8').includes(`Current source version:** \`${pkg.version}\``)) failures.push('README current version marker missing')
+if(!readFileSync(join(root,'docs/PROJECT_TRUTH.md'),'utf8').includes(`**Current source version:** \`${pkg.version}\``)) failures.push('PROJECT_TRUTH current version marker missing')
 if(!readFileSync(join(root,'docs/SOURCE_OF_TRUTH.md'),'utf8').includes('legacy documents')) failures.push('SOURCE_OF_TRUTH legacy-document rule missing')
 if(failures.length){ console.error(`Documentation hygiene: ${failures.length} failure(s)`); for(const f of failures) console.error(`FAIL ${f}`); process.exit(1) }
 console.log('Documentation hygiene: PASS (legacy noise isolated/marked and current source-of-truth documents present)')

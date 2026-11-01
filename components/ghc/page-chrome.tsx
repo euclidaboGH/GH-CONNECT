@@ -26,22 +26,22 @@ export function PageChrome({
 }) {
   return (
     <header
-      className={`flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md ${className}`}
+      className={`gh-page-chrome flex shrink-0 items-center gap-2 px-3 py-2.5 ${className}`}
     >
       {onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
+          className="gh-icon-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
           aria-label="Back"
         >
           <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
       ) : null}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[14px] font-bold leading-tight tracking-tight text-foreground">{title}</h1>
+        <h1 className="truncate text-[15px] font-extrabold leading-tight tracking-[-0.02em] text-foreground">{title}</h1>
         {subtitle ? (
-          <p className="truncate text-[10px] leading-tight text-muted-foreground">{subtitle}</p>
+          <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">{subtitle}</p>
         ) : null}
       </div>
       {trailing}
@@ -50,7 +50,7 @@ export function PageChrome({
           type="button"
           onClick={onRefresh}
           disabled={Boolean(refreshing)}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted disabled:opacity-60"
+          className="gh-secondary-control inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold text-muted-foreground transition hover:text-foreground disabled:opacity-60"
           aria-busy={Boolean(refreshing)}
           aria-label={refreshing ? "Refreshing" : "Refresh"}
         >

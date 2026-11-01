@@ -114,6 +114,22 @@ export const a11y = {
     return () => window.removeEventListener("keydown", handler)
   },
 
+
+  // Enforce a practical mobile touch target without dictating visual design.
+  touchTargetClass: (minimum = 44): string => {
+    const px = Math.max(44, Math.round(minimum))
+    return px <= 44 ? "min-h-11 min-w-11" : "min-h-12 min-w-12"
+  },
+
+  // Restore focus after closing a modal/sheet.
+  captureFocus: (): (() => void) => {
+    if (typeof document === "undefined") return () => {}
+    const active = document.activeElement as HTMLElement | null
+    return () => {
+      try { active?.focus?.() } catch { /* focus target may have been removed */ }
+    }
+  },
+
   // Check if user prefers reduced motion
   prefersReducedMotion: (): boolean => {
     if (typeof window === "undefined") return false

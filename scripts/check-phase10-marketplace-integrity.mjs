@@ -11,6 +11,7 @@ const pay = read('app/api/marketplace/orders/[orderId]/pay/route.ts')
 const commerce = read('app/api/marketplace/orders/[orderId]/commerce/route.ts')
 const migration = read('supabase/migrations/20261028160000_marketplace_buyer_confirmation_delivery_gate.sql')
 const marketplaceUi = read('components/ghc/marketplace-screen.tsx')
+const marketplaceMappers = read('lib/marketplace/record-mappers.ts')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
@@ -42,7 +43,8 @@ const checks = [
  ['public generic transition cannot mark orders refunded', /REFUND_TRANSITION_FORBIDDEN/.test(transition) && /to === \"refunded\"/.test(transition)],
  ['commerce lifecycle states require authorized commerce actions', /COMMERCE_TRANSITION_REQUIRED/.test(transition) && /fulfilling.*completed.*disputed/.test(transition)],
  ['buyer confirmation database RPC requires delivery or service activation', /r\.status<>'fulfilling' OR r\.delivery_status NOT IN \('delivered','service_active'\)/.test(migration) && /DELIVERY_NOT_CONFIRMED/.test(migration)],
- ['marketplace order UI hydrates authoritative delivery status', /deliveryStatus: typeof o\.deliveryStatus === \"string\"/.test(marketplaceUi)],
+ ['shared order mapper hydrates camelCase and snake_case delivery status', marketplaceMappers.includes('row.deliveryStatus ?? row.delivery_status') && marketplaceMappers.includes('not_started')],
+ ['marketplace UI hydrates durable orders through the shared mapper', marketplaceUi.includes('.map((order: unknown) => mapMarketplaceOrderRecord(order))')],
  ['buyer confirmation button only appears after confirmed delivery/service activation', /status === \"fulfilling\" && \[\"delivered\",\"service_active\"\]\.includes/.test(marketplaceUi)],
 ]
 let failed=0

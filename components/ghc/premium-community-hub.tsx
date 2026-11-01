@@ -45,6 +45,8 @@ import {
 } from "./community-features-ui"
 import { CommunityPeopleYouMayKnow } from "./community-people-you-may-know"
 import { PinnedResourceCard } from "./community-features-ui"
+import { CommunityOutcomeCard } from "./community-outcome-card"
+import { buildCommunityOutcome } from "@/lib/domains/adapters/community-outcome"
 import { buildCommunityFeed } from "@/lib/domains/adapters/community-feed"
 import { buildCommunityActivityDigest } from "@/lib/domains/adapters/community-activity-digest"
 import { CommunityMemberWelcome } from "@/components/ghc/community-member-welcome"
@@ -408,6 +410,16 @@ export function PremiumCommunityHub({
   })
 
 
+  const communityOutcome = buildCommunityOutcome({
+    isJoined: community.isJoined,
+    boardUnread: community.boardUnread,
+    chatUnread: community.chatUnread,
+    activePolls,
+    upcomingEvents: participationHub.upcomingEvents,
+    boardPosts: boardPosts as any[],
+    chatAvailable: effectiveCanChat,
+  })
+
   const viewerId = IdentityService.getCurrentUserId() || ""
   const joinReasons = (() => {
     try {
@@ -630,6 +642,28 @@ export function PremiumCommunityHub({
           </div>
         ) : null}
 
+        {community.isJoined && ((community.boardUnread || 0) > 0 || (community.chatUnread || 0) > 0) ? (
+          <div className="mx-3 mb-2 rounded-2xl border border-border/60 bg-muted/35 p-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-foreground">Continue where attention is needed</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Jump directly to the space with new activity.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if ((community.boardUnread || 0) > 0) setTab("board")
+                  else if ((community.chatUnread || 0) > 0 && effectiveCanChat) onOpenChat?.()
+                  else setTab("chat")
+                }}
+                className="min-h-9 shrink-0 rounded-full bg-[var(--gh-green)] px-3 text-[10px] font-bold text-white"
+              >
+                {(community.boardUnread || 0) > 0 ? "Review board" : effectiveCanChat ? "Open chat" : "View chat"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* Board (content) vs Chat — structured spaces */}
         <div
           className="flex gap-1 overflow-x-auto px-3 pb-2 scrollbar-hide"
@@ -670,14 +704,14 @@ export function PremiumCommunityHub({
                   }
                   setTab(t.id)
                 }}
-                className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   selected
                     ? isChat
-                      ? "bg-[var(--gh-green)] text-white"
-                      : "bg-primary text-primary-foreground"
+                      ? "bg-[var(--gh-green)] text-white shadow-sm shadow-emerald-700/20"
+                      : "bg-primary text-primary-foreground shadow-sm"
                     : isChat
                       ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
-                      : "bg-muted text-muted-foreground"
+                      : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 {t.icon}
@@ -722,6 +756,15 @@ export function PremiumCommunityHub({
 
         {tab === "board" && (
           <div className="space-y-4">
+            <CommunityOutcomeCard
+              outcome={communityOutcome}
+              onAction={() => {
+                if (communityOutcome.kind === "event") setTab("events")
+                else if (communityOutcome.kind === "chat" && effectiveCanChat) onOpenChat?.()
+                else if (communityOutcome.kind === "explore" && !community.isJoined) setTab("about")
+                else setTab("board")
+              }}
+            />
             {/* Participation strip — events & knowledge without leaving Board */}
             {(participationHub.nextEvent || participationHub.resources.length > 0) && (
               <div className="grid gap-2 sm:grid-cols-2">

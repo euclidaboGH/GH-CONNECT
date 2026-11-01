@@ -17,6 +17,8 @@ import { ConnectionCard } from "./connection-card"
 import type { ConnectionUiState } from "@/lib/domains/adapters/connection-graph-adapter"
 import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
+import { ACTION_LABELS, actionAriaLabel } from "@/lib/action-language"
+import { WorkflowPathHint } from "@/components/ghc/workflow-path-hint"
 
 export function DiscoveryObjectCard({
   candidate,
@@ -66,8 +68,9 @@ export function DiscoveryObjectCard({
           {candidate.privacy ? ` · ${candidate.privacy}` : ""}
         </p>
         <p className="mt-2 text-[11px] text-foreground/80"><span className="font-medium text-primary">Why: </span>{reason}</p>
+        <WorkflowPathHint kind="community" />
         <div className="mt-3 flex gap-1.5">
-          <button type="button" className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground" onClick={() => onOpenCommunity?.(candidate.id)}>View community</button>
+          <button type="button" className="min-h-10 rounded-full bg-primary px-3.5 py-2 text-[11px] font-semibold text-primary-foreground transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={actionAriaLabel(ACTION_LABELS.viewCommunity, candidate.displayName)} onClick={() => onOpenCommunity?.(candidate.id)}>{ACTION_LABELS.viewCommunity}</button>
         </div>
       </article>
     )
@@ -84,8 +87,9 @@ export function DiscoveryObjectCard({
           {candidate.communityName ? ` · ${candidate.communityName}` : ""}
         </p>
         <p className="mt-2 text-[11px] text-foreground/80"><span className="font-medium text-primary">Why: </span>{reason}</p>
+        <WorkflowPathHint kind="event" />
         <div className="mt-3 flex gap-1.5">
-          <button type="button" className="rounded-full border border-border px-3 py-1.5 text-[11px] font-medium" onClick={() => onOpenEvent?.(candidate.id, candidate.communityId)}>View event</button>
+          <button type="button" className="min-h-10 rounded-full border border-border px-3.5 py-2 text-[11px] font-medium transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={actionAriaLabel(ACTION_LABELS.viewEvent, candidate.displayName)} onClick={() => onOpenEvent?.(candidate.id, candidate.communityId)}>{ACTION_LABELS.viewEvent}</button>
         </div>
       </article>
     )
@@ -101,8 +105,9 @@ export function DiscoveryObjectCard({
           {candidate.organizerName ? ` · ${candidate.organizerName}` : ""}
         </p>
         <p className="mt-2 text-[11px] text-foreground/80"><span className="font-medium text-primary">Why: </span>{reason}</p>
+        <WorkflowPathHint kind="activity" />
         <div className="mt-3">
-          <button type="button" className="rounded-full border border-border px-3 py-1.5 text-[11px] font-medium" onClick={() => onOpenActivity?.(candidate.id, candidate.communityId)}>View activity</button>
+          <button type="button" className="min-h-10 rounded-full border border-border px-3.5 py-2 text-[11px] font-medium transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={actionAriaLabel(ACTION_LABELS.viewActivity, candidate.displayName)} onClick={() => onOpenActivity?.(candidate.id, candidate.communityId)}>{ACTION_LABELS.viewActivity}</button>
         </div>
       </article>
     )
@@ -119,8 +124,9 @@ export function DiscoveryObjectCard({
           {candidate.locationLabel ? ` · ${candidate.locationLabel}` : ""}
         </p>
         <p className="mt-2 text-[11px] text-foreground/80"><span className="font-medium text-primary">Why: </span>{reason}</p>
+        <WorkflowPathHint kind="service" />
         <div className="mt-3 flex gap-1.5">
-          <button type="button" className="rounded-full border border-border px-3 py-1.5 text-[11px] font-medium" onClick={() => onOpenService?.(candidate.id)}>View listing</button>
+          <button type="button" className="min-h-10 rounded-full border border-border px-3.5 py-2 text-[11px] font-medium transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={actionAriaLabel(ACTION_LABELS.viewListing, candidate.displayName)} onClick={() => onOpenService?.(candidate.id)}>{ACTION_LABELS.viewListing}</button>
         </div>
       </article>
     )

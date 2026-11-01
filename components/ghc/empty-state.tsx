@@ -143,9 +143,10 @@ export function EmptyState({
     <div
       className={`gh-empty-state flex flex-col items-center justify-center px-6 py-16 text-center ${className}`}
       role="status"
+      aria-live="polite"
     >
       <div
-        className={`gh-empty-state-icon relative mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white`}
+        className={`gh-empty-state-icon relative mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--gh-radius-lg)] bg-gradient-to-br ${preset.gradient} text-white shadow-md shadow-black/10`}
       >
         <Icon size={28} strokeWidth={2} aria-hidden />
       </div>
@@ -159,18 +160,20 @@ export function EmptyState({
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
           {action && (
             <button
+              aria-label={action.label}
               type="button"
               onClick={action.onClick}
-              className="gh-btn gh-btn-primary min-h-11 px-6"
+              className="gh-btn gh-btn-primary min-h-11 rounded-full px-6 text-[13px] font-bold"
             >
               {action.label}
             </button>
           )}
           {secondaryAction && (
             <button
+              aria-label={secondaryAction.label}
               type="button"
               onClick={secondaryAction.onClick}
-              className="gh-btn gh-btn-secondary min-h-11 px-6"
+              className="gh-btn gh-btn-secondary min-h-11 rounded-full px-6 text-[13px] font-semibold"
             >
               {secondaryAction.label}
             </button>

@@ -80,10 +80,12 @@ const reviewRequired = new Set([
   '20261030010002_pi_earnings_payout_requests.sql',
   '20261030010003_pi_earnings_payout_settlement_recovery.sql',
   '20261031010002_gh_community_chat_review_membership_order.sql',
+  '20261101010001_gh_security_control_plane_retention.sql',
 ])
 
 const notes = {
   '20261031010002_gh_community_chat_review_membership_order.sql': 'Security-sensitive Community Chat approval ordering fix. Validate owner-only approval, active-membership requirement, idempotent retries, request-state preservation on rejected approval, and conversation membership on disposable PostgreSQL/Testnet before applying.',
+  '20261101010001_gh_security_control_plane_retention.sql': 'Security-control-plane retention and bounded cleanup. Validate cleanup query plans, sampled invocation frequency, event expiry behavior, row-lock/concurrency behavior, and service_role-only RPC execution on disposable PostgreSQL before applying; do not infer remote migration status.',
   '20261022010015_connection_request_intents.sql': 'Product/security review; do not auto-apply.',
   '20261025010001_gh_community_create_idempotency_guard.sql': 'Review community ID-conflict behavior and verify same-owner retries plus cross-owner rejection on disposable PostgreSQL/Testnet before applying; reconcile remote migration history first.',
   '20261027010003_gh_media_upload_finalize_identity.sql': 'Review upload-session finalization against concurrent retries and media asset lifecycle on disposable PostgreSQL; verify asset/session identity matching and service-role ACL before applying.',

@@ -339,7 +339,7 @@ export function RewardsJourneyHero({
               {isOffline ? "Offline — reconnect to claim" : `Open daily claim · +${formatGhc(daily.todayGhc)}`}
             </button>
           ) : (
-            <div className="mt-4 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3.5 text-center">
+            <div className="mt-4 rounded-[1.35rem] border border-border/60 bg-muted/40 px-4 py-3.5 text-center">
               <p className="text-[13px] font-bold text-foreground">Claimed today</p>
               <p className="mt-1 text-[12px] tabular-nums text-muted-foreground">
                 Next claim in <span className="font-semibold text-foreground">{countdownLabel}</span>

@@ -73,7 +73,7 @@ const SuggestedGroupsCardComponent = ({
       await onJoin(groupId)
       setHasJoined(true)
     } catch (error) {
-      console.error("[v0] Join failed:", error)
+      console.error("[ghc] Join failed:", error)
     } finally {
       setIsJoining(false)
     }

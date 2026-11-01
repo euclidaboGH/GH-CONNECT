@@ -66,6 +66,7 @@ import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-stat
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
+import { EconomyOutcomeCentre } from "@/components/ghc/economy-outcome-centre"
 
 const formatGhc = formatGhcShared
 
@@ -1265,6 +1266,41 @@ const lowBalance = balance === 0 && displayPending === 0
           />
           </div>
           <PaymentRecoveryBanner />
+
+          <EconomyOutcomeCentre
+            availableGhc={balance}
+            pendingGhc={displayPending}
+            lockedGhc={locked}
+            claimableToday={claimableToday}
+            selectedRail={assetRail}
+            onOpenPending={() => setShowPendingSheet(true)}
+            onOpenRewards={() => navigateSettingsSection("rewards")}
+            onOpenActivity={() => { setHistoryRail("ghc"); setShowFullHistory(true); setTab("activity") }}
+            onOpenPi={() => { setAssetRail("pi"); setHistoryRail("pi"); requestAnimationFrame(() => document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })) }}
+          />
+
+          {/* One economic command centre: money, benefits and participation stay connected without mixing ledgers. */}
+          <section className="mx-3 mt-3 rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-sm" aria-label="Money and benefits">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-black tracking-tight text-foreground">Money & benefits</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">One place to move from balance to the action that matters next. GHC and Pi remain separate rails.</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Protected</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => navigateSettingsSection("rewards")} className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-left transition hover:bg-muted/60 active:scale-[.99]">
+                <Gift size={17} className="text-emerald-700 dark:text-emerald-300" aria-hidden />
+                <p className="mt-2 text-[12px] font-bold text-foreground">Rewards Centre</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Claims, missions, referrals and achievements</p>
+              </button>
+              <button type="button" onClick={() => navigateSettingsSection("membership")} className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-left transition hover:bg-muted/60 active:scale-[.99]">
+                <CreditCard size={17} className="text-violet-700 dark:text-violet-300" aria-hidden />
+                <p className="mt-2 text-[12px] font-bold text-foreground">Membership</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Free, VIP and VVIP benefits</p>
+              </button>
+            </div>
+          </section>
 
           {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
           {assetRail === "pi" ? (

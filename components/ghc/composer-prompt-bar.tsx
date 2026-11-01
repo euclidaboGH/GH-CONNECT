@@ -27,7 +27,7 @@ export function ComposerPromptBar({
 
   return (
     <section
-      className={`rounded-[1.35rem] border border-border/70 bg-card p-3 shadow-[var(--gh-card-shadow)] ${className}`}
+      className={`rounded-[1.35rem] border border-border/70 bg-card p-3 shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)] ${className}`}
       aria-label="Create a post"
     >
       <button
@@ -46,7 +46,7 @@ export function ComposerPromptBar({
             letter
           )}
         </span>
-        <span className="min-w-0 flex-1 rounded-full border border-border/60 bg-muted/50 px-4 py-2.5 text-[13px] text-muted-foreground transition hover:bg-muted/80">
+        <span className="min-w-0 flex-1 rounded-full border border-border/60 bg-muted/45 px-4 py-2.5 text-[13px] text-muted-foreground transition hover:border-border hover:bg-muted/70">
           {placeholder}
         </span>
       </button>

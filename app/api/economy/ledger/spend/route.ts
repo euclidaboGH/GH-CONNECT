@@ -12,7 +12,7 @@ import {
   jsonOk,
 } from "@/lib/server/economy/http"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { resolveSpendAmount } from "@/lib/server/economy/spend-catalog"
 import {
   executeAuthoritativeSpend,
@@ -79,10 +79,9 @@ export async function POST(request: Request) {
     return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
   }
 
-  pruneRateLimitBuckets()
-  const rl = checkRateLimit(`spend:${auth.userId}`, 20, 60_000)
+  const rl = await checkDurableRateLimit(`spend:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonErr("RATE_LIMITED", `Too many spend attempts; retry in ${rl.retryAfterSec}s`, 429)
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Spend protection is temporarily unavailable" : `Too many spend attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
   const parsedBody = await readBoundedJson(request, 8192)

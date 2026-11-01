@@ -484,6 +484,13 @@ export function RewardsCentreScreen({
           onOpenWallet={onOpenWallet}
         />
 
+        <section className="mx-3 mt-3 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/70 px-3.5 py-3 dark:border-emerald-900 dark:bg-emerald-950/25" aria-label="Recommended next action">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">Best next action</p>
+          <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review pending rewards" : "Keep building quality participation"}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{recommended.length > 0 ? "This mission is currently the strongest available next step based on your verified progress." : snapshot.pending.length > 0 ? "Some rewards are still pending validation or maturity. Review their status before planning around them." : "There is no reward action you need to force. Useful posts, helpful comments and community participation build your journey naturally."}</p>
+          <button type="button" onClick={() => recommended.length > 0 ? setTab("challenges") : snapshot.pending.length > 0 ? setTab("history") : setTab("opportunities")} className="mt-2.5 min-h-9 rounded-full bg-emerald-700 px-3.5 text-[11px] font-bold text-white">{recommended.length > 0 ? "View mission" : snapshot.pending.length > 0 ? "Review status" : "Explore opportunities"}</button>
+        </section>
+
         <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
           <p className="font-semibold text-foreground">Two different rewards</p>
           <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
@@ -651,7 +658,7 @@ export function RewardsCentreScreen({
           {(
             [
               { id: "challenges" as const, label: "Missions" },
-              { id: "opportunities" as const, label: "Earn" },
+              { id: "opportunities" as const, label: "Opportunities" },
               { id: "history" as const, label: "History" },
               { id: "achievements" as const, label: "Achievements" },
             ] as const
@@ -678,7 +685,7 @@ export function RewardsCentreScreen({
             ? `${snapshot.challenges.length} mission${snapshot.challenges.length === 1 ? "" : "s"}`
             : null}
           {tab === "opportunities"
-            ? `${snapshot.rules.length} earn rule${snapshot.rules.length === 1 ? "" : "s"}`
+            ? `${snapshot.rules.length} participation path${snapshot.rules.length === 1 ? "" : "s"}`
             : null}
           {tab === "history"
             ? `${snapshot.rewards.length} history item${snapshot.rewards.length === 1 ? "" : "s"}`

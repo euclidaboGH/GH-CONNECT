@@ -80,6 +80,8 @@ jobs:
         run: npm run test:phase4-recovery-release-gate
       - name: Phase 4 cross-feature identity integration
         run: npm run check:phase4-identity-integration
+      - name: Durable financial abuse-control contract
+        run: npm run check:pass44
       - name: Comprehensive source-only contract suite
         run: npm run verify:static
       - name: Discovery-based production verification pack

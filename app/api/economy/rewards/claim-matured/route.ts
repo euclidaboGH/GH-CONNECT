@@ -6,7 +6,7 @@
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcClaimPending, rpcListMaturedDailyClaimHolds, rpcWalletSnapshot } from "@/lib/server/economy/db"
 import { isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,9 +18,8 @@ export async function POST(request: Request) {
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
   if (!isDatabaseConfigured()) return jsonErr("DATABASE_UNAVAILABLE", "Durable wallet database is required to reconcile matured rewards", 503)
 
-  pruneRateLimitBuckets()
-  const rate = checkRateLimit(`claim_matured:${auth.userId}`, 6, 60_000)
-  if (!rate.ok) return jsonErr("RATE_LIMITED", `Too many wallet reconciliation attempts; retry in ${rate.retryAfterSec}s`, 429)
+  const rate = await checkDurableRateLimit(`claim_matured:${auth.userId}`, 6, 60_000, { onUnavailable: "deny" })
+  if (!rate.ok) return jsonErr(durableRateLimitCode(rate), rate.unavailable ? "Wallet protection is temporarily unavailable" : `Too many wallet reconciliation attempts; retry in ${rate.retryAfterSec}s`, durableRateLimitStatus(rate))
 
   const cutoff = new Date(Date.now() - LOCK_MS)
   const candidates = await rpcListMaturedDailyClaimHolds(auth.userId, cutoff)

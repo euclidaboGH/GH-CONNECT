@@ -260,7 +260,7 @@ export function ProfileEcosystemHub({
         <button
           type="button"
           onClick={onOpenWallet}
-          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200 hover:shadow-md active:scale-[0.99] dark:hover:border-emerald-800"
+          className="flex min-h-[108px] flex-col rounded-[1.35rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-300 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.99] dark:hover:border-emerald-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:ring-emerald-900/40">
@@ -284,7 +284,7 @@ export function ProfileEcosystemHub({
         <button
           type="button"
           onClick={onOpenRewards}
-          className="flex min-h-[100px] flex-col rounded-[1.25rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-amber-200 hover:shadow-md active:scale-[0.99] dark:hover:border-amber-800"
+          className="flex min-h-[108px] flex-col rounded-[1.35rem] border border-border/60 bg-card p-3.5 text-left shadow-[var(--gh-card-shadow)] transition hover:border-amber-300 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.99] dark:hover:border-amber-800"
         >
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/40">

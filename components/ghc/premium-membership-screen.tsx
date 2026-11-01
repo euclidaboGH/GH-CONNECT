@@ -305,6 +305,8 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   // entitlement may display VIP/VVIP. Local domain state is cache, never authority.
   const currentTier = (serverStatus?.tier || "free") as MembershipTierId
   const membershipAuthorityReady = serverStatusState === "ready" && serverStatus !== null
+  // Display authority: paid status is never inferred from local cache.
+  const authoritativeStatus = membershipAuthorityReady ? serverStatus : null
   const mapEntitlementToStatus = (
     e: Record<string, unknown>
   ): MembershipStatus => {
@@ -713,16 +715,16 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 ? "Loading…"
                 : busy
                   ? "Purchase in progress"
-                  : status?.active
+                  : authoritativeStatus?.active
                     ? `${MEMBERSHIP_PLANS[currentTier].label} active`
                     : `${MEMBERSHIP_PLANS[currentTier].label}`}
             </span>
-            {status?.source === "trial" || (status as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
+            {authoritativeStatus?.source === "trial" || (authoritativeStatus as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
               <span className="text-[11px] text-muted-foreground">
-                Welcome trial{status?.expiresAt ? ` · ends ${formatUntil(status.expiresAt)}` : ""}
+                Welcome trial{authoritativeStatus?.expiresAt ? ` · ends ${formatUntil(authoritativeStatus.expiresAt)}` : ""}
               </span>
-            ) : status?.expiresAt ? (
-              <span className="text-[11px] text-muted-foreground">{formatUntil(status.expiresAt)}</span>
+            ) : authoritativeStatus?.expiresAt ? (
+              <span className="text-[11px] text-muted-foreground">{formatUntil(authoritativeStatus.expiresAt)}</span>
             ) : null}
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
@@ -730,6 +732,14 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             <strong className="text-foreground">Verification ≠ VIP</strong>. Benefits come from entitlements.
           </p>
         </div>
+
+        {membershipAuthorityReady ? (
+          <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Membership path</p>
+            <p className="mt-1 text-[13px] font-bold text-foreground">{currentTier === "free" ? "Start with VIP when you need more reach and tools" : currentTier === "vip" ? "VIP is active — move to VVIP only when advanced tools matter" : "VVIP is active — your highest membership tier"}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{currentTier === "free" ? "Stay Free for core social access. Upgrade for specific benefits, not because GreenHaven requires payment to participate." : currentTier === "vip" ? "Use your current benefits first. VVIP is intended for people who need the broader creator, business, matching and analytics toolkit." : "Your account already has the broadest membership entitlement set. Membership does not buy reputation, verification or guaranteed rewards."}</p>
+          </div>
+        ) : null}
 
         {/* What you have now / next upgrades (Free-focused) */}
         {currentTier === "free" && (
@@ -762,7 +772,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {/* Current plan — product-tier presentation */}
-        {status?.active && (
+        {authoritativeStatus?.active && (
           <div
             className={`mb-3 overflow-hidden rounded-[1.25rem] border shadow-[var(--gh-card-shadow)] ${
               currentTier === "vvip"

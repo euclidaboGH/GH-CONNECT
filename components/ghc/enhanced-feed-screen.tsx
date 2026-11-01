@@ -87,7 +87,7 @@ function FeedSkeleton() {
   return (
     <div className="space-y-4 px-3 py-3" role="status" aria-busy="true" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="gh-card animate-pulse p-4">
+        <div key={i} className="gh-card gh-skeleton p-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-muted" />
             <div className="flex-1 space-y-2">
@@ -134,7 +134,27 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   })
   const [locationLane, setLocationLane] = useState<FeedLocationLane>("worldwide")
   const [intentionBias, setIntentionBias] = useState<FeedIntentionBias>("balanced")
-  const [focusMode, setFocusMode] = useState(false)
+  const [focusMode, setFocusMode] = useState(() => {
+    try { return window.localStorage.getItem("ghc.feedFocusMode") === "1" } catch { return false }
+  })
+  const [showFeedControls, setShowFeedControls] = useState(false)
+  useEffect(() => {
+    try {
+      const lane = window.localStorage.getItem("ghc.feedLocationLane")
+      const bias = window.localStorage.getItem("ghc.feedIntentionBias")
+      if (lane === "city" || lane === "country" || lane === "worldwide") setLocationLane(lane)
+      if (bias === "balanced" || bias === "friendship" || bias === "professional" || bias === "dating") setIntentionBias(bias)
+    } catch { /* */ }
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ghc.feedLocationLane", locationLane)
+      window.localStorage.setItem("ghc.feedIntentionBias", intentionBias)
+      window.localStorage.setItem("ghc.feedFocusMode", focusMode ? "1" : "0")
+    } catch { /* */ }
+  }, [locationLane, intentionBias, focusMode])
+
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [viewingAuthorId, setViewingAuthorId] = useState<string | null>(null)
@@ -725,13 +745,29 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 </button>
               ))}
             </div>
-            <button type="button" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? "Close feed search" : "Search feed"} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card">
+            <button type="button" onClick={() => setShowFeedControls((v) => !v)} aria-expanded={showFeedControls} aria-label="Personalize feed" className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card transition-colors ${showFeedControls || focusMode ? "border-emerald-500 text-emerald-700" : "border-border/60 text-muted-foreground hover:text-foreground"}`}>
+              <Filter size={15} />
+            </button>
+            <button type="button" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? "Close feed search" : "Search feed"} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground">
               {isSearchOpen ? <X size={16} /> : <Search size={16} />}
             </button>
-            <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} aria-label="Refresh feed" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card disabled:opacity-50">
+            <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} aria-label="Refresh feed" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
               <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
             </button>
           </div>
+          {showFeedControls ? (
+            <section className="mt-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Feed personalization">
+              <div className="flex items-start justify-between gap-3">
+                <div><p className="text-xs font-bold text-foreground">Your feed, your priorities</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. These preferences stay on this device.</p></div>
+                <button type="button" onClick={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false) }} className="text-[10px] font-bold text-emerald-700">Reset</button>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Location relevance</p><div className="flex flex-wrap gap-1">{([ ["city","Nearby"], ["country","Country"], ["worldwide","Worldwide"] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setLocationLane(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${locationLane === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
+                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">What matters now</p><div className="flex flex-wrap gap-1">{([ ["balanced","Balanced"], ["friendship","Connections"], ["professional","Professional"], ["dating","Matching"] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setIntentionBias(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${intentionBias === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
+              </div>
+              <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"><span><span className="block text-xs font-bold text-foreground">Focus mode</span><span className="block text-[10px] text-muted-foreground">Reduce lower-value feed items and emphasize stronger relevance.</span></span><input type="checkbox" checked={focusMode} onChange={(e) => setFocusMode(e.target.checked)} className="h-4 w-4 accent-emerald-700" /></label>
+            </section>
+          ) : null}
           {isSearchOpen ? (
             <input
               autoFocus
@@ -842,7 +878,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
             />
           ) : (
-            <div className="gh-premium-feed-list space-y-3 px-3 py-3">
+            <div className="gh-premium-feed-list gh-feed-column space-y-4 px-2 py-3 sm:px-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && interstitialKindAt(index) ? (
@@ -937,7 +973,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 </div>
               ))}
               <div ref={observerTargetRef} className="flex min-h-12 items-center justify-center py-3" aria-live="polite">
-                {isLoadingMore ? <span className="text-[11px] text-muted-foreground">Loading more posts…</span> : hasMorePosts ? <button type="button" onClick={() => void loadMorePosts()} className="rounded-full border border-border/70 bg-card px-4 py-2 text-[11px] font-bold">Load more</button> : <span className="text-[10px] text-muted-foreground">You’re all caught up</span>}
+                {isLoadingMore ? <span className="text-[11px] font-medium text-muted-foreground motion-safe:animate-pulse">Loading more posts…</span> : hasMorePosts ? <button type="button" onClick={() => void loadMorePosts()} className="rounded-full border border-border/70 bg-card px-4 py-2 text-[11px] font-bold">Load more</button> : <span className="rounded-full bg-muted/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">You’re all caught up</span>}
               </div>
             </div>
           )}
