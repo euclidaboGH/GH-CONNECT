@@ -5,6 +5,7 @@
  * inside a collapsed Dashboard. Profile post actions reuse the canonical feed card.
  */
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-context"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
@@ -122,6 +123,13 @@ export function ProfileScreen({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [authoritativeFollowCounts, setAuthoritativeFollowCounts] = useState<{ followers: number; following: number } | null>(null)
 
+  const [profileSoftTick, setProfileSoftTick] = useState(0)
+  useSectionRefresh("profile", () => {
+    setProfileSoftTick((n) => n + 1)
+  }, { minIntervalMs: 8_000 })
+
+
+
   useEffect(() => {
     if (!meId) return
     const controller = new AbortController()
@@ -178,7 +186,7 @@ export function ProfileScreen({
       }
     })()
     return () => controller.abort()
-  }, [meId, timelineRetry])
+  }, [meId, timelineRetry, profileSoftTick])
 
   const loadMoreTimeline = useCallback(async () => {
     if (!meId || !timelineCursor || !timelineHasMore || timelineLoadingMore) return

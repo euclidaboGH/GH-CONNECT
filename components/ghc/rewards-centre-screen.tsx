@@ -1,5 +1,7 @@
 "use client"
 
+import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
+
 import { useMemo, useState, useCallback, useEffect } from "react"
 import {
   ArrowLeft,
@@ -506,6 +508,7 @@ export function RewardsCentreScreen({
         {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
             Compact cashback summary only; full ledger + A2U request on Wallet. */}
         <PiCashbackSummary />
+        <PiPayoutAuthorizationCard />
         <UnifiedEarningsDashboard compact />
 
         <div className="mx-3 mt-3">

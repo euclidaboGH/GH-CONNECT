@@ -574,293 +574,147 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     )
   }
 
-  const reasons = Array.isArray(snap.reasons) ? snap.reasons : []
   const feePct = snap.feePercent ?? (snap.feeBps != null ? snap.feeBps / 100 : 3)
+  const available = typeof snap.available === "number" ? snap.available : atomicToDisplay(snap.availableAtomic)
+  const pending = typeof snap.pending === "number" ? snap.pending : atomicToDisplay(snap.pendingAtomic)
+  const withdrawable = typeof snap.withdrawable === "number" ? snap.withdrawable : atomicToDisplay(snap.withdrawableAtomic)
+
+  const runWithdraw = async () => {
+    if (walletAuthActive !== true) {
+      await onAuthorizeWallet()
+      // After authorize, user taps Withdraw again — avoid double network without confirmed auth
+      return
+    }
+    if (!quoteDetail) {
+      await onPreviewFee()
+    }
+    await onRequestPayout()
+  }
 
   return (
     <section
-      className="mx-3 mt-3 overflow-hidden rounded-2xl border border-emerald-900/10 bg-gradient-to-b from-emerald-50/90 to-white shadow-sm"
-      aria-label="PI earnings dashboard"
+      id="gh-pi-earnings-tools"
+      className={
+        compact
+          ? "overflow-hidden rounded-2xl border border-border/60 bg-card"
+          : "mx-3 mt-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+      }
+      aria-label="Pi balance"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-emerald-900/5 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
-            <Wallet className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-sm font-bold text-white">
+            π
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-emerald-950">PI earnings</h2>
-            <p className="text-[11px] text-emerald-900/70">Server ledger · not GHC</p>
+            <p className="text-sm font-semibold text-foreground">Pi</p>
+            <p className="text-[11px] text-muted-foreground">
+              {snap.linkedPiUsername ? `@${snap.linkedPiUsername}` : snap.piWalletLinked ? "Linked" : "Not linked"}
+            </p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void refresh()}
-          className="rounded-full p-2 text-emerald-800 hover:bg-emerald-100"
-          aria-label="Refresh earnings"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          aria-label="Refresh Pi balance"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
-      <div className="px-4 pt-4">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-900/60">Withdrawable</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-950">
-          {typeof snap.withdrawable === "number" ? piToDisplay(snap.withdrawable) : atomicToDisplay(snap.withdrawableAtomic)}
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Available", value: snap.available ?? snap.availableAtomic, atomic: snap.available == null },
-            { label: "Pending", value: snap.pending ?? snap.pendingAtomic, atomic: snap.pending == null },
-            { label: "Reserved", value: snap.reserved ?? snap.reservedAtomic, atomic: snap.reserved == null },
-            { label: "Paid", value: snap.paid ?? snap.paidAtomic, atomic: snap.paid == null },
-          ].map((cell) => (
-            <div key={cell.label} className="rounded-xl bg-white/80 px-3 py-2 shadow-sm ring-1 ring-black/5">
-              <p className="text-[10px] font-medium uppercase text-slate-500">{cell.label}</p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">
-                {cell.value === undefined || cell.value === null ? "Unavailable" : cell.atomic ? atomicToDisplay(cell.value) : piToDisplay(cell.value)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-3 space-y-2 px-4">
-        {crossStatus ? (
-          <div className={`rounded-xl px-3 py-2 ring-1 ${crossStatus === "healthy" ? "bg-emerald-50 ring-emerald-200/80" : "bg-amber-50 ring-amber-200/80"}`}>
-            <p className={`text-[11px] font-semibold ${crossStatus === "healthy" ? "text-emerald-950" : "text-amber-950"}`}>{crossStatus === "healthy" ? "Financial snapshots reconciled" : crossStatus === "degraded" ? "Reconciliation unavailable" : "Cross-feature attention"}</p>
-            {crossFindings.length > 0 ? <ul className={`mt-1 list-inside list-disc text-[11px] ${crossStatus === "healthy" ? "text-emerald-900/90" : "text-amber-900/90"}`}>
-              {crossFindings.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul> : null}
-          </div>
-        ) : null}
-        {charityTotal != null ? (
-          <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" />
-            <p className="text-xs text-slate-700">
-              Charity given: <strong>{charityTotal}</strong>
-              {charityCount > 0 ? ` (${charityCount} gifts)` : ""}. Charity is separate from withdrawable earnings.
+      <div className="grid grid-cols-2 gap-2 px-4 py-3 sm:grid-cols-4">
+        {[
+          { label: "Available", value: available },
+          { label: "Pending", value: pending },
+          { label: "Reserved", value: typeof snap.reserved === "number" ? snap.reserved : atomicToDisplay(snap.reservedAtomic) },
+          { label: "Paid", value: typeof snap.paid === "number" ? snap.paid : atomicToDisplay(snap.paidAtomic) },
+        ].map((cell) => (
+          <div key={cell.label} className="rounded-xl bg-muted/40 px-2.5 py-2 text-center">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{cell.label}</p>
+            <p className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
+              {typeof cell.value === "number" ? piToDisplay(cell.value) : String(cell.value)}
             </p>
           </div>
-        ) : null}
-        <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-          <Percent className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-          <p className="text-xs text-slate-700">
-            Withdrawal fee <strong>{feePct}%</strong> of gross. Net is sent to your{" "}
-            <strong>Pi wallet linked at sign-in</strong>
-            {snap.linkedPiUsername ? (
-              <>
-                {" "}
-                (<span className="font-medium">@{snap.linkedPiUsername}</span>)
-              </>
-            ) : null}
-            .
+        ))}
+      </div>
+      <p className="px-4 pb-1 text-center text-[11px] text-muted-foreground">
+        Withdrawable <span className="font-semibold text-foreground">{typeof withdrawable === "number" ? piToDisplay(withdrawable) : String(withdrawable)}</span>
+        {" · "}{feePct}% fee · linked at sign-in{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
+      </p>
+
+      {quoteDetail ? (
+        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">
+            {quoteDetail.gross} π − {feePct}% fee ({quoteDetail.fee} π) → <span className="font-semibold text-foreground">{quoteDetail.net} π</span>
+            {quoteDetail.recipientUsername ? ` → @${quoteDetail.recipientUsername}` : ""}
           </p>
         </div>
+      ) : null}
 
-        <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-          {snap.piWalletLinked ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-          ) : (
-            <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          )}
-          <p className="text-xs text-slate-700">
-            {snap.piWalletLinked
-              ? "Pi identity linked for payouts."
-              : "Pi identity not linked — sign in with Pi to enable withdrawals."}
+      <div className="px-4 pb-3">
+        <button
+          type="button"
+          onClick={() => void runWithdraw()}
+          disabled={
+            requestingPayout ||
+            authorizingWallet ||
+            walletAuthLoading ||
+            snap.eligible !== true ||
+            snap.piWalletLinked !== true ||
+            !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)
+          }
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
+        >
+          {authorizingWallet
+            ? "Authorizing…"
+            : requestingPayout
+              ? "Submitting…"
+              : walletAuthActive !== true
+                ? "Authorize & withdraw"
+                : "Withdraw"}
+        </button>
+        {payoutMsg ? (
+          <p className="mt-2 text-center text-[12px] font-medium text-amber-800 dark:text-amber-200" role="status">
+            {humanizeApiError(
+              /^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? payoutMsg.trim() : undefined,
+              payoutMsg,
+            )}
           </p>
-        </div>
-
-        {snap.eligible === true ? (
-          <div className="flex items-start gap-2 rounded-xl bg-emerald-100/80 px-3 py-2">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-emerald-800" />
-            <p className="text-xs text-emerald-950">
-              Eligible to withdraw (subject to Testnet A2U and operator gates). Min{" "}
-              {snap.minPayout != null ? `${snap.minPayout} π` : "policy minimum"}.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200/80">
-            <div className="flex items-start gap-2">
-              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-              <div>
-                <p className="text-xs font-medium text-amber-950">Not eligible to withdraw yet</p>
-                {crossFindings.length > 0 ? <ul className={`mt-1 list-inside list-disc text-[11px] ${crossStatus === "healthy" ? "text-emerald-900/90" : "text-amber-900/90"}`}>
-                  {reasons.length > 0 ? (
-                    reasons.map((r) => <li key={r}>{reasonLabel(String(r))}</li>)
-                  ) : (
-                    <li>Complete linking and wait for available balance.</li>
-                  )}
-                </ul> : null}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2 pb-1">
-          {quoteDetail ? (
-            <div className="mt-2 rounded-xl border border-violet-200/80 bg-white/95 px-3 py-2.5 ring-1 ring-violet-100 dark:bg-violet-950/30">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Withdrawal quote</p>
-              <div className="mt-1.5 grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Gross</p>
-                  <p className="text-[13px] font-bold tabular-nums text-foreground">{quoteDetail.gross} π</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Fee 3%</p>
-                  <p className="text-[13px] font-bold tabular-nums text-amber-800">−{quoteDetail.fee} π</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">You receive</p>
-                  <p className="text-[13px] font-bold tabular-nums text-emerald-800">{quoteDetail.net} π</p>
-                </div>
-              </div>
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Destination:{" "}
-                <span className="font-semibold text-foreground">
-                  {quoteDetail.recipientUsername ? `@${quoteDetail.recipientUsername}` : "linked KYC’d Pi wallet"}
-                </span>
-              </p>
-            </div>
-          ) : null}
-
-          {walletAuthActive !== true ? (
-            <div className="mb-3 w-full rounded-2xl border-2 border-amber-400 bg-amber-50 px-3 py-3.5 shadow-sm dark:border-amber-600 dark:bg-amber-950/60" role="status">
-              <p className="text-[14px] font-bold text-amber-950 dark:text-amber-50">Step required: authorize Pi payouts</p>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-amber-950/90 dark:text-amber-100/90">
-                {snap.piWalletLinked
-                  ? `Your Pi account${snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""} is linked, but payouts stay blocked until you grant consent. This does not move any π.`
-                  : "Link your Pi identity at sign-in, then grant payout consent here. Withdrawals cannot start without both."}
-              </p>
-              <button
-                type="button"
-                disabled={authorizingWallet || walletAuthLoading || snap.piWalletLinked !== true}
-                onClick={() => void onAuthorizeWallet()}
-                className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
-              >
-                {authorizingWallet
-                  ? "Authorizing…"
-                  : snap.piWalletLinked !== true
-                    ? "Pi identity required first"
-                    : "Authorize Pi wallet for payouts"}
-              </button>
-            </div>
-          ) : null}
-
-          {walletAuthActive === true ? (
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/90 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
-              <p className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-100">
-                Pi payouts authorized for your linked wallet
-                {snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}.
-              </p>
-              <button
-                type="button"
-                disabled={authorizingWallet}
-                onClick={() => void onRevokeWalletAuth()}
-                className="text-[11px] font-bold text-emerald-900 underline-offset-2 hover:underline disabled:opacity-50 dark:text-emerald-100"
-              >
-                Revoke
-              </button>
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={quoting || snap.eligible !== true || snap.piWalletLinked !== true || !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)}
-              onClick={() => void onPreviewFee()}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-emerald-700/30 bg-emerald-50 px-4 text-[13px] font-bold text-emerald-900 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-100"
-            >
-              {quoting ? "Quoting…" : quoteDetail ? "Refresh quote" : "Preview 3% fee"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (walletAuthActive !== true) {
-                  void onAuthorizeWallet()
-                  return
-                }
-                void onRequestPayout()
-              }}
-              disabled={
-                requestingPayout ||
-                authorizingWallet ||
-                snap.eligible !== true ||
-                snap.piWalletLinked !== true ||
-                walletAuthLoading
-              }
-              className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
-            >
-              {authorizingWallet
-                ? "Authorizing…"
-                : requestingPayout
-                  ? "Submitting request…"
-                  : walletAuthActive === false
-                    ? "Authorize & withdraw"
-                    : "Withdraw to Pi wallet"}
-            </button>
-          </div>
-          {payoutMsg ? (
-            <p className="mt-2 text-[12px] font-medium leading-relaxed text-amber-900 dark:text-amber-100" role="status">
-              {humanizeApiError(
-                /^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? payoutMsg.trim() : undefined,
-                payoutMsg,
-              )}
-            </p>
-          ) : (
-            <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-              {walletAuthActive !== true
-                ? "Authorize once above, then preview the 3% fee and submit a withdrawal request. Funds only move after the server A2U worker verifies the transfer."
-                : "Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement. Destination is your KYC’d Pi wallet linked at sign-in"}
-              {walletAuthActive === true && snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
-              {walletAuthActive === true ? ". The client never invents a paid result." : ""}
-            </p>
-          )}
-
-        </div>
-        {quoteMsg && !quoteDetail ? <p className="pb-2 text-[11px] text-slate-600">{quoteMsg}</p> : null}
+        ) : null}
+        {walletAuthActive === true && snap.linkedPiUsername ? (
+          <button
+            type="button"
+            disabled={authorizingWallet}
+            onClick={() => void onRevokeWalletAuth()}
+            className="mt-2 w-full text-center text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Revoke payout authorization
+          </button>
+        ) : null}
       </div>
 
-      {!compact && (
-        <div className="border-t border-emerald-900/5 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recent ledger</p>
-          {entries.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">No earnings ledger entries yet.</p>
-          ) : (
-            <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
-              {entries.map((e, i) => (
-                <li
-                  key={e.id || e.unique_ref || String(i)}
-                  className="flex items-start justify-between gap-2 rounded-lg bg-white px-2.5 py-2 ring-1 ring-black/5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-slate-900">
-                      {e.entry_type || "entry"} · {e.source_kind || "—"}
-                    </p>
-                    <p className="truncate text-[10px] text-slate-500">
-                      {e.unique_ref || e.payout_request_id || e.reason || "—"}
-                    </p>
-                    {e.created_at ? (
-                      <p className="text-[10px] text-slate-400">
-                        {new Date(e.created_at).toLocaleString()}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-xs font-semibold tabular-nums text-slate-900">
-                      {atomicToDisplay(e.amount_atomic)}
-                    </p>
-                    <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-medium ${statusTone(e.status)}`}>
-                      {e.status || "—"}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+      {entries.length > 0 ? (
+        <div className="border-t border-border/40 px-4 py-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Recent ledger</p>
+          <ul className="space-y-2">
+            {entries.slice(0, compact ? 3 : 6).map((e, idx) => (
+              <li key={String(e.id || e.unique_ref || idx)} className="flex items-start justify-between gap-2 text-[12px]">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-foreground">{e.entry_type || e.source_kind || "entry"}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{e.unique_ref || e.reason || ""}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {e.amount_atomic != null ? atomicToDisplay(e.amount_atomic) : "—"}
+                  </p>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${statusTone(e.status)}`}>{e.status || "—"}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }

@@ -31,7 +31,7 @@ export function WalletPrimaryActions({
     {
       id: "send",
       label: isPi ? "Withdraw" : "Send",
-      hint: isPi ? "To Pi wallet" : "Transfer GHC",
+      hint: isPi ? "Withdraw π" : "Transfer",
       icon: <ArrowUpRight size={20} strokeWidth={2.25} />,
       onClick: onSend,
       accent: isPi
@@ -41,7 +41,7 @@ export function WalletPrimaryActions({
     {
       id: "request",
       label: isPi ? "Status" : "Request",
-      hint: isPi ? "Eligibility" : "Ask for GHC",
+      hint: isPi ? "Pi status" : "Request",
       icon: <HandCoins size={20} strokeWidth={2.25} />,
       onClick: onRequest,
       accent: isPi
@@ -51,7 +51,7 @@ export function WalletPrimaryActions({
     {
       id: "receive",
       label: isPi ? "Linked" : "Receive",
-      hint: isPi ? "Pi identity" : "Your QR / ID",
+      hint: isPi ? "Identity" : "Receive",
       icon: <ArrowDownLeft size={20} strokeWidth={2.25} />,
       onClick: onReceive,
       accent: isPi
@@ -61,7 +61,7 @@ export function WalletPrimaryActions({
     {
       id: "activity",
       label: "History",
-      hint: isPi ? "PI ledger" : "GHC ledger",
+      hint: isPi ? "History" : "History",
       icon: <Clock3 size={20} strokeWidth={2.25} />,
       onClick: onActivity || onAdd || (() => {}),
       accent: "bg-muted text-foreground",
@@ -72,7 +72,7 @@ export function WalletPrimaryActions({
     <div className="space-y-2" role="group" aria-label={isPi ? "PI wallet actions" : "GHC wallet actions"}>
       <div className="flex items-center justify-between gap-2 px-0.5">
         <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-          {isPi ? "PI actions" : "GHC actions"}
+          {embedded ? (isPi ? "Pi" : "GHC") : isPi ? "Pi actions" : "GHC actions"}
         </p>
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${

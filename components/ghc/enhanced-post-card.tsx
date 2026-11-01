@@ -1051,7 +1051,7 @@ function EnhancedPostCardInner({
           <div className="min-w-[4px]" aria-hidden />
           <button
             type="button"
-            aria-label={visibleCommentCount === 1 ? "1 comment" : `${visibleCommentCount} comments`}
+            aria-label="Comment"
             onClick={() => onComment(post.id)}
             className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
           >

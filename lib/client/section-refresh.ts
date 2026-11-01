@@ -58,7 +58,7 @@ export function emitSectionRefresh(
 }
 
 export type SoftRefreshOptions = {
-  /** Minimum gap between soft refreshes (focus/visibility). Default 12s. */
+  /** Minimum gap between soft refreshes (focus/visibility). Default 8s. */
   minIntervalMs?: number
   /** Run on window focus. Default true. */
   onFocus?: boolean
@@ -79,7 +79,7 @@ export function attachSoftRefresh(
   opts: SoftRefreshOptions & { section?: SectionRefreshId } = {},
 ): () => void {
   if (typeof window === "undefined") return () => {}
-  const min = opts.minIntervalMs ?? 12_000
+  const min = opts.minIntervalMs ?? 8_000
   let last = 0
   let inflight = false
   let queued: string | null = null

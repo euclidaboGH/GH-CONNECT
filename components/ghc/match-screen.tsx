@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useState, useEffect, useCallback } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHC } from "@/contexts/ghc-context"
 import { getUnifiedConnectionState } from "@/lib/domains/adapters/unified-connection-request"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -38,6 +39,12 @@ import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 
 export function MatchScreen() {
+  useSectionRefresh("discover", () => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:matches-refresh", { detail: { reason: "soft" } }))
+    } catch { /* */ }
+  }, { minIntervalMs: 10_000 })
+
   const {
     matches,
     likes,

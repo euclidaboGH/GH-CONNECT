@@ -930,7 +930,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     lines.push(
       "",
       "GHC is an in-app utility only — not Pi and not an investment product.",
-      "Balances are private and ledger-backed."
+      "Ledger-backed balances."
     )
     return lines.join("\n")
   }, [balance, locked, displayPending, earned, spent, monthInsight, txs])
@@ -1155,11 +1155,8 @@ const lowBalance = balance === 0 && displayPending === 0
         <div className="mx-3 mt-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" role="status">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Your GHC wallet is currently empty</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Social actions do not mint GHC. Use an available daily claim or another funded GreenHaven source first; curation can then move existing GHC to creators.
-              </p>
-              {claimableToday ? <p className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim is available.</p> : null}
+              <p className="text-sm font-semibold">GHC balance is 0</p>
+              {claimableToday ? <p className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim available in Rewards.</p> : <p className="mt-1 text-xs text-muted-foreground">Add or earn GHC to transfer.</p>}
             </div>
             <span className="shrink-0 rounded-full border border-border bg-background px-2 py-1 text-[10px] font-bold uppercase tracking-wide">Ledger-backed</span>
           </div>
@@ -1235,7 +1232,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onRequest={() => {
                   if (assetRail === "pi") {
-                    setSendEducate("PI requests use your linked Pi identity at sign-in. Request a payout from PI earnings below.")
+                    setSendEducate(null)
                     document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
                     return
                   }
@@ -1305,7 +1302,7 @@ const lowBalance = balance === 0 && displayPending === 0
           {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
           {assetRail === "pi" ? (
             <div id="gh-pi-earnings-tools" className="scroll-mt-20 space-y-3">
-              <UnifiedEarningsDashboard />
+              <UnifiedEarningsDashboard compact />
               <PiCashbackSummary />
             </div>
           ) : (
@@ -1433,7 +1430,7 @@ const lowBalance = balance === 0 && displayPending === 0
             <Info size={14} className="mt-0.5 shrink-0 text-amber-700" />
             <p className="text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
               GHC is an <strong>in-app utility</strong> for rewards, transfers, and features.
-              It is <strong>not Pi</strong> and not an investment product. Balances are private and ledger-backed.
+              GHC is separate from Pi. Balances are ledger-backed.
             </p>
           </div>
           <GhcSocialFuelNote />
@@ -1940,7 +1937,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <div className="mx-3 mb-3 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
                 <p className="text-sm font-bold text-foreground">Claims live in Rewards</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Daily claim, registration bonus, cashback, and missions are claimed in Rewards — not here — so Wallet stays balances, transfers, and History only.
+                  Claims live in Rewards. Wallet is balances, transfers, and history.
                 </p>
                 <button
                   type="button"

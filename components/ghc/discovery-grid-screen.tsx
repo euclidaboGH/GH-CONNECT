@@ -87,6 +87,21 @@ export function DiscoveryGridScreen() {
   const meId = IdentityService.getCurrentUserId()
   const profileIntents = resolveUserIntents(meId, ghc.profile as any)
   const [selectedIntents, setSelectedIntents] = useState<ConnectionIntentId[]>(() => profileIntents)
+  useSectionRefresh(
+    "discover",
+    () => {
+      const anyGhc = ghc as { refreshCandidates?: () => void | Promise<void>; reloadDiscovery?: () => void | Promise<void> }
+      if (typeof anyGhc.refreshCandidates === "function") void anyGhc.refreshCandidates()
+      else if (typeof anyGhc.reloadDiscovery === "function") void anyGhc.reloadDiscovery()
+      else {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:discover-refresh", { detail: { reason: "soft" } }))
+        } catch { /* */ }
+      }
+    },
+    { minIntervalMs: 10_000 },
+  )
+
   const [category, setCategory] = useState<DiscoveryCategory>("people")
   const [useModernCard, setUseModernCard] = useState(true)
   const onIntentsChange = useCallback(
