@@ -310,6 +310,25 @@ export function GHConnectApp() {
   const { conversations } = useGHCMessaging()
   const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
+
+  // After session is server-verified, soft-refresh primary sections once so login is not stale.
+  useEffect(() => {
+    if (!authLifecycle?.serverVerified) return
+    const sections: SectionRefreshId[] = [
+      "feed",
+      "messages",
+      "communities",
+      "marketplace",
+      "wallet",
+      "notifications",
+      "profile",
+      "rewards",
+    ]
+    for (const section of sections) {
+      emitSectionRefresh(section, { reason: "post-login" }, { minIntervalMs: 0 })
+    }
+  }, [authLifecycle?.serverVerified, authLifecycle?.ghUserId])
+
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   const [socialAttentionCount, setSocialAttentionCount] = useState(0)
   const [economyAttentionCount, setEconomyAttentionCount] = useState(0)

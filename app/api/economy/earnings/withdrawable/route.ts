@@ -32,6 +32,7 @@ export async function GET(request: Request) {
       ...snapshot,
       walletAuthorization: {
         active: walletAuth.authorizationActive === true,
+        authorizationActive: walletAuth.authorizationActive === true,
         available: walletAuth.ok === true && walletAuth.error !== "WALLET_AUTHORIZATION_UNAVAILABLE",
         error: walletAuth.error || null,
         authorizedPiAppUid: walletAuth.authorizedPiAppUid || null,

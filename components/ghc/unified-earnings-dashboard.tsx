@@ -248,8 +248,14 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setFailed(false)
         setSnap(wJson)
         const wa = wJson.walletAuthorization
-        if (wa && typeof wa.authorizationActive === "boolean") {
-          setWalletAuthActive(wa.authorizationActive)
+        if (wa) {
+          const activeFlag =
+            typeof wa.authorizationActive === "boolean"
+              ? wa.authorizationActive
+              : typeof (wa as { active?: unknown }).active === "boolean"
+                ? Boolean((wa as { active: boolean }).active)
+                : null
+          if (typeof activeFlag === "boolean") setWalletAuthActive(activeFlag)
         }
       }
       if (sRes.ok && sJson?.ok && Array.isArray(sJson.entries)) {
@@ -719,12 +725,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </div>
           ) : null}
 
-          {snap.piWalletLinked === true && walletAuthActive === false ? (
-            <div className="mb-2 w-full rounded-2xl border border-amber-200/90 bg-amber-50/95 px-3 py-3 dark:border-amber-900 dark:bg-amber-950/40" role="status">
-              <p className="text-[13px] font-bold text-amber-950 dark:text-amber-100">Authorize Pi payouts</p>
+          {snap.piWalletLinked === true && walletAuthActive !== true ? (
+            <div className="mb-3 w-full rounded-2xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-800 dark:bg-amber-950/50" role="status">
+              <p className="text-[13px] font-bold text-amber-950 dark:text-amber-100">Authorize Pi wallet for payouts</p>
               <p className="mt-1 text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-                Your Pi identity is linked{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}, but GreenHaven still needs one explicit consent
-                before App-to-User withdrawals can reserve and send PI to that wallet. This does not move funds by itself.
+                Linking your Pi identity is not enough. You must grant one explicit consent before GreenHaven can request
+                App-to-User payouts to that wallet{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}. This step does not move funds.
               </p>
               <button
                 type="button"
@@ -766,7 +772,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             <button
               type="button"
               onClick={() => {
-                if (walletAuthActive === false) {
+                if (walletAuthActive !== true) {
                   void onAuthorizeWallet()
                   return
                 }
@@ -777,7 +783,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
                 authorizingWallet ||
                 snap.eligible !== true ||
                 snap.piWalletLinked !== true ||
-                walletAuthActive === null
+                walletAuthLoading
               }
               className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
             >

@@ -968,9 +968,9 @@ function EnhancedPostCardInner({
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <div className="flex min-w-0 w-full flex-wrap items-center gap-y-1.5">
+        <div className="flex min-w-0 w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* Curation cluster — shrinks first on narrow screens */}
-          <div className="flex min-w-0 flex-1 items-center gap-1">
+          <div className="flex min-w-0 shrink items-center gap-1">
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
@@ -1052,8 +1052,8 @@ function EnhancedPostCardInner({
             </button>
           </div>
 
-          {/* Response cluster — never shrinks away; share/save always visible */}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {/* Response cluster — stays on the same row as votes (no wrap over downvote) */}
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
             <div className="mx-0.5 hidden h-5 w-px bg-border/70 xs:block sm:mx-1 sm:h-6" aria-hidden />
             <button
               type="button"
