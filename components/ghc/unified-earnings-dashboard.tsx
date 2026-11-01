@@ -451,7 +451,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         const code = body?.error || ""
         if (code === "WALLET_AUTHORIZATION_REQUIRED") {
           setWalletAuthActive(false)
-          setPayoutMsg(reasonLabel("WALLET_AUTHORIZATION_REQUIRED"))
+          setPayoutMsg("Authorize Pi wallet payouts once — then you can withdraw to your linked Pi wallet.")
           return
         }
         setPayoutMsg(humanizeApiError(body?.error, body?.message) || "Could not create a payout request. No transfer was started.")
@@ -725,20 +725,25 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </div>
           ) : null}
 
-          {snap.piWalletLinked === true && walletAuthActive !== true ? (
-            <div className="mb-3 w-full rounded-2xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-800 dark:bg-amber-950/50" role="status">
-              <p className="text-[13px] font-bold text-amber-950 dark:text-amber-100">Authorize Pi wallet for payouts</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-                Linking your Pi identity is not enough. You must grant one explicit consent before GreenHaven can request
-                App-to-User payouts to that wallet{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}. This step does not move funds.
+          {walletAuthActive !== true ? (
+            <div className="mb-3 w-full rounded-2xl border-2 border-amber-400 bg-amber-50 px-3 py-3.5 shadow-sm dark:border-amber-600 dark:bg-amber-950/60" role="status">
+              <p className="text-[14px] font-bold text-amber-950 dark:text-amber-50">Step required: authorize Pi payouts</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-amber-950/90 dark:text-amber-100/90">
+                {snap.piWalletLinked
+                  ? `Your Pi account${snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""} is linked, but payouts stay blocked until you grant consent. This does not move any π.`
+                  : "Link your Pi identity at sign-in, then grant payout consent here. Withdrawals cannot start without both."}
               </p>
               <button
                 type="button"
-                disabled={authorizingWallet || walletAuthLoading}
+                disabled={authorizingWallet || walletAuthLoading || snap.piWalletLinked !== true}
                 onClick={() => void onAuthorizeWallet()}
-                className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-amber-800 px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-amber-900 disabled:opacity-50 sm:w-auto"
+                className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
               >
-                {authorizingWallet ? "Authorizing…" : "Authorize Pi wallet for payouts"}
+                {authorizingWallet
+                  ? "Authorizing…"
+                  : snap.piWalletLinked !== true
+                    ? "Pi identity required first"
+                    : "Authorize Pi wallet for payouts"}
               </button>
             </div>
           ) : null}
@@ -797,16 +802,19 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </button>
           </div>
           {payoutMsg ? (
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-700 dark:text-slate-200" role="status">
-              {/^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? reasonLabel(payoutMsg.trim()) : payoutMsg}
+            <p className="mt-2 text-[12px] font-medium leading-relaxed text-amber-900 dark:text-amber-100" role="status">
+              {humanizeApiError(
+                /^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? payoutMsg.trim() : undefined,
+                payoutMsg,
+              )}
             </p>
           ) : (
             <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-              {walletAuthActive === false
-                ? "Authorize once, then preview the 3% fee and submit a withdrawal request. Funds only move after the server A2U worker verifies the transfer."
+              {walletAuthActive !== true
+                ? "Authorize once above, then preview the 3% fee and submit a withdrawal request. Funds only move after the server A2U worker verifies the transfer."
                 : "Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement. Destination is your KYC’d Pi wallet linked at sign-in"}
-              {walletAuthActive !== false && snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
-              {walletAuthActive !== false ? ". The client never invents a paid result." : ""}
+              {walletAuthActive === true && snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
+              {walletAuthActive === true ? ". The client never invents a paid result." : ""}
             </p>
           )}
 

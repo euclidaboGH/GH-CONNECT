@@ -968,9 +968,7 @@ function EnhancedPostCardInner({
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <div className="flex min-w-0 w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* Curation cluster — shrinks first on narrow screens */}
-          <div className="flex min-w-0 shrink items-center gap-1">
+        <div className="grid w-full grid-cols-[auto_auto_auto_1fr_auto_auto_auto] items-center gap-1 sm:gap-1.5">
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
@@ -1050,44 +1048,39 @@ function EnhancedPostCardInner({
               <ThumbsDown size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
               <span className="tabular-nums">{downvoteCount}</span>
             </button>
-          </div>
-
-          {/* Response cluster — stays on the same row as votes (no wrap over downvote) */}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
-            <div className="mx-0.5 hidden h-5 w-px bg-border/70 xs:block sm:mx-1 sm:h-6" aria-hidden />
-            <button
-              type="button"
-              aria-label="Comment"
-              onClick={() => onComment(post.id)}
-              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-            >
-              <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
-              <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
-                {visibleCommentCount}
-              </span>
-            </button>
-            <button
-              type="button"
-              aria-label={isSaved ? "Unsave" : "Save"}
-              aria-pressed={isSaved}
-              onClick={() => onSave(post.id)}
-              className={`inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full transition active:scale-95 ${
-                isSaved
-                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Share"
-              onClick={() => onShare(post.id)}
-              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-            >
-              <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
-            </button>
-          </div>
+          <div className="min-w-[4px]" aria-hidden />
+          <button
+            type="button"
+            aria-label={visibleCommentCount === 1 ? "1 comment" : `${visibleCommentCount} comments`}
+            onClick={() => onComment(post.id)}
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+          >
+            <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
+            <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
+              {visibleCommentCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={isSaved ? "Unsave" : "Save"}
+            aria-pressed={isSaved}
+            onClick={() => onSave(post.id)}
+            className={`inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
+              isSaved
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Share"
+            onClick={() => onShare(post.id)}
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+          >
+            <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
+          </button>
         </div>
       </div>
 

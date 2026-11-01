@@ -490,26 +490,17 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
                 </div>
               )
             ) : profileAvatar ? (
-              <>
-                <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/25 p-2 text-center text-white">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-emerald-600 shadow">
-                    <Plus size={18} />
-                  </span>
-                </div>
-              </>
+              <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400">
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2 text-center text-white">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/50 bg-white/15">
-                    <Plus size={18} />
-                  </span>
-                </div>
-              </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400" />
             )}
+            {/* Single add badge — Instagram-style; no duplicate centered + */}
             {!ownStory ? (
-              <span className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-emerald-600 text-white shadow">
-                <Plus size={12} strokeWidth={3} />
+              <span
+                className="absolute bottom-1.5 right-1.5 z-[1] flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-emerald-600 text-white shadow-md"
+                aria-hidden
+              >
+                <Plus size={14} strokeWidth={3} />
               </span>
             ) : null}
           </span>
