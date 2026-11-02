@@ -9,6 +9,7 @@
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { RegistrationBonusCard } from "./registration-bonus-card"
+import { piAuthenticateOfficial } from "@/lib/pi-runtime"
 import {
   AlertCircle,
   CheckCircle2,
@@ -59,6 +60,20 @@ type LedgerEntry = {
   payout_request_id?: string
   reason?: string
   created_at?: string
+}
+
+type PayoutStatusItem = {
+  requestId: string
+  grossAtomic: string
+  feeAtomic: string
+  netAtomic: string
+  network: string
+  status: string
+  transactionId: string | null
+  failureCode: string | null
+  createdAt: string
+  updatedAt: string
+  settledAt: string | null
 }
 
 type Statement = {
@@ -119,6 +134,10 @@ function reasonLabel(code: string): string {
       return "Too many attempts. Please wait a moment and try again."
     case "AUTH_REQUIRED":
       return "Sign in again to continue with withdrawals."
+    case "PAYOUT_REQUEST_TEMPORARILY_UNAVAILABLE":
+      return "The payout service is temporarily unavailable. Refresh withdrawal status before retrying."
+    case "PAYOUT_STATUS_UNAVAILABLE":
+      return "Withdrawal status is temporarily unavailable. Your existing request has not been cancelled."
     default:
       return code.replace(/_/g, " ").toLowerCase()
   }
@@ -150,6 +169,9 @@ function statusTone(status?: string): string {
 
 export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolean }) {
   const [snap, setSnap] = useState<Withdrawable | null>(null)
+  const snapRef = useRef<Withdrawable | null>(null)
+  const refreshInFlightRef = useRef(false)
+  const refreshQueuedRef = useRef(false)
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -163,18 +185,73 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [quoting, setQuoting] = useState(false)
   const [requestingPayout, setRequestingPayout] = useState(false)
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null)
+  const [payoutStatuses, setPayoutStatuses] = useState<PayoutStatusItem[]>([])
+  const [payoutStatusLoading, setPayoutStatusLoading] = useState(false)
+  const payoutStatusInFlightRef = useRef(false)
+  const payoutStatusRefreshQueuedRef = useRef(false)
+  const [payoutStatusError, setPayoutStatusError] = useState<string | null>(null)
   const [walletAuthActive, setWalletAuthActive] = useState<boolean | null>(null)
   const [walletAuthLoading, setWalletAuthLoading] = useState(false)
   const [authorizingWallet, setAuthorizingWallet] = useState(false)
+  const [linkingPiIdentity, setLinkingPiIdentity] = useState(false)
+  const [identityMsg, setIdentityMsg] = useState<string | null>(null)
+  const [identityPanelOpen, setIdentityPanelOpen] = useState(false)
+  const [eligibilityPanelOpen, setEligibilityPanelOpen] = useState(false)
   const [charityTotal, setCharityTotal] = useState<string | null>(null)
   const [charityCount, setCharityCount] = useState(0)
   const [crossFindings, setCrossFindings] = useState<string[]>([])
   const [crossStatus, setCrossStatus] = useState<"healthy" | "attention" | "degraded" | null>(null)
   const quoteController = useRef<AbortController | null>(null)
   const quoteSequence = useRef(0)
+  // Reuse the same idempotency key after an ambiguous network failure so a retry
+  // cannot reserve the same earnings twice under a fresh client-generated key.
+  const payoutIdempotencyKey = useRef<{ amountAtomic: number; key: string; requestId?: string } | null>(null)
+
+  const refreshPayoutStatuses = useCallback(async () => {
+    if (payoutStatusInFlightRef.current) {
+      payoutStatusRefreshQueuedRef.current = true
+      return
+    }
+    payoutStatusInFlightRef.current = true
+    setPayoutStatusLoading(true)
+    setPayoutStatusError(null)
+    try {
+      const response = await fetch("/api/economy/earnings/withdrawals/status", {
+        credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+      })
+      const body = await response.json().catch(() => null) as { ok?: boolean; error?: string; items?: PayoutStatusItem[] } | null
+      if (!response.ok || !body?.ok || !Array.isArray(body.items)) {
+        setPayoutStatusError(body?.error === "AUTH_REQUIRED" ? "Sign in with Pi to view your withdrawal requests." : "Withdrawal status is temporarily unavailable. Retry shortly.")
+        return
+      }
+      setPayoutStatuses(body.items)
+      const trackedId = payoutIdempotencyKey.current?.requestId
+      const tracked = trackedId ? body.items.find((item) => item.requestId === trackedId) : null
+      if (tracked && ["paid", "failed", "released"].includes(tracked.status)) payoutIdempotencyKey.current = null
+    } catch {
+      setPayoutStatusError("Could not reach withdrawal status. Your existing request, if any, has not been cancelled.")
+    } finally {
+      payoutStatusInFlightRef.current = false
+      setPayoutStatusLoading(false)
+      if (payoutStatusRefreshQueuedRef.current) {
+        payoutStatusRefreshQueuedRef.current = false
+        void refreshPayoutStatuses()
+      }
+    }
+  }, [])
+
+  useEffect(() => { void refreshPayoutStatuses() }, [refreshPayoutStatuses])
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true)
+    // Several wallet events can fire together after a mutation. Keep one read
+    // in flight and preserve the last authoritative snapshot during refreshes.
+    if (refreshInFlightRef.current) {
+      // A mutation/auth event during an active read must not lose its refresh.
+      refreshQueuedRef.current = true
+      return
+    }
+    refreshInFlightRef.current = true
+    if (!snapRef.current) setLoading(true)
     try {
       const [wRes, sRes, cRes, xRes] = await Promise.all([
         fetch("/api/economy/earnings/withdrawable", {
@@ -242,10 +319,11 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       }
 
       if (!wRes.ok || !wJson?.ok) {
-        setFailed(true)
-        setSnap(null)
+        // A transient refresh failure must not unmount the populated dashboard.
+        setFailed(!snapRef.current)
       } else {
         setFailed(false)
+        snapRef.current = wJson
         setSnap(wJson)
         const wa = wJson.walletAuthorization
         if (wa) {
@@ -260,8 +338,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       }
       if (sRes.ok && sJson?.ok && Array.isArray(sJson.entries)) {
         setEntries(sJson.entries)
-      } else {
-        setEntries([])
       }
 
       // Explicit A2U payout consent status (separate from Pi identity link)
@@ -294,11 +370,18 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       }
     } catch {
       if (!signal?.aborted) {
-        setFailed(true)
-        setSnap(null)
+        // Retain the most recent verified snapshot if this read fails.
+        setFailed(!snapRef.current)
       }
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      refreshInFlightRef.current = false
+      if (!signal?.aborted) {
+        setLoading(false)
+        if (refreshQueuedRef.current) {
+          refreshQueuedRef.current = false
+          void refresh()
+        }
+      }
     }
   }, [])
 
@@ -306,11 +389,23 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     const ac = new AbortController()
     void refresh(ac.signal)
     const onRefresh = () => void refresh()
+    const onOpenIdentity = () => setIdentityPanelOpen(true)
+    const onOpenEligibility = () => setEligibilityPanelOpen(true)
+    const onOpenPayout = () => {
+      setEligibilityPanelOpen(false)
+      document.getElementById("gh-pi-withdraw-action")?.focus({ preventScroll: true })
+    }
+    window.addEventListener("ghc:pi-open-identity", onOpenIdentity)
+    window.addEventListener("ghc:pi-open-eligibility", onOpenEligibility)
+    window.addEventListener("ghc:pi-open-payout", onOpenPayout)
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-auth-changed", onRefresh)
     return () => {
       ac.abort()
+      window.removeEventListener("ghc:pi-open-identity", onOpenIdentity)
+      window.removeEventListener("ghc:pi-open-eligibility", onOpenEligibility)
+      window.removeEventListener("ghc:pi-open-payout", onOpenPayout)
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
       window.removeEventListener("ghc:wallet-auth-changed", onRefresh)
@@ -323,6 +418,51 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   }, [])
 
 
+
+  const onReconnectPiIdentity = async () => {
+    if (linkingPiIdentity) return
+    setLinkingPiIdentity(true)
+    setIdentityMsg(null)
+    try {
+      // Pi.authenticate is only the client handshake. The server bridge must
+      // verify the access token with Pi /v2/me and issue the canonical GH session.
+      const piAuth = await piAuthenticateOfficial(["username", "payments"])
+      if (!piAuth.accessToken) {
+        setIdentityMsg("Pi did not return an access token. Reopen this wallet in Pi Browser and try again.")
+        return
+      }
+      const response = await fetch("/api/auth/pi", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: piAuth.accessToken }),
+      })
+      const result = await response.json().catch(() => null) as {
+        ok?: boolean; verified?: boolean; durable?: boolean; sessionDurable?: boolean; error?: string; detail?: string; identity?: { piUsername?: string | null; serverVerified?: boolean }
+      } | null
+      if (!response.ok || !result?.ok || result.verified !== true || result.identity?.serverVerified !== true) {
+        setIdentityMsg(result?.detail || humanizeApiError(result?.error, null) || "Pi identity verification failed. No wallet mapping was changed.")
+        return
+      }
+      const durabilityNote = result.durable === false || result.sessionDurable === false
+        ? " The server reports non-durable identity/session storage in this environment; withdrawals must remain blocked until durable storage is configured."
+        : ""
+      setIdentityMsg(`Pi identity verified${result.identity?.piUsername ? ` as @${result.identity.piUsername}` : ""}. Checking payout eligibility and authorization…${durabilityNote}`)
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "pi-identity-relinked" } }))
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "pi-identity-relinked" } }))
+      } catch { /* refresh below is authoritative */ }
+      await refresh()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Pi identity connection failed."
+      setIdentityMsg(message.includes("not available on this host")
+        ? "Pi authentication is available inside Pi Browser. Open GH-CONNECT there to link your Pi identity."
+        : message)
+    } finally {
+      setLinkingPiIdentity(false)
+    }
+  }
 
   const onAuthorizeWallet = async () => {
     if (authorizingWallet) return
@@ -409,6 +549,18 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
   const onRequestPayout = async () => {
     if (requestingPayout) return
+    if (payoutStatusLoading) {
+      setPayoutMsg("Checking recent withdrawal requests first. Refresh status before submitting another request.")
+      await refreshPayoutStatuses()
+      return
+    }
+    const unresolved = payoutStatuses.find((item) => ["reserved", "processing", "uncertain"].includes(item.status))
+    if (unresolved) {
+      setPayoutMsg(`Withdrawal ${unresolved.requestId} is ${unresolved.status}. Refresh its status before creating another withdrawal; this prevents duplicate or overlapping requests.`)
+      setEligibilityPanelOpen(true)
+      await refreshPayoutStatuses()
+      return
+    }
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
       setPayoutMsg("Withdrawal is not available until the server confirms eligibility and a linked Pi identity.")
       return
@@ -426,7 +578,13 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     setRequestingPayout(true)
     setPayoutMsg(null)
     try {
-      const idempotencyKey = `ui-payout:${Date.now()}:${amountAtomic}`
+      if (!payoutIdempotencyKey.current || payoutIdempotencyKey.current.amountAtomic !== amountAtomic) {
+        const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+        payoutIdempotencyKey.current = { amountAtomic, key: `ui-payout:${nonce}:${amountAtomic}` }
+      }
+      const idempotencyKey = payoutIdempotencyKey.current.key
       const res = await fetch("/api/economy/earnings/withdrawals", {
         method: "POST",
         credentials: "include",
@@ -457,10 +615,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setPayoutMsg(humanizeApiError(body?.error, body?.message) || "Could not create a payout request. No transfer was started.")
         return
       }
+      if (payoutIdempotencyKey.current) payoutIdempotencyKey.current.requestId = body.requestId
       setPayoutMsg(
         body.message ||
-          `Payout request recorded (${body.requestId || "queued"}). This does not send Pi until the server execution worker completes a verified A2U transfer.`,
+          `Payout request recorded (${body.requestId || "queued"}). The request is not a payment confirmation; check the payout status for a verified transfer receipt.`,
       )
+      void refreshPayoutStatuses()
       try {
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "payout-request" } }))
         window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "payout-request" } }))
@@ -474,7 +634,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         )
       } catch { /* */ }
     } catch {
-      setPayoutMsg("Network error while creating payout request. No transfer was started.")
+      setPayoutMsg("The connection failed before the request result could be confirmed. The same idempotency key is retained; refresh withdrawal status before retrying. Do not create a second request while the outcome is uncertain.")
+      void refreshPayoutStatuses()
     } finally {
       setRequestingPayout(false)
     }
@@ -551,7 +712,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     )
   }
 
-  if (failed || !snap) {
+  if ((failed || !snap) && !snap) {
     return (
       <section className="mx-3 mt-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
         <div className="flex items-start gap-2">
@@ -580,6 +741,21 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const withdrawable = typeof snap.withdrawable === "number" ? snap.withdrawable : atomicToDisplay(snap.withdrawableAtomic)
 
   const runWithdraw = async () => {
+    if (!snap) {
+      setPayoutMsg("Pi payout status is still loading. Refresh the wallet and try again.")
+      return
+    }
+    if (snap.piWalletLinked !== true) {
+      setIdentityPanelOpen(true)
+      setPayoutMsg("Verify your Pi identity first. No withdrawal was submitted.")
+      return
+    }
+    if (snap.eligible !== true) {
+      setEligibilityPanelOpen(true)
+      const reason = Array.isArray(snap.reasons) && snap.reasons.length ? humanizeApiError(snap.reasons[0], null) : "The server has not confirmed withdrawal eligibility yet."
+      setPayoutMsg(`${reason} No withdrawal was submitted.`)
+      return
+    }
     if (walletAuthActive !== true) {
       await onAuthorizeWallet()
       // After authorize, user taps Withdraw again — avoid double network without confirmed auth
@@ -587,6 +763,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     }
     if (!quoteDetail) {
       await onPreviewFee()
+      return
     }
     await onRequestPayout()
   }
@@ -622,6 +799,44 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
+      {failed ? (
+        <p className="border-b border-amber-200/70 bg-amber-50/70 px-4 py-2 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+          Refresh failed — showing the last verified PI earnings snapshot. Retry when your connection is stable.
+        </p>
+      ) : null}
+
+      <div className="mx-4 mt-3 rounded-xl border border-violet-200/70 bg-violet-50/60 px-3 py-2.5 dark:border-violet-900/60 dark:bg-violet-950/20" aria-label="Pi identity connection">
+        <div className="flex items-start gap-2">
+          <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold text-foreground">
+                {snap.piWalletLinked ? `Pi identity linked${snap.linkedPiUsername ? ` · @${snap.linkedPiUsername}` : ""}` : "Pi identity not linked"}
+              </p>
+              <button type="button" onClick={() => setIdentityPanelOpen((v) => !v)} aria-expanded={identityPanelOpen} className="shrink-0 rounded-full border border-violet-300 px-2 py-1 text-[10px] font-bold text-violet-900 dark:border-violet-800 dark:text-violet-100">
+                {identityPanelOpen ? "Hide details" : "Identity details"}
+              </button>
+            </div>
+            <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+              {snap.piWalletLinked
+                ? "Identity linkage is separate from payout consent and withdrawal eligibility."
+                : "Reconnect through Pi authentication to verify the account on the server. A username alone is not proof of identity."}
+            </p>
+            {identityPanelOpen ? (
+              <div className="mt-2 rounded-lg border border-violet-200/70 bg-white/70 p-2 text-[10px] leading-relaxed text-muted-foreground dark:border-violet-900/60 dark:bg-slate-900/60">
+                <p>Pi sign-in verifies your Pi account. Payout consent is separate and can be revoked. Eligibility is checked independently by the server.</p>
+                <p className="mt-1">Current account: <strong>{snap.piWalletLinked ? (snap.linkedPiUsername ? `@${snap.linkedPiUsername}` : "Linked; username unavailable") : "Not verified / not linked"}</strong></p>
+                <button type="button" onClick={() => void onReconnectPiIdentity()} disabled={linkingPiIdentity}
+                  className="mt-2 inline-flex min-h-9 items-center justify-center rounded-full border border-violet-300 bg-white px-3 text-[11px] font-bold text-violet-900 disabled:opacity-50 dark:border-violet-800 dark:bg-slate-900 dark:text-violet-100">
+                  {linkingPiIdentity ? "Verifying Pi identity…" : snap.piWalletLinked ? "Reconnect / verify Pi account" : "Connect / verify Pi identity"}
+                </button>
+              </div>
+            ) : null}
+            {!identityPanelOpen ? <button type="button" onClick={() => setIdentityPanelOpen(true)} className="mt-2 text-[10px] font-bold text-violet-800 underline dark:text-violet-200">Open identity controls</button> : null}
+            {identityMsg ? <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground" role="status">{identityMsg}</p> : null}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-2 px-4 py-3 sm:grid-cols-4">
         {[
@@ -642,6 +857,24 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         Withdrawable <span className="font-semibold text-foreground">{typeof withdrawable === "number" ? piToDisplay(withdrawable) : String(withdrawable)}</span>
         {" · "}{feePct}% fee · linked at sign-in{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
       </p>
+      <div className="mx-4 mb-3 rounded-xl border border-border/60 bg-muted/20">
+        <button type="button" onClick={() => setEligibilityPanelOpen((v) => !v)} aria-expanded={eligibilityPanelOpen} className="flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left">
+          <span className="flex items-center gap-2 text-[11px] font-semibold text-foreground"><Shield className="h-4 w-4 text-violet-700 dark:text-violet-300" />Payout eligibility & status</span>
+          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${snap.eligible === true ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"}`}>{snap.eligible === true ? "Eligible" : snap.eligible === false ? "Not eligible" : "Checking"}</span>
+        </button>
+        {eligibilityPanelOpen ? (
+          <div className="space-y-2 border-t border-border/50 px-3 py-3 text-[11px]">
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Pi identity</span><strong>{snap.piWalletLinked === true ? "Verified / linked" : "Required"}</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Payout consent</span><strong>{walletAuthLoading ? "Checking…" : walletAuthActive === true ? "Authorized" : walletAuthActive === false ? "Not authorized" : "Unavailable"}</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Withdrawable balance</span><strong>{piToDisplay(snap.withdrawable)}</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Minimum payout</span><strong>{piToDisplay(snap.minPayout)}</strong></div>
+            {Array.isArray(snap.reasons) && snap.reasons.length > 0 ? <ul className="list-disc space-y-1 pl-4 text-amber-900 dark:text-amber-100">{snap.reasons.slice(0, 8).map((reason, index) => <li key={`${reason}-${index}`}>{humanizeApiError(reason, null)}</li>)}</ul> : snap.eligible === true ? <p className="text-emerald-800 dark:text-emerald-200">The server currently reports this account as eligible. Consent and payout deployment gates still apply.</p> : <p className="text-muted-foreground">The server has not returned a specific eligibility reason. Refresh to check again.</p>}
+            {snap.reasons?.some((reason) => reason === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") ? <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">Payout request intake is disabled by the deployment gate. This cannot be fixed from the user interface.</p> : null}
+            <button type="button" onClick={() => void refresh()} className="min-h-9 rounded-full border border-border px-3 text-[10px] font-bold">Refresh eligibility</button>
+          </div>
+        ) : null}
+      </div>
+
       {(charityTotal || charityCount > 0) ? (
         <p className="px-4 pb-2 text-center text-[10px] text-muted-foreground" role="status">
           Charity recorded: {charityTotal || "—"}
@@ -674,7 +907,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
 
       {quoteDetail ? (
-        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">
+        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2" aria-label="Withdrawal quote">
+          <p className="mb-1 text-[11px] font-semibold text-foreground">Withdrawal quote</p>
           <p className="text-[11px] text-muted-foreground">
             {quoteDetail.gross} π − {feePct}% fee ({quoteDetail.fee} π) → <span className="font-semibold text-foreground">{quoteDetail.net} π</span>
             {quoteDetail.recipientUsername ? ` → @${quoteDetail.recipientUsername}` : ""}
@@ -684,16 +918,10 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
       <div className="px-4 pb-3">
         <button
+          id="gh-pi-withdraw-action"
           type="button"
           onClick={() => void runWithdraw()}
-          disabled={
-            requestingPayout ||
-            authorizingWallet ||
-            walletAuthLoading ||
-            snap.eligible !== true ||
-            snap.piWalletLinked !== true ||
-            !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)
-          }
+          disabled={requestingPayout || authorizingWallet || walletAuthLoading || loading || !snap}
           className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
         >
           {authorizingWallet
@@ -701,8 +929,10 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             : requestingPayout
               ? "Submitting…"
               : walletAuthActive !== true
-                ? "Authorize & withdraw"
-                : "Withdraw"}
+                ? "Authorize Pi wallet"
+                : !quoteDetail
+                  ? "Preview 3% fee"
+                  : "Withdraw to Pi wallet"}
         </button>
         {payoutMsg ? (
           <p className="mt-2 text-center text-[12px] font-medium text-amber-800 dark:text-amber-200" role="status">
@@ -722,6 +952,33 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             Revoke payout authorization
           </button>
         ) : null}
+      </div>
+
+      <div className="border-t border-border/40 px-4 py-3" aria-label="Withdrawal request history">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Withdrawal requests</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">Server-recorded status, separate from payment confirmation.</p>
+          </div>
+          <button type="button" onClick={() => void refreshPayoutStatuses()} disabled={payoutStatusLoading} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 text-[10px] font-bold disabled:opacity-50">
+            <RefreshCw className={`h-3 w-3 ${payoutStatusLoading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
+        {payoutStatusError ? <p className="mt-2 text-[11px] text-amber-800 dark:text-amber-200" role="status">{payoutStatusError}</p> : null}
+        {!payoutStatusError && payoutStatuses.length === 0 && !payoutStatusLoading ? <p className="mt-2 text-[11px] text-muted-foreground">No payout requests were found for this account.</p> : null}
+        {payoutStatuses.length > 0 ? <ul className="mt-2 space-y-2">{payoutStatuses.slice(0, 5).map((item) => (
+          <li key={item.requestId} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0"><p className="text-[11px] font-semibold text-foreground">{item.status === "paid" ? "Payment verified" : item.status === "uncertain" ? "Needs status recheck" : item.status === "processing" ? "Processing" : item.status === "reserved" ? "Request reserved" : item.status === "released" ? "Reservation released" : item.status === "failed" ? "Request failed" : item.status}</p><p className="mt-0.5 break-all text-[9px] text-muted-foreground">Request {item.requestId}</p></div>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-bold ${item.status === "paid" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" : item.status === "failed" || item.status === "released" ? "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200" : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"}`}>{item.status}</span>
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">Gross {atomicToDisplay(item.grossAtomic)} · Fee {atomicToDisplay(item.feeAtomic)} · Net {atomicToDisplay(item.netAtomic)}</p>
+            {item.status === "paid" && item.transactionId ? <p className="mt-1 break-all text-[10px] text-emerald-800 dark:text-emerald-200">Verified transaction: {item.transactionId}</p> : null}
+            {item.status === "uncertain" ? <p className="mt-1 text-[10px] text-amber-800 dark:text-amber-200">The provider outcome is not yet confirmed. Do not submit a new withdrawal for the same amount; refresh status or contact support with this request ID.</p> : null}
+            {item.failureCode ? <p className="mt-1 text-[10px] text-muted-foreground">Support code: {item.failureCode}</p> : null}
+            <p className="mt-1 text-[9px] text-muted-foreground">Updated {Number.isFinite(Date.parse(item.updatedAt)) ? new Date(item.updatedAt).toLocaleString() : "time unavailable"}</p>
+          </li>
+        ))}</ul> : null}
       </div>
 
       {entries.length > 0 ? (

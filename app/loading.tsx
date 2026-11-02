@@ -21,7 +21,7 @@ export default function Loading() {
             <p className="text-xs text-muted-foreground">A greener space to connect and grow</p>
           </div>
           <span className="ml-auto flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" aria-hidden="true" /> Loading
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none" aria-hidden="true" /> Loading
           </span>
         </header>
 

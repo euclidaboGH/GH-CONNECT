@@ -55,6 +55,55 @@ export async function POST(request: Request, ctx: Ctx) {
   const body = parsedBody.value as Record<string, unknown>
   const action = String(body.action || "").trim()
   if (!ALLOWED.has(action)) return NextResponse.json({ ok: false, error: "INVALID_ACTION" }, { status: 400 })
+
+  // Bound and validate user-controlled fields before they reach privileged RPCs.
+  // Authorization remains authoritative in the database functions below.
+  const textField = (key: string, max: number, required = false): string | null => {
+    const raw = body[key]
+    if (raw === undefined || raw === null) return required ? "" : null
+    if (typeof raw !== "string") return ""
+    const value = raw.trim()
+    if (value.length > max || (required && value.length === 0)) return ""
+    return value
+  }
+  const invalid = (field: string) => NextResponse.json({ ok: false, error: "INVALID_" + field.toUpperCase() }, { status: 400 })
+  if (action === "announcement_create") {
+    if (textField("title", 160, true) === "") return invalid("title")
+    if (textField("content", 12000, true) === "") return invalid("content")
+    if (!textField("title", 160, true) || !textField("content", 12000, true)) return invalid("announcement")
+  }
+  if (action === "event_create") {
+    if (!textField("title", 160, true)) return invalid("title")
+    if (textField("title", 160, true) === "") return invalid("title")
+    if (textField("description", 12000) === "") return invalid("description")
+    if (textField("location", 500) === "") return invalid("location")
+    if (textField("virtualLink", 2048) === "") return invalid("virtual_link")
+    if (body.virtualLink) {
+      try { const url = new URL(String(body.virtualLink)); if (url.protocol !== "https:" && url.protocol !== "http:") return invalid("virtual_link") }
+      catch { return invalid("virtual_link") }
+    }
+  }
+  if (action === "event_rsvp" && !["going", "interested", "not_going"].includes(String(body.status || "going"))) return invalid("rsvp_status")
+  if (action === "resource_upsert") {
+    if (!textField("title", 160, true) || textField("title", 160, true) === "") return invalid("title")
+    if (textField("description", 4000) === "") return invalid("description")
+    if (textField("content", 12000) === "") return invalid("content")
+    if (textField("url", 2048) === "") return invalid("url")
+    if (body.url) {
+      try { const url = new URL(String(body.url)); if (url.protocol !== "https:" && url.protocol !== "http:") return invalid("url") }
+      catch { return invalid("url") }
+    }
+  }
+  if (action === "report_create") {
+    if (!textField("targetType", 40, true) || textField("targetType", 40, true) === "") return invalid("target_type")
+    if (!textField("targetId", 160, true) || textField("targetId", 160, true) === "") return invalid("target_id")
+    if (!textField("reason", 120, true) || textField("reason", 120, true) === "") return invalid("reason")
+    if (textField("note", 4000) === "") return invalid("note")
+  }
+  if (action === "report_resolve" && !["resolved", "dismissed", "escalated"].includes(String(body.status || "resolved"))) return invalid("resolution_status")
+  if (action === "report_resolve" && textField("resolutionNote", 4000) === "") return invalid("resolution_note")
+  if (["member_remove", "member_ban"].includes(action) && !textField("targetUserId", 160, true)) return invalid("target_user_id")
+
   const rl = checkRateLimit(`community-platform:${auth.userId}:${communityId}:${action}`, 30, 60_000)
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   if (!socialDbConfigured()) {
@@ -76,8 +125,8 @@ export async function POST(request: Request, ctx: Ctx) {
     case "event_create": {
       const startsAt = new Date(String(body.startsAt || ""))
       const endsAt = new Date(String(body.endsAt || ""))
-      if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime())) {
-        return NextResponse.json({ ok: false, error: "INVALID_DATE" }, { status: 400 })
+      if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime()) || endsAt.getTime() <= startsAt.getTime()) {
+        return NextResponse.json({ ok: false, error: "INVALID_DATE_RANGE" }, { status: 400 })
       }
       fn = "gh_community_event_create"
       rpcBody = {

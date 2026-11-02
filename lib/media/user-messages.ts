@@ -27,6 +27,8 @@ export function mediaUserMessage(code: string | undefined, fallback?: string): s
     case "HTTP_501":
     case "HTTP_503":
       return "Photo storage is not ready on the server yet. Photos can stay on this device for now — ask the operator to set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GH_MEDIA_BUCKET."
+    case "MEDIA_REQUEST_TIMEOUT":
+      return "The upload took too long to respond. Check your connection, then retry. If it may have finished, refresh your media list before uploading again."
     case "NETWORK":
       return "Connection issue while uploading. Check your network and retry."
     case "OPTIMIZE_FAILED":

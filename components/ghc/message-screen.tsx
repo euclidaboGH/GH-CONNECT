@@ -241,8 +241,9 @@ export function MessageScreen() {
       })
     }
     const onReconcile = () => {
-      // After realtime reconnect / online: drop ephemeral draft UI only (server remains authority)
-      setDraft("")
+      // Reconcile message data without touching the composer. A network recovery
+      // event is not evidence that the user's unsent draft has been delivered.
+      // Drafts remain local until the user sends or explicitly clears them.
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     }
@@ -471,7 +472,8 @@ export function MessageScreen() {
     startTransition(() => {
       setSelectedId(id)
       setDraft("")
-      try { window.localStorage.removeItem(`ghc.message-draft.${selectedId}`) } catch { /* */ }
+      // Do not delete the previously open conversation's draft here. The
+      // selectedId effect restores the target conversation's own draft.
       setReplyToId(null)
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)

@@ -215,7 +215,9 @@ export async function POST(request: Request) {
     }
   }
 
-  const saved = await upsertListing({
+  let saved: Awaited<ReturnType<typeof upsertListing>>
+  try {
+    saved = await upsertListing({
     id,
     sellerId: auth.userId,
     title,
@@ -230,7 +232,13 @@ export async function POST(request: Request) {
     category: category || undefined,
     condition: condition || undefined,
     tags,
-  })
+    })
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "LISTING_SERVICE_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } }
+    )
+  }
   if (!saved.ok) {
     const durable =
       String(saved.error || "").includes("DATABASE") ||
@@ -283,10 +291,17 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const id = url.searchParams.get("id")
   const scope = (url.searchParams.get("scope") || "public").toLowerCase()
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 50), 1), 100)
+  const rawLimit = url.searchParams.get("limit")
+  const parsedLimit = rawLimit === null || rawLimit.trim() === "" ? 50 : Number(rawLimit)
+  const limit = Number.isSafeInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 50
 
   if (id) {
-    const listing = await getListing(id)
+    let listing
+    try {
+      listing = await getListing(id)
+    } catch {
+      return NextResponse.json({ ok: false, error: "LISTING_SERVICE_UNAVAILABLE", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } })
+    }
     if (!listing) {
       return NextResponse.json(
         { ok: false, error: "NOT_FOUND" },
@@ -317,7 +332,12 @@ export async function GET(request: Request) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const listings = await listSellerListings(auth.userId, limit)
+    let listings
+    try {
+      listings = await listSellerListings(auth.userId, limit)
+    } catch {
+      return NextResponse.json({ ok: false, error: "LISTING_SERVICE_UNAVAILABLE", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } })
+    }
     return NextResponse.json(
       {
         ok: true,
@@ -328,7 +348,12 @@ export async function GET(request: Request) {
     )
   }
 
-  const listings = await listActiveListings(limit)
+  let listings
+  try {
+    listings = await listActiveListings(limit)
+  } catch {
+    return NextResponse.json({ ok: false, error: "LISTING_SERVICE_UNAVAILABLE", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } })
+  }
   return NextResponse.json(
     {
       ok: true,

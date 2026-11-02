@@ -3156,3 +3156,30 @@ img { height: auto; }
 @media (prefers-reduced-motion: reduce) {
   .gh-hub-scroll { scroll-behavior: auto; }
 }
+
+
+/* Phase 9 continuation 5: predictable keyboard focus and mobile viewport recovery. */
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--gh-focus-ring, #087f5b);
+  outline-offset: 3px;
+}
+
+:where(main, [role="main"], [data-route-content]) {
+  scroll-margin-block-start: max(1rem, env(safe-area-inset-top, 0px));
+  scroll-margin-block-end: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+html { scroll-padding-block: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)); }
+
+@media (max-width: 639px) {
+  /* Keep focused fields visible above browser chrome and the virtual keyboard. */
+  .gh-app-shell :where(input, select, textarea, [contenteditable="true"]):focus {
+    scroll-margin-block: max(5rem, env(safe-area-inset-top, 0px)) max(7rem, env(safe-area-inset-bottom, 0px));
+  }
+  .gh-app-shell :where(button, a, [role="button"]) { -webkit-tap-highlight-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}

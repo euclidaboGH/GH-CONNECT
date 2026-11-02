@@ -183,6 +183,16 @@ function EnhancedPostCardInner({
   )
   const [curationBusy, setCurationBusy] = useState(false)
   const [rewardPercentage, setRewardPercentage] = useState(100)
+
+  // Feed/profile caches can refresh a mounted card in place. Reconcile its
+  // visible vote state with the newest server-backed post snapshot instead of
+  // leaving stale counts or a stale selected vote on screen.
+  useEffect(() => {
+    setCurationChoice(seedChoice)
+    setUpvoteCount(Number.isFinite(seedUp) ? Math.max(0, Math.trunc(seedUp)) : 0)
+    setDownvoteCount(Number.isFinite(seedDown) ? Math.max(0, Math.trunc(seedDown)) : 0)
+  }, [post.id, seedChoice, seedUp, seedDown])
+
   const lastCurationAtRef = useRef(0)
   const curationRosterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const curationRosterLongPressRef = useRef(false)

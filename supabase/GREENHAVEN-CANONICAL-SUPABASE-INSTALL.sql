@@ -1,3 +1,11 @@
+-- DEPRECATED / STALE — DO NOT EXECUTE.
+-- Audit date: 2026-11-01. This artifact includes only 132 migration source markers,
+-- while supabase/migrations/ currently contains 175 canonical migrations.
+-- It omits 43 migrations, including financial, payout, identity, media, and
+-- marketplace integrity changes. It is NOT a complete or safe installer.
+-- Reconcile target migration history and apply individually reviewed migrations.
+-- The original generated body is retained for forensic comparison only.
+-- ============================================================================
 -- GREENHAVEN 0.70.3 — CANONICAL SUPABASE INSTALLER
 -- GENERATED FILE — DO NOT EDIT BY HAND
 -- Source of truth: supabase/migrations/*.sql

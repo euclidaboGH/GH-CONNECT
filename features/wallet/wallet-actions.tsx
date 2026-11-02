@@ -31,7 +31,7 @@ export function WalletPrimaryActions({
     {
       id: "send",
       label: isPi ? "Withdraw" : "Send",
-      hint: isPi ? "Withdraw π" : "Transfer",
+      hint: isPi ? "Open payout steps" : "Transfer",
       icon: <ArrowUpRight size={20} strokeWidth={2.25} />,
       onClick: onSend,
       accent: isPi
@@ -40,8 +40,8 @@ export function WalletPrimaryActions({
     },
     {
       id: "request",
-      label: isPi ? "Status" : "Request",
-      hint: isPi ? "Pi status" : "Request",
+      label: isPi ? "Eligibility" : "Request",
+      hint: isPi ? "Check payout status" : "Request",
       icon: <HandCoins size={20} strokeWidth={2.25} />,
       onClick: onRequest,
       accent: isPi
@@ -50,8 +50,8 @@ export function WalletPrimaryActions({
     },
     {
       id: "receive",
-      label: isPi ? "Linked" : "Receive",
-      hint: isPi ? "Identity" : "Receive",
+      label: isPi ? "Identity" : "Receive",
+      hint: isPi ? "Verify Pi account" : "Receive",
       icon: <ArrowDownLeft size={20} strokeWidth={2.25} />,
       onClick: onReceive,
       accent: isPi

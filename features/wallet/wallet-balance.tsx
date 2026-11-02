@@ -52,7 +52,9 @@ export function WalletBalanceCard({
     reasons: string[]
   } | null>(null)
   const [piLoading, setPiLoading] = useState(true)
+  const [piRefreshing, setPiRefreshing] = useState(false)
   const [piFailed, setPiFailed] = useState(false)
+  const piSnapshotRef = useRef<typeof piSnapshot>(null)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
   )
@@ -60,12 +62,15 @@ export function WalletBalanceCard({
   const piRequestIdRef = useRef(0)
 
   const refreshPi = useCallback(async () => {
+    // Coalesce refresh-event bursts instead of aborting a healthy request and
+    // repeatedly replacing already-rendered balances with loading placeholders.
+    if (piRequestRef.current && !piRequestRef.current.signal.aborted) return
     const requestId = ++piRequestIdRef.current
-    piRequestRef.current?.abort()
     const controller = new AbortController()
     piRequestRef.current = controller
     const timeout = window.setTimeout(() => controller.abort(), 10_000)
-    setPiLoading(true)
+    if (piSnapshotRef.current) setPiRefreshing(true)
+    else setPiLoading(true)
     try {
       const response = await fetch("/api/economy/earnings/withdrawable", {
         credentials: "include",
@@ -88,13 +93,14 @@ export function WalletBalanceCard({
       )
       if (!response.ok || !data || data.ok !== true || !validAmounts || typeof data.eligible !== "boolean") {
         if (requestId === piRequestIdRef.current) {
-          setPiSnapshot(null)
+          // Keep the last verified snapshot visible on transient API/session errors.
+          // A failed refresh is not evidence that the authoritative balance is zero.
           setPiFailed(true)
         }
         return
       }
       if (requestId === piRequestIdRef.current) {
-        setPiSnapshot({
+        const nextSnapshot = {
           available: Number(data.available),
           withdrawable: Number(data.withdrawable),
           pending: Number(data.pending),
@@ -102,18 +108,21 @@ export function WalletBalanceCard({
           eligible: data.eligible === true,
           piWalletLinked: data.piWalletLinked === true,
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
-        })
+        }
+        piSnapshotRef.current = nextSnapshot
+        setPiSnapshot(nextSnapshot)
         setPiFailed(false)
       }
     } catch {
       if (requestId === piRequestIdRef.current) {
-        setPiSnapshot(null)
+        // Preserve the last verified value; surface failure in the status copy.
         setPiFailed(true)
       }
     } finally {
       window.clearTimeout(timeout)
       if (requestId === piRequestIdRef.current) {
         setPiLoading(false)
+        setPiRefreshing(false)
         piRequestRef.current = null
       }
     }
@@ -216,7 +225,7 @@ export function WalletBalanceCard({
             </div>
           </div>
           <p className="text-[22px] font-black tabular-nums leading-none tracking-tight text-foreground">
-            {piLoading ? (
+            {piLoading && !piSnapshot ? (
               <Loader2 className="inline h-5 w-5 animate-spin text-muted-foreground" />
             ) : piSnapshot ? (
               maskPi(piSnapshot.available)
@@ -227,10 +236,12 @@ export function WalletBalanceCard({
             )}
           </p>
           <p className="text-[10px] text-muted-foreground">
-            {piLoading
+            {piLoading && !piSnapshot
               ? "Loading ledger…"
-              : piFailed
-                ? "PI balance unavailable — refresh to retry"
+              : piFailed && piSnapshot
+                ? "Last verified balance · refresh failed"
+                : piFailed
+                  ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
                   ? piSnapshot.eligible
                     ? "Pi identity linked · payout eligible"
@@ -300,11 +311,11 @@ export function WalletBalanceCard({
             <button
               type="button"
               onClick={() => void refreshPi()}
-              disabled={piLoading}
+              disabled={piLoading || piRefreshing}
               className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Refresh PI balance"
             >
-              {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
+              {piLoading || piRefreshing ? "Refreshing PI…" : "Refresh PI balance"}
             </button>
           </div>
         ) : (

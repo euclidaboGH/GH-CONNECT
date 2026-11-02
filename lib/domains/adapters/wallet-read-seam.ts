@@ -60,6 +60,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
             pending?: number
             pendingBalance?: number
             locked?: number
+            ledgerBalance?: number
           }
           getPremiumStatus?: () => { tier?: string; plan?: string } | null
         }
@@ -78,13 +79,13 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         updatedAt: now,
         categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
         ledgerBalance: null, escrowLocked: 0,
-        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
+        reconciliation: { availablePlusLockedEqualsLedger:false, availableNonNegative:false, pendingNonNegative:false, ledgerNonNegative:false, unclassifiedAmount:0 },
       }
     }
 
     const w = economy.getWallet()
     const available = numOrNull(w?.balance) ?? numOrNull(w?.available)
-    const pending = numOrNull(w?.pending) ?? numOrNull(w?.pendingBalance) ?? 0
+    const pending = numOrNull(w?.pending) ?? numOrNull(w?.pendingBalance)
 
     if (available === null) {
       return {
@@ -99,7 +100,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
         updatedAt: now,
         categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
         ledgerBalance: null, escrowLocked: 0,
-        reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
+        reconciliation: { availablePlusLockedEqualsLedger:false, availableNonNegative:false, pendingNonNegative:false, ledgerNonNegative:false, unclassifiedAmount:0 },
       }
     }
 
@@ -113,11 +114,12 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       membershipTier = null
     }
 
-    const locked = numOrNull(w?.locked) ?? 0
-    const ledger =
-      typeof (w as { ledgerBalance?: unknown } | null)?.ledgerBalance === "number"
-        ? Number((w as { ledgerBalance?: number }).ledgerBalance)
-        : available + locked
+    const locked = numOrNull(w?.locked)
+    const ledger = numOrNull(w?.ledgerBalance)
+    const availableAndLockedMatchLedger =
+      locked !== null &&
+      ledger !== null &&
+      Math.abs((available + locked) - ledger) < 0.0001
     return {
       status: "ready",
       availableGhc: available,
@@ -128,9 +130,17 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       source: "session",
       updatedAt: now,
       categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
-      ledgerBalance: Number.isFinite(ledger) ? ledger : available + locked,
+      ledgerBalance: ledger,
       escrowLocked: 0,
-      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
+      reconciliation: {
+        availablePlusLockedEqualsLedger: availableAndLockedMatchLedger,
+        availableNonNegative: available >= 0,
+        pendingNonNegative: pending !== null && pending >= 0,
+        ledgerNonNegative: ledger !== null && ledger >= 0,
+        // This presentation seam does not load category totals; do not infer
+        // a successful ledger reconciliation from a derived fallback value.
+        unclassifiedAmount: 0,
+      },
     }
   } catch (e) {
     return {
@@ -145,7 +155,7 @@ export function readWalletSnapshot(): WalletReadSnapshot {
       updatedAt: now,
       categories: { rewards:0, creator:0, curation:0, transfersIn:0, transfersOut:0, marketplace:0, membership:0, withdrawals:0, adjustments:0, unclassified:0 },
       ledgerBalance: null, escrowLocked: 0,
-      reconciliation: { availablePlusLockedEqualsLedger:true, availableNonNegative:true, pendingNonNegative:true, ledgerNonNegative:true, unclassifiedAmount:0 },
+      reconciliation: { availablePlusLockedEqualsLedger:false, availableNonNegative:false, pendingNonNegative:false, ledgerNonNegative:false, unclassifiedAmount:0 },
     }
   }
 }

@@ -53,6 +53,7 @@ import ProfileStorySection from "./profile-story-section"
 import { ComposerPromptBar } from "./composer-prompt-bar"
 import { UnifiedActivityCenter } from "./unified-activity-center"
 import { ProfileIdentityOverview } from "./profile-identity-overview"
+import { IdentityAccountCenter } from "./identity-account-center"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -868,6 +869,7 @@ export function ProfileScreen({
               </section>
             ) : null}
             <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
+            <IdentityAccountCenter />
             <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button

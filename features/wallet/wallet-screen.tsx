@@ -1214,8 +1214,9 @@ const lowBalance = balance === 0 && displayPending === 0
                   if (assetRail === "pi") {
                     setSendEducate(null)
                     setHistoryRail("pi")
-                    // PI "send" is earnings withdrawal — scroll to PI tools in dashboard
+                    // This card action navigates to the single authoritative payout workflow.
                     document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    window.dispatchEvent(new CustomEvent("ghc:pi-open-payout"))
                     return
                   }
                   if (balance <= 0 && (displayPending > 0 || pending > 0)) {
@@ -1234,6 +1235,7 @@ const lowBalance = balance === 0 && displayPending === 0
                   if (assetRail === "pi") {
                     setSendEducate(null)
                     document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    window.dispatchEvent(new CustomEvent("ghc:pi-open-eligibility"))
                     return
                   }
                   setSendEducate(null)
@@ -1243,7 +1245,9 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onReceive={() => {
                   if (assetRail === "pi") {
-                    setSendEducate("PI is credited to your earnings ledger from rewards and cashback — not via P2P receive.")
+                    setSendEducate(null)
+                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    window.dispatchEvent(new CustomEvent("ghc:pi-open-identity"))
                     return
                   }
                   setSendEducate(null)

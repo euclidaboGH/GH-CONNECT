@@ -15,6 +15,46 @@ const MAX_DIRECT_IMAGE_BYTES = 50 * 1024 * 1024
 const MAX_DIRECT_VIDEO_BYTES = 40 * 1024 * 1024
 const MAX_DIRECT_FILE_BYTES = 50 * 1024 * 1024
 const MAX_DIRECT_AUDIO_BYTES = 50 * 1024 * 1024
+const API_REQUEST_TIMEOUT_MS = 30_000
+const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
+
+/** Bound network waits so a stalled API/storage request cannot leave the UI spinning forever. */
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = API_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const upstreamSignal = init.signal
+  let timedOut = false
+  const abortFromCaller = () => controller.abort(upstreamSignal?.reason)
+  if (upstreamSignal?.aborted) abortFromCaller()
+  else upstreamSignal?.addEventListener("abort", abortFromCaller, { once: true })
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort(new DOMException("Media request timed out", "TimeoutError"))
+  }, timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new Error("MEDIA_REQUEST_TIMEOUT")
+      timeoutError.name = "TimeoutError"
+      throw timeoutError
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+    upstreamSignal?.removeEventListener("abort", abortFromCaller)
+  }
+}
+
+/** Strip path/control characters from client filenames; server-side validation remains authoritative. */
+function safeUploadName(value: string): string {
+  const leaf = value.replace(/\\/g, "/").split("/").pop() || "upload"
+  const safe = leaf.replace(/[\u0000-\u001f\u007f<>:"|?*]/g, "_").trim().slice(0, 160)
+  return safe || "upload"
+}
 
 /** Compress oversized images in-browser before they reach the constrained API proxy. */
 async function compressOversizedImage(file: File | Blob): Promise<Blob> {
@@ -118,14 +158,14 @@ async function fetchWithPiSessionRecovery(
   input: RequestInfo | URL,
   init: RequestInit
 ): Promise<Response> {
-  const response = await fetch(input, init)
+  const response = await fetchWithTimeout(input, init)
   if (response.status !== 401) return response
 
   const accessToken = IdentityService.getAccessToken()
   if (!accessToken) return response
 
   try {
-    const bridge = await fetch("/api/auth/pi", {
+    const bridge = await fetchWithTimeout("/api/auth/pi", {
       method: "POST",
       credentials: "include",
       cache: "no-store",
@@ -136,7 +176,7 @@ async function fetchWithPiSessionRecovery(
     if (!bridge.ok || result.ok !== true || result.verified !== true) return response
 
     // Reuse the original request body and cookie credentials; retry only once.
-    return await fetch(input, { ...init, credentials: "include" })
+    return await fetchWithTimeout(input, { ...init, credentials: "include" })
   } catch {
     return response
   }
@@ -186,12 +226,14 @@ async function uploadViaProxy(
       userMessage: mediaUserMessage(code, String(data.message || "") || undefined),
       clientCompress: Boolean(data.clientCompress),
     }
-  } catch {
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError"
+    const code = timedOut ? "MEDIA_REQUEST_TIMEOUT" : "NETWORK"
     return {
       ok: false,
       durable: false,
-      error: "NETWORK",
-      userMessage: mediaUserMessage("NETWORK"),
+      error: code,
+      userMessage: mediaUserMessage(timedOut ? "NETWORK" : code),
     }
   }
 }
@@ -243,18 +285,19 @@ async function uploadViaDirect(
     if (intent.token) {
       putHeaders["x-upsert"] = "false"
     }
-    const putRes = await fetch(String(intent.uploadUrl), {
+    const putRes = await fetchWithTimeout(String(intent.uploadUrl), {
       method: "PUT",
       headers: putHeaders,
       body: file,
-    })
-    // Some Supabase deployments expect POST to signed URL
-    if (!putRes.ok) {
-      const postRes = await fetch(String(intent.uploadUrl), {
+    }, STORAGE_UPLOAD_TIMEOUT_MS)
+    // Retry with POST only when the storage endpoint explicitly rejects PUT as a method.
+    // Never replay after a timeout/network failure: the first upload may have reached storage.
+    if (!putRes.ok && (putRes.status === 405 || putRes.status === 501)) {
+      const postRes = await fetchWithTimeout(String(intent.uploadUrl), {
         method: "POST",
         headers: putHeaders,
         body: file,
-      })
+      }, STORAGE_UPLOAD_TIMEOUT_MS)
       if (!postRes.ok) {
         return {
           ok: false,
@@ -262,6 +305,13 @@ async function uploadViaDirect(
           error: "STORAGE_UPLOAD_FAILED",
           userMessage: mediaUserMessage("STORAGE_UPLOAD_FAILED"),
         }
+      }
+    } else if (!putRes.ok) {
+      return {
+        ok: false,
+        durable: false,
+        error: `STORAGE_UPLOAD_HTTP_${putRes.status}`,
+        userMessage: mediaUserMessage("STORAGE_UPLOAD_FAILED"),
       }
     }
 
@@ -305,12 +355,14 @@ async function uploadViaDirect(
       error: code,
       userMessage: mediaUserMessage(code, String(complete.message || "") || undefined),
     }
-  } catch {
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError"
+    const code = timedOut ? "MEDIA_REQUEST_TIMEOUT" : "NETWORK"
     return {
       ok: false,
       durable: false,
-      error: "NETWORK",
-      userMessage: mediaUserMessage("NETWORK"),
+      error: code,
+      userMessage: mediaUserMessage(timedOut ? "MEDIA_REQUEST_TIMEOUT" : "NETWORK"),
     }
   }
 }
@@ -349,12 +401,21 @@ export async function uploadDurableMedia(
     category?: "avatars" | "images" | "videos" | "audio" | "documents"
   }
 ): Promise<DurableMediaResult> {
+  if (!Number.isSafeInteger(file.size) || file.size <= 0) {
+    return {
+      ok: false,
+      durable: false,
+      error: "EMPTY_FILE",
+      userMessage: mediaUserMessage("EMPTY_FILE"),
+    }
+  }
+
   const mimeType =
     (file.type || "").toLowerCase() ||
     (meta?.fileName?.match(/\.pdf$/i) ? "application/pdf" : meta?.fileName?.match(/\.mp3$/i) ? "audio/mpeg" : "application/octet-stream")
   let uploadFile: Blob = file
   let uploadName =
-    meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
+    safeUploadName(meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`))
   meta = { ...meta, category: meta?.category || (mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "videos" : mimeType === "application/pdf" ? "documents" : "images") }
 
   const isImage = mimeType.startsWith("image/")

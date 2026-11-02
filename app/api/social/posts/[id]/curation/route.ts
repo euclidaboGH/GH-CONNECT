@@ -199,8 +199,46 @@ export async function POST(
     )
   }
 
-  const rpcChoice = String(data.choice || choice).toLowerCase().trim()
-  const finalChoice: CurationChoice = isCurationChoice(rpcChoice) ? rpcChoice : choice
+  // Treat the atomic RPC response as a strict commit receipt. A 200 response
+  // without the vote, both authoritative counts, reward decision, and GHPV
+  // transaction result is not evidence that curation durably committed.
+  const rpcChoice = String(data?.choice || "").toLowerCase().trim()
+  const validCounts =
+    Number.isSafeInteger(data?.upvoteCount) &&
+    Number.isSafeInteger(data?.downvoteCount) &&
+    Number(data?.upvoteCount) >= 0 &&
+    Number(data?.downvoteCount) >= 0
+  const validCommitReceipt =
+    data?.ok === true &&
+    isCurationChoice(rpcChoice) &&
+    validCounts &&
+    data?.reward?.ok === true &&
+    typeof data?.reward?.credited === "boolean" &&
+    Number.isFinite(Number(data?.reward?.amount)) &&
+    Number(data?.reward?.amount) >= 0 &&
+    data?.ghpv?.ok === true &&
+    Number.isFinite(Number(data?.ghpv?.weight)) &&
+    Number(data?.ghpv?.weight) >= 0
+  if (!validCommitReceipt) {
+    console.error("[curation] atomic RPC returned an incomplete commit receipt", {
+      hasData: Boolean(data),
+      ok: data?.ok === true,
+      validChoice: isCurationChoice(rpcChoice),
+      validCounts,
+      rewardConfirmed: data?.reward?.ok === true,
+      ghpvConfirmed: data?.ghpv?.ok === true,
+    })
+    return NextResponse.json(
+      {
+        ok: false,
+        durable: false,
+        error: "CURATION_COMMIT_UNCONFIRMED",
+        message: "GreenHaven could not confirm that this curation action was saved. Please refresh and try again.",
+      },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+  const finalChoice: CurationChoice = rpcChoice
 
   // GHPV was written by the same DB transaction as the vote and reward.
   const ghpvResult = data.ghpv
@@ -288,8 +326,8 @@ export async function POST(
     contentRewardUpdated: Boolean(redistribute?.credited) || Boolean(reward?.credited),
     redistribute,
     choice: finalChoice,
-    upvoteCount: data.upvoteCount ?? 0,
-    downvoteCount: data.downvoteCount ?? 0,
+    upvoteCount: data.upvoteCount,
+    downvoteCount: data.downvoteCount,
     ghpv,
     reward,
     funding: {

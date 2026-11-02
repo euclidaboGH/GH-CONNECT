@@ -14,6 +14,8 @@ const required = new Set([
   'docs/PASS-47-APP-EXPERIENCE-COHESION-2026-11-01.md',
   'docs/PASS-48-ACCESSIBLE-NAVIGATION-2026-11-01.md',
   'docs/PROJECT_TRUTH.md',
+  'docs/PHASE-3-STORIES-NAVIGATION-AND-VISIBILITY-2026-11-01.md',
+  'docs/PHASE-4-MARKETPLACE-CART-CHECKOUT-INTEGRITY-2026-11-01.md',
   'docs/MIGRATION_CHECKLIST.md',
   'docs/POLICY_REVIEW_CHECKLIST.md',
   'docs/OPERATOR_ENV_AND_STATUS.md',
@@ -40,7 +42,7 @@ const walk=(dir)=>{
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
-        const datedCurrent = /2026-10-31|2026-11-01|0\.222\.0|0\.26[5-9]|0\.270/.test(s) || /0\.270\.\d/.test(s)
+        const datedCurrent = /2026-10-31|2026-11-01|2026-11-02|0\.222\.0|0\.26[5-9]|0\.270/.test(s) || /0\.270\.\d/.test(s)
         if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }

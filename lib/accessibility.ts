@@ -1,15 +1,38 @@
 // Accessibility utilities for WCAG compliance
 
-export const a11y = {
-  // Screen reader announcements
-  announce: (message: string, politeness: "polite" | "assertive" = "polite"): void => {
-    if (typeof document === "undefined") return
+let announcementTimer: ReturnType<typeof setTimeout> | undefined
 
-    const ariaLive = document.getElementById("aria-live-region")
-    if (ariaLive) {
-      ariaLive.setAttribute("aria-live", politeness)
-      ariaLive.textContent = message
-    }
+function getLiveRegion(): HTMLElement | null {
+  if (typeof document === "undefined") return null
+  const existing = document.getElementById("aria-live-region")
+  if (existing) return existing
+
+  if (!document.body) return null
+  const region = document.createElement("div")
+  region.id = "aria-live-region"
+  region.className = "sr-only"
+  region.setAttribute("aria-live", "polite")
+  region.setAttribute("aria-atomic", "true")
+  document.body.appendChild(region)
+  return region
+}
+
+export const a11y = {
+  // Screen reader announcements. Clear first so repeated messages are announced
+  // reliably; bound the text to avoid accidentally announcing untrusted payloads.
+  announce: (message: string, politeness: "polite" | "assertive" = "polite"): void => {
+    const ariaLive = getLiveRegion()
+    if (!ariaLive) return
+    const safeMessage = typeof message === "string" ? message.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ").trim().slice(0, 240) : ""
+    if (!safeMessage) return
+
+    if (announcementTimer) clearTimeout(announcementTimer)
+    ariaLive.setAttribute("aria-live", politeness)
+    ariaLive.textContent = ""
+    announcementTimer = setTimeout(() => {
+      ariaLive.textContent = safeMessage
+      announcementTimer = undefined
+    }, 40)
   },
 
   // Create aria-label
@@ -17,38 +40,89 @@ export const a11y = {
     return `aria-label="${label}"`
   },
 
-  // Focus trap for modals
-  createFocusTrap: (container: HTMLElement): (() => void) => {
-    const focusableElements = container.querySelectorAll(
-      "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])"
-    ) as NodeListOf<HTMLElement>
+  // Keyboard focus management for modal surfaces. Re-query on every Tab press so
+  // disabled/hidden controls and conditionally rendered actions cannot trap focus.
+  createFocusTrap: (
+    container: HTMLElement,
+    options: { onEscape?: () => void; restoreFocus?: boolean } = {},
+  ): (() => void) => {
+    if (typeof document === "undefined" || !container) return () => {}
 
-    if (focusableElements.length === 0) return () => {}
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const selector = [
+      "a[href]", "area[href]", "button:not([disabled])", "input:not([disabled]):not([type=\"hidden\"])",
+      "select:not([disabled])", "textarea:not([disabled])", "summary", "iframe[title]",
+      "[contenteditable=\"true\"]", "[tabindex]:not([tabindex=\"-1\"])"
+    ].join(",")
 
-    const firstElement = focusableElements[0]
-    const lastElement = focusableElements[focusableElements.length - 1]
+    const getFocusable = (): HTMLElement[] => Array.from(container.querySelectorAll<HTMLElement>(selector)).filter((element) => {
+      if (element.tabIndex < 0 || element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true" || element.getAttribute("aria-hidden") === "true") return false
+      if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false
+      const style = typeof window !== "undefined" ? window.getComputedStyle(element) : null
+      if (style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")) return false
+      return element.getClientRects().length > 0
+    })
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return
+    const focusWithoutScroll = (element: HTMLElement) => {
+      try { element.focus({ preventScroll: true }) } catch { element.focus() }
+    }
 
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          lastElement.focus()
-          e.preventDefault()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          firstElement.focus()
-          e.preventDefault()
-        }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && options.onEscape) {
+        event.preventDefault()
+        options.onEscape()
+        return
+      }
+      if (event.key !== "Tab") return
+      const focusable = getFocusable()
+      if (focusable.length === 0) {
+        event.preventDefault()
+        if (!container.hasAttribute("tabindex")) container.setAttribute("tabindex", "-1")
+        focusWithoutScroll(container)
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || active === container || !container.contains(active))) {
+        event.preventDefault()
+        focusWithoutScroll(last)
+      } else if (!event.shiftKey && (active === last || active === container || !container.contains(active))) {
+        event.preventDefault()
+        focusWithoutScroll(first)
+      }
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target
+      if (target instanceof Node && !container.contains(target)) {
+        const focusable = getFocusable()
+        focusWithoutScroll(focusable[0] ?? container)
       }
     }
 
     container.addEventListener("keydown", handleKeyDown)
-    firstElement.focus()
+    document.addEventListener("focusin", handleFocusIn, true)
+    const initial = container.querySelector<HTMLElement>("[autofocus]")
+    const focusable = getFocusable()
+    if (initial && focusable.includes(initial) && !initial.hasAttribute("disabled")) focusWithoutScroll(initial)
+    else if (focusable.length > 0) focusWithoutScroll(focusable[0])
+    else {
+      if (!container.hasAttribute("tabindex")) container.setAttribute("tabindex", "-1")
+      focusWithoutScroll(container)
+    }
 
+    let released = false
     return () => {
+      if (released) return
+      released = true
       container.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("focusin", handleFocusIn, true)
+      if (options.restoreFocus !== false && previouslyFocused?.isConnected && !container.contains(previouslyFocused)) {
+        focusWithoutScroll(previouslyFocused)
+      }
     }
   },
 
@@ -56,10 +130,17 @@ export const a11y = {
   addSkipLink: (): void => {
     if (typeof document === "undefined") return
 
+    // The authenticated shell already renders its own skip link. Avoid adding
+    // a duplicate, and only create a link when its destination actually exists.
+    if (document.querySelector('a[href="#ghc-main-content"], #global-skip-to-content')) return
+    const target = document.getElementById("ghc-main-content") ?? document.getElementById("main-content")
+    if (!target) return
+
     const skipLink = document.createElement("a")
-    skipLink.href = "#main-content"
+    skipLink.id = "global-skip-to-content"
+    skipLink.href = `#${target.id}`
     skipLink.textContent = "Skip to main content"
-    skipLink.className = "sr-only focus:not-sr-only"
+    skipLink.className = "sr-only focus:not-sr-only focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
     skipLink.style.cssText = `
       position: absolute;
       top: -40px;

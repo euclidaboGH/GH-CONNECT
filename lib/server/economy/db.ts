@@ -17,40 +17,64 @@ export type RpcTransferInput = {
   requestId?: string
 }
 
-function mapRpcJson(data: unknown): GhcTransferResult {
-  const row = data as Record<string, unknown>
-  if (!row || typeof row !== "object") {
-    return { ok: false, error: mapTransferFailure("Empty RPC response") }
+function mapRpcJson(data: unknown, input: RpcTransferInput): GhcTransferResult {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, error: mapTransferFailure("Invalid RPC transfer payload") }
   }
+  const row = data as Record<string, unknown>
   if (row.ok === false) {
     return {
       ok: false,
       error: mapTransferFailure(String(row.message || row.code || "TRANSFER_FAILED"), String(row.code || "TRANSFER_FAILED") as any),
     }
   }
-  const debitTx = (row.debitTx || row.debit) as GhcTransaction | undefined
-  const creditTx = (row.creditTx || row.credit) as GhcTransaction | undefined
-  if (!debitTx || !creditTx) {
+  // An RPC response is not proof of a transfer merely because it contains two
+  // objects. Verify both ledger legs against the exact requested intent before
+  // the caller emits notifications or returns success to the client.
+  if (row.ok !== true || String(row.referenceId || "") !== input.referenceId) {
     return { ok: false, error: mapTransferFailure("Invalid RPC transfer payload") }
   }
-  // Normalize numeric amounts if returned as strings from Postgres
-  const norm = (tx: GhcTransaction): GhcTransaction => ({
-    ...tx,
+  const debitRaw = (row.debitTx || row.debit) as Record<string, unknown> | null
+  const creditRaw = (row.creditTx || row.credit) as Record<string, unknown> | null
+  if (!debitRaw || typeof debitRaw !== "object" || Array.isArray(debitRaw) ||
+      !creditRaw || typeof creditRaw !== "object" || Array.isArray(creditRaw)) {
+    return { ok: false, error: mapTransferFailure("Invalid RPC transfer payload") }
+  }
+  const debitAmount = Number(debitRaw.amount)
+  const creditAmount = Number(creditRaw.amount)
+  const validLeg = (tx: Record<string, unknown>, expectedUserId: string, expectedKind: string, expectedAmount: number) =>
+    Boolean(String(tx.id || "").trim()) &&
+    String(tx.userId || "") === expectedUserId &&
+    String(tx.kind || "") === expectedKind &&
+    String(tx.status || "") === "posted" &&
+    String(tx.referenceId || "") === input.referenceId &&
+    Number.isFinite(Number(tx.amount)) &&
+    Number(tx.amount) === expectedAmount
+  if (!Number.isFinite(debitAmount) || !Number.isFinite(creditAmount) ||
+      !validLeg(debitRaw, input.senderId, "transfer_out", -input.amount) ||
+      !validLeg(creditRaw, input.toUserId, "transfer_in", input.amount) ||
+      String(debitRaw.id || "").trim() === String(creditRaw.id || "").trim()) {
+    return { ok: false, error: mapTransferFailure("Invalid RPC transfer ledger legs") }
+  }
+  // Normalize numeric amounts if returned as strings from Postgres. Validation
+  // above intentionally runs first so normalization cannot hide bad fields.
+  const norm = (tx: Record<string, unknown>): GhcTransaction => ({
+    ...(tx as unknown as GhcTransaction),
     amount: Number(tx.amount),
     createdAt: Number(tx.createdAt) || Date.now(),
     userId: String(tx.userId),
-    kind: tx.kind,
-    status: tx.status,
-    reason: tx.reason || "",
-    sourceEvent: tx.sourceEvent || "WALLET_TRANSFER",
-    referenceId: tx.referenceId || String(row.referenceId || ""),
+    kind: tx.kind as GhcTransaction["kind"],
+    status: tx.status as GhcTransaction["status"],
+    reason: String(tx.reason || ""),
+    sourceEvent: String(tx.sourceEvent || "WALLET_TRANSFER"),
+    referenceId: String(tx.referenceId),
   })
   return {
     ok: true,
-    idempotent: Boolean(row.idempotent),
-    referenceId: String(row.referenceId || debitTx.referenceId),
-    debitTx: norm(debitTx),
-    creditTx: norm(creditTx),
+    idempotent: row.idempotent === true,
+    referenceId: input.referenceId,
+    debitTx: norm(debitRaw),
+    creditTx: norm(creditRaw),
   }
 }
 
@@ -107,7 +131,7 @@ export async function rpcExecuteTransfer(
     const data = await res.json()
     // Supabase may return the jsonb value directly or nested
     const payload = Array.isArray(data) ? data[0] : data
-    return mapRpcJson(payload)
+    return mapRpcJson(payload, input)
   } catch (e) {
     // A timeout can happen after the database committed. Preserve the same
     // referenceId on retries and reconcile before issuing a fresh transfer.
@@ -191,10 +215,15 @@ export async function rpcWalletSnapshot(
     if (!data || typeof data !== "object" || Array.isArray(data)) return null
     // A malformed snapshot must never be rendered as a legitimate zero balance.
     const numeric = ["balance", "ledgerBalance", "locked", "pending", "lifetimeEarned", "lifetimeSpent", "lifetimePurchased"] as const
-    const values = Object.fromEntries(numeric.map((key) => [key, Number(data[key] ?? (key === "ledgerBalance" ? data.balance : undefined))])) as Record<(typeof numeric)[number], number>
-    if (numeric.some((key) => !Number.isFinite(values[key])) || values.balance < 0 || values.ledgerBalance < 0 ||
-        values.locked < 0 || values.pending < 0 || values.lifetimeEarned < 0 || values.lifetimeSpent < 0 || values.lifetimePurchased < 0 ||
-        (data.userId != null && String(data.userId) !== userId)) return null
+    // The latest wallet snapshot contract includes both spendable balance and
+    // posted-ledger balance. Never synthesize a missing ledger value from the
+    // spendable amount; that can conceal stale RPC deployments or lock drift.
+    const values = Object.fromEntries(numeric.map((key) => [key, Number(data[key])])) as Record<(typeof numeric)[number], number>
+    const updatedAt = Number(data.updatedAt)
+    if (numeric.some((key) => data[key] == null || !Number.isFinite(values[key])) ||
+        values.balance < 0 || values.ledgerBalance < 0 || values.locked < 0 || values.pending < 0 ||
+        values.lifetimeEarned < 0 || values.lifetimeSpent < 0 || values.lifetimePurchased < 0 ||
+        String(data.userId ?? "") !== userId || !Number.isFinite(updatedAt) || updatedAt <= 0) return null
     return {
       userId,
       balance: values.balance,
@@ -204,7 +233,7 @@ export async function rpcWalletSnapshot(
       lifetimeEarned: values.lifetimeEarned,
       lifetimeSpent: values.lifetimeSpent,
       lifetimePurchased: values.lifetimePurchased,
-      updatedAt: Number.isFinite(Number(data.updatedAt)) && Number(data.updatedAt) > 0 ? Number(data.updatedAt) : Date.now(),
+      updatedAt,
     }
   } catch {
     return null

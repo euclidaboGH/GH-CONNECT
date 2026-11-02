@@ -140,6 +140,30 @@ export function normalizeWalletV2Snapshot(value: unknown): WalletV2Snapshot {
   }
 }
 
+export class WalletV2RequestError extends Error {
+  readonly status: number
+  readonly retryable: boolean
+  readonly retryAfterSeconds: number | null
+
+  constructor(
+    code: string,
+    options: { status: number; retryable: boolean; retryAfterSeconds?: number | null },
+  ) {
+    super(code)
+    this.name = "WalletV2RequestError"
+    this.status = options.status
+    this.retryable = options.retryable
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null
+  }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds < 0) return null
+  return Math.min(300, Math.ceil(seconds))
+}
+
 export async function fetchWalletV2(options?: { signal?: AbortSignal }): Promise<WalletV2Snapshot> {
   const response = await fetch("/api/economy/wallet/summary", {
     credentials: "include",
@@ -147,9 +171,34 @@ export async function fetchWalletV2(options?: { signal?: AbortSignal }): Promise
     headers: { Accept: "application/json" },
     signal: options?.signal,
   })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok || !payload?.ok || !payload?.wallet) {
-    throw new Error(String(payload?.error || "WALLET_UNAVAILABLE"))
+
+  // Treat the response as untrusted: proxies and framework error pages may return
+  // HTML or empty bodies. Never let a JSON parse error replace the real HTTP status.
+  const payload: unknown = await response.json().catch(() => null)
+  const envelope = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null
+  const wallet = envelope?.wallet
+  const isSuccessEnvelope = envelope?.ok === true && wallet !== null && typeof wallet === "object" && !Array.isArray(wallet)
+
+  if (!response.ok || !isSuccessEnvelope) {
+    const rawCode = typeof envelope?.error === "string" ? envelope.error : "WALLET_UNAVAILABLE"
+    const code = /^[A-Z0-9_]{1,80}$/.test(rawCode) ? rawCode : "WALLET_UNAVAILABLE"
+    const retryable = envelope?.retryable === true || response.status === 429 || response.status >= 500
+    throw new WalletV2RequestError(code, {
+      status: response.status,
+      retryable,
+      retryAfterSeconds: parseRetryAfter(response.headers.get("Retry-After")),
+    })
   }
-  return normalizeWalletV2Snapshot(payload.wallet)
+
+  try {
+    return normalizeWalletV2Snapshot(wallet)
+  } catch {
+    // A malformed successful response is a service contract failure, not a zero balance.
+    throw new WalletV2RequestError("WALLET_INVALID_SNAPSHOT", {
+      status: response.status,
+      retryable: false,
+    })
+  }
 }

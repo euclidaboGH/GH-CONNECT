@@ -52,6 +52,8 @@ jobs:
         run: node scripts/check-database-rls-coverage.mjs
       - name: SECURITY DEFINER ACL source audit
         run: node scripts/check-security-definer-acl.mjs
+      - name: Phase 10 operator diagnostics fail-closed contract
+        run: node scripts/check-phase10-system-status-probes.mjs
       - name: Production safety scan
         run: npm run test:safety
       - name: Phase 15 payment recovery contracts
