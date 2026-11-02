@@ -516,7 +516,6 @@ export function MessageScreen() {
     }
     lastScreenSendRef.current = { key: dedupeKey, at: now }
     setSending(true)
-    setDraft("")
     stopTyping()
     const replyingTo = replyToId
     setReplyToId(null)
@@ -539,6 +538,12 @@ export function MessageScreen() {
         )
         return
       }
+      // Clear the persisted draft only after the send/queue operation confirms acceptance.
+      // Failed or ambiguous sends keep the text available for a safe retry.
+      setDraft("")
+      try {
+        window.localStorage.removeItem(`ghc.message-draft.${selectedId}`)
+      } catch { /* Draft storage is best-effort; in-memory state is already cleared. */ }
       setStatusMsg(isOffline ? "Queued — will sync when online" : "Message sent")
       window.setTimeout(() => setStatusMsg(null), 2000)
       requestAnimationFrame(() => {

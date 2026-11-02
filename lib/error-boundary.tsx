@@ -17,7 +17,7 @@ export class ErrorBoundary extends React.Component<
   ErrorBoundaryProps,
   { hasError: boolean; error: Error | null; autoRetried: boolean }
 > {
-  private autoRetryTimer: ReturnType<typeof window.setTimeout> | null = null
+  private autoRetryTimer: number | null = null
   constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null, autoRetried: false }
