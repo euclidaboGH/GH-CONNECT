@@ -960,8 +960,8 @@ function EnhancedPostCardInner({
 
       {/* Primary actions — quality (left) and social (right), never overlapping */}
       <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality</p>
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Respond</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
+        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
       </div>
       <div
         className="px-2 pb-2.5 pt-1 sm:px-3"
