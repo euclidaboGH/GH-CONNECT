@@ -592,7 +592,7 @@ export function MessageScreen() {
     setReplyPreview(null)
     try {
       const accepted = replyingTo
-        ? await replyToMessage(selectedId, replyingTo, text)
+        ? await replyToMessage?.(selectedId, replyingTo, text)
         : await sendMessage?.(selectedId, text)
       if (accepted === false || accepted === undefined) {
         setDraft(text)
@@ -772,7 +772,7 @@ export function MessageScreen() {
                   }
                 }}
                 onDelete={(id, forEveryone) => {
-                  void deleteMessage(selectedId!, id, Boolean(forEveryone))
+                  void deleteMessage?.(selectedId!, id, Boolean(forEveryone))
                 }}
                 onRetry={
                   msg.status === "failed"

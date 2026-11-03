@@ -1930,7 +1930,7 @@ export function MarketplaceScreen({
       list = list.filter((o) => o.sellerId === viewerId)
     }
     return [...list].sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
-  }, [domain, durableOrders, orderRoleFilter])
+  }, [domain, tick, durableOrders, orderRoleFilter])
 
   const outcomeOrders = useMemo(() => {
     if (durableOrders.length) return durableOrders
