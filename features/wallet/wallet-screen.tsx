@@ -1315,7 +1315,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <button type="button" onClick={() => navigateSettingsSection("membership")} className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-left transition hover:bg-muted/60 active:scale-[.99]">
                 <CreditCard size={17} className="text-violet-700 dark:text-violet-300" aria-hidden />
                 <p className="mt-2 text-[12px] font-bold text-foreground">Membership</p>
-                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Free, VIP and VVIP benefits open on Membership — not paid from this balance card</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">VIP plans open on Membership — Free, VIP and VVIP benefits · not paid from this balance card</p>
               </button>
             </div>
           </section>

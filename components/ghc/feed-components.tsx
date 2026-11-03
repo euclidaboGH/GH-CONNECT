@@ -174,7 +174,7 @@ export const PostCard = memo(function PostCard({
         <QuoteRepost
           originalPost={post}
           quoteText={post.content}
-          onViewOriginal={() => if (process.env.NODE_ENV !== "production") console.log("View original")}
+          onViewOriginal={() => { if (process.env.NODE_ENV !== "production") console.log("View original") }}
         />
       )}
 
@@ -184,7 +184,7 @@ export const PostCard = memo(function PostCard({
         <EnhancedPostContent
           content={post.content}
           onMentionClick={(userId) => onFollowFromPost?.(userId)}
-          onHashtagClick={(hashtag) => if (process.env.NODE_ENV !== "production") console.log("Hashtag:", hashtag)}
+          onHashtagClick={(hashtag) => { if (process.env.NODE_ENV !== "production") console.log("Hashtag:", hashtag) }}
           onLinkClick={(url) => window.open(url, "_blank")}
         />
         </div>
