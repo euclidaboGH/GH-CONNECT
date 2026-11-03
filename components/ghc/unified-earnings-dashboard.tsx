@@ -304,12 +304,33 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
   useEffect(() => {
     const ac = new AbortController()
-    void refresh(ac.signal)
-    const onRefresh = () => void refresh()
+    // Phase 1: never leave "Loading PI earnings…" stuck — hard timeout + fail closed
+    const hardTimeout = window.setTimeout(() => {
+      try {
+        ac.abort()
+      } catch { /* */ }
+      setLoading(false)
+      setFailed(true)
+    }, 12_000)
+    void refresh(ac.signal).finally(() => {
+      window.clearTimeout(hardTimeout)
+    })
+    const onRefresh = () => {
+      const next = new AbortController()
+      const t = window.setTimeout(() => {
+        try {
+          next.abort()
+        } catch { /* */ }
+        setLoading(false)
+        setFailed(true)
+      }, 12_000)
+      void refresh(next.signal).finally(() => window.clearTimeout(t))
+    }
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-auth-changed", onRefresh)
     return () => {
+      window.clearTimeout(hardTimeout)
       ac.abort()
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
@@ -570,8 +591,20 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </p>
             <button
               type="button"
-              onClick={() => void refresh()}
-              className="mt-2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-950 shadow-sm"
+              className="mt-3 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 shadow-sm"
+              onClick={() => {
+                setFailed(false)
+                setLoading(true)
+                const ac = new AbortController()
+                const t = window.setTimeout(() => {
+                  try {
+                    ac.abort()
+                  } catch { /* */ }
+                  setLoading(false)
+                  setFailed(true)
+                }, 12_000)
+                void refresh(ac.signal).finally(() => window.clearTimeout(t))
+              }}
             >
               <RefreshCw className="h-3 w-3" /> Retry
             </button>

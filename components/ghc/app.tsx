@@ -343,6 +343,16 @@ export function GHConnectApp() {
   // Section attention indicators use authenticated server counts plus local in-app
   // alerts. Polling and event-driven refresh cover new activity without requiring a tap.
   const refreshSectionAttention = useCallback(async () => {
+    // Phase 5: fail closed — never leave sticky red dots when the server denies or errors.
+    try {
+      if (!authLifecycle?.serverVerified) {
+        setSocialAttentionCount(0)
+        setEconomyAttentionCount(0)
+        return
+      }
+    } catch {
+      /* authLifecycle may be undefined during boot */
+    }
     const [socialResponse, economyResponse] = await Promise.all([
       fetch("/api/social/notifications?countOnly=1", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
       fetch("/api/economy/notifications/unread-count", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
@@ -351,9 +361,17 @@ export function GHConnectApp() {
       socialResponse?.json().catch(() => ({})) || {},
       economyResponse?.json().catch(() => ({})) || {},
     ]) as [{ ok?: boolean; unreadCount?: number }, { ok?: boolean; count?: number }]
-    if (social.ok && typeof social.unreadCount === "number") setSocialAttentionCount(Math.max(0, social.unreadCount))
-    if (economy.ok && typeof economy.count === "number") setEconomyAttentionCount(Math.max(0, economy.count))
-  }, [])
+    if (socialResponse && socialResponse.ok && social.ok && typeof social.unreadCount === "number") {
+      setSocialAttentionCount(Math.max(0, Math.min(99, social.unreadCount)))
+    } else if (socialResponse && (socialResponse.status === 401 || socialResponse.status === 403)) {
+      setSocialAttentionCount(0)
+    }
+    if (economyResponse && economyResponse.ok && economy.ok && typeof economy.count === "number") {
+      setEconomyAttentionCount(Math.max(0, Math.min(99, economy.count)))
+    } else if (economyResponse && (economyResponse.status === 401 || economyResponse.status === 403)) {
+      setEconomyAttentionCount(0)
+    }
+  }, [authLifecycle?.serverVerified])
 
   // Invite links: capture ?ref= and attribute once session is ready
   useEffect(() => {
@@ -374,6 +392,10 @@ export function GHConnectApp() {
     void refreshSectionAttention()
     const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
     const onAttention = () => void refreshSectionAttention()
+    const onNotificationsRead = () => {
+      setSocialAttentionCount(0)
+      void refreshSectionAttention()
+    }
     const onVisible = () => { if (document.visibilityState === "visible") void refreshSectionAttention() }
     window.addEventListener("focus", onAttention)
     window.addEventListener("online", onAttention)
@@ -383,7 +405,7 @@ export function GHConnectApp() {
     window.addEventListener("ghc:post-engagement", onAttention)
     window.addEventListener("ghc:daily-reward-claimed", onAttention)
     window.addEventListener("ghc:community-updated", onAttention)
-    window.addEventListener("ghc:notifications-read", onAttention)
+    window.addEventListener("ghc:notifications-read", onNotificationsRead)
     document.addEventListener("visibilitychange", onVisible)
     return () => {
       window.clearInterval(timer)
@@ -395,7 +417,7 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:post-engagement", onAttention)
       window.removeEventListener("ghc:daily-reward-claimed", onAttention)
       window.removeEventListener("ghc:community-updated", onAttention)
-      window.removeEventListener("ghc:notifications-read", onAttention)
+      window.removeEventListener("ghc:notifications-read", onNotificationsRead)
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [refreshSectionAttention])
@@ -1324,7 +1346,12 @@ export function GHConnectApp() {
                   if (isActive) {
                     if (id === "home" && socialAttentionCount > 0) {
                       try {
-                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "connections" } }))
+                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "all" } }))
+                        emitSectionRefresh("feed", { reason: "attention" })
+                      } catch { /* */ }
+                    } else if (id === "messages" && unreadMessageCount > 0) {
+                      try {
+                        emitSectionRefresh("messages", { reason: "attention" })
                       } catch { /* */ }
                     }
                     scrollActiveTabToTop()
@@ -1337,6 +1364,11 @@ export function GHConnectApp() {
                   }
                   if (isPrimaryTab(id)) {
                     startTransition(() => setTab(id))
+                    if (id === "home") {
+                      try {
+                        emitSectionRefresh("feed", { reason: "tab" })
+                      } catch { /* */ }
+                    }
                   }
                 }}
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
@@ -1381,8 +1413,24 @@ export function GHConnectApp() {
                       (id === "profile" && economyAttentionCount > 0)) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
-                        aria-label="New activity"
-                        title="New activity — open this section to review"
+                        aria-label={
+                          id === "home"
+                            ? `${socialAttentionCount} unread notification${socialAttentionCount === 1 ? "" : "s"} — open Home again for inbox`
+                            : id === "messages"
+                              ? `${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
+                              : id === "communities"
+                                ? `${unreadGroupCount} community update${unreadGroupCount === 1 ? "" : "s"}`
+                                : `${economyAttentionCount} wallet or rewards update${economyAttentionCount === 1 ? "" : "s"}`
+                        }
+                        title={
+                          id === "home"
+                            ? "Unread notifications — tap Home again to open the inbox"
+                            : id === "messages"
+                              ? "Unread messages"
+                              : id === "communities"
+                                ? "Community activity"
+                                : "Wallet or rewards activity — open Profile → Wallet / Rewards"
+                        }
                       />
                     ) : null}
                   </span>

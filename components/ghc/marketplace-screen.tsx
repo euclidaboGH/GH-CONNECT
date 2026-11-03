@@ -82,9 +82,11 @@ import {
   clearMarketplaceCart,
   getMarketplaceCart,
   removeMarketplaceCartItem,
+  removeMarketplaceCartItemsBySeller,
   updateMarketplaceCartQuantity,
   type MarketplaceCartItem,
 } from "@/lib/marketplace/cart"
+import { humanizeClientErrorCode, toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 import {
   formatListingFeeCta,
   quoteListingCreateFee,
@@ -208,11 +210,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
       })
       if (!created.ok || !created.order) {
         const errCode = !created.ok ? String(created.error || "") : ""
-        setErr(
-          errCode === "CANNOT_BUY_OWN"
-            ? "Cannot buy your own listing"
-            : errCode || "Could not create order",
-        )
+        setErr(humanizeClientErrorCode(errCode, "Could not create order"))
         return
       }
       const orderId = String((created.order as { id?: string }).id || "")
@@ -1238,39 +1236,73 @@ function CartPanel({
   const [error, setError] = useState<string | null>(null)
 
   const totals = useMemo(() => {
+    // Phase 2: estimated total excludes own listings (not checkout-eligible)
     const map = new Map<string, number>()
-    for (const item of items) {
+    for (const item of purchasableItems) {
       const currency = (item.currency || "GHC").toUpperCase()
       map.set(currency, (map.get(currency) || 0) + Math.max(0, Number(item.price) || 0) * item.quantity)
     }
     return map
-  }, [items])
+  }, [purchasableItems])
+
+  const viewerId = IdentityService.getCurrentUserId() || ""
+  const ownItems = useMemo(
+    () => items.filter((i) => viewerId && i.sellerId && i.sellerId === viewerId),
+    [items, viewerId],
+  )
+  const purchasableItems = useMemo(
+    () => items.filter((i) => !(viewerId && i.sellerId && i.sellerId === viewerId)),
+    [items, viewerId],
+  )
 
   const checkout = async () => {
     if (busy || !items.length) return
+    if (ownItems.length && !purchasableItems.length) {
+      setError("You can't buy your own listing. Remove it from the cart to continue.")
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const hardTimeout = typeof window !== "undefined"
+      ? window.setTimeout(() => {
+          try { controller?.abort() } catch { /* */ }
+        }, 45_000)
+      : null
     try {
       const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import("@/lib/social/client")
       const created: Array<{ id: string; item: MarketplaceCartItem }> = []
-      for (const item of items) {
+      // Phase 1: never submit own listings; server still enforces CANNOT_BUY_OWN
+      for (const item of purchasableItems) {
         const result = await socialCreateMarketplaceOrder({
           listingId: item.listingId,
           quantity: item.quantity,
           idempotencyKey: `cart_${item.listingId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         })
-        if (!result.ok || !result.order) throw new Error(result.error || `Could not reserve ${item.title}`)
+        if (!result.ok || !result.order) {
+          const code = String(result.error || "")
+          throw new Error(humanizeClientErrorCode(code, `Could not reserve ${item.title}`))
+        }
         const id = String((result.order as { id?: string }).id || "")
         if (!id) throw new Error(`Order created without an id for ${item.title}`)
         created.push({ id, item })
+      }
+
+      if (!created.length) {
+        setError("You can't buy your own listing. Remove it from the cart to continue.")
+        return
       }
 
       const piOrder = created.find(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
       const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
       for (const { id } of ghcOrders) {
         const paid = await socialPayMarketplaceOrder(id, "ghc")
-        if (!paid.ok) throw new Error(paid.message || paid.error || "GHC payment failed — check available balance")
+        if (!paid.ok) {
+          throw new Error(
+            humanizeClientErrorCode(paid.error, paid.message || "GHC payment failed — check available balance"),
+          )
+        }
       }
 
       clearMarketplaceCart()
@@ -1291,11 +1323,18 @@ function CartPanel({
       emitMarketplaceEconomyRefresh("marketplace-cart-checkout")
       window.dispatchEvent(new CustomEvent("ghc:marketplace-order-changed"))
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cart checkout failed")
+      const aborted = controller?.signal?.aborted
+      setError(
+        aborted
+          ? "Checkout timed out. No charge was confirmed — check Orders, then retry."
+          : toClientSafeErrorMessage(e, "Cart checkout failed"),
+      )
     } finally {
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
       setBusy(false)
     }
   }
+
 
   if (!items.length) {
     return (
@@ -1327,6 +1366,24 @@ function CartPanel({
           </div>
           <button type="button" onClick={onClear} className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground">Clear</button>
         </div>
+        {ownItems.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+            <p>
+              {ownItems.length === 1
+                ? "One item is your own listing and can't be purchased."
+                : `${ownItems.length} items are your own listings and can't be purchased.`}
+            </p>
+            <button
+              type="button"
+              className="mt-2 rounded-full border border-amber-400/70 bg-white px-3 py-1 text-[11px] font-bold text-amber-950 dark:bg-amber-900/40 dark:text-amber-50"
+              onClick={() => {
+                for (const own of ownItems) onRemove(own.listingId)
+              }}
+            >
+              Remove my listings from cart
+            </button>
+          </div>
+        ) : null}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Items</p><p className="mt-1 text-sm font-bold">{items.reduce((n, i) => n + i.quantity, 0)}</p></div>
           <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Sellers</p><p className="mt-1 text-sm font-bold">{new Set(items.map((i) => i.sellerId)).size}</p></div>
@@ -1338,14 +1395,24 @@ function CartPanel({
         {items.map((item) => {
           const lineTotal = (Number(item.price) || 0) * item.quantity
           const currency = (item.currency || "GHC").toUpperCase()
+          const isOwn = Boolean(viewerId && item.sellerId && item.sellerId === viewerId)
           return (
-            <article key={item.listingId} className="flex gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+            <article key={item.listingId} className={`flex gap-3 rounded-2xl border p-3 shadow-sm ${isOwn ? "border-amber-300/70 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20" : "border-border/60 bg-card"}`}>
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted/60">
                 {item.media ? <LazyImage src={item.media} alt={item.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Package size={22} className="text-muted-foreground" /></div>}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">Seller · {item.sellerId.slice(0, 8)}</p></div>
+                  <div className="min-w-0">
+                    <h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {isOwn
+                        ? "Your listing · can't be purchased"
+                        : item.sellerName
+                          ? `Seller · ${item.sellerName}`
+                          : `Seller · ${item.sellerId.slice(0, 8)}`}
+                    </p>
+                  </div>
                   <button type="button" onClick={() => onRemove(item.listingId)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label={`Remove ${item.title}`}><X size={15} /></button>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -1378,12 +1445,23 @@ function CartPanel({
 
       <div className="rounded-[1.4rem] border border-border/60 bg-card p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Estimated total</p><div className="text-right">{Array.from(totals.entries()).map(([currency, amount]) => <p key={currency} className="text-base font-extrabold">{currency === "GHC" ? "₲ " : ""}{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : ` ${currency === "PI" ? "π" : currency}`}</p>)}</div></div>
-        <p className="mt-1 text-[11px] text-muted-foreground">Shipping, service terms and final server-authoritative totals may vary by order.</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Estimate only — final totals, inventory and fees are confirmed by the server at checkout. Own listings are excluded.
+        </p>
         {message ? <p className="mt-3 rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200">{message}</p> : null}
         {error ? <p className="mt-3 rounded-xl bg-red-500/10 p-3 text-xs font-semibold text-red-700 dark:text-red-300">{error}</p> : null}
-        <button type="button" disabled={busy} onClick={() => void checkout()} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white shadow-md shadow-emerald-700/20 transition active:scale-[0.99] disabled:opacity-60">
+        <button
+          type="button"
+          disabled={busy || purchasableItems.length === 0}
+          onClick={() => void checkout()}
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white shadow-md shadow-emerald-700/20 transition active:scale-[0.99] disabled:opacity-60"
+        >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
-          {busy ? "Securing your orders…" : "Checkout securely"}
+          {busy
+            ? "Securing your orders…"
+            : purchasableItems.length === 0
+              ? "Remove your own listings to checkout"
+              : "Checkout securely"}
         </button>
       </div>
     </div>
@@ -1598,6 +1676,10 @@ export function MarketplaceScreen({
 
   const addToCart = useCallback((listing: MarketplaceListing) => {
     if (listing.status !== "active") return
+    const sellerLabel =
+      (listing as { sellerName?: string }).sellerName ||
+      (listing as { sellerDisplayName?: string }).sellerDisplayName ||
+      undefined
     addMarketplaceCartItem({
       listingId: listing.id,
       quantity: 1,
@@ -1605,6 +1687,7 @@ export function MarketplaceScreen({
       price: listing.price,
       currency: listing.currency,
       sellerId: listing.sellerId,
+      sellerName: sellerLabel,
       media: listing.media?.[0],
       availability: listing.availability,
     })
@@ -1686,8 +1769,21 @@ export function MarketplaceScreen({
   const loadDurableOrders = useCallback(async () => {
     const requestId = ++ordersRequestRef.current
     setOrdersLoading(true)
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const hardTimeout =
+      typeof window !== "undefined"
+        ? window.setTimeout(() => {
+            try {
+              controller?.abort()
+            } catch { /* */ }
+          }, 15_000)
+        : null
     try {
-      const res = await fetch("/api/marketplace/orders", { cache: "no-store", credentials: "include" })
+      const res = await fetch("/api/marketplace/orders", {
+        cache: "no-store",
+        credentials: "include",
+        signal: controller?.signal,
+      })
       const data = await res.json().catch(() => ({}))
       if (requestId !== ordersRequestRef.current) return
       // An authoritative empty array clears orders; transport/API failures do not.
@@ -1699,6 +1795,7 @@ export function MarketplaceScreen({
     } catch {
       // Retain last known durable orders; never turn a network failure into an empty order history.
     } finally {
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
       if (requestId === ordersRequestRef.current) setOrdersLoading(false)
     }
   }, [])
@@ -2658,7 +2755,24 @@ export function MarketplaceScreen({
           {ordersLoading && orders.length === 0 ? (
             <LoadingState title="Loading orders" description="Checking the latest durable order status." />
           ) : orders.length === 0 ? (
-            <EmptyState variant="transactions" title="No orders yet" description="Purchases and sales appear here from the durable Marketplace order authority." icon={Package} />
+            <EmptyState
+              variant="transactions"
+              title={
+                orderRoleFilter === "buying"
+                  ? "No purchases yet"
+                  : orderRoleFilter === "selling"
+                    ? "No sales yet"
+                    : "No orders yet"
+              }
+              description={
+                orderRoleFilter === "buying"
+                  ? "When you checkout, buyer orders appear here with live status."
+                  : orderRoleFilter === "selling"
+                    ? "When someone buys your listing, seller orders appear here to fulfill."
+                    : "Purchases and sales appear here from the durable Marketplace order authority."
+              }
+              icon={Package}
+            />
           ) : (
             <ul className="space-y-2.5">
               {orders.map((o) => {

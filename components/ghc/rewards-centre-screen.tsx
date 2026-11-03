@@ -32,6 +32,7 @@ import {
   DAILY_STREAK_GHC,
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
 import { RegistrationBonusCard } from "./registration-bonus-card"
@@ -331,6 +332,13 @@ export function RewardsCentreScreen({
       window.removeEventListener("ghc:wallet-refresh", onLive)
     }
   }, [refresh])
+
+  useSectionRefresh("rewards", async () => {
+    refresh()
+  }, {
+    minIntervalMs: 8_000,
+    events: ["ghc:wallet-refresh", "ghc:reward-claimed", "ghc:rewards-refresh"],
+  })
 
   useEffect(() => {
     const tabHandler = (e: Event) => {

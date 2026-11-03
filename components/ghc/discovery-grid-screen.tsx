@@ -177,6 +177,16 @@ export function DiscoveryGridScreen() {
       rawAll,
     )
     let list = result.ok ? result.data : []
+    // Phase 1: stable dedupe by person id (photo + initial-only duplicates collapse)
+    {
+      const seen = new Set<string>()
+      list = list.filter((c) => {
+        const id = String((c as { id?: string; userId?: string }).id || (c as { userId?: string }).userId || "").trim()
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+    }
     const exclude = new Set<string>([
       String(meId || ""),
       ...(graphSnap.friends || []).map(String),
@@ -197,10 +207,18 @@ export function DiscoveryGridScreen() {
         return blob.includes(q)
       })
     }
-    if (onlineOnly) {
-      list = list.filter((c) => Boolean((c as { isOnline?: boolean; online?: boolean }).isOnline || (c as { online?: boolean }).online))
+    // Phase gap-fill: only filter by presence when server-backed flags exist on candidates
+    const presenceKnown = list.some(
+      (c) =>
+        typeof (c as { isOnline?: unknown }).isOnline === "boolean" ||
+        typeof (c as { online?: unknown }).online === "boolean",
+    )
+    if (onlineOnly && presenceKnown) {
+      list = list.filter((c) =>
+        Boolean((c as { isOnline?: boolean; online?: boolean }).isOnline || (c as { online?: boolean }).online),
+      )
     }
-    return { list, source: result.ok ? result.source : "empty" }
+    return { list, source: result.ok ? result.source : "empty", presenceKnown }
   }, [
     ghc.candidates,
     selectedIntents,
@@ -294,6 +312,9 @@ export function DiscoveryGridScreen() {
           return
         }
         setPickerTarget(null)
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+        } catch { /* */ }
         ghc.addToast?.(
           "Connection request sent — they can accept when ready",
           "success"
@@ -378,12 +399,36 @@ export function DiscoveryGridScreen() {
       }
       if (action === "follow" || action === "unfollow") {
         const follow = action === "follow"
+        // Phase 1: prefer context followUser so session following[] updates and cards
+        // leave the Discover pool / show Following — not a silent socialFollow side-path.
+        // followUser verifies server status then toggles; safe for both follow and unfollow.
+        if (typeof ghc.followUser === "function") {
+          void ghc
+            .followUser(id)
+            .then(() => {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+              } catch { /* */ }
+              ghc.addToast?.(follow ? "Following" : "Unfollowed", "success")
+            })
+            .catch(() => {
+              ghc.addToast?.(follow ? "Could not follow" : "Could not unfollow", "error")
+            })
+          return
+        }
         void import("@/lib/social/client").then(({ socialFollow }) =>
           socialFollow(id, follow).then((r) => {
             if (!r.ok) {
               ghc.addToast?.(r.error || (follow ? "Could not follow" : "Could not unfollow"), "error")
               return
             }
+            try {
+              window.dispatchEvent(
+                new CustomEvent("ghc:follow-changed", {
+                  detail: { userId: id, following: follow, durable: r.durable },
+                }),
+              )
+            } catch { /* */ }
             ghc.addToast?.(
               r.durable
                 ? follow
@@ -394,13 +439,6 @@ export function DiscoveryGridScreen() {
                   : "Unfollow saved on this device",
               r.durable ? "success" : "info",
             )
-            try {
-              window.dispatchEvent(
-                new CustomEvent("ghc:follow-changed", {
-                  detail: { userId: id, following: follow, durable: r.durable },
-                }),
-              )
-            } catch { /* */ }
           }),
         )
         return
@@ -474,17 +512,28 @@ export function DiscoveryGridScreen() {
           >
             <SlidersHorizontal size={13} />
           </button>
-          <button
+                    <button
             type="button"
-            onClick={() => setOnlineOnly((v) => !v)}
+            onClick={() => {
+              if (!adapted.presenceKnown) {
+                ghc.addToast?.("Live presence is not available for these results yet", "info")
+                return
+              }
+              setOnlineOnly((v) => !v)
+            }}
             className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
-              onlineOnly
+              onlineOnly && adapted.presenceKnown
                 ? "bg-emerald-100 text-emerald-900 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-100"
                 : "bg-muted/40 text-muted-foreground ring-border/60"
             }`}
-            aria-pressed={onlineOnly}
+            aria-pressed={Boolean(onlineOnly && adapted.presenceKnown)}
+            title={
+              adapted.presenceKnown
+                ? "Show people marked online by the server"
+                : "Presence is not available until the server reports it"
+            }
           >
-            Online now
+            {adapted.presenceKnown ? "Online now" : "Presence offline"}
           </button>
         </div>
       </header>
@@ -672,15 +721,20 @@ export function DiscoveryGridScreen() {
           >
             <div className="flex items-center justify-between gap-2 px-0.5">
               <p className="text-[11px] font-medium text-muted-foreground" aria-live="polite">
-                {adapted.list.length} {category}
-                {query.trim() ? ` matching “${query.trim()}”` : " · explainable matches"}
+                {adapted.list.length}{" "}
+                {category === "people"
+                  ? adapted.list.length === 1
+                    ? "person"
+                    : "people"
+                  : category}
+                {query.trim() ? ` matching “${query.trim()}”` : " · ranked matches"}
               </p>
               <button
                 type="button"
                 className="text-[10px] font-medium text-primary"
                 onClick={() => setUseModernCard((v) => !v)}
               >
-                {useModernCard ? "Photo cards" : "Connection cards"}
+                {useModernCard ? "Connection cards" : "Photo cards"}
               </button>
             </div>
             {adapted.list.map((candidate) => {

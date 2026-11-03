@@ -383,6 +383,15 @@ export function CommunitiesScreen() {
     let cancelled = false
     setDirectoryLoading(true)
     setDirectoryError(null)
+    const hardTimeout =
+      typeof window !== "undefined"
+        ? window.setTimeout(() => {
+            if (!cancelled) {
+              setDirectoryLoading(false)
+              setDirectoryError((prev) => prev || "Directory is taking longer than expected. Pull to retry.")
+            }
+          }, 15_000)
+        : null
     void import("@/lib/social/client")
       .then(({ socialListCommunities }) => socialListCommunities(50))
       .then((res) => {
@@ -434,6 +443,26 @@ export function CommunitiesScreen() {
         setRemoteDirectory(rows)
         setDirectoryDurable(Boolean(res.durable))
         setDirectoryLoading(false)
+        if (hardTimeout != null) window.clearTimeout(hardTimeout)
+        // Phase 1: seed local membership markers for rows the viewer owns or is listed on,
+        // so My (n) and the list stay aligned when the API returns membership sparsely.
+        try {
+          const me = IdentityService.getCurrentUserId() || ""
+          if (me) {
+            const owned = rows
+              .filter((c) => {
+                if (c.createdBy && c.createdBy === me) return true
+                if (Array.isArray(c.members) && c.members.includes(me)) return true
+                return false
+              })
+              .map((c) => c.id)
+            if (owned.length) {
+              setLocalJoined((prev) => Array.from(new Set([...(prev || []), ...owned])))
+            }
+          }
+        } catch {
+          /* identity unavailable */
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -445,6 +474,7 @@ export function CommunitiesScreen() {
       })
     return () => {
       cancelled = true
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
     }
   }, [directoryTick])
 
@@ -591,10 +621,15 @@ export function CommunitiesScreen() {
   const visibleGroups = useMemo(() => {
     const pool = directory === "my" ? myCommunities : discoverCommunities
     const q = searchQuery.trim().toLowerCase()
+    // Phase 1 honesty: "My" lists membership truth — do not hide joined spaces behind
+    // Discover-oriented privacy/category chips. Search still applies so users can find
+    // among many memberships. Discover keeps full filters.
     return pool
       .filter((c) => {
-        if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
-        if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
+        if (directory === "discover") {
+          if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
+          if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
+        }
         if (!q) return true
         const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""} ${c.privacy || ""}`.toLowerCase()
         return hay.includes(q)
@@ -1406,15 +1441,27 @@ export function CommunitiesScreen() {
             </p>
           ) : null}
 
-          {visibleGroups.length === 0 ? (
+          {!directoryLoading && visibleGroups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
               <p className="text-[14px] font-bold text-foreground">
-                {directory === "my" ? "No communities yet" : "No communities match"}
+                {directory === "my"
+                  ? myCommunities.length === 0
+                    ? "No communities yet"
+                    : "No communities match your search"
+                  : discoverCommunities.length === 0
+                    ? myCommunities.length > 0
+                      ? "You're already in every community we found"
+                      : "No communities to discover yet"
+                    : "No communities match"}
               </p>
               <p className="mt-1 text-[12px] text-muted-foreground">
                 {directory === "my"
-                  ? "Join a space from Discover, or create one for your city or interest."
-                  : "Try another search or category."}
+                  ? myCommunities.length === 0
+                    ? "Join a space from Discover, or create one for your city or interest."
+                    : "Clear search to see all of your communities."
+                  : discoverCommunities.length === 0
+                    ? "Create a new space, or open My communities for spaces you already joined."
+                    : "Try another search or category."}
               </p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {directory === "my" ? (
@@ -1424,6 +1471,14 @@ export function CommunitiesScreen() {
                     className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Discover communities
+                  </button>
+                ) : myCommunities.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setDirectory("my")}
+                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
+                  >
+                    Open My communities ({myCommunities.length})
                   </button>
                 ) : null}
                 <button
@@ -1478,6 +1533,13 @@ export function CommunitiesScreen() {
                   coverImage={community.groupPhoto || community.photo}
                   groupAvatar={community.participantPhoto || community.groupPhoto}
                   onClick={() => setSelectedCommunityId(community.id)}
+                  joinLabel={
+                    ["invite-only", "invite", "private", "approval", "request"].includes(
+                      String(community.privacy || "").toLowerCase(),
+                    )
+                      ? "Request to join"
+                      : "Join"
+                  }
                   onJoin={!joined ? () => setJoinGate(community) : undefined}
                 />
               )
@@ -1490,15 +1552,25 @@ export function CommunitiesScreen() {
               description={
                 searchQuery
                   ? `No results for “${searchQuery}”. Try another keyword — or create a community.`
-                  : "Board = posts & events · Chat = member conversation."
+                  : privacyFilter !== "all" || categoryFilter !== "all"
+                    ? "No communities match these filters. Clear filters or create a new community."
+                    : "Board = posts & events · Chat = member conversation. Create one if nothing fits."
               }
-              action={
-                searchQuery
+              action={{ label: "Create community", onClick: openCreateCommunity }}
+              secondaryAction={
+                searchQuery || privacyFilter !== "all" || categoryFilter !== "all"
                   ? {
-                      label: "Create community",
-                      onClick: openCreateCommunity,
+                      label: "Clear filters",
+                      onClick: () => {
+                        setSearchQuery("")
+                        setPrivacyFilter("all")
+                        setCategoryFilter("all")
+                      },
                     }
-                  : { label: "Create community", onClick: openCreateCommunity }
+                  : {
+                      label: "Retry directory",
+                      onClick: () => setDirectoryTick((n) => n + 1),
+                    }
               }
             />
           ) : null}

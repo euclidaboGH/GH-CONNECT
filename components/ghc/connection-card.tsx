@@ -15,6 +15,7 @@ import {
 import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
+import { LazyImage } from "./lazy-image"
 
 
 /** Safe media/location accessors for the DiscoveryCandidate discriminated union */
@@ -67,7 +68,7 @@ export function ConnectionCard({
       <div className="flex gap-3">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-background dark:bg-emerald-950">
           {avatarUrl ? (
-            <img
+            <LazyImage
               src={avatarUrl}
               alt=""
               className="h-full w-full object-cover"
@@ -129,11 +130,13 @@ export function ConnectionCard({
             disabled={busy || connectionState === "blocked"}
             onClick={() => onAction?.(action, candidate)}
             className={
-              action === "connect" || action === "accept" || action === "like"
+              action === "connect" || action === "accept" || action === "message"
                 ? "rounded-full bg-primary px-3.5 py-2 text-[12px] font-bold text-primary-foreground shadow-sm disabled:opacity-50"
-                : action === "pass"
-                  ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
-                  : "rounded-full border border-border bg-background px-3.5 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+                : action === "like"
+                  ? "rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary disabled:opacity-50"
+                  : action === "pass"
+                    ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
+                    : "rounded-full border border-border bg-background px-3.5 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
             }
             title={
               action === "like"

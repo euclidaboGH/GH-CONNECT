@@ -1,4 +1,4 @@
-# Upgrade worklog — 0.277.0
+# Upgrade worklog — 0.279.0
 
 ## Wallet A2U production readiness (post Phase 5)
 

@@ -39,7 +39,6 @@ import { GhcTransactionDetail } from "@/components/ghc/ghc-transaction-detail"
 import { PiPaymentDetail, type PiPaymentDetailRecord } from "@/components/ghc/pi-payment-detail"
 import { GhcRequestsPanel } from "@/components/ghc/ghc-requests-panel"
 import { GhcSocialFuelNote } from "@/components/ghc/ghc-social-fuel-note"
-import { GhPayPanel } from "@/components/ghc/gh-pay-panel"
 import { useGHCShell } from "@/contexts/ghc-context"
 import { EMPTY_STATES, PRIMARY_ACTIONS, formatGhcAmount, mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
 import { getBoundDomainServices } from "@/lib/domains/compat"
@@ -1242,7 +1241,7 @@ const lowBalance = balance === 0 && displayPending === 0
                   }
                   if (balance <= 0 && (displayPending > 0 || pending > 0)) {
                     setSendEducate(
-                      "Claim pending GHC to send — only available balance can be transferred."
+                      "Only available GHC can be sent. Pending holds mature on the server — check Pending status or claim matured rewards in Rewards."
                     )
                     setShowPendingSheet(true)
                     return
@@ -1303,7 +1302,7 @@ const lowBalance = balance === 0 && displayPending === 0
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[13px] font-black tracking-tight text-foreground">Money & benefits</p>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">One place to move from balance to the action that matters next. GHC and Pi remain separate rails.</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Wallet holds balances and History. Claims open in Rewards; VIP plans open in Membership. GHC and Pi stay separate rails.</p>
               </div>
               <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Protected</span>
             </div>
@@ -1316,7 +1315,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <button type="button" onClick={() => navigateSettingsSection("membership")} className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-left transition hover:bg-muted/60 active:scale-[.99]">
                 <CreditCard size={17} className="text-violet-700 dark:text-violet-300" aria-hidden />
                 <p className="mt-2 text-[12px] font-bold text-foreground">Membership</p>
-                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Free, VIP and VVIP benefits</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">VIP plans open on Membership — not paid from this balance card</p>
               </button>
             </div>
           </section>
@@ -1490,7 +1489,7 @@ const lowBalance = balance === 0 && displayPending === 0
           {(
             [
               { id: "activity" as const, label: "Activity" },
-              { id: "rewards" as const, label: "Rewards" },
+              { id: "rewards" as const, label: "Earn" },
               { id: "about" as const, label: "About" },
             ] as const
           ).map((item) => (
@@ -1939,87 +1938,51 @@ const lowBalance = balance === 0 && displayPending === 0
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">Buy GHC with π</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pack purchases only. Membership, profile boosts, and other services are paid on their own screens (Membership / Settings → Account &amp; economy).
-            </p>
-            <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground/90">
-              GreenHaven device PIN only unlocks this app — Pi Wallet authorizes π charges.
-            </p>
-          </div>
-          <div id="ghc-wallet-gh-pay" className="scroll-mt-4">
-          {selectedGhcPack ? (
-            <div className="mx-3 mb-2 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2 text-[12px] dark:border-violet-900 dark:bg-violet-950/40">
-              <p className="font-bold text-violet-900 dark:text-violet-100">
-                Pack selected: {selectedGhcPack.label || `${selectedGhcPack.ghcAmount} GHC`}
-              </p>
-              <p className="text-muted-foreground">
-                Pay {selectedGhcPack.piAmount} π via GH Pay, then server credits GHC (product {selectedGhcPack.productId}).
-              </p>
+          {/* Phase 3: packs are not primary Wallet chrome — open Add GHC sheet only */}
+          <div id="ghc-wallet-gh-pay" className="mx-3 mt-2 scroll-mt-4 rounded-2xl border border-border/70 bg-card px-3.5 py-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-foreground">Add GHC</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Buy utility packs with π when needed. Membership and profile boosts stay on their own screens — not mixed into balances.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddGhc(true)}
+                className="shrink-0 rounded-xl bg-emerald-700 px-3 py-2 text-[11px] font-bold text-white"
+              >
+                Open packs
+              </button>
             </div>
-          ) : null}
-          <GhPayPanel
-            compact
-            onToast={(msg, type) => {
-              const level =
-                type === "error" || type === "success" || type === "info" ? type : "info"
-              addToast(msg, level)
-            }}
-          />
-        </div>
+            {selectedGhcPack ? (
+              <p className="mt-2 text-[11px] text-violet-800 dark:text-violet-200">
+                Pack selected: {selectedGhcPack.label || `${selectedGhcPack.ghcAmount} GHC`} · {selectedGhcPack.piAmount} π
+              </p>
+            ) : null}
+          </div>
         </div>
 
           {tab === "rewards" && (
-            <>
-              <div className="mx-3 mb-3 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="mx-3 mb-3 space-y-3">
+              <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
                 <p className="text-sm font-bold text-foreground">Claims live in Rewards</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Claims live in Rewards. Wallet is balances, transfers, and history.
+                  Daily claim, registration bonus, cashback and missions are claimed in Rewards only.
+                  This Wallet shows balances, Send / Request / Receive, dual-rail History, and Pi withdraw.
                 </p>
                 <button
                   type="button"
                   onClick={() => navigateSettingsSection("rewards")}
-                  className="mt-2.5 inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
                 >
-                  Open Rewards
+                  Open Rewards Centre
                 </button>
               </div>
-              {rewards.length === 0 ? (
-                <EmptyBlock
-                  title="No reward activity on this device"
-                  body="Open Rewards to claim. Wallet only shows settled ledger effects after a successful claim."
-                />
-              ) : (
-                rewards.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded-2xl border border-border bg-card px-3 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">
-                        {r.category || r.ruleId || "Reward"}
-                      </p>
-                      <span className="inline-flex items-center gap-1 text-sm font-bold text-emerald-700">
-                        <GhcCoinIcon size={16} />
-                        +{formatGhc(r.amount)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      Status:{" "}
-                      <span className="font-semibold">
-                        {r.validationStatus}
-                      </span>
-                      {r.sourceEvent ? ` · ${r.sourceEvent}` : ""}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80">
-                      {formatWhen(r.createdAt)}
-                    </p>
-                  </div>
-                ))
-              )}
-            </>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Settled claims appear in Activity / History after the server credits available balance — Wallet never invents claim amounts.
+              </p>
+            </div>
           )}
 
           {tab === "about" && (
@@ -2128,7 +2091,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-bold text-white">π</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-foreground">Pi (GH Pay)</p>
-                  <p className="text-[11px] text-muted-foreground">External π rail · membership & packs · not mixed with GHC</p>
+                  <p className="text-[11px] text-muted-foreground">External π rail · earnings withdraw and GH Pay · not mixed with GHC</p>
                   <span className="mt-1 inline-block rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-800 dark:text-violet-200">Available</span>
                 </div>
               </li>
@@ -2247,7 +2210,7 @@ const lowBalance = balance === 0 && displayPending === 0
                             ) : null}
                           </div>
                           <p className="mt-1 text-sm font-semibold text-foreground">
-                            {formatGhc(h.amount)} GHC · {h.claimState === "review" ? "Pending validation" : "Ready to claim"}
+                            {formatGhc(h.amount)} GHC · {h.claimState === "review" ? "Pending validation" : "Ready to release"}
                           </p>
                           <p className="mt-1 text-[11px] font-medium text-foreground">{h.reason}</p>
                           <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
@@ -2258,7 +2221,7 @@ const lowBalance = balance === 0 && displayPending === 0
                             <span className="font-semibold text-foreground">What happens next: </span>
                             {h.claimState === "review"
                               ? h.expectedClearLabel
-                              : "Tap Claim to move this amount into your available balance. Then you can send or spend it."}
+                              : "When ready, release this amount into available balance so you can send or spend it."}
                           </p>
                           <p className="mt-1 text-[10px] text-muted-foreground/80">
                             Source: {SOURCE_LABEL[h.source]} · Created {formatWhen(h.createdAt)}
@@ -2278,10 +2241,10 @@ const lowBalance = balance === 0 && displayPending === 0
                         {h.claimState === "review"
                           ? "Under review"
                           : claimingHoldId === h.id
-                            ? "Claiming…"
+                            ? "Releasing…"
                             : (h.stackCount || 1) > 1
-                              ? `Claim ×${h.stackCount} to available`
-                              : "Claim to available balance"}
+                              ? `Release ×${h.stackCount} to available`
+                              : "Release to available balance"}
                       </button>
                     </li>
                   ))}

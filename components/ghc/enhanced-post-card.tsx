@@ -958,17 +958,18 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — separate quality curation from everyday response actions. */}
+      {/* Primary actions — quality (left) and social (right), never overlapping */}
       <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
-        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Respond</p>
       </div>
       <div
-        className="px-2 pb-2 pt-1 sm:px-3"
+        className="px-2 pb-2.5 pt-1 sm:px-3"
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <div className="grid w-full grid-cols-[auto_auto_auto_1fr_auto_auto_auto] items-center gap-1 sm:gap-1.5">
+        <div className="flex w-full flex-wrap items-center justify-between gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 sm:gap-1.5" role="group" aria-label="Quality votes">
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
@@ -1048,7 +1049,8 @@ function EnhancedPostCardInner({
               <ThumbsDown size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
               <span className="tabular-nums">{downvoteCount}</span>
             </button>
-          <div className="min-w-[4px]" aria-hidden />
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1" role="group" aria-label="Respond">
           <button
             type="button"
             aria-label="Comment"
@@ -1081,6 +1083,7 @@ function EnhancedPostCardInner({
           >
             <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
           </button>
+          </div>
         </div>
       </div>
 

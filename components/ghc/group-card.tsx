@@ -31,6 +31,8 @@ interface GroupCardProps {
   onToggleMute?: () => void
   onTogglePin?: () => void
   onJoin?: () => void
+  /** Privacy-aware CTA — Join vs Request to join */
+  joinLabel?: string
   memberAvatars?: Array<{ id: string; name: string; photo?: string }>
   onMemberProfile?: (memberId: string) => void
   region?: string
@@ -55,6 +57,7 @@ function GroupCardContent({
   isJoined = true,
   onClick,
   onJoin,
+  joinLabel = "Preview & join",
   region,
   role,
   isSample = false,
@@ -214,7 +217,7 @@ function GroupCardContent({
                 }}
                 className="ml-auto min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
               >
-                Preview & join
+                {joinLabel}
               </button>
             )}
           </div>

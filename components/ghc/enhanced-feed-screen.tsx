@@ -731,19 +731,28 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="gh-premium-feed-toolbar border-b border-border/50 bg-background/95 px-3 py-2 backdrop-blur">
           <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Feed filters">
-              {FEED_FILTERS.map((filter) => (
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" role="tablist" aria-label="Feed filters">
+              {FEED_FILTERS.map((filter) => {
+                const active = activeFilter === filter.value
+                return (
                 <button
                   key={filter.value}
                   type="button"
                   role="tab"
-                  aria-selected={activeFilter === filter.value}
+                  aria-selected={active}
+                  title={filter.hint || filter.label}
                   onClick={() => setActiveFilter(filter.value)}
-                  className={`relative inline-flex min-h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[12px] font-semibold transition-colors ${activeFilter === filter.value ? "border-[var(--gh-green)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                    active
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
+                      : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
                 >
-                  {filter.icon}<span>{filter.shortLabel}</span>
+                  <span className={active ? "opacity-100" : "opacity-80"} aria-hidden>{filter.icon}</span>
+                  <span>{filter.shortLabel}</span>
                 </button>
-              ))}
+                )
+              })}
             </div>
             <button type="button" onClick={() => setShowFeedControls((v) => !v)} aria-expanded={showFeedControls} aria-label="Personalize feed" className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card transition-colors ${showFeedControls || focusMode ? "border-emerald-500 text-emerald-700" : "border-border/60 text-muted-foreground hover:text-foreground"}`}>
               <Filter size={15} />

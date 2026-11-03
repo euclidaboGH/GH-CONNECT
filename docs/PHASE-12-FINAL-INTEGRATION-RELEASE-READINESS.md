@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.277.0` (2026-11-01)
+Release: `0.279.0` (2026-11-01)
 
 ## Delivered in v0.157.12
 

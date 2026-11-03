@@ -58,13 +58,22 @@ export function MessageScreen() {
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
-  const { deleteMessage, replyToMessage, matches, friends } = useGHC()
+  const { deleteMessage, replyToMessage, matches, friends, candidates } = useGHC() as {
+    deleteMessage?: (id: string) => void
+    replyToMessage?: (...args: unknown[]) => void
+    matches?: unknown[]
+    friends?: unknown[]
+    candidates?: unknown[]
+  }
   const ghc = {
     pinConversation: messaging.pinConversation,
     archiveConversation: messaging.archiveConversation,
     muteConversation: messaging.muteConversation,
     matches: Array.isArray(matches) ? matches : [],
     friends: Array.isArray(friends) ? friends : [],
+    candidates: Array.isArray(candidates) ? candidates : [],
+    refreshConversations: (messaging as { refreshConversations?: () => Promise<unknown> }).refreshConversations,
+    loadConversations: (messaging as { loadConversations?: () => Promise<unknown> }).loadConversations,
   }
 
   const conversations = useMemo(
@@ -76,6 +85,7 @@ export function MessageScreen() {
   /** Debounced query for filtering — keeps typing responsive on long inboxes */
   const [queryDebounced, setQueryDebounced] = useState("")
   const [filter, setFilter] = useState<InboxFilter>("all")
+  const [inboxRefreshing, setInboxRefreshing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const [draftConversationId, setDraftConversationId] = useState<string | null>(null)
@@ -144,11 +154,20 @@ export function MessageScreen() {
   }, [selectedId, loadConversationMessages, markConversationRead])
 
   useSectionRefresh("messages", async () => {
-    if (!selectedId || document.visibilityState === "hidden") return
-    await loadConversationMessages?.(selectedId)
+    if (document.visibilityState === "hidden") return
+    // Refresh open thread and keep inbox list current (names, unread, order)
+    try {
+      await ghc.refreshConversations?.()
+    } catch { /* optional on context */ }
+    try {
+      await (ghc as { loadConversations?: () => Promise<unknown> }).loadConversations?.()
+    } catch { /* */ }
+    if (selectedId) {
+      await loadConversationMessages?.(selectedId)
+    }
   }, {
     minIntervalMs: 5_000,
-    events: ["ghc:new-message", "ghc:messaging-reconcile"],
+    events: ["ghc:new-message", "ghc:messaging-reconcile", "ghc:messages-refresh"],
   })
 
   useEffect(() => {
@@ -337,7 +356,53 @@ export function MessageScreen() {
 
   const list = useMemo(() => {
     const q = queryDebounced.trim().toLowerCase()
-    let rows = conversations.filter((c) => c && !c.isArchived)
+    // Build a peer lookup from session graph so inbox rows never show blank names/photos
+    // when the conversation payload omitted display fields.
+    const peerIndex = new Map<string, { name?: string; photo?: string }>()
+    const indexPeer = (id: unknown, name?: unknown, photo?: unknown) => {
+      const key = String(id || "").trim()
+      if (!key) return
+      const prev = peerIndex.get(key) || {}
+      const n = typeof name === "string" && name.trim() ? name.trim() : prev.name
+      const ph = typeof photo === "string" && photo.trim() ? photo.trim() : prev.photo
+      peerIndex.set(key, { name: n, photo: ph })
+    }
+    try {
+      for (const c of (ghc.candidates || []) as Array<Record<string, unknown>>) {
+        indexPeer(c.id || c.userId, c.displayName || c.name, c.avatarUrl || c.photo || c.profilePhoto)
+      }
+      for (const f of (ghc.friends || []) as Array<Record<string, unknown> | string>) {
+        if (typeof f === "string") continue
+        indexPeer(f.id || f.userId, f.displayName || f.name, f.avatarUrl || f.photo || f.profilePhoto)
+      }
+      for (const m of (ghc.matches || []) as Array<Record<string, unknown> | string>) {
+        if (typeof m === "string") continue
+        indexPeer(m.id || m.userId, m.displayName || m.name, m.avatarUrl || m.photo || m.profilePhoto)
+      }
+    } catch {
+      /* best-effort enrichment */
+    }
+
+    let rows = conversations.filter((c) => c && !c.isArchived).map((c) => {
+      if (isCommunityConversation(c)) return c
+      const peerId = String(c.participantId || (c as { otherUserId?: string }).otherUserId || "").trim()
+      if (!peerId) return c
+      const hit = peerIndex.get(peerId)
+      if (!hit) return c
+      const needsName =
+        !c.participantName ||
+        c.participantName === "User" ||
+        c.participantName === "Unknown" ||
+        c.participantName === peerId ||
+        /^user[_-]/i.test(c.participantName)
+      const needsPhoto = !c.participantPhoto && !c.groupPhoto
+      if (!needsName && !needsPhoto) return c
+      return {
+        ...c,
+        participantName: needsName && hit.name ? hit.name : c.participantName,
+        participantPhoto: needsPhoto && hit.photo ? hit.photo : c.participantPhoto,
+      }
+    })
     if (filter === "unread") {
       rows = rows.filter((c) => Boolean(c.unread) || (c.unreadCount || 0) > 0)
     } else if (filter === "requests") {
@@ -359,7 +424,7 @@ export function MessageScreen() {
       if (pin !== 0) return pin
       return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
     })
-  }, [conversations, queryDebounced, filter])
+  }, [conversations, queryDebounced, filter, ghc.candidates, ghc.friends, ghc.matches])
 
   const selected = useMemo(() => {
     if (!selectedId) return null
@@ -941,7 +1006,35 @@ export function MessageScreen() {
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2"
         style={{ WebkitOverflowScrolling: "touch" }}
+        onTouchStart={(e) => {
+          const el = e.currentTarget
+          if (el.scrollTop <= 0) (el as HTMLElement & { _pullY?: number })._pullY = e.touches[0]?.clientY
+        }}
+        onTouchEnd={(e) => {
+          const el = e.currentTarget as HTMLElement & { _pullY?: number }
+          const start = el._pullY
+          el._pullY = undefined
+          if (start == null || el.scrollTop > 0 || inboxRefreshing) return
+          const dy = (e.changedTouches[0]?.clientY || 0) - start
+          if (dy < 72) return
+          setInboxRefreshing(true)
+          void (async () => {
+            try {
+              await ghc.refreshConversations?.()
+            } catch { /* */ }
+            try {
+              await (ghc as { loadConversations?: () => Promise<unknown> }).loadConversations?.()
+            } catch { /* */ }
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:messages-refresh", { detail: { reason: "pull" } }))
+            } catch { /* */ }
+            setInboxRefreshing(false)
+          })()
+        }}
       >
+        {inboxRefreshing ? (
+          <p className="px-3 py-1.5 text-center text-[11px] font-medium text-muted-foreground">Refreshing inbox…</p>
+        ) : null}
         {list.length === 0 ? (
           filter === "unread" ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

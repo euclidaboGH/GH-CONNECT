@@ -436,109 +436,128 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   }
 
   const rail = (
-    <div className="space-y-3" aria-label="Stories from your community">
+    <div className="space-y-2.5" aria-label="Stories">
       {scope === "feed" ? (
-        <div className="flex items-end justify-between gap-3 px-1">
-          <div>
-            <h2 className="text-[15px] font-extrabold tracking-tight text-foreground">Stories</h2>
-            <p className="text-[11px] text-muted-foreground">Moments from people you follow · 24h</p>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-black tracking-tight text-foreground">Stories</h2>
+            <p className="text-[11px] text-muted-foreground">
+              {otherStories.length + (ownStory ? 1 : 0) > 0
+                ? `${otherStories.length + (ownStory ? 1 : 0)} live · expire in 24h`
+                : "Share a moment · visible 24 hours"}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={openCreator}
+            className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm active:scale-[0.98]"
+          >
+            Create
+          </button>
         </div>
       ) : (
-        <div className="px-0">
-          <h2 className="text-[13px] font-extrabold tracking-tight text-foreground">Your moments</h2>
-          <p className="text-[11px] text-muted-foreground">Stories disappear after 24 hours</p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[13px] font-black tracking-tight text-foreground">Your moments</h2>
+            <p className="text-[11px] text-muted-foreground">Stories disappear after 24 hours</p>
+          </div>
+          <button
+            type="button"
+            onClick={openCreator}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground"
+          >
+            New
+          </button>
         </div>
       )}
-      <div className="gh-stories-rail flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 scrollbar-hide">
-        {/* Own story / add */}
+
+      <div
+        className="gh-stories-rail -mx-1 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-1 pb-1 pt-0.5 scrollbar-hide"
+        role="list"
+        aria-label="Story avatars"
+      >
+        {/* Own story bubble */}
         <button
           type="button"
-          onClick={() => (ownStory ? setViewing(ownStory) : openCreator())}
-          className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
+          role="listitem"
+          onClick={() => (ownStory ? openStory(ownStory) : openCreator())}
+          className="group flex w-[76px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={ownStory ? "View your story" : "Add a story"}
         >
           <span
-            className={`relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 shadow-sm transition group-active:scale-[0.98] ${
+            className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-full p-[3px] transition group-active:scale-[0.97] ${
               ownStory
-                ? "border-emerald-500 ring-2 ring-emerald-500/20"
-                : "border-dashed border-border/80 bg-muted/40"
+                ? "bg-gradient-to-tr from-emerald-500 via-teal-400 to-emerald-600 shadow-md shadow-emerald-500/20"
+                : "bg-gradient-to-tr from-border via-muted to-border"
             }`}
           >
-            {ownStory?.media?.url && !String(ownStory.media.url).startsWith("blob:") ? (
-              ownStory.media.type === "video" ? (
-                <video src={ownStory.media.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline autoPlay loop />
+            <span className="relative h-full w-full overflow-hidden rounded-full bg-card ring-2 ring-card">
+              {ownStory?.media?.url && !String(ownStory.media.url).startsWith("blob:") ? (
+                ownStory.media.type === "video" ? (
+                  <video src={ownStory.media.url} className="h-full w-full object-cover" muted playsInline />
+                ) : (
+                  <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" />
+                )
+              ) : profileAvatar ? (
+                <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" />
               ) : (
-                <LazyImage src={ownStory.media.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              )
-            ) : ownStory ? (
-              profileAvatar ? (
-                <>
-                  <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                  <div className="absolute inset-0 bg-black/35" />
-                  <div className="absolute inset-0 flex items-center justify-center p-2">
-                    <p className="line-clamp-4 whitespace-pre-wrap text-center text-[11px] font-bold leading-snug text-white drop-shadow">
-                      {ownStory.text || "Your moment"}
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center p-2" style={{ background: ownStory.background || STORY_BACKGROUNDS[0].value }}>
-                  <p className="line-clamp-4 whitespace-pre-wrap text-center text-[11px] font-bold leading-snug text-white drop-shadow">
-                    {ownStory.text || "Your moment"}
-                  </p>
-                </div>
-              )
-            ) : profileAvatar ? (
-              <LazyImage src={profileAvatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-700 to-teal-400" />
-            )}
-            {/* Single add badge — Instagram-style; no duplicate centered + */}
+                <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-800 to-teal-500 text-lg font-black text-white">
+                  {(profile?.displayName || profile?.username || "Y").slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </span>
             {!ownStory ? (
-              <span
-                className="absolute bottom-1.5 right-1.5 z-[1] flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-emerald-600 text-white shadow-md"
-                aria-hidden
-              >
-                <Plus size={14} strokeWidth={3} />
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-[2.5px] border-card bg-emerald-600 text-white shadow-md">
+                <Plus size={13} strokeWidth={3} aria-hidden />
               </span>
             ) : null}
           </span>
-          <span className="w-full truncate text-center text-[11px] font-semibold text-foreground">
-            {ownStory ? "Your story" : "Add story"}
+          <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-foreground">
+            {ownStory ? "Your story" : "Your story"}
           </span>
         </button>
 
         {otherStories.map((item) => {
           const label = String(item.name || item.ownerId || "Member").trim() || "Member"
-          const thumb = item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
+          const thumb =
+            item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
           const avatar = typeof item.photo === "string" && item.photo ? item.photo : null
+          const seen = seenStoryIds.includes(item.id)
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => setViewing(item)}
-              className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
-              aria-label={`View story from ${label}`}
+              role="listitem"
+              onClick={() => openStory(item)}
+              className="group flex w-[76px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              aria-label={`View story from ${label}${seen ? " (seen)" : ""}`}
             >
-              <span className="relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 border-transparent bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 p-[2px] shadow-sm transition group-active:scale-[0.98]">
-                <span className="relative block h-full w-full overflow-hidden rounded-[1.2rem] bg-card">
+              <span
+                className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-full p-[3px] transition group-active:scale-[0.97] ${
+                  seen
+                    ? "bg-muted-foreground/25"
+                    : "bg-gradient-to-tr from-pink-500 via-amber-400 to-emerald-500 shadow-md shadow-pink-500/15"
+                }`}
+              >
+                <span className="relative h-full w-full overflow-hidden rounded-full bg-card ring-2 ring-card">
                   {thumb ? (
                     item.media?.type === "video" ? (
-                      <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+                      <video src={thumb} className="h-full w-full object-cover" muted playsInline />
                     ) : (
-                      <LazyImage src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      <LazyImage src={thumb} alt="" className="h-full w-full object-cover" />
                     )
                   ) : avatar ? (
-                    <LazyImage src={avatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    <LazyImage src={avatar} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="absolute inset-0 flex items-center justify-center bg-muted text-lg font-bold text-muted-foreground">
+                    <span className="flex h-full w-full items-center justify-center bg-muted text-base font-bold text-muted-foreground">
                       {label.slice(0, 1).toUpperCase()}
                     </span>
                   )}
                 </span>
               </span>
-              <span className="w-full truncate text-center text-[11px] font-semibold text-foreground">{label}</span>
+              <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-foreground">
+                {label}
+              </span>
             </button>
           )
         })}
@@ -546,11 +565,16 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         {scope === "feed" && otherStories.length === 0 && !ownStory ? (
           <button
             type="button"
+            role="listitem"
             onClick={openCreator}
-            className="flex h-[88px] min-w-[148px] shrink-0 snap-start flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-border/80 bg-muted/30 px-3 text-center text-[11px] text-muted-foreground transition hover:bg-muted/50"
+            className="flex h-[72px] min-w-[140px] shrink-0 snap-start items-center gap-2 rounded-full border border-dashed border-border/70 bg-muted/25 px-3 text-left transition hover:bg-muted/40"
           >
-            <Sparkles size={18} className="mb-1.5 text-emerald-600" />
-            Be the first to share a moment with your community.
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/15 text-emerald-700">
+              <Sparkles size={16} />
+            </span>
+            <span className="text-[11px] font-medium leading-snug text-muted-foreground">
+              Be first — share a 24h moment
+            </span>
           </button>
         ) : null}
       </div>

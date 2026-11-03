@@ -752,8 +752,46 @@ export function NotificationBell({
                 Some notifications are temporarily unavailable. Please try again shortly.
               </div>
             ) : null}
+            {/* Focus first: All · Unread · Priority (simple segment control) */}
+            <div className="border-b border-border/50 px-3 py-2.5">
+              <div
+                className="flex rounded-2xl bg-muted/70 p-1"
+                role="tablist"
+                aria-label="Notification focus"
+              >
+                {([
+                  { id: "all" as const, label: "All" },
+                  {
+                    id: "unread" as const,
+                    label:
+                      unread > 0 ? `Unread · ${unread > 99 ? "99+" : unread}` : "Unread",
+                  },
+                  { id: "priority" as const, label: "Priority" },
+                ]).map((mode) => {
+                  const active = readFilter === mode.id
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setReadFilter(mode.id)}
+                      className={`min-h-9 flex-1 rounded-xl px-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                        active
+                          ? "bg-card text-foreground shadow-sm ring-1 ring-border/60"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Category chips with per-bucket unread counts */}
             <div
-              className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-hide"
+              className="flex gap-1.5 overflow-x-auto border-b border-border/50 px-3 py-2.5 scrollbar-hide"
               role="tablist"
               aria-label="Notification categories"
               onKeyDown={(e) => {
@@ -777,6 +815,7 @@ export function NotificationBell({
             >
               {NOTIFICATION_CENTER_BUCKETS.map((b) => {
                 const active = bucket === b.id
+                const count = bucketUnreadCounts[b.id] || 0
                 return (
                   <button
                     key={b.id}
@@ -785,29 +824,28 @@ export function NotificationBell({
                     aria-selected={active}
                     tabIndex={active ? 0 : -1}
                     onClick={() => setBucket(b.id)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                       active
-                        ? "bg-[var(--gh-green)] text-white"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
+                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
+                        : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
-                    {b.label}
+                    <span>{b.label}</span>
+                    {count > 0 ? (
+                      <span
+                        className={`min-w-[1.15rem] rounded-full px-1 text-center text-[10px] font-extrabold tabular-nums ${
+                          active ? "bg-white/25 text-white" : "bg-emerald-600/15 text-emerald-800 dark:text-emerald-200"
+                        }`}
+                      >
+                        {count > 99 ? "99+" : count}
+                      </span>
+                    ) : null}
                   </button>
                 )
               })}
-            </div>
-            <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2" aria-label="Notification read filter">
-              {(["all", "unread", "priority"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setReadFilter(mode)}
-                  className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${readFilter === mode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
-                >
-                  {mode === "all" ? "All" : mode === "priority" ? "Priority" : `Unread${bucketUnreadCounts[bucket] ? ` (${bucketUnreadCounts[bucket]})` : ""}`}
-                </button>
-              ))}
-              <span className="ml-auto text-[10px] text-muted-foreground">{listLoading ? "Syncing…" : "Up to date"}</span>
+              <span className="ml-auto shrink-0 self-center pl-2 text-[10px] font-medium text-muted-foreground">
+                {listLoading ? "Syncing…" : "Up to date"}
+              </span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto [content-visibility:auto] overscroll-contain">
@@ -821,13 +859,40 @@ export function NotificationBell({
               ) : null}
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center px-6 py-14 text-center">
-                  <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">
                     <Bell size={26} />
                   </span>
-                  <p className="text-[15px] font-bold text-foreground">{EMPTY_COPY[bucket]?.title || "Nothing here"}</p>
-                  <p className="mt-1 max-w-[16rem] text-[12px] leading-relaxed text-muted-foreground">
-                    {EMPTY_COPY[bucket]?.body}
+                  <p className="text-[15px] font-bold text-foreground">
+                    {readFilter === "unread"
+                      ? "No unread alerts"
+                      : readFilter === "priority"
+                        ? "No priority alerts"
+                        : EMPTY_COPY[bucket]?.title || "Nothing here"}
                   </p>
+                  <p className="mt-1 max-w-[17rem] text-[12px] leading-relaxed text-muted-foreground">
+                    {readFilter === "unread"
+                      ? "You’re caught up in this category. Switch to All to review history."
+                      : readFilter === "priority"
+                        ? "Priority covers messages, orders, and money notices that still need attention."
+                        : EMPTY_COPY[bucket]?.body}
+                  </p>
+                  {readFilter !== "all" ? (
+                    <button
+                      type="button"
+                      onClick={() => setReadFilter("all")}
+                      className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm"
+                    >
+                      Show all notifications
+                    </button>
+                  ) : bucket !== "all" ? (
+                    <button
+                      type="button"
+                      onClick={() => setBucket("all")}
+                      className="mt-4 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
+                    >
+                      View all categories
+                    </button>
+                  ) : null}
                 </div>
               ) : expanded && activeThread ? (
                   <div className="flex flex-col">
