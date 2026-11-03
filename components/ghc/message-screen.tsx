@@ -58,9 +58,15 @@ export function MessageScreen() {
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
-  const { deleteMessage, replyToMessage, matches, friends, candidates } = useGHC() as {
-    deleteMessage?: (id: string) => void
-    replyToMessage?: (...args: unknown[]) => void
+  const {
+    deleteMessage,
+    replyToMessage,
+    matches,
+    friends,
+    candidates,
+  } = useGHC() as unknown as {
+    deleteMessage?: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
+    replyToMessage?: (conversationId: string, replyToMessageId: string, text: string) => Promise<boolean>
     matches?: unknown[]
     friends?: unknown[]
     candidates?: unknown[]
@@ -556,7 +562,7 @@ export function MessageScreen() {
     } catch {
       /* */
     }
-  }, [stopTyping, rawConversations])
+  }, [stopTyping, rawConversations, selectedId])
 
   const closeThread = useCallback(() => {
     stopTyping()

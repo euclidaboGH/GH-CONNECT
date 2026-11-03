@@ -1930,13 +1930,13 @@ export function MarketplaceScreen({
       list = list.filter((o) => o.sellerId === viewerId)
     }
     return [...list].sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
-  }, [domain, tick, durableOrders, orderRoleFilter])
+  }, [domain, durableOrders, orderRoleFilter])
 
   const outcomeOrders = useMemo(() => {
     if (durableOrders.length) return durableOrders
     if (!domain?.getOrders) return [] as MarketplaceOrder[]
     try { return domain.getOrders?.() || [] } catch { return [] as MarketplaceOrder[] }
-  }, [domain, tick, durableOrders])
+  }, [domain, durableOrders])
 
   const [remoteSelected, setRemoteSelected] = useState<MarketplaceListing | null>(null)
 
