@@ -732,6 +732,10 @@ export function CommunitiesScreen() {
       if (ok) {
         // Domain join / request succeeded. Toast authority is in joinCommunity
         // (Joined vs Request sent vs device-only) — never blanket "Joined" for pending.
+        try {
+          // Prefer My so the community is visible without hunting the Discover list.
+          setDirectory("my")
+        } catch { /* */ }
         if (communityLocalCacheAllowed()) {
           const meId = IdentityService.getCurrentUserId()
           const after = resolveMembershipState(
@@ -1321,7 +1325,7 @@ export function CommunitiesScreen() {
         </div>
       ) : null}
       <div
-        className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
+        className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-y-contain scrollbar-hide" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
         onScroll={onHeaderScroll}
       >
         <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5" role="region" aria-label="Community directory">

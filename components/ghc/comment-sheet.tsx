@@ -503,7 +503,7 @@ useEffect(() => {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end bg-black/50"
+      className="fixed inset-0 z-[200] flex items-end bg-black/50"
       role="presentation"
       onClick={onClose}
     >

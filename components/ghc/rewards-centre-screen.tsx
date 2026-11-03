@@ -373,7 +373,14 @@ export function RewardsCentreScreen({
   }, [showLearnMore])
 
 
-  const claimPendingReward = useCallback(
+  
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:section-refresh", { detail: { section: "rewards", reason: "opened" } }))
+    } catch { /* */ }
+  }, [])
+
+const claimPendingReward = useCallback(
     async (rewardId: string) => {
       if (claimingId) return
       if (typeof navigator !== "undefined" && !navigator.onLine) {

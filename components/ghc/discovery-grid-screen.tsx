@@ -58,6 +58,7 @@ const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: string }[] = [
 ]
 
 export function DiscoveryGridScreen() {
+  const [localFollowing, setLocalFollowing] = useState<Set<string>>(() => new Set())
   const ghc = useGHCDiscovery() as {
     candidates?: any[]
     profile?: {
@@ -406,6 +407,13 @@ export function DiscoveryGridScreen() {
         const followApi = ghc as typeof ghc & FollowCapable
         if (typeof followApi.followUser === "function") {
           // Call through followApi so TypeScript accepts the optional method; static gate still sees ghc.followUser above.
+          // Instant UI: mark following locally so CTA flips before soft-revalidate.
+          setLocalFollowing((prev) => {
+            const next = new Set(prev)
+            if (follow) next.add(id)
+            else next.delete(id)
+            return next
+          })
           void followApi.followUser(id)
             .then(() => {
               try {
@@ -805,11 +813,37 @@ export function DiscoveryGridScreen() {
                     matchScore={undefined}
                     matchReason={legacy._reason}
                     mutualInterestNames={legacy._sharedInterests}
+                    isFollowing={
+                      localFollowing.has(id) ||
+                      (Array.isArray((ghc as { following?: string[] }).following) &&
+                        (ghc as { following?: string[] }).following!.includes(id)) ||
+                      (Array.isArray(ghc.profile?.following) && ghc.profile!.following!.includes(id))
+                    }
+                    onFollow={() => void onCardAction(localFollowing.has(id) ? "unfollow" : "follow", candidate)}
                     onViewProfile={() => onCardAction("view_profile", candidate)}
                     onLike={() => void onLike(id)}
                     onPass={() => void onPass(id)}
                     onMessage={() => onCardAction("message", candidate)}
-                    onBlock={() => ghc.blockUser?.(id)}
+                    onBlock={() => {
+                      void (async () => {
+                        try {
+                          await ghc.blockUser?.(id)
+                          setLocalFollowing((prev) => {
+                            const n = new Set(prev)
+                            n.delete(id)
+                            return n
+                          })
+                          try {
+                            window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+                            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "User blocked", type: "success" } }))
+                          } catch { /* */ }
+                        } catch {
+                          try {
+                            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Could not block", type: "error" } }))
+                          } catch { /* */ }
+                        }
+                      })()
+                    }}
                     onReport={() => ghc.reportContent?.("user", id, "discover")}
                     userInterests={userInterests}
                     userLocation={userLocation || undefined}

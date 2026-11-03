@@ -72,9 +72,18 @@ export function MessageScreen() {
     candidates?: unknown[]
   }
   const ghc = {
-    pinConversation: messaging.pinConversation,
-    archiveConversation: messaging.archiveConversation,
-    muteConversation: messaging.muteConversation,
+    pinConversation: async (id: string) => {
+      await messaging.pinConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation pinned", type: "success" } })) } catch { /* */ }
+    },
+    archiveConversation: async (id: string) => {
+      await messaging.archiveConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation archived", type: "success" } })) } catch { /* */ }
+    },
+    muteConversation: async (id: string) => {
+      await messaging.muteConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation muted", type: "success" } })) } catch { /* */ }
+    },
     matches: Array.isArray(matches) ? matches : [],
     friends: Array.isArray(friends) ? friends : [],
     candidates: Array.isArray(candidates) ? candidates : [],
@@ -941,9 +950,33 @@ export function MessageScreen() {
             </p>
           </div>
           {unreadCount > 0 ? (
-            <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums shadow-sm">
-              {unreadCount} new
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums shadow-sm">
+                {unreadCount} new
+              </span>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
+                onClick={() => {
+                  try {
+                    const list = Array.isArray(conversations) ? conversations : []
+                    for (const c of list) {
+                      const id = c?.id
+                      if (!id) continue
+                      const unread = Boolean(c.unread) || Number(c.unreadCount || 0) > 0
+                      if (unread && typeof markConversationRead === "function") {
+                        void markConversationRead(id)
+                      }
+                    }
+                    setStatusMsg?.("Inbox marked read")
+                    window.setTimeout(() => setStatusMsg?.(null), 1600)
+                  } catch { /* */ }
+                }}
+                aria-label="Mark all conversations as read"
+              >
+                Mark all read
+              </button>
+            </div>
           ) : null}
         </div>
         <div className="mt-2.5">

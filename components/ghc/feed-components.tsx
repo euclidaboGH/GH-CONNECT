@@ -174,7 +174,16 @@ export const PostCard = memo(function PostCard({
         <QuoteRepost
           originalPost={post}
           quoteText={post.content}
-          onViewOriginal={() => { if (process.env.NODE_ENV !== "production") console.log("View original") }}
+          onViewOriginal={() => {
+            const origId = (post as { quoteOf?: string; quote_of?: string }).quoteOf || (post as { quote_of?: string }).quote_of
+            try {
+              if (origId) {
+                window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: String(origId), action: "view" } }))
+              } else {
+                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Original post unavailable", type: "info" } }))
+              }
+            } catch { /* */ }
+          }}
         />
       )}
 
@@ -184,7 +193,15 @@ export const PostCard = memo(function PostCard({
         <EnhancedPostContent
           content={post.content}
           onMentionClick={(userId) => onFollowFromPost?.(userId)}
-          onHashtagClick={(hashtag) => { if (process.env.NODE_ENV !== "production") console.log("Hashtag:", hashtag) }}
+          onHashtagClick={(hashtag) => {
+            const tag = String(hashtag || "").trim()
+            if (!tag) return
+            const q = tag.startsWith("#") ? tag : `#${tag}`
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:feed-search", { detail: { query: q } }))
+              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+            } catch { /* */ }
+          }}
           onLinkClick={(url) => window.open(url, "_blank")}
         />
         </div>

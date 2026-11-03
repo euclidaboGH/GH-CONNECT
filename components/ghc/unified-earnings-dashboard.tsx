@@ -149,6 +149,8 @@ function statusTone(status?: string): string {
 }
 
 export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolean }) {
+  // Wallet primary actions (Withdraw / Status / Linked) focus this surface as source of truth.
+
   const [snap, setSnap] = useState<Withdrawable | null>(null)
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -632,15 +634,33 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     await onRequestPayout()
   }
 
+
+  useEffect(() => {
+    const onFocus = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as { action?: string } | undefined
+      const action = detail?.action
+      if (action === "withdraw") {
+        void runWithdraw()
+      } else if (action === "status") {
+        void refresh()
+        setPayoutMsg("Eligibility and linked Pi status are shown above. Withdraw stays on this card.")
+      } else if (action === "linked") {
+        void onAuthorizeWallet()
+      }
+    }
+    window.addEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+    return () => window.removeEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+  }, [runWithdraw, refresh, onAuthorizeWallet])
+
   return (
     <section
-      id="gh-pi-earnings-tools"
       className={
         compact
           ? "overflow-hidden rounded-2xl border border-border/60 bg-card"
           : "mx-3 mt-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
       }
       aria-label="Pi balance"
+      data-pi-earnings-root
     >
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div className="flex items-center gap-2">

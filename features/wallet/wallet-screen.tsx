@@ -656,6 +656,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       return
     }
     setClaimingHoldId(holdId)
+    // Safety: never leave primary wallet actions locked if claim hangs
+    window.setTimeout(() => {
+      setClaimingHoldId((cur) => (cur === holdId ? null : cur))
+    }, 45000)
     setClaimFeedback(null)
     try {
       const hold = pendingHolds.find((h) => h.id === holdId)
@@ -1230,22 +1234,21 @@ const lowBalance = balance === 0 && displayPending === 0
               <WalletPrimaryActions
                 embedded
                 assetRail={assetRail}
-                disabled={!!claimingHoldId}
+                disabled={false}
                 onSend={() => {
                   if (assetRail === "pi") {
                     setSendEducate(null)
                     setHistoryRail("pi")
-                    // PI "send" is earnings withdrawal — scroll to PI tools in dashboard
-                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    setTab("activity")
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "withdraw" } }))
+                    } catch { /* */ }
+                    requestAnimationFrame(() => {
+                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    })
                     return
                   }
-                  if (balance <= 0 && (displayPending > 0 || pending > 0)) {
-                    setSendEducate(
-                      "Only available GHC can be sent. Pending holds mature on the server — check Pending status or claim matured rewards in Rewards."
-                    )
-                    setShowPendingSheet(true)
-                    return
-                  }
+                  // Always open Send flow — zero balance is handled inside the flow, not by dead buttons.
                   setSendEducate(null)
                   setP2pMode("send")
                   setP2pError(null)
@@ -1254,7 +1257,13 @@ const lowBalance = balance === 0 && displayPending === 0
                 onRequest={() => {
                   if (assetRail === "pi") {
                     setSendEducate(null)
-                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    setTab("activity")
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "status" } }))
+                    } catch { /* */ }
+                    requestAnimationFrame(() => {
+                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    })
                     return
                   }
                   setSendEducate(null)
@@ -1264,7 +1273,14 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onReceive={() => {
                   if (assetRail === "pi") {
-                    setSendEducate("PI is credited to your earnings ledger from rewards and cashback — not via P2P receive.")
+                    setSendEducate(null)
+                    setTab("activity")
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "linked" } }))
+                    } catch { /* */ }
+                    requestAnimationFrame(() => {
+                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    })
                     return
                   }
                   setSendEducate(null)
@@ -1320,23 +1336,28 @@ const lowBalance = balance === 0 && displayPending === 0
             </div>
           </section>
 
-          {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
+          {/* Single PI earnings surface — source of truth for withdraw / auth / eligibility (no duplicate CTAs) */}
           {assetRail === "pi" ? (
-            <div id="gh-pi-earnings-tools" className="scroll-mt-20 space-y-3">
+            <div id="gh-pi-earnings-tools" className="mx-3 mt-3 scroll-mt-20 space-y-3">
               <UnifiedEarningsDashboard compact />
               <PiCashbackSummary />
             </div>
           ) : (
-            <div id="gh-pi-earnings-tools" className="scroll-mt-20">
-              <details className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card open:shadow-sm">
-                <summary className="cursor-pointer list-none px-3.5 py-3 text-[12px] font-bold text-muted-foreground [&::-webkit-details-marker]:hidden">
-                  PI earnings & cashback
-                </summary>
-                <div className="space-y-3 border-t border-border/50 px-2 pb-3 pt-2">
-                  <UnifiedEarningsDashboard compact />
-                  <PiCashbackSummary />
-                </div>
-              </details>
+            <div className="mx-3 mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAssetRail("pi")
+                  setHistoryRail("pi")
+                  setTab("activity")
+                }}
+                className="w-full rounded-2xl border border-violet-200/80 bg-violet-50/60 px-3.5 py-3 text-left transition hover:bg-violet-50 dark:border-violet-900 dark:bg-violet-950/30"
+              >
+                <p className="text-[12px] font-bold text-violet-900 dark:text-violet-100">Pi earnings</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Switch to the Pi rail for withdraw, linked identity, and eligibility — one place, no duplicate buttons.
+                </p>
+              </button>
             </div>
           )}
 
@@ -1944,7 +1965,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <div className="min-w-0">
                 <p className="text-[13px] font-bold text-foreground">Add GHC</p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Buy utility packs with π when needed. Membership and profile boosts stay on their own screens — not mixed into balances.
+                  Buy GHC utility packs with π when needed. VIP / VVIP membership is only sold on the Membership screen — never from Wallet.
                 </p>
               </div>
               <button

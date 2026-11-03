@@ -470,7 +470,7 @@ function ListingDetail({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y] overscroll-contain">
         <SurfaceIntro
           kicker="Commerce"
           title="Buy & sell with confidence"
@@ -1692,6 +1692,9 @@ export function MarketplaceScreen({
     })
     setBucket("cart")
     try {
+      const next = getMarketplaceCart()
+      const count = next.reduce((n, i) => n + (Number(i.quantity) || 0), 0)
+      window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count } }))
       window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Added to cart", type: "success" } }))
     } catch { /* */ }
   }, [])
@@ -2307,9 +2310,27 @@ export function MarketplaceScreen({
         {bucket === "cart" ? (
           <CartPanel
             items={cartItems}
-            onChange={(id, quantity) => setCartItems(updateMarketplaceCartQuantity(id, quantity))}
-            onRemove={(id) => setCartItems(removeMarketplaceCartItem(id))}
-            onClear={() => { clearMarketplaceCart(); setCartItems([]) }}
+            onChange={(id, quantity) => {
+              const next = updateMarketplaceCartQuantity(id, quantity)
+              setCartItems(next)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: next.reduce((n, i) => n + (i.quantity || 0), 0) } }))
+              } catch { /* */ }
+            }}
+            onRemove={(id) => {
+              const next = removeMarketplaceCartItem(id)
+              setCartItems(next)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: next.reduce((n, i) => n + (Number(i.quantity) || 0), 0) } }))
+              } catch { /* */ }
+            }}
+            onClear={() => {
+              clearMarketplaceCart()
+              setCartItems([])
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: 0 } }))
+              } catch { /* */ }
+            }}
             onContinueShopping={() => setBucket("browse")}
           />
         ) : null}

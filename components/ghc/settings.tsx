@@ -791,7 +791,20 @@ export function SettingsScreen({
                       <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{name}</span>
                       <button
                         type="button"
-                        onClick={() => void unblockUser?.(id)}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              await unblockUser?.(id)
+                              try {
+                                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "User unblocked", type: "success" } }))
+                              } catch { /* */ }
+                            } catch {
+                              try {
+                                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Could not unblock", type: "error" } }))
+                              } catch { /* */ }
+                            }
+                          })()
+                        }}
                         className="min-h-10 rounded-full border border-border px-3 text-[12px] font-bold text-foreground"
                       >
                         Unblock

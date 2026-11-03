@@ -433,8 +433,9 @@ export function MatchScreen() {
             <EmptyState
               variant="matches"
               title="No likes yet"
-              description="When someone likes you on Discover, they appear here until you match. Liking is interest only — Connect is a separate request."
+              description="Likes from Discover show here. Like someone back to match — Connect is a separate request."
               action={{ label: "Open Discover", onClick: handleStartSwiping }}
+              secondaryAction={{ label: "Refresh", onClick: () => { try { window.dispatchEvent(new CustomEvent("ghc:section-refresh", { detail: { section: "matches" } })) } catch { /* */ } } }}
             />
           ) : (
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4" role="list" aria-label="People who liked you">

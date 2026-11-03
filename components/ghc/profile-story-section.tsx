@@ -582,7 +582,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   )
 
   const creator = creatorOpen ? (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-[#07110f] text-white" role="dialog" aria-modal="true" aria-label="Create a story">
+    <div className="fixed inset-0 z-[220] flex flex-col bg-[#07110f] text-white" role="dialog" aria-modal="true" aria-label="Create a story">
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <button type="button" onClick={closeCreator} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20" aria-label="Close story creator"><X size={20} /></button>
         <div className="min-w-0 text-center"><p className="text-sm font-bold tracking-wide">Create a story</p><p className="text-[11px] text-white/55">A moment that disappears in 24 hours</p></div>

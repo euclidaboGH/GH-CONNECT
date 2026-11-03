@@ -1049,7 +1049,21 @@ export function ProfileScreen({
               }).slice(0, 18)}
             </div>
             {posts.every((post) => !(Array.isArray((post as any).images) && (post as any).images.length) && !(post as any).video) ? (
-              <p className="mt-3 text-center text-[12px] text-muted-foreground">Photos and videos from your posts appear here.</p>
+              <div className="mt-3 rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-center">
+                <p className="text-[12px] font-semibold text-foreground">No media yet</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Photos and videos from your posts appear here.</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:focus-composer", { detail: { source: "profile-media-empty" } }))
+                    } catch { /* */ }
+                  }}
+                >
+                  Post a photo or video
+                </button>
+              </div>
             ) : null}
             <section className="mt-4" aria-label="Moments">
               <ProfileStorySection scope="profile" />
@@ -1092,7 +1106,20 @@ export function ProfileScreen({
             ) : posts.length === 0 ? (
               <div className="m-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-7 text-center">
                 <p className="text-[13px] font-semibold text-foreground">Your timeline starts here</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Use the composer above to share a thought, photo, video or update.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Share a thought, photo, video or update — it appears here and on the home feed.</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white shadow-sm"
+                  onClick={() => {
+                    try {
+                      const el = document.getElementById("gh-profile-composer") || document.querySelector("[data-composer-root]")
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                      window.dispatchEvent(new CustomEvent("ghc:focus-composer", { detail: { source: "profile-empty" } }))
+                    } catch { /* */ }
+                  }}
+                >
+                  Create a post
+                </button>
               </div>
             ) : (
               <ul className="space-y-3 p-3" role="list" aria-label="Your posts timeline">

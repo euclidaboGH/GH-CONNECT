@@ -845,7 +845,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
         <div
           ref={containerRef}
-          className="gh-premium-feed-scroll min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]"
+          className="gh-premium-feed-scroll min-h-0 flex-1 overflow-y-auto [touch-action:pan-y] pb-[var(--gh-screen-bottom-inset)] scrollbar-hide [-webkit-overflow-scrolling:touch]"
           onScroll={onHeaderScroll}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -884,7 +884,20 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               variant="feed"
               title={searchQuery.trim() ? "No matching posts" : undefined}
               description={searchQuery.trim() ? "Try another keyword or hashtag." : hasRealPosts ? "No posts match this filter yet. Try another feed filter." : undefined}
-              action={searchQuery.trim() ? { label: "Clear search", onClick: () => setSearchQuery("") } : { label: "Discover people", onClick: () => setTab("discover") }}
+              action={searchQuery.trim()
+                ? { label: "Clear search", onClick: () => setSearchQuery("") }
+                : {
+                    label: "Refresh feed",
+                    onClick: () => { void handleRefresh() },
+                  }}
+              secondaryAction={
+                searchQuery.trim()
+                  ? undefined
+                  : {
+                      label: "Find people",
+                      onClick: () => setTab("discover"),
+                    }
+              }
             />
           ) : (
             <div className="gh-premium-feed-list gh-feed-column space-y-4 px-2 py-3 sm:px-3">

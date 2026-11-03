@@ -610,7 +610,15 @@ function EnhancedPostCardInner({
           </ActionSheetItem>
         )}
         {onSave && (
-          <ActionSheetItem icon={<Bookmark size={16} />} onClick={() => { onSave(post.id); setShowMenu(false) }}>
+          <ActionSheetItem icon={<Bookmark size={16} />} onClick={() => {
+              onSave(post.id)
+              setShowMenu(false)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:toast", {
+                  detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
+                }))
+              } catch { /* */ }
+            }}>
             {isSaved ? "Remove from saved" : "Save post"}
           </ActionSheetItem>
         )}
@@ -1066,7 +1074,14 @@ function EnhancedPostCardInner({
             type="button"
             aria-label={isSaved ? "Unsave" : "Save"}
             aria-pressed={isSaved}
-            onClick={() => onSave(post.id)}
+            onClick={() => {
+              onSave(post.id)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:toast", {
+                  detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
+                }))
+              } catch { /* */ }
+            }}
             className={`inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
               isSaved
                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"

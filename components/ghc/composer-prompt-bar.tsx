@@ -4,6 +4,7 @@
  * World-class inline composer entry — shared by Feed and Profile.
  * Opens the canonical Create hub / UnifiedCompose pipeline. No second publisher.
  */
+import { useEffect, useRef } from "react"
 import { Image as ImageIcon, Smile, Video } from "lucide-react"
 
 export function ComposerPromptBar({
@@ -24,9 +25,22 @@ export function ComposerPromptBar({
   className?: string
 }) {
   const letter = (avatarLetter || "G").trim().slice(0, 1).toUpperCase() || "G"
+  const openRef = useRef(onOpen)
+  openRef.current = onOpen
+  useEffect(() => {
+    const onFocus = () => {
+      try {
+        openRef.current?.()
+      } catch { /* */ }
+    }
+    window.addEventListener("ghc:focus-composer", onFocus)
+    return () => window.removeEventListener("ghc:focus-composer", onFocus)
+  }, [])
 
   return (
     <section
+      id="gh-profile-composer"
+      data-composer-root
       className={`rounded-[1.35rem] border border-border/70 bg-card p-3 shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)] ${className}`}
       aria-label="Create a post"
     >

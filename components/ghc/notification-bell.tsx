@@ -651,6 +651,10 @@ export function NotificationBell({
     try { notificationSystem.markAllAsRead?.() } catch { /* */ }
     setItems((prev) => prev.map((x) => ({ ...x, read: true })))
     setUnread(0)
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { unread: 0 } }))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "All notifications marked read", type: "success" } }))
+    } catch { /* */ }
     const results = await Promise.all([
       fetch("/api/social/notifications", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },

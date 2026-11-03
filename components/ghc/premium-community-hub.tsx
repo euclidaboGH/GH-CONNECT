@@ -722,7 +722,7 @@ export function PremiumCommunityHub({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [touch-action:pan-y]">
         {/* Join with eyes open */}
         {showJoinConfirm && !community.isJoined && (
           <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-3 dark:border-amber-900 dark:bg-amber-950/40">

@@ -425,13 +425,13 @@ export function SendGhcFlow({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Send GHC"
     >
-      <button type="button" className="absolute inset-0" aria-label="Close send flow" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border bg-card shadow-2xl sm:rounded-[1.75rem]">
+      <button type="button" className="absolute inset-0 z-0" aria-label="Close send flow" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[92vh] pointer-events-auto w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border bg-card shadow-2xl sm:rounded-[1.75rem]">
         {/* Header */}
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           {step !== "success" && step !== "sending" && step !== "reconciling" && (
