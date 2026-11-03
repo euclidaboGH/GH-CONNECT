@@ -1235,16 +1235,6 @@ function CartPanel({
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const totals = useMemo(() => {
-    // Phase 2: estimated total excludes own listings (not checkout-eligible)
-    const map = new Map<string, number>()
-    for (const item of purchasableItems) {
-      const currency = (item.currency || "GHC").toUpperCase()
-      map.set(currency, (map.get(currency) || 0) + Math.max(0, Number(item.price) || 0) * item.quantity)
-    }
-    return map
-  }, [purchasableItems])
-
   const viewerId = IdentityService.getCurrentUserId() || ""
   const ownItems = useMemo(
     () => items.filter((i) => viewerId && i.sellerId && i.sellerId === viewerId),
@@ -1254,6 +1244,15 @@ function CartPanel({
     () => items.filter((i) => !(viewerId && i.sellerId && i.sellerId === viewerId)),
     [items, viewerId],
   )
+  const totals = useMemo(() => {
+    // Phase 2: estimated total excludes own listings (not checkout-eligible)
+    const map = new Map<string, number>()
+    for (const item of purchasableItems) {
+      const currency = (item.currency || "GHC").toUpperCase()
+      map.set(currency, (map.get(currency) || 0) + Math.max(0, Number(item.price) || 0) * item.quantity)
+    }
+    return map
+  }, [purchasableItems])
 
   const checkout = async () => {
     if (busy || !items.length) return

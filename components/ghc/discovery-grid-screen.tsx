@@ -402,9 +402,11 @@ export function DiscoveryGridScreen() {
         // Phase 1: prefer context followUser so session following[] updates and cards
         // leave the Discover pool / show Following — not a silent socialFollow side-path.
         // followUser verifies server status then toggles; safe for both follow and unfollow.
-        const followUserFn = (ghc as { followUser?: (userId: string) => Promise<void> }).followUser
-        if (typeof followUserFn === "function") {
-          void followUserFn(id)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ghc.followUser on full context
+        const followApi = ghc as any
+        if (typeof followApi.followUser === "function") {
+          void followApi
+            .followUser(id)
             .then(() => {
               try {
                 window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
