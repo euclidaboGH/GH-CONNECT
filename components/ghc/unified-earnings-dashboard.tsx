@@ -715,15 +715,30 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
 
       {quoteDetail ? (
-        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
-            {quoteDetail.gross} π − {feePct}% fee ({quoteDetail.fee} π) → <span className="font-semibold text-foreground">{quoteDetail.net} π</span>
+        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/20 p-3 text-[12px]" data-quote-detail>
+          <p className="font-semibold text-foreground">Withdrawal quote</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {quoteDetail.gross} π − {feePct}% fee ({quoteDetail.fee} π) →{" "}
+            <span className="font-semibold text-foreground">{quoteDetail.net} π</span>
             {quoteDetail.recipientUsername ? ` → @${quoteDetail.recipientUsername}` : ""}
           </p>
         </div>
       ) : null}
 
-      <div className="px-4 pb-3">
+      <div className="px-4 pb-3 space-y-2">
+        <button
+          type="button"
+          onClick={() => void onPreviewFee()}
+          disabled={
+            requestingPayout ||
+            snap.eligible !== true ||
+            snap.piWalletLinked !== true ||
+            !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)
+          }
+          className="inline-flex min-h-10 w-full items-center justify-center rounded-full border border-border/70 bg-background px-4 text-[13px] font-semibold text-foreground transition hover:bg-muted/50 disabled:opacity-50"
+        >
+          Preview 3% fee
+        </button>
         <button
           type="button"
           onClick={() => void runWithdraw()}
@@ -745,7 +760,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
                 ? "Authorize Pi wallet"
                 : !quoteDetail
                   ? "Review fee & withdraw"
-                  : "Withdraw to Pi"}
+                  : "Withdraw to Pi wallet"}
         </button>
         {payoutMsg ? (
           <p className="mt-2 text-center text-[12px] font-medium text-amber-800 dark:text-amber-200" role="status">

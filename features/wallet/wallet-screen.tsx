@@ -1302,7 +1302,7 @@ const lowBalance = balance === 0 && displayPending === 0
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[13px] font-black tracking-tight text-foreground">Money & benefits</p>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Wallet holds balances and History. Claims open in Rewards; VIP plans open in Membership. GHC and Pi stay separate rails.</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Wallet holds balances and History. Claims open in Rewards; VIP plans open in Membership. GHC and Pi remain separate rails.</p>
               </div>
               <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Protected</span>
             </div>

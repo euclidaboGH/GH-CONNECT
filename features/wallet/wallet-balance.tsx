@@ -198,6 +198,8 @@ export function WalletBalanceCard({
         <button
           type="button"
           aria-pressed={piSelected}
+          role="option"
+          aria-selected={selectedRail === "pi"}
           onClick={() => onSelectRail?.("pi")}
           className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
             piSelected
@@ -246,6 +248,8 @@ export function WalletBalanceCard({
         <button
           type="button"
           aria-pressed={!piSelected}
+          role="option"
+          aria-selected={selectedRail === "ghc"}
           onClick={() => onSelectRail?.("ghc")}
           className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
             !piSelected
@@ -325,7 +329,7 @@ export function WalletBalanceCard({
       ) : null}
 
       <p className="sr-only">
-        PI and GHC are never added together. GHC utility and PI earnings remain separate assets and separate ledgers.
+        GHC and Pi remain separate rails. PI and GHC are never added together. GHC utility and PI earnings remain separate assets and separate ledgers.
         {" "}{ASSET_POLICY.ghcRailsCopy} {ASSET_POLICY.piRailsCopy}
       </p>
     </section>
