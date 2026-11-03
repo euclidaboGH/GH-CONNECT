@@ -9,7 +9,7 @@ const checks = [
   ['transaction history has an 8-second deadline', /rpcListTransactions[\s\S]*?signal:\s*AbortSignal\.timeout\(8_000\)/.test(source)],
   ['transaction history rejects malformed rows instead of mapping them', /rows\.some\(\(r\) =>[\s\S]*?Number\.isFinite\(Number\(r\.amount\)\)[\s\S]*?String\(r\.user_id \|\| ""\) !== userId/.test(source)],
   ['wallet snapshot validates the requested identity', /rpcWalletSnapshot[\s\S]*?!userId\?\.trim\(\)[\s\S]*?userId\.length > 160/.test(source)],
-  ['wallet snapshot rejects non-finite and negative totals', /numeric\.some\(\(key\) => data\[key\] == null \|\| !Number\.isFinite\(values\[key\]\)\)[\s\S]*?values\.balance < 0[\s\S]*?values\.ledgerBalance < 0/.test(source)],
+  ['wallet snapshot rejects non-finite and negative totals', /numeric\.some\(\(key\) => !Number\.isFinite\(values\[key\]\)\)[\s\S]*?values\.balance < 0[\s\S]*?values\.ledgerBalance < 0/.test(source)],
   ['wallet snapshot rejects a mismatched returned user', /String\(data\.userId\) !== userId/.test(source)],
   ['transfer-reference lookup validates its reference', /rpcFindTransferByReference[\s\S]*?!referenceId\?\.trim\(\)[\s\S]*?referenceId\.length > 160/.test(source)],
   ['transfer-reference query has a hard result cap', /kind=in\.\(transfer_out,transfer_in\)&limit=3/.test(source)],

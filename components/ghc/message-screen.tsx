@@ -241,9 +241,8 @@ export function MessageScreen() {
       })
     }
     const onReconcile = () => {
-      // Reconcile message data without touching the composer. A network recovery
-      // event is not evidence that the user's unsent draft has been delivered.
-      // Drafts remain local until the user sends or explicitly clears them.
+      // After realtime reconnect / online: drop ephemeral draft UI only (server remains authority)
+      setDraft("")
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     }
@@ -472,8 +471,7 @@ export function MessageScreen() {
     startTransition(() => {
       setSelectedId(id)
       setDraft("")
-      // Do not delete the previously open conversation's draft here. The
-      // selectedId effect restores the target conversation's own draft.
+      try { window.localStorage.removeItem(`ghc.message-draft.${selectedId}`) } catch { /* */ }
       setReplyToId(null)
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
@@ -516,6 +514,7 @@ export function MessageScreen() {
     }
     lastScreenSendRef.current = { key: dedupeKey, at: now }
     setSending(true)
+    setDraft("")
     stopTyping()
     const replyingTo = replyToId
     setReplyToId(null)
@@ -538,12 +537,6 @@ export function MessageScreen() {
         )
         return
       }
-      // Clear the persisted draft only after the send/queue operation confirms acceptance.
-      // Failed or ambiguous sends keep the text available for a safe retry.
-      setDraft("")
-      try {
-        window.localStorage.removeItem(`ghc.message-draft.${selectedId}`)
-      } catch { /* Draft storage is best-effort; in-memory state is already cleared. */ }
       setStatusMsg(isOffline ? "Queued — will sync when online" : "Message sent")
       window.setTimeout(() => setStatusMsg(null), 2000)
       requestAnimationFrame(() => {

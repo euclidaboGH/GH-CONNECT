@@ -17,7 +17,7 @@ test('3% fee and linked Pi wallet copy', /3%/.test(dash) && /linked at sign-in/.
 test('Fee quote via POST /api/economy/earnings/quote', /\/api\/economy\/earnings\/quote/.test(dash))
 test('Does not invent balances on failure', /No balances were invented/.test(dash))
 test('Wired into wallet screen', /UnifiedEarningsDashboard/.test(wallet))
-test('Wired into rewards centre', /UnifiedEarningsDashboard/.test(rewards))
+test('Rewards links to Wallet for Pi withdraw (no duplicate dashboard)', /Open Wallet · Withdraw Pi/.test(rewards) && !/UnifiedEarningsDashboard/.test(rewards))
 test('Ledger history with statuses', /Recent ledger/.test(dash) && /statusTone/.test(dash))
 test('Atomic ledger amounts use atomic-unit conversion for numeric and string payloads', /function atomicToDisplay/.test(dash) && /BigInt\(raw\)/.test(dash) && /amount_atomic/.test(dash))
 test('Invalid financial values never fall back to a fabricated zero', /return "Unavailable"/.test(dash) && !/return "0 π"/.test(dash))

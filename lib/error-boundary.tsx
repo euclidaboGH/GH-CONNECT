@@ -17,7 +17,6 @@ export class ErrorBoundary extends React.Component<
   ErrorBoundaryProps,
   { hasError: boolean; error: Error | null; autoRetried: boolean }
 > {
-  private autoRetryTimer: number | null = null
   constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null, autoRetried: false }
@@ -25,13 +24,6 @@ export class ErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error }
-  }
-
-  componentWillUnmount() {
-    if (this.autoRetryTimer !== null) {
-      window.clearTimeout(this.autoRetryTimer)
-      this.autoRetryTimer = null
-    }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
@@ -48,8 +40,7 @@ export class ErrorBoundary extends React.Component<
         msg.includes("chunk") ||
         msg.includes("dynamically imported")
       if (transient) {
-        this.autoRetryTimer = window.setTimeout(() => {
-          this.autoRetryTimer = null
+        window.setTimeout(() => {
           this.setState({ hasError: false, error: null, autoRetried: true })
           try {
             this.props.onRetry?.()
@@ -62,10 +53,6 @@ export class ErrorBoundary extends React.Component<
   }
 
   retry = () => {
-    if (this.autoRetryTimer !== null) {
-      window.clearTimeout(this.autoRetryTimer)
-      this.autoRetryTimer = null
-    }
     this.setState({ hasError: false, error: null, autoRetried: false })
     try {
       this.props.onRetry?.()
@@ -94,11 +81,18 @@ export class ErrorBoundary extends React.Component<
           <h2 className="text-lg font-bold text-foreground">{section}</h2>
           <p className="max-w-sm text-sm text-muted-foreground">{friendly.message}</p>
           <p className="text-[11px] text-muted-foreground">
-            Retrying may reload current content. Check pending actions before submitting them again to avoid accidental duplicates.
+            We kept your account safe. No progress or profile data was removed.
           </p>
-          <p className="max-w-sm text-[11px] text-muted-foreground">
-            Reference: {this.state.error?.name === "ChunkLoadError" ? "APP_UPDATE_REQUIRED" : "SCREEN_RENDER_FAILED"}
-          </p>
+          {this.state.error?.message ? (
+            <details className="mt-1 max-w-sm text-left">
+              <summary className="cursor-pointer text-[11px] font-semibold text-muted-foreground">
+                Technical details
+              </summary>
+              <p className="mt-1 max-h-20 overflow-auto rounded-lg bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                {this.state.error.message}
+              </p>
+            </details>
+          ) : null}
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
@@ -107,13 +101,6 @@ export class ErrorBoundary extends React.Component<
             >
               <RefreshCw size={16} />
               Try again
-            </button>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Reload app
             </button>
             {this.props.onDismiss && (
               <button

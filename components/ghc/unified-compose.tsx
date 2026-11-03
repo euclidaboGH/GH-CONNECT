@@ -104,13 +104,9 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     if (!open) return
     const root = document.querySelector(".gh-world-compose") as HTMLElement | null
     if (!root) return
-    const release = a11y.createFocusTrap(root, {
-      // Escape dismisses the compose surface only while it is safe to leave.
-      // An in-flight publish must not be interrupted by keyboard dismissal.
-      onEscape: isPublishing ? undefined : () => onOpenChange(false),
-    })
+    const release = a11y.createFocusTrap(root)
     return () => release()
-  }, [open, isPublishing, onOpenChange])
+  }, [open])
 
   const activeDraftIdRef = useRef<string | null>(null)
   const pendingComposeRef = useRef<{ text?: string; draftId?: string } | null>(null)

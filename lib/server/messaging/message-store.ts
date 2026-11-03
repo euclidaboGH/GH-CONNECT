@@ -1055,19 +1055,10 @@ export async function appendMessage(input: {
           }
         }
       }
-      // A configured database is the authority in every environment. Never
-      // acknowledge a message that exists only in this process after a durable
-      // insert failed; the client may otherwise show a message that disappears
-      // on refresh or on another server instance.
-      return { ok: false, error: "PERSIST_FAILED" }
+      if (isProd()) return { ok: false, error: "PERSIST_FAILED" }
+    } else if (ins.data?.[0]) {
+      Object.assign(msg, rowToMessage(ins.data[0]))
     }
-    if (!Array.isArray(ins.data) || !ins.data[0] || !String(ins.data[0].id || "").trim()) {
-      // Prefer: return=representation is required to confirm the committed row.
-      // An empty or malformed success payload is ambiguous and must not be
-      // converted into a synthetic local success.
-      return { ok: false, error: "PERSIST_FAILED" }
-    }
-    Object.assign(msg, rowToMessage(ins.data[0]))
     await rest(
       `gh_conversations?id=eq.${encodeURIComponent(cid)}`,
       {

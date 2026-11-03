@@ -1,82 +1,82 @@
 {
-  "generatedAt": "2026-11-02T06:59:41.458Z",
+  "generatedAt": "2026-11-01T08:51:00.080Z",
   "scope": "source-only verification; not production approval",
   "runtime": {
-    "version": "v22.16.0",
-    "supported": false
+    "version": "v24.15.0",
+    "supported": true
   },
-  "discoveredCount": 242,
-  "passCount": 242,
+  "discoveredCount": 204,
+  "passCount": 204,
   "failCount": 0,
   "results": [
     {
       "name": "check-0_229-community-results.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-a2u-earnings-roadmap.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-api-csrf-contract.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-bounded-json-imports.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 52,
       "timedOut": false
     },
     {
       "name": "check-build-blocker-repairs.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-build-type-regressions.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 60,
       "timedOut": false
     },
     {
       "name": "check-cashback-quarterly-0_5pct.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 50,
       "timedOut": false
     },
     {
       "name": "check-clean-migrations.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-community-global-standard.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-community-idempotency-contract.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 35,
       "timedOut": false
     },
     {
@@ -90,35 +90,35 @@
       "name": "check-daily-reward-ux.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 47,
       "timedOut": false
     },
     {
       "name": "check-database-contract-source.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 107,
+      "ms": 110,
       "timedOut": false
     },
     {
       "name": "check-database-rls-coverage.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 92,
+      "ms": 133,
       "timedOut": false
     },
     {
       "name": "check-deliberate-post-voting.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-dependency-lock-integrity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 39,
       "timedOut": false
     },
     {
@@ -132,56 +132,56 @@
       "name": "check-followup-build-errors.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-followup-vercel-errors.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 39,
       "timedOut": false
     },
     {
       "name": "check-generic-rate-limiter-bound.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-governance-moderation-log-input.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-jsx-safety.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 89,
+      "ms": 102,
       "timedOut": false
     },
     {
       "name": "check-marketplace-cart-upgrade.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 41,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-marketplace-revenue-reconciliation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 44,
       "timedOut": false
     },
     {
       "name": "check-massive-search-upgrade.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 36,
       "timedOut": false
     },
     {
@@ -195,203 +195,182 @@
       "name": "check-media-asset-immutability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-media-upload-finalize-identity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-media-upload-session-immutability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-message-hydration-media-contract.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-messaging-bounded-json.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
-      "timedOut": false
-    },
-    {
-      "name": "check-migration-master-bundle.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 51,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-migration-release-readiness.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 46,
       "timedOut": false
     },
     {
       "name": "check-migration-source-manifest.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-notification-center-contract.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
-      "timedOut": false
-    },
-    {
-      "name": "check-notification-list-createdat-order.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-notification-rpc-privileges.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
+      "ms": 69,
       "timedOut": false
     },
     {
       "name": "check-pass10-quality.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-pass11-journey.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-pass12-experience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-pass13-resilience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass14-product-design.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 46,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-pass15-intelligent-action.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass16-social-loop.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass17-relationship-intelligence.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 47,
       "timedOut": false
     },
     {
       "name": "check-pass18-profile-identity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass19-marketplace-outcomes.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-pass20-economy-outcomes.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-pass21-discovery-intelligence.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass22-community-outcomes.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 45,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-pass23-attention-intelligence.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-pass24-journey-orchestration.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 48,
       "timedOut": false
     },
     {
       "name": "check-pass25-outcome-home.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-pass26-personalized-home.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass27-cross-feature-experience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 41,
+      "ms": 40,
       "timedOut": false
     },
     {
@@ -405,56 +384,56 @@
       "name": "check-pass29-outcome-quality.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-pass30-experience-quality.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 51,
       "timedOut": false
     },
     {
       "name": "check-pass31-workflow-experience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-pass32-action-clarity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pass33-journey-guidance.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 49,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-pass34-personal-priorities.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 44,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-pass35-settings-discovery.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-pass36-system-integrity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 51,
       "timedOut": false
     },
     {
@@ -468,49 +447,49 @@
       "name": "check-pass38-data-contracts.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 40,
       "timedOut": false
     },
     {
       "name": "check-pass39-independent-hydration.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 40,
       "timedOut": false
     },
     {
       "name": "check-pass40-feed-reconciliation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 46,
+      "ms": 45,
       "timedOut": false
     },
     {
       "name": "check-pass41-marketplace-resilience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 45,
+      "ms": 39,
       "timedOut": false
     },
     {
       "name": "check-pass42-marketplace-domain-boundary.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 55,
       "timedOut": false
     },
     {
       "name": "check-pass43-domain-session-bridges.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-pass44-durable-abuse-controls.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 41,
+      "ms": 46,
       "timedOut": false
     },
     {
@@ -524,364 +503,329 @@
       "name": "check-pass46-experience-and-fail-closed.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-pass47-experience-cohesion.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-pass48-accessible-navigation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-payment-intent-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-payment-retry-ux.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase-1-6-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 217,
+      "ms": 218,
       "timedOut": false
     },
     {
       "name": "check-phase-a-daily-claim-ux.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-phase-b-marketplace-commerce.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase-c-marketplace-trust.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase-d-communities-product.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-phase-e-ecosystem-polish.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 48,
       "timedOut": false
     },
     {
       "name": "check-phase-f-production-proof.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 196,
+      "ms": 236,
       "timedOut": false
     },
     {
       "name": "check-phase-post-curation-production.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-audit-ux.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-consolidation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-cross-system-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 43,
+      "ms": 39,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-engagement-reliability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-hardening-upgrade.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 59,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-request-boundary-expansion.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-request-boundary-followup.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 39,
       "timedOut": false
     },
     {
       "name": "check-phase1-12-systematic-upgrade.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase1-architecture-foundation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase1-pi-earnings-dispatch.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 30,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase1-pi-identity-reconnect.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 30,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase1-platform-foundation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 44,
+      "ms": 60,
       "timedOut": false
     },
     {
       "name": "check-phase1-registration-topup.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase10-marketplace-integrity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase10-system-status-probes.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 30,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase10-testnet-release-gate.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 264,
+      "ms": 208,
       "timedOut": false
     },
     {
       "name": "check-phase11-cross-feature-reconcile.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-phase11-wallet-cross-feature-reconciliation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase12-earnings-final-gate.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 602,
+      "ms": 604,
       "timedOut": false
     },
     {
       "name": "check-phase12-final-release-readiness.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase12-pi-transaction-details.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase13-unified-transaction-records.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase14-reconciliation-efficiency.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase15-payment-recovery.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-phase16-payment-timeline.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase17-ci-governance.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 40,
       "timedOut": false
     },
     {
       "name": "check-phase18-marketplace-payment-binding.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase19-marketplace-rpc-transport.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 30,
       "timedOut": false
     },
     {
       "name": "check-phase2-admin-body-and-secret-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase2-architecture-decomposition.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 49,
       "timedOut": false
     },
     {
       "name": "check-phase2-canonical-identity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase2-curation-commit-receipt.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase2-dual-asset-wallet.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-phase2-durable-rate-limit-fail-closed.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase2-economy-database-boundaries.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase2-economy-rpc-timeouts.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-phase2-financial-body-bounds.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase2-messaging-durable-write.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 34,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase2-operator-readiness-withdrawal-bounds.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 47,
       "timedOut": false
     },
     {
@@ -892,80 +836,66 @@
       "timedOut": false
     },
     {
-      "name": "check-phase2-pi-wallet-actions.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 37,
-      "timedOut": false
-    },
-    {
       "name": "check-phase2-privileged-review-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-phase2-reward-contract.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 43,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase2-reward-operator-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-phase2-system-status-operator-only.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase2-transfer-request-idempotency-intent.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-phase2-transfer-request-rpc-acl.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-phase2-transfer-rpc-boundary.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase2-transfer-rpc-result-integrity.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 30,
+      "ms": 29,
       "timedOut": false
     },
     {
       "name": "check-phase2-transfer-streaming-boundary.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase2-transfer-timeout-response.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 32,
       "timedOut": false
     },
     {
@@ -979,14 +909,14 @@
       "name": "check-phase2-wallet-transfer-integrity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase2-withdrawal-streaming-boundary.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 35,
       "timedOut": false
     },
     {
@@ -1000,42 +930,42 @@
       "name": "check-phase21-marketplace-event-journal.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase22-marketplace-adjustments.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 30,
       "timedOut": false
     },
     {
       "name": "check-phase23-treasury-community-reconciliation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase24-financial-exception-detail.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase25-operational-workflows.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase25-premium-ui.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 44,
       "timedOut": false
     },
     {
@@ -1046,178 +976,143 @@
       "timedOut": false
     },
     {
-      "name": "check-phase3-authoritative-wallet-snapshot.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 38,
-      "timedOut": false
-    },
-    {
       "name": "check-phase3-database-recovery.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 49,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase3-pi-claim-buttons.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase3-pi-withdrawal-status-recovery.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 33,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase3-profile-identity.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 39,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-phase3-restore-catalog-gate.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase3-story-experience-integrity.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase3-unified-earnings-ledger.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase3-wallet-reconciliation-truthfulness.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-phase31-floating-header-settlement.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 42,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase4-identity-integration.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-phase4-marketplace-checkout-integrity.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-phase4-pi-earnings-execution-worker.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-phase4-pi-earnings-request-lifecycle.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase4-pi-earnings-settlement-recovery.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase4-pi-withdraw-kyc.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 31,
       "timedOut": false
     },
     {
       "name": "check-phase4-pi-withdrawal-boundary.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 30,
+      "ms": 45,
       "timedOut": false
     },
     {
       "name": "check-phase4-receipt-fencing.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase4-recovery-release-gate.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 1239,
+      "ms": 1352,
       "timedOut": false
     },
     {
       "name": "check-phase4-reward-adapters.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 44,
       "timedOut": false
     },
     {
       "name": "check-phase5-cashback-attribution.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase5-design-system.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 43,
+      "ms": 49,
       "timedOut": false
     },
     {
       "name": "check-phase5-reliability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 43,
       "timedOut": false
     },
     {
       "name": "check-phase5-shared-a2u-lane.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase5-wallet-release-gate.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 225,
+      "ms": 258,
       "timedOut": false
     },
     {
@@ -1231,21 +1126,21 @@
       "name": "check-phase6-financial-reconciliation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 48,
       "timedOut": false
     },
     {
       "name": "check-phase6-integration-reliability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 43,
+      "ms": 41,
       "timedOut": false
     },
     {
       "name": "check-phase6-shell-navigation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 39,
       "timedOut": false
     },
     {
@@ -1259,7 +1154,7 @@
       "name": "check-phase7-a2u-orchestration.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 32,
       "timedOut": false
     },
     {
@@ -1273,315 +1168,168 @@
       "name": "check-phase7-social-experience.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 41,
+      "ms": 46,
       "timedOut": false
     },
     {
       "name": "check-phase7-treasury-completion.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 38,
+      "ms": 37,
       "timedOut": false
     },
     {
       "name": "check-phase7-treasury-operations.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 29,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase8-earnings-dashboard.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 37,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-phase8-trust-notification-results.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase8-wallet-history-foundation.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-phase9-charity-utility.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 41,
+      "ms": 42,
       "timedOut": false
     },
     {
       "name": "check-phase9-opportunities-matching.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-phase9-wallet-transaction-integration.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 44,
-      "timedOut": false
-    },
-    {
-      "name": "check-pi-auth-bounded-json.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 39,
+      "ms": 40,
       "timedOut": false
     },
     {
       "name": "check-pi-cashback-a2u.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-pi-cashback-ledger.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 44,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-pi-cashback-period-grace.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-pi-cashback-statement.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-post-curation-dashboard.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-pre-github-audit.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 63,
+      "ms": 49,
       "timedOut": false
     },
     {
       "name": "check-privileged-reward-body-bounds.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 46,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-project-truth.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 49,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-rate-limit-memory-bound.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 32,
       "timedOut": false
     },
     {
       "name": "check-regional-context.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 38,
       "timedOut": false
     },
     {
       "name": "check-registration-bonus.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 36,
+      "ms": 40,
       "timedOut": false
     },
     {
       "name": "check-release-hygiene.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 40,
+      "ms": 51,
       "timedOut": false
     },
     {
       "name": "check-residual-debt-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 84,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase1-identity.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 41,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase10-release-evidence.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 39,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase2-feed-social.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 33,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase3-messaging.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase4-communities-governance.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 35,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase4-community-platform-validation.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 34,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase5-marketplace-commerce.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 45,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase6-wallet-economy.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 54,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase7-media-stories.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 57,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase7-recovery-ux.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase8-notification-resilience.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 38,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-closure.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 34,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation3.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation4.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation5.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 36,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation6.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 38,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation7.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-continuation8.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 32,
-      "timedOut": false
-    },
-    {
-      "name": "check-roadmap-phase9-navigation-resilience.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 39,
+      "ms": 79,
       "timedOut": false
     },
     {
       "name": "check-section-refresh.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 39,
       "timedOut": false
     },
     {
       "name": "check-security-definer-acl.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 513,
+      "ms": 457,
       "timedOut": false
     },
     {
       "name": "check-security-headers.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 49,
+      "ms": 32,
       "timedOut": false
     },
     {
@@ -1595,84 +1343,70 @@
       "name": "check-social-upstream-timeouts.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 44,
       "timedOut": false
     },
     {
       "name": "check-spend-bounded-json-import.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 36,
       "timedOut": false
     },
     {
       "name": "check-transfer-request-hardening.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 34,
       "timedOut": false
     },
     {
       "name": "check-unified-wallet-card.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 32,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "check-wallet-premium-notification-wiring.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
-      "timedOut": false
-    },
-    {
-      "name": "check-wallet-refresh-stability.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 31,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "check-wallet-utility-reliability.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 31,
-      "timedOut": false
-    },
-    {
-      "name": "check-withdrawals-health.mjs",
-      "status": "PASS",
-      "code": 0,
-      "ms": 34,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "verify-economy-stage1-gates.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "verify-legal-public.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 33,
+      "ms": 50,
       "timedOut": false
     },
     {
       "name": "verify-massive-messaging-upgrade.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 35,
+      "ms": 33,
       "timedOut": false
     },
     {
       "name": "verify-phase-economy-membership-rewards-228.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 33,
       "timedOut": false
     },
     {
@@ -1686,21 +1420,21 @@
       "name": "verify-phase-marketplace-seller-227.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 35,
       "timedOut": false
     },
     {
       "name": "verify-phase14-static.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 3422,
+      "ms": 4029,
       "timedOut": false
     },
     {
       "name": "verify-pi-backend-lock.mjs",
       "status": "PASS",
       "code": 0,
-      "ms": 34,
+      "ms": 46,
       "timedOut": false
     }
   ],

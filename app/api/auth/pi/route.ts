@@ -13,7 +13,6 @@
  */
 
 import { NextResponse } from "next/server"
-import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { verifyPiAccessToken } from "@/lib/server/economy/auth"
 import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { createHash } from "node:crypto"
@@ -47,17 +46,23 @@ export async function POST(request: Request) {
         { status: durableRateLimitStatus(rate), headers: { "Cache-Control": "no-store", "Retry-After": String(rate.retryAfterSec) } }
       )
     }
-    // Enforce the byte cap while streaming; post-read checks buffer the entire
-    // attacker-controlled chunked body before they can reject it.
-    const parsedBody = await readBoundedJson(request, 16_384)
-    if (!parsedBody.ok) {
-      const status = parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400
-      return NextResponse.json(
-        { ok: false, error: parsedBody.error },
-        { status, headers: { "Cache-Control": "no-store" } },
-      )
+    const contentLength = Number(request.headers.get("content-length") || 0)
+    if (Number.isFinite(contentLength) && contentLength > 16_384) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }
-    const body = parsedBody.value
+    // Enforce the cap on the actual body too; content-length can be absent on
+    // streamed/chunked requests. Do not parse an unbounded JSON body first.
+    const rawBody = await request.text()
+    if (Buffer.byteLength(rawBody, "utf8") > 16_384) {
+      return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
+    }
+    let body: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = JSON.parse(rawBody)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ ok: false, error: "INVALID_JSON" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
     const accessToken =
       typeof body.accessToken === "string" ? body.accessToken.trim() : ""
 

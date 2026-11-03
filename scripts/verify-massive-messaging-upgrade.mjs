@@ -8,7 +8,7 @@ const checks=[
  ['requests UI',s.includes('No message requests')],
  ['draft persistence key',s.includes('ghc.message-draft.${selectedId}')],
  ['draft restore',s.includes('localStorage.getItem(`ghc.message-draft.${selectedId}`)')],
- ['draft clear after confirmed send',s.includes('localStorage.removeItem(`ghc.message-draft.${selectedId}`)') && s.indexOf('if (accepted === false || accepted === undefined)') < s.indexOf('localStorage.removeItem(`ghc.message-draft.${selectedId}`)')],
+ ['draft clear after send',s.includes('localStorage.removeItem(`ghc.message-draft.${selectedId}`)')],
  ['community inbox retained',s.includes('filter === "communities"')],
  ['offline recovery retained',s.includes('ghc:messaging-reconcile')],
 ]

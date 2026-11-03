@@ -52,43 +52,33 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Partial<RetryConfig> = {}
 ): Promise<T> {
-  const requested = { ...DEFAULT_RETRY_CONFIG, ...config }
-  const settings: RetryConfig = {
-    ...requested,
-    maxRetries: Number.isFinite(requested.maxRetries) ? Math.max(0, Math.min(8, Math.floor(requested.maxRetries))) : DEFAULT_RETRY_CONFIG.maxRetries,
-    initialDelayMs: Number.isFinite(requested.initialDelayMs) ? Math.max(0, Math.min(30_000, requested.initialDelayMs)) : DEFAULT_RETRY_CONFIG.initialDelayMs,
-    maxDelayMs: Number.isFinite(requested.maxDelayMs) ? Math.max(0, Math.min(60_000, requested.maxDelayMs)) : DEFAULT_RETRY_CONFIG.maxDelayMs,
-    backoffMultiplier: Number.isFinite(requested.backoffMultiplier) ? Math.max(1, Math.min(10, requested.backoffMultiplier)) : DEFAULT_RETRY_CONFIG.backoffMultiplier,
-    timeoutMs: Number.isFinite(requested.timeoutMs) ? Math.max(1, Math.min(120_000, requested.timeoutMs)) : DEFAULT_RETRY_CONFIG.timeoutMs,
-  }
+  const settings = { ...DEFAULT_RETRY_CONFIG, ...config }
   let lastError: unknown
   let delay = settings.initialDelayMs
 
   for (let attempt = 0; attempt <= settings.maxRetries; attempt++) {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
     try {
-      // Clear the timeout as soon as the operation settles. A timed-out
-      // operation may continue if the caller's API does not support cancellation.
-      const timeout = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Request timeout')), settings.timeoutMs)
-      })
-      return await Promise.race([Promise.resolve().then(fn), timeout])
+      // Add timeout wrapper
+      return await Promise.race([
+        fn(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Request timeout')),
+            settings.timeoutMs
+          )
+        ),
+      ])
     } catch (error) {
       lastError = error
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId)
-        timeoutId = undefined
-      }
 
-      if (attempt < settings.maxRetries &&
+      // Check if we should retry
+      if (attempt < settings.maxRetries && 
           (settings.shouldRetry ? settings.shouldRetry(error) : isRetryableError(error))) {
         await new Promise((resolve) => setTimeout(resolve, delay))
         delay = Math.min(delay * settings.backoffMultiplier, settings.maxDelayMs)
       } else {
         throw error
       }
-    } finally {
-      if (timeoutId !== undefined) clearTimeout(timeoutId)
     }
   }
 

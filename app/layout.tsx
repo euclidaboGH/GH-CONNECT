@@ -4,13 +4,12 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import Script from "next/script"
 import { AppWrapper } from "@/components/app-wrapper"
-import { resolveSafeMetadataBase } from "@/lib/safe-metadata-base"
 import "./globals.css"
 
-const metadataBase = resolveSafeMetadataBase(process.env.NEXT_PUBLIC_APP_URL)
+const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
 
 export const metadata: Metadata = {
-  ...(metadataBase ? { metadataBase } : {}),
+  ...(appUrl ? { metadataBase: new URL(appUrl.startsWith("http") ? appUrl : `https://${appUrl}`) } : {}),
   title: {
     default: "GreenHaven",
     template: "%s · GreenHaven",

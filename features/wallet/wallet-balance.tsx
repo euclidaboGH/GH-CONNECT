@@ -52,9 +52,7 @@ export function WalletBalanceCard({
     reasons: string[]
   } | null>(null)
   const [piLoading, setPiLoading] = useState(true)
-  const [piRefreshing, setPiRefreshing] = useState(false)
   const [piFailed, setPiFailed] = useState(false)
-  const piSnapshotRef = useRef<typeof piSnapshot>(null)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
   )
@@ -62,15 +60,12 @@ export function WalletBalanceCard({
   const piRequestIdRef = useRef(0)
 
   const refreshPi = useCallback(async () => {
-    // Coalesce refresh-event bursts instead of aborting a healthy request and
-    // repeatedly replacing already-rendered balances with loading placeholders.
-    if (piRequestRef.current && !piRequestRef.current.signal.aborted) return
     const requestId = ++piRequestIdRef.current
+    piRequestRef.current?.abort()
     const controller = new AbortController()
     piRequestRef.current = controller
     const timeout = window.setTimeout(() => controller.abort(), 10_000)
-    if (piSnapshotRef.current) setPiRefreshing(true)
-    else setPiLoading(true)
+    setPiLoading(true)
     try {
       const response = await fetch("/api/economy/earnings/withdrawable", {
         credentials: "include",
@@ -93,14 +88,13 @@ export function WalletBalanceCard({
       )
       if (!response.ok || !data || data.ok !== true || !validAmounts || typeof data.eligible !== "boolean") {
         if (requestId === piRequestIdRef.current) {
-          // Keep the last verified snapshot visible on transient API/session errors.
-          // A failed refresh is not evidence that the authoritative balance is zero.
+          setPiSnapshot(null)
           setPiFailed(true)
         }
         return
       }
       if (requestId === piRequestIdRef.current) {
-        const nextSnapshot = {
+        setPiSnapshot({
           available: Number(data.available),
           withdrawable: Number(data.withdrawable),
           pending: Number(data.pending),
@@ -108,21 +102,18 @@ export function WalletBalanceCard({
           eligible: data.eligible === true,
           piWalletLinked: data.piWalletLinked === true,
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
-        }
-        piSnapshotRef.current = nextSnapshot
-        setPiSnapshot(nextSnapshot)
+        })
         setPiFailed(false)
       }
     } catch {
       if (requestId === piRequestIdRef.current) {
-        // Preserve the last verified value; surface failure in the status copy.
+        setPiSnapshot(null)
         setPiFailed(true)
       }
     } finally {
       window.clearTimeout(timeout)
       if (requestId === piRequestIdRef.current) {
         setPiLoading(false)
-        setPiRefreshing(false)
         piRequestRef.current = null
       }
     }
@@ -166,7 +157,7 @@ export function WalletBalanceCard({
   return (
     <section
       className="gh-reference-panel mx-3 mt-3 overflow-hidden rounded-[1.75rem] border border-white/15 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(255,255,255,0.98)_38%,rgba(124,58,237,0.10))] shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] ring-1 ring-black/[0.03] dark:bg-[linear-gradient(145deg,rgba(16,185,129,0.14),rgba(15,23,42,0.96)_42%,rgba(124,58,237,0.14))] dark:ring-white/[0.05]"
-      aria-label="Unified PI and GHC wallet balances" aria-live="polite"
+      aria-label="Unified PI and GHC wallet balances; Pi and GHC remain separate"
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-white/45 px-4 py-4 backdrop-blur-xl dark:bg-white/[0.025]">
@@ -203,13 +194,12 @@ export function WalletBalanceCard({
       </div>
 
       {/* Dual asset grid — bank / crypto wallet class */}
-      <div className="grid grid-cols-2 gap-2.5 p-3" role="listbox" aria-label="Select asset">
+      <div className="grid grid-cols-2 gap-2.5 p-3" role="group" aria-label="Choose wallet asset">
         <button
           type="button"
-          role="option"
-          aria-selected={piSelected}
+          aria-pressed={piSelected}
           onClick={() => onSelectRail?.("pi")}
-          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition ${
+          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
             piSelected
               ? "bg-violet-100/90 shadow-[0_14px_30px_-18px_rgba(124,58,237,0.55)] ring-1 ring-violet-400/40 dark:bg-violet-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
@@ -220,12 +210,12 @@ export function WalletBalanceCard({
               π
             </span>
             <div className="min-w-0">
-              <p className="text-[12px] font-bold text-foreground">PI</p>
-              <p className="text-[10px] text-muted-foreground">Earnings</p>
+              <p className="text-[12px] font-bold text-foreground">Pi</p>
+              <p className="text-[10px] text-muted-foreground">Pi earnings</p>
             </div>
           </div>
           <p className="text-[22px] font-black tabular-nums leading-none tracking-tight text-foreground">
-            {piLoading && !piSnapshot ? (
+            {piLoading ? (
               <Loader2 className="inline h-5 w-5 animate-spin text-muted-foreground" />
             ) : piSnapshot ? (
               maskPi(piSnapshot.available)
@@ -235,13 +225,11 @@ export function WalletBalanceCard({
               "Unavailable"
             )}
           </p>
-          <p className="text-[10px] text-muted-foreground">
-            {piLoading && !piSnapshot
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            {piLoading
               ? "Loading ledger…"
-              : piFailed && piSnapshot
-                ? "Last verified balance · refresh failed"
-                : piFailed
-                  ? "PI balance unavailable — refresh to retry"
+              : piFailed
+                ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
                   ? piSnapshot.eligible
                     ? "Pi identity linked · payout eligible"
@@ -257,10 +245,9 @@ export function WalletBalanceCard({
 
         <button
           type="button"
-          role="option"
-          aria-selected={!piSelected}
+          aria-pressed={!piSelected}
           onClick={() => onSelectRail?.("ghc")}
-          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition ${
+          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
             !piSelected
               ? "bg-emerald-100/90 shadow-[0_14px_30px_-18px_rgba(5,150,105,0.55)] ring-1 ring-emerald-400/40 dark:bg-emerald-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
@@ -272,13 +259,13 @@ export function WalletBalanceCard({
             </span>
             <div className="min-w-0">
               <p className="text-[12px] font-bold text-foreground">GHC</p>
-              <p className="text-[10px] text-muted-foreground">Utility</p>
+              <p className="text-[10px] text-muted-foreground">GreenHaven Credits</p>
             </div>
           </div>
           <p className="text-[22px] font-black tabular-nums leading-none tracking-tight text-foreground">
             {balanceVisible ? formatGhc(balance) : "••••"}
           </p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
             {pending > 0 || locked > 0
               ? `${formatGhc(pending)} pending · ${formatGhc(locked)} locked`
               : "Available to spend"}
@@ -311,11 +298,11 @@ export function WalletBalanceCard({
             <button
               type="button"
               onClick={() => void refreshPi()}
-              disabled={piLoading || piRefreshing}
+              disabled={piLoading}
               className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Refresh PI balance"
             >
-              {piLoading || piRefreshing ? "Refreshing PI…" : "Refresh PI balance"}
+              {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
             </button>
           </div>
         ) : (

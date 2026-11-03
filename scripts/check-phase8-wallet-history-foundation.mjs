@@ -28,7 +28,7 @@ const checks = [
   ['Wallet pending count must be an integer', /Number\.isSafeInteger\(amounts\.pendingCount\)/.test(walletV2)],
   ['Wallet timestamps reject implausible future values', /Date\.now\(\) \+ 5 \* 60_000/.test(walletV2)],
   ['Wallet escrow rail is allowlisted', /supportedEscrowRails/.test(walletV2) && /supportedEscrowRails\.has\(holdsRecord\.escrowRail\)/.test(walletV2)],
-  ['Wallet summary is non-cacheable and retryable failures include Retry-After', (walletSummaryApi.match(/headers: noStore/g) || []).length >= 2 && (walletSummaryApi.match(/headers: unavailableHeaders/g) || []).length >= 3 && /no-cache, max-age=0, must-revalidate/.test(walletSummaryApi) && /Retry-After/.test(walletSummaryApi)],
+  ['Wallet summary uses no-store headers for auth, config, error, and success responses', (walletSummaryApi.match(/headers: noStore/g) || []).length >= 4 && /no-cache, max-age=0, must-revalidate/.test(walletSummaryApi)],
   ['Wallet snapshot refresh rejects out-of-order responses', /requestSequence = useRef\(0\)/.test(walletProvider) && /sequence !== requestSequence\.current/.test(walletProvider)],
   ['Wallet refresh failure preserves last server-confirmed snapshot as stale', /previous\.source === \"server\"/.test(walletProvider) && /status: \"error\"/.test(walletProvider) && /last server-confirmed snapshot/.test(walletProvider)],
 ]

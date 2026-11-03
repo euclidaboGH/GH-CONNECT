@@ -34,7 +34,6 @@ const STORY_AUDIENCES: Array<{ id: StoryAudience; title: string; detail: string 
   { id: "everyone", title: "Everyone", detail: "Anyone who can discover your profile" },
   { id: "followers", title: "Followers", detail: "People who follow you" },
   { id: "friends", title: "Friends", detail: "Your mutual connections" },
-  { id: "matches-only", title: "Matches", detail: "People you have mutually matched with" },
   { id: "private", title: "Only me", detail: "Keep this moment private" },
 ]
 
@@ -52,7 +51,6 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const stories = Array.isArray(ghc.stories) ? ghc.stories : []
   const following = Array.isArray(ghc.following) ? ghc.following : []
   const friends = Array.isArray(ghc.friends) ? ghc.friends : []
-  const matches = Array.isArray(ghc.matches) ? ghc.matches : []
   const publishStory = ghc.publishStory
   const addToast = ghc.addToast
   const startConversation = ghc.startConversation
@@ -80,22 +78,13 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     }
     return ""
   }).filter(Boolean))
-  const matchSet = new Set(matches.map((match: unknown) => {
-    if (typeof match === "string") return match
-    if (match && typeof match === "object") {
-      const item = match as { id?: string; userId?: string; matchedUserId?: string }
-      return String(item.userId || item.matchedUserId || "")
-    }
-    return ""
-  }).filter(Boolean))
 
   const otherStories = scope === "feed" ? stories
     .filter((story) => {
       if (!story.ownerId || isOwnStory(story) || (story.expiresAt != null && story.expiresAt <= Date.now())) return false
-      if (story.audience === "private") return false
-      if (story.audience === "matches-only") return matchSet.has(String(story.ownerId))
+      if (story.audience === "private" || story.audience === "matches-only") return false
       if (story.audience === "friends") return friendSet.has(String(story.ownerId))
-      if (story.audience === "followers") return followingSet.has(String(story.ownerId))
+      if (story.audience === "followers") return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId))
       return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId)) || story.audience === "everyone" || !story.audience
     })
     .sort((a, b) => b.createdAt - a.createdAt) : []
@@ -144,15 +133,9 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("ghc-story-seen")
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw)
-        if (Array.isArray(parsed)) setSeenStoryIds(parsed.filter((id): id is string => typeof id === "string").slice(-120))
-      }
+      if (raw) setSeenStoryIds(JSON.parse(raw))
       const savedHighlights = window.localStorage.getItem("ghc-story-highlights")
-      if (savedHighlights) {
-        const parsed: unknown = JSON.parse(savedHighlights)
-        if (Array.isArray(parsed)) setHighlights(parsed.filter((id): id is string => typeof id === "string").slice(-20))
-      }
+      if (savedHighlights) setHighlights(JSON.parse(savedHighlights))
     } catch { /* optional local story preferences */ }
   }, [])
 
@@ -471,12 +454,12 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         {/* Own story / add */}
         <button
           type="button"
-          onClick={() => (ownStory ? openStory(ownStory) : openCreator())}
-          className="group relative flex w-[100px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:100px_154px]"
+          onClick={() => (ownStory ? setViewing(ownStory) : openCreator())}
+          className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
           aria-label={ownStory ? "View your story" : "Add a story"}
         >
           <span
-            className={`relative h-[124px] w-[100px] overflow-hidden rounded-[1.25rem] border-2 shadow-sm transition group-active:scale-[0.98] ${
+            className={`relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 shadow-sm transition group-active:scale-[0.98] ${
               ownStory
                 ? "border-emerald-500 ring-2 ring-emerald-500/20"
                 : "border-dashed border-border/80 bg-muted/40"
@@ -534,12 +517,12 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
             <button
               key={item.id}
               type="button"
-              onClick={() => openStory(item)}
-              className="group relative flex w-[100px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:100px_154px]"
+              onClick={() => setViewing(item)}
+              className="group relative flex w-[88px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 [content-visibility:auto] [contain-intrinsic-size:88px_110px]"
               aria-label={`View story from ${label}`}
             >
-              <span className={`relative h-[124px] w-[100px] overflow-hidden rounded-[1.25rem] border-2 p-[2px] shadow-sm transition group-active:scale-[0.98] ${seenStoryIds.includes(item.id) ? "border-border bg-muted" : "border-transparent bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500"}`}>
-                <span className="relative block h-full w-full overflow-hidden rounded-[1.05rem] bg-card">
+              <span className="relative h-[88px] w-[88px] overflow-hidden rounded-[1.35rem] border-2 border-transparent bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 p-[2px] shadow-sm transition group-active:scale-[0.98]">
+                <span className="relative block h-full w-full overflow-hidden rounded-[1.2rem] bg-card">
                   {thumb ? (
                     item.media?.type === "video" ? (
                       <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
@@ -564,7 +547,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
           <button
             type="button"
             onClick={openCreator}
-            className="flex h-[124px] min-w-[164px] shrink-0 snap-start flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-border/80 bg-muted/30 px-3 text-center text-[11px] text-muted-foreground transition hover:bg-muted/50"
+            className="flex h-[88px] min-w-[148px] shrink-0 snap-start flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-border/80 bg-muted/30 px-3 text-center text-[11px] text-muted-foreground transition hover:bg-muted/50"
           >
             <Sparkles size={18} className="mb-1.5 text-emerald-600" />
             Be the first to share a moment with your community.
@@ -640,7 +623,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
             <p className="truncate text-sm font-bold text-white">{viewing.name || "Member"}</p>
             <p className="text-[11px] text-white/70">
               {viewing.createdAt ? new Date(viewing.createdAt).toLocaleString([], { hour: "2-digit", minute: "2-digit" }) : "Story"}
-              {viewing.audience ? ` · ${STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}` : ""}
+              {viewing.audience ? ` · ${viewing.audience}` : ""}
             </p>
           </div>
           {viewing.media?.url ? (
@@ -662,7 +645,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         </div>
       </div>
       <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
-        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <video key={viewing.id} src={viewing.media.url} controls autoPlay playsInline onEnded={() => navigateStory(1)} className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <img src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
+        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <video key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <img src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
         <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <img src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
         {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
         {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}

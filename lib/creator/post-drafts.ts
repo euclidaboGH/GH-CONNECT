@@ -22,10 +22,10 @@ function readRaw(): PostDraft[] {
         return {
           id: String(x.id),
           content: typeof x.content === "string" ? x.content : "",
-          images: Array.isArray(x.images) ? x.images.filter((u): u is string => typeof u === "string" && u.length <= 2048).slice(0, 10) : [],
+          images: Array.isArray(x.images) ? x.images.filter((u) => typeof u === "string") : [],
           video: typeof x.video === "string" ? x.video : null,
-          hashtags: Array.isArray(x.hashtags) ? x.hashtags.filter((v): v is string => typeof v === "string").map((v) => v.slice(0, 80)).slice(0, 50) : [],
-          mentions: Array.isArray(x.mentions) ? x.mentions.filter((v): v is string => typeof v === "string").map((v) => v.slice(0, 120)).slice(0, 50) : [],
+          hashtags: Array.isArray(x.hashtags) ? x.hashtags.map(String) : [],
+          mentions: Array.isArray(x.mentions) ? x.mentions.map(String) : [],
           createdAt: Number(x.createdAt) || Date.now(),
           lastEditedAt: Number(x.lastEditedAt) || Date.now(),
         }
@@ -58,8 +58,7 @@ export function upsertPostDraft(input: {
   mentions?: string[]
 }): PostDraft {
   const list = readRaw()
-  const requestedId = typeof input.id === "string" ? input.id.trim().slice(0, 160) : ""
-  const id = requestedId || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const id = (input.id || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).trim()
   const now = Date.now()
   const existing = list.find((d) => d.id === id)
   const next: PostDraft = {
@@ -67,8 +66,8 @@ export function upsertPostDraft(input: {
     content: String(input.content || "").slice(0, 5000),
     images: (input.images || existing?.images || []).filter(Boolean).slice(0, 10),
     video: input.video !== undefined ? input.video : existing?.video ?? null,
-    hashtags: (input.hashtags || existing?.hashtags || []).filter((v): v is string => typeof v === "string").map((v) => v.slice(0, 80)).slice(0, 50),
-    mentions: (input.mentions || existing?.mentions || []).filter((v): v is string => typeof v === "string").map((v) => v.slice(0, 120)).slice(0, 50),
+    hashtags: input.hashtags || existing?.hashtags || [],
+    mentions: input.mentions || existing?.mentions || [],
     createdAt: existing?.createdAt || now,
     lastEditedAt: now,
   }

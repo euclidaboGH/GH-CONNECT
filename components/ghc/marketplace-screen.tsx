@@ -362,7 +362,7 @@ function ListingDetail({
   const [saved, setSaved] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const media = mediaItems[mediaIndex] || mediaItems[0]
-  const canBuy = listing.status === "active" && (!Number.isFinite(listing.availability) || listing.availability > 0)
+  const canBuy = listing.status === "active"
   const viewerId = IdentityService.getCurrentUserId() || ""
   const isOwner = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
@@ -1248,81 +1248,33 @@ function CartPanel({
 
   const checkout = async () => {
     if (busy || !items.length) return
-    const piItems = items.filter((item) => (item.currency || "GHC").toUpperCase() === "PI")
-    if (piItems.length > 1) {
-      setError("Pi checkout is one order at a time. Remove the other Pi items or complete them separately; no orders have been created.")
-      return
-    }
-    const unavailable = items.find((item) => item.availability === 0)
-    if (unavailable) {
-      setError(`“${unavailable.title}” is marked out of stock in your saved cart. Remove it or refresh the listing before checkout.`)
-      return
-    }
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      const { socialCreateMarketplaceOrder, socialFetchMarketplaceListing, socialPayMarketplaceOrder } = await import("@/lib/social/client")
-      const authoritativeCurrency = new Map<string, "PI" | "GHC">()
-      // Preflight the server's current listing state before creating any orders. The
-      // order-create RPC still performs the final locked price/stock validation.
-      for (const item of items) {
-        const quote = await socialFetchMarketplaceListing(item.listingId)
-        if (!quote.ok || !quote.durable || !quote.listing) {
-          throw new Error(`Could not verify the live listing for ${item.title}. No cart orders were created.`)
-        }
-        const listing = quote.listing
-        const currency = typeof listing.currency === "string" ? listing.currency.toUpperCase() : ""
-        if (currency !== "PI" && currency !== "GHC") {
-          throw new Error(`The live listing for ${item.title} has an unsupported settlement currency. No cart orders were created.`)
-        }
-        if (listing.status !== "active") {
-          throw new Error(`The listing “${item.title}” is no longer active. Refresh your cart before checkout.`)
-        }
-        const availability = Number(listing.availability)
-        if (Number.isFinite(availability) && availability < item.quantity) {
-          throw new Error(`Only ${Math.max(0, Math.floor(availability))} unit(s) remain for “${item.title}”. Update the quantity and retry.`)
-        }
-        authoritativeCurrency.set(item.listingId, currency)
-      }
-      const piLineCount = [...authoritativeCurrency.values()].filter((currency) => currency === "PI").length
-      if (piLineCount > 1) {
-        throw new Error("Pi checkout is one order at a time. Remove the other Pi items or complete them separately; no cart orders were created.")
-      }
-      const created: Array<{ id: string; item: MarketplaceCartItem; currency: "PI" | "GHC" }> = []
-      // Stable keys survive refreshes and retries. The server binds each key to the
-      // request fingerprint and authoritative listing/stock, not this client snapshot.
+      const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import("@/lib/social/client")
+      const created: Array<{ id: string; item: MarketplaceCartItem }> = []
       for (const item of items) {
         const result = await socialCreateMarketplaceOrder({
           listingId: item.listingId,
           quantity: item.quantity,
-          idempotencyKey: `cart_${item.checkoutKey}`,
+          idempotencyKey: `cart_${item.listingId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         })
         if (!result.ok || !result.order) throw new Error(result.error || `Could not reserve ${item.title}`)
-        const order = result.order as { id?: string; currency?: unknown }
-        const id = String(order.id || "")
+        const id = String((result.order as { id?: string }).id || "")
         if (!id) throw new Error(`Order created without an id for ${item.title}`)
-        const currency = typeof order.currency === "string" ? order.currency.toUpperCase() : ""
-        if (currency !== "PI" && currency !== "GHC") {
-          throw new Error(`The server returned an unsupported or missing settlement currency for ${item.title}. The order was reserved; review it under Orders before retrying.`)
-        }
-        if (currency !== authoritativeCurrency.get(item.listingId)) {
-          throw new Error(`The listing currency changed during checkout for ${item.title}. The order was reserved but not paid; review Orders before retrying.`)
-        }
-        created.push({ id, item, currency })
+        created.push({ id, item })
       }
 
-      const piOrder = created.find(({ currency }) => currency === "PI")
-      const ghcOrders = created.filter(({ currency }) => currency === "GHC")
+      const piOrder = created.find(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
+      const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
       for (const { id } of ghcOrders) {
         const paid = await socialPayMarketplaceOrder(id, "ghc")
         if (!paid.ok) throw new Error(paid.message || paid.error || "GHC payment failed — check available balance")
       }
 
+      clearMarketplaceCart()
       if (piOrder) {
-        // Do not discard the Pi line before the user completes the external payment
-        // handoff. Remove only GHC lines that this attempt reports as successfully paid.
-        for (const { item } of ghcOrders) removeMarketplaceCartItem(item.listingId)
         openPayForListing(
           {
             listingId: piOrder.item.listingId,
@@ -1332,9 +1284,8 @@ function CartPanel({
           },
           "pi",
         )
-        setMessage("GHC orders are paid. Your Pi item remains in the cart until you complete its Pi payment; the reserved order is available under Orders.")
+        setMessage("Your GHC items were paid. Complete the Pi payment for the remaining item; other orders remain protected in Orders.")
       } else {
-        clearMarketplaceCart()
         setMessage("Cart checkout completed. Your orders are now protected and available under Orders.")
       }
       emitMarketplaceEconomyRefresh("marketplace-cart-checkout")
@@ -1394,7 +1345,7 @@ function CartPanel({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">Seller · {item.sellerId.slice(0, 8)}</p>{item.availability === 0 ? <p className="mt-1 text-[10px] font-bold text-red-700 dark:text-red-300">Out of stock · remove or refresh</p> : null}</div>
+                  <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">Seller · {item.sellerId.slice(0, 8)}</p></div>
                   <button type="button" onClick={() => onRemove(item.listingId)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label={`Remove ${item.title}`}><X size={15} /></button>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -1647,10 +1598,6 @@ export function MarketplaceScreen({
 
   const addToCart = useCallback((listing: MarketplaceListing) => {
     if (listing.status !== "active") return
-    if (Number.isFinite(listing.availability) && listing.availability <= 0) {
-      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This listing is out of stock", type: "error" } })) } catch { /* */ }
-      return
-    }
     addMarketplaceCartItem({
       listingId: listing.id,
       quantity: 1,

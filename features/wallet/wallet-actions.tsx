@@ -31,7 +31,7 @@ export function WalletPrimaryActions({
     {
       id: "send",
       label: isPi ? "Withdraw" : "Send",
-      hint: isPi ? "Open payout steps" : "Transfer",
+      hint: isPi ? "Withdraw π" : "Transfer",
       icon: <ArrowUpRight size={20} strokeWidth={2.25} />,
       onClick: onSend,
       accent: isPi
@@ -40,8 +40,8 @@ export function WalletPrimaryActions({
     },
     {
       id: "request",
-      label: isPi ? "Eligibility" : "Request",
-      hint: isPi ? "Check payout status" : "Request",
+      label: isPi ? "Status" : "Request",
+      hint: isPi ? "Pi status" : "Request",
       icon: <HandCoins size={20} strokeWidth={2.25} />,
       onClick: onRequest,
       accent: isPi
@@ -50,8 +50,8 @@ export function WalletPrimaryActions({
     },
     {
       id: "receive",
-      label: isPi ? "Identity" : "Receive",
-      hint: isPi ? "Verify Pi account" : "Receive",
+      label: isPi ? "Linked" : "Receive",
+      hint: isPi ? "Identity" : "Receive",
       icon: <ArrowDownLeft size={20} strokeWidth={2.25} />,
       onClick: onReceive,
       accent: isPi
@@ -95,7 +95,7 @@ export function WalletPrimaryActions({
             type="button"
             disabled={disabled}
             onClick={a.onClick}
-            className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 transition active:scale-[0.97] disabled:opacity-50 ${a.accent}`}
+            className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${a.accent}`}
             aria-label={`${a.label}: ${a.hint}`}
           >
             {a.icon}

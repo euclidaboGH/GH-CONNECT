@@ -1,3 +1,5 @@
+> **LEGACY VERIFICATION FIXTURE** — superseded by current package worklog; retained for audit trail only.
+
 # Upgrade worklog — 0.274.3
 
 ## Notification RPC EXECUTE privilege hardening

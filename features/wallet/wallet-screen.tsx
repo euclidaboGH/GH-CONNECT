@@ -224,6 +224,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+
+
   const [showUtilityPanel, setShowUtilityPanel] = useState(false)
 
   useEffect(() => {
@@ -481,6 +483,26 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showFullHistory, setShowFullHistory] = useState(false)
   const [historyRail, setHistoryRail] = useState<"ghc" | "pi">("ghc")
+  // Phase 5: deep-link from Rewards "Open Wallet · Withdraw Pi" (and similar).
+  useEffect(() => {
+    let focus: string | null = null
+    try {
+      focus = sessionStorage.getItem("ghc.wallet.focus")
+      if (focus) sessionStorage.removeItem("ghc.wallet.focus")
+    } catch { /* */ }
+    if (!focus) return
+    setAssetRail("pi")
+    setHistoryRail("pi")
+    const targetId =
+      focus === "gh-pi-earnings-tools" || focus.startsWith("gh-") ? focus : "gh-pi-earnings-tools"
+    const timer = window.setTimeout(() => {
+      try {
+        document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })
+      } catch { /* */ }
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const [showAddGhc, setShowAddGhc] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<SendRecipient | null>(null)
   const [selectedTx, setSelectedTx] = useState<GhcTransaction | null>(null)
@@ -804,7 +826,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       if (txFilter === "received" && tx.kind !== "transfer_in") return false
       if (txFilter === "pending" && tx.status !== "pending" && tx.kind !== "pending" && tx.kind !== "transfer_request") return false
       if (q) {
-        const hay = `${tx.reason} ${tx.sourceEvent} ${tx.kind} ${statusLabel(tx.status).text}`.toLowerCase()
+        const hay = `${tx.id} ${tx.referenceId || ""} ${tx.reason} ${tx.sourceEvent} ${tx.kind} ${tx.status} ${statusLabel(tx.status).text}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       const now = Date.now()
@@ -1214,9 +1236,8 @@ const lowBalance = balance === 0 && displayPending === 0
                   if (assetRail === "pi") {
                     setSendEducate(null)
                     setHistoryRail("pi")
-                    // This card action navigates to the single authoritative payout workflow.
+                    // PI "send" is earnings withdrawal — scroll to PI tools in dashboard
                     document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    window.dispatchEvent(new CustomEvent("ghc:pi-open-payout"))
                     return
                   }
                   if (balance <= 0 && (displayPending > 0 || pending > 0)) {
@@ -1235,7 +1256,6 @@ const lowBalance = balance === 0 && displayPending === 0
                   if (assetRail === "pi") {
                     setSendEducate(null)
                     document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    window.dispatchEvent(new CustomEvent("ghc:pi-open-eligibility"))
                     return
                   }
                   setSendEducate(null)
@@ -1245,9 +1265,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onReceive={() => {
                   if (assetRail === "pi") {
-                    setSendEducate(null)
-                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    window.dispatchEvent(new CustomEvent("ghc:pi-open-identity"))
+                    setSendEducate("PI is credited to your earnings ledger from rewards and cashback — not via P2P receive.")
                     return
                   }
                   setSendEducate(null)
@@ -1569,16 +1587,17 @@ const lowBalance = balance === 0 && displayPending === 0
                 {(
                   [
                     { id: "today" as const, label: "Today" },
-                    { id: "7d" as const, label: "7d" },
-                    { id: "30d" as const, label: "30d" },
-                    { id: "all" as const, label: "All" },
+                    { id: "7d" as const, label: "7 days" },
+                    { id: "30d" as const, label: "30 days" },
+                    { id: "all" as const, label: "All time" },
                   ] as const
                 ).map((r) => (
                   <button
                     key={r.id}
                     type="button"
+                    aria-pressed={txDateRange === r.id}
                     onClick={() => setTxDateRange(r.id)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    className={`min-h-9 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
                       txDateRange === r.id
                         ? "bg-foreground text-background"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1604,8 +1623,9 @@ const lowBalance = balance === 0 && displayPending === 0
                   <button
                     key={f.id}
                     type="button"
+                    aria-pressed={txFilter === f.id}
                     onClick={() => setTxFilter(f.id)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    className={`min-h-9 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
                       txFilter === f.id
                         ? "bg-emerald-600 text-white"
                         : "bg-muted text-muted-foreground"
@@ -1622,15 +1642,30 @@ const lowBalance = balance === 0 && displayPending === 0
                 <Search
                   size={14}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
                 />
                 <input
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search reference, reason…"
-                  className="w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus:ring-2"
-                  aria-label="Search transactions"
+                  placeholder="Search description or reference…"
+                  className="min-h-11 w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2"
+                  aria-label="Search GHC transactions by description or reference"
                 />
+              </div>
+              <div className="flex min-h-8 items-center justify-between gap-3" aria-live="polite" aria-atomic="true">
+                <p className="text-[11px] text-muted-foreground">
+                  {filteredTxs.length} {filteredTxs.length === 1 ? "transaction" : "transactions"} shown
+                </p>
+                {(query.trim() || txFilter !== "all" || txDateRange !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(""); setTxFilter("all"); setTxDateRange("all") }}
+                    className="min-h-9 rounded-lg px-3 text-xs font-semibold text-emerald-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:text-emerald-300"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
 
               {refreshing && filteredTxs.length === 0 ? (

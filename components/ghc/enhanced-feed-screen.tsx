@@ -149,12 +149,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("ghc.feedFilter", activeFilter)
       window.localStorage.setItem("ghc.feedLocationLane", locationLane)
       window.localStorage.setItem("ghc.feedIntentionBias", intentionBias)
       window.localStorage.setItem("ghc.feedFocusMode", focusMode ? "1" : "0")
     } catch { /* */ }
-  }, [activeFilter, locationLane, intentionBias, focusMode])
+  }, [locationLane, intentionBias, focusMode])
 
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -760,7 +759,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             <section className="mt-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Feed personalization">
               <div className="flex items-start justify-between gap-3">
                 <div><p className="text-xs font-bold text-foreground">Your feed, your priorities</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. These preferences stay on this device.</p></div>
-                <button type="button" onClick={() => { setActiveFilter("for-you"); setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false); try { window.localStorage.setItem("ghc.feedFilter", "for-you") } catch { /* storage may be unavailable */ } }} className="text-[10px] font-bold text-emerald-700">Reset</button>
+                <button type="button" onClick={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false) }} className="text-[10px] font-bold text-emerald-700">Reset</button>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Location relevance</p><div className="flex flex-wrap gap-1">{([ ["city","Nearby"], ["country","Country"], ["worldwide","Worldwide"] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setLocationLane(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${locationLane === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>

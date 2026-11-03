@@ -9,7 +9,7 @@ const route = read('app/api/economy/earnings/registration-bonus/route.ts')
 const wallet = read('features/wallet/wallet-screen.tsx')
 const rewards = read('components/ghc/rewards-centre-screen.tsx')
 const checks = [
-  ['wallet keeps PI registration claim out of balance management', !/RegistrationBonusCard/.test(wallet) && /RegistrationBonusCard\s+compact/.test(rewards)],
+  ['wallet keeps PI registration claim out of balance management', !/RegistrationBonusCard/.test(wallet) && /registration bonus[\s\S]{0,120}Rewards/i.test(wallet)],
   ['rewards mounts compact claim card', /RegistrationBonusCard\s+compact/.test(rewards)],
   ['full-width claim CTA', /w-full/.test(card) && /Claim remaining|Claim \$\{amount\} π now|Claim \$\{amount\} π/.test(card)],
   ['legacy auto-reconcile', /autoReconcileStarted/.test(card) && /legacyClaimed/.test(card)],

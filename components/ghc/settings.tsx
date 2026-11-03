@@ -160,7 +160,8 @@ export function SettingsScreen({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const next = (e as CustomEvent<{ section?: string }>).detail?.section
+      const detail = (e as CustomEvent<{ section?: string; focus?: string }>).detail
+      const next = detail?.section
       if (
         next === "wallet" ||
         next === "rewards" ||
@@ -171,6 +172,12 @@ export function SettingsScreen({
         next === "appearance" ||
         next === "device-lock"
       ) {
+        // Phase 5: optional focus target for Wallet Pi tools (withdrawal journey)
+        if (next === "wallet" && detail?.focus) {
+          try {
+            sessionStorage.setItem("ghc.wallet.focus", String(detail.focus))
+          } catch { /* */ }
+        }
         goToSection(
           next as
             | "wallet"

@@ -691,7 +691,7 @@ export function CommunitiesScreen() {
       }
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         addToast("You are offline — join when reconnected", "info")
-        return false
+        return
       }
       const ok = await joinCommunity(row.id)
       if (ok) {
@@ -744,30 +744,24 @@ export function CommunitiesScreen() {
         addToast("You are offline — leave when reconnected", "info")
         return
       }
-      try {
-        const ok = await leaveCommunity(id)
-        if (ok) {
-          // Mirror cache only after domain leave succeeds (Studio Class D)
-          if (communityLocalCacheAllowed()) {
-            setLocalJoined((prev) => prev.filter((x) => x !== id))
-          }
-          setLocalBoard((prev) => {
-            if (!prev[id]) return prev
-            const next = { ...prev }
-            delete next[id]
-            return next
-          })
-          addToast(`Left ${name}`, "info")
-          if (selectedCommunityId === id) setSelectedCommunityId(null)
-          return
+      const ok = await leaveCommunity(id)
+      if (ok) {
+        // Mirror cache only after domain leave succeeds (Studio Class D)
+        if (communityLocalCacheAllowed()) {
+          setLocalJoined((prev) => prev.filter((x) => x !== id))
         }
-        addToast("Could not leave this community. Please try again.", "error")
-        return
-      } catch {
-        // A rejected network/domain operation must not escape into a route-level error screen.
-        addToast("Could not confirm leaving this community. Check your connection and try again.", "error")
+        setLocalBoard((prev) => {
+          if (!prev[id]) return prev
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        addToast(`Left ${name}`, "info")
+        if (selectedCommunityId === id) setSelectedCommunityId(null)
         return
       }
+      addToast("Could not leave this community. Please try again.", "error")
+      return
     }
     // No domain leave API: Studio cache-only leave; production must not fake leave
     if (communityLocalCacheAllowed()) {
@@ -794,21 +788,14 @@ export function CommunitiesScreen() {
     kind?: "text" | "question" | "resource"
   ) => {
     if (createBoardPost) {
-      try {
-        const ok = await createBoardPost(communityId, body, kind)
-        if (ok) {
-          setHubKey((k) => k + 1)
-          return
-        }
-        if (!allowLocalBoardFallback()) {
-          addToast("Could not post to the board. Please try again.", "error")
-          return
-        }
-      } catch {
-        if (!allowLocalBoardFallback()) {
-          addToast("Could not confirm your board post. Check your connection before retrying.", "error")
-          return
-        }
+      const ok = await createBoardPost(communityId, body, kind)
+      if (ok) {
+        setHubKey((k) => k + 1)
+        return
+      }
+      if (!allowLocalBoardFallback()) {
+        addToast("Could not post to the board. Please try again.", "error")
+        return
       }
     } else if (!allowLocalBoardFallback()) {
       addToast("Board posting is unavailable right now.", "error")

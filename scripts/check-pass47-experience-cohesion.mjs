@@ -14,7 +14,7 @@ assert.match(wrapper, /You’re offline\. Live updates and new actions may be un
 assert.match(wrapper, /Check pending actions before retrying\./, 'reconnect state discourages duplicate retries')
 assert.match(wrapper, /clearTimeout\(restoredTimer\)/, 'reconnect notice timer is cleaned up')
 assert.doesNotMatch(globalError, /error\?\.message/, 'root error boundary does not expose raw exception messages')
-assert.match(globalError, /correlationId = typeof error\?\.digest === \"string\"[\s\S]*?Support reference/, 'root error boundary retains a sanitized, user-visible correlation reference')
+assert.match(globalError, /error\?\.digest \?\? "unavailable"/, 'root error boundary retains safe correlation digest')
 const feedSkeleton = feed.slice(feed.indexOf('function FeedSkeleton()'), feed.indexOf('export function EnhancedFeedScreen'))
 assert.match(feedSkeleton, /gh-skeleton/, 'feed skeleton uses shared shimmer treatment')
 assert.doesNotMatch(feedSkeleton, /animate-pulse/, 'feed skeleton avoids conflicting pulse animation')

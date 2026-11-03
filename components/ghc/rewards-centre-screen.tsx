@@ -1,6 +1,5 @@
 "use client"
 
-import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
 
 import { useMemo, useState, useCallback, useEffect } from "react"
 import {
@@ -35,7 +34,6 @@ import {
 import { useGHC } from "@/contexts/ghc-context"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
-import { UnifiedEarningsDashboard } from "./unified-earnings-dashboard"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import { SurfaceIntro } from "./ui/product-surface"
 import { EconomyProgramStatus } from "./economy-program-status"
@@ -486,6 +484,38 @@ export function RewardsCentreScreen({
           onOpenWallet={onOpenWallet}
         />
 
+        <section className="mx-3 mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-labelledby="rewards-balance-summary-title">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p id="rewards-balance-summary-title" className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Rewards at a glance</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Amounts below come from the latest available wallet snapshot. Pending and locked rewards are not spendable.</p>
+            </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" aria-hidden="true">
+              <Award size={17} />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="min-w-0 rounded-xl bg-emerald-50/80 px-2.5 py-2 dark:bg-emerald-950/30">
+              <p className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">Available</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.balance == null ? "—" : formatGhc(serverEconomy.balance)}</p>
+            </div>
+            <div className="min-w-0 rounded-xl bg-amber-50/80 px-2.5 py-2 dark:bg-amber-950/25">
+              <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-300">Pending</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.pending == null ? "—" : formatGhc(serverEconomy.pending)}</p>
+            </div>
+            <div className="min-w-0 rounded-xl bg-violet-50/80 px-2.5 py-2 dark:bg-violet-950/25">
+              <p className="text-[10px] font-semibold text-violet-800 dark:text-violet-300">Locked</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.locked == null ? "—" : formatGhc(serverEconomy.locked)}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+            <p className="text-[10px] text-muted-foreground">{snapshot.pending.length} reward record{snapshot.pending.length === 1 ? "" : "s"} awaiting review or maturity</p>
+            <button type="button" onClick={() => setTab("history")} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+              View reward history <ChevronRight size={13} aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
         <section className="mx-3 mt-3 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/70 px-3.5 py-3 dark:border-emerald-900 dark:bg-emerald-950/25" aria-label="Recommended next action">
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">Best next action</p>
           <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review pending rewards" : "Keep building quality participation"}</p>
@@ -505,11 +535,30 @@ export function RewardsCentreScreen({
           tone="emerald"
         />
         <RegistrationBonusCard compact />
-        {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
-            Compact cashback summary only; full ledger + A2U request on Wallet. */}
+        {/* Phase 4: PI withdraw + payout authorization live only on Wallet (no duplicate dashboards). */}
         <PiCashbackSummary />
-        <PiPayoutAuthorizationCard />
-        <UnifiedEarningsDashboard compact />
+        <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm">
+          <p className="text-[12px] font-bold text-foreground">Pi withdrawals</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            Authorize payouts and withdraw available Pi from Wallet. Claims stay here; balances and History stay on Wallet.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-settings-section", {
+                    detail: { section: "wallet", focus: "gh-pi-earnings-tools" },
+                  }),
+                )
+              } catch { /* */ }
+            }}
+            className="mt-2.5 inline-flex min-h-9 items-center justify-center rounded-full bg-violet-700 px-3.5 text-[11px] font-bold text-white transition hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2"
+            aria-label="Open Wallet to authorize and withdraw Pi"
+          >
+            Open Wallet · Withdraw Pi
+          </button>
+        </div>
 
         <div className="mx-3 mt-3">
           <EconomyProgramStatus />

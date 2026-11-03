@@ -45,38 +45,21 @@ export async function GET(request: Request) {
     // a function can have side effects even when invoked with an empty payload.
     if (base && key) {
       const headers = { apikey: key, Authorization: `Bearer ${key}` }
-      const targets = [
+      for (const [label, path] of [
         ["table:gh_media_assets", "/rest/v1/gh_media_assets?select=id&limit=0"],
         ["table:gh_conversation_members", "/rest/v1/gh_conversation_members?select=conversation_id&limit=0"],
-      ] as const
-
-      // Probe independent read-only endpoints concurrently so diagnostics have a
-      // bounded wall-clock budget rather than accumulating one timeout per table.
-      await Promise.all(targets.map(async ([label, path]) => {
+      ] as const) {
         try {
-          const response = await fetch(`${base}${path}`, {
-            method: "GET",
-            headers,
-            cache: "no-store",
-            signal: AbortSignal.timeout(5_000),
-          })
-          if (response.status === 404) probes[label] = "MISSING"
-          else if (response.status === 401 || response.status === 403) probes[label] = "AUTH_REJECTED"
-          else if (response.ok) probes[label] = "PRESENT"
-          else if (response.status >= 500) probes[label] = "UPSTREAM_ERROR"
-          else probes[label] = `HTTP_${response.status}`
+          const response = await fetch(`${base}${path}`, { method: "GET", headers, cache: "no-store", signal: AbortSignal.timeout(5_000) })
+          probes[label] = response.status === 404 ? "MISSING" : response.ok ? "PRESENT" : `HTTP_${response.status}`
         } catch {
           probes[label] = "UNREACHABLE"
         }
-      }))
+      }
     }
 
-    const probeValues = Object.values(probes)
     const blockers: string[] = []
     if (!supabase.urlPresent || !supabase.serviceRolePresent) blockers.push("SUPABASE_CONFIGURATION_MISSING")
-    if (probeValues.includes("AUTH_REJECTED")) blockers.push("SUPABASE_CREDENTIALS_REJECTED")
-    if (probeValues.includes("UNREACHABLE")) blockers.push("SUPABASE_PROBE_UNREACHABLE")
-    if (probeValues.includes("UPSTREAM_ERROR") || probeValues.some((value) => value.startsWith("HTTP_"))) blockers.push("SUPABASE_PROBE_FAILED")
     if (probes["table:gh_media_assets"] === "MISSING") blockers.push("MEDIA_ASSET_TABLE_MISSING")
     if (probes["table:gh_conversation_members"] === "MISSING") blockers.push("CONVERSATION_MEMBERS_TABLE_MISSING")
     if (flags.activityRewards && !supabase.economyDbConfigured) blockers.push("ACTIVITY_REWARDS_DATABASE_NOT_CONFIGURED")

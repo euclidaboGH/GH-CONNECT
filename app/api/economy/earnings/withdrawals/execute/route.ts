@@ -34,12 +34,12 @@ async function rest<T>(base:string,key:string,path:string,init:RequestInit={}):P
 async function rpc<T>(base:string,key:string,name:string,body:Record<string,unknown>):Promise<T> {
   return rest<T>(base,key,`rpc/${name}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
 }
-async function handlePost(request:Request) {
+export async function POST(request:Request) {
   const auth=await resolveAuthenticatedUser(request.headers)
-  const serviceAuthorized=secretOk(request)
-  // Execution is server-secret-only. An optional signed-in user may execute only their own
-  // request; trusted server-side queue dispatchers can execute without impersonating a user.
-  if(!serviceAuthorized) return reply({ok:false,error:auth?"FORBIDDEN":"AUTH_REQUIRED"},auth?403:401)
+  if(!auth) return reply({ok:false,error:"AUTH_REQUIRED"},401)
+  if(!secretOk(request)) return reply({ok:false,error:"FORBIDDEN"},403)
+  const rl=await checkDurableRateLimit(`pi-earnings-execute:${auth.userId}`,2,60_000,{onUnavailable:"deny"})
+  if(!rl.ok) return reply({ok:false,error:durableRateLimitCode(rl),retryAfterSec:rl.retryAfterSec},durableRateLimitStatus(rl))
   if(process.env.PI_EARNINGS_PAYOUT_EXECUTION_ENABLED!=="true" || process.env.PI_A2U_ENABLED!=="true" || process.env.PI_A2U_TESTNET_ONLY!=="true" || process.env.PI_NETWORK!=="testnet" || process.env.PI_ENV!=="production" || !resolvePiSandbox()) return reply({ok:false,error:"PI_EARNINGS_EXECUTION_DISABLED"},503)
   const apiKey=String(process.env.PI_API_KEY||process.env.PI_SERVER_API_KEY||"").trim()
   const seed=String(process.env.PI_WALLET_PRIVATE_SEED||"").trim()
@@ -51,21 +51,15 @@ async function handlePost(request:Request) {
   if(!/^[0-9a-f-]{36}$/i.test(requestId)) return reply({ok:false,error:"INVALID_REQUEST_ID"},400)
   const env=readGhcServerEnv(); if(!env.supabaseUrl||!env.supabaseServiceRoleKey) return reply({ok:false,error:"PAYOUT_SERVICE_UNAVAILABLE"},503)
   const base=env.supabaseUrl.replace(/\/$/,""); const key=env.supabaseServiceRoleKey
-  const query:Record<string,string>={id:`eq.${requestId}`,select:"id,user_id,gross_atomic,fee_atomic,net_atomic,recipient_pi_app_uid,network,status,provider_payment_id",limit:"1"}
-  if(auth) query.user_id=`eq.${auth.userId}`
-  const rows=await rest<Array<{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null}>>(base,key,`gh_pi_earnings_payout_requests?${new URLSearchParams(query)}`)
+  const rows=await rest<Array<{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null}>>(base,key,`gh_pi_earnings_payout_requests?${new URLSearchParams({id:`eq.${requestId}`,user_id:`eq.${auth.userId}`,select:"id,user_id,gross_atomic,fee_atomic,net_atomic,recipient_pi_app_uid,network,status,provider_payment_id",limit:"1"})}`)
   const row=rows[0]; if(!row) return reply({ok:false,error:"REQUEST_NOT_FOUND"},404)
-  const ownerId=String(row.user_id||"").trim()
-  if(!ownerId || (auth && ownerId!==auth.userId)) return reply({ok:false,error:"REQUEST_NOT_FOUND"},404)
-  const rl=await checkDurableRateLimit(`pi-earnings-execute:${ownerId}`,2,60_000,{onUnavailable:"deny"})
-  if(!rl.ok) return reply({ok:false,error:durableRateLimitCode(rl),retryAfterSec:rl.retryAfterSec},durableRateLimitStatus(rl))
   if(row.status==="paid") return reply({ok:true,duplicate:true,status:"paid",requestId})
   if(row.status==="released"||row.status==="failed") return reply({ok:false,error:"REQUEST_TERMINAL"},409)
   if(row.network!=="Pi Testnet") return reply({ok:false,error:"TESTNET_ONLY"},409)
-  const wallet=await assertPayoutWalletAuthorization({ghUserId:ownerId,recipientUid:row.recipient_pi_app_uid})
+  const wallet=await assertPayoutWalletAuthorization({ghUserId:auth.userId,recipientUid:row.recipient_pi_app_uid})
   if(!wallet.ok) return reply({ok:false,error:wallet.error||"WALLET_AUTHORIZATION_REQUIRED"},wallet.error==="WALLET_AUTHORIZATION_UNAVAILABLE"?503:409)
   const lease=randomUUID()
-  const begin=await rpc<{ok:boolean;error?:string;providerPaymentId?:string|null;recipientUid:string;netPi:number;status?:string;duplicate?:boolean}>(base,key,"gh_pi_earnings_payout_begin_execution",{p_request_id:requestId,p_user_id:ownerId,p_lease_token:lease}).catch(()=>null)
+  const begin=await rpc<{ok:boolean;error?:string;providerPaymentId?:string|null;recipientUid:string;netPi:number;status?:string;duplicate?:boolean}>(base,key,"gh_pi_earnings_payout_begin_execution",{p_request_id:requestId,p_user_id:auth.userId,p_lease_token:lease}).catch(()=>null)
   if(!begin?.ok) return reply({ok:false,error:begin?.error||"EXECUTION_CLAIM_FAILED",retryable:begin?.error==="EXECUTION_BUSY"},begin?.error==="EXECUTION_BUSY"?409:503)
   if(begin.duplicate&&begin.status==="paid") return reply({ok:true,duplicate:true,status:"paid",requestId})
   let uncertain=true
@@ -143,16 +137,9 @@ async function handlePost(request:Request) {
     uncertain=false
     return reply({ok:true,requestId,status:"paid",network:"Pi Testnet",providerPaymentId:paymentId,txid,grossAtomic:row.gross_atomic,feeAtomic:row.fee_atomic,netAtomic:row.net_atomic})
   } catch(error) {
-    return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",retryable:true,reservationRetained:true,requestId,message:"The provider outcome could not be confirmed. Check withdrawal status before retrying."},503)
+    return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",detail:error instanceof Error?error.message.slice(0,160):"unknown",retryable:true,reservationRetained:true,requestId},503)
   } finally {
     clearInterval(heartbeatTimer)
     await rpc(base,key,"gh_pi_earnings_payout_end_execution",{p_request_id:requestId,p_lease_token:lease,p_uncertain:uncertain,p_failure_code:"PI_PROVIDER_OUTCOME_UNCERTAIN"}).catch(()=>null)
-  }
-}
-export async function POST(request:Request) {
-  try { return await handlePost(request) }
-  catch (error) {
-    console.error("[pi-earnings] execution endpoint failed safely", { error: error instanceof Error ? error.name : "UNKNOWN_ERROR" })
-    return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",retryable:true,message:"The provider outcome could not be confirmed. Recheck request status before retrying or creating another request."},503)
   }
 }

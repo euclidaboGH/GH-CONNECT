@@ -77,17 +77,7 @@ export async function POST(request: Request) {
     audit: [{ at: Date.now(), action: "CREATED", detail: auth.userId }],
   }
 
-  let created: Awaited<ReturnType<typeof createReservedOrder>>
-  try {
-    created = await createReservedOrder(order, idempotencyKey)
-  } catch {
-    // Unexpected storage/runtime failures must never become an unhandled route error
-    // or a fabricated order success. A retry with the same idempotency key is safe.
-    return NextResponse.json(
-      { ok: false, error: "ORDER_SERVICE_UNAVAILABLE", retryable: true },
-      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } }
-    )
-  }
+  const created = await createReservedOrder(order, idempotencyKey)
   if (!created.ok) {
     const status = created.error === "LISTING_NOT_FOUND" ? 404 :
       created.error === "INSUFFICIENT_STOCK" ? 409 :
@@ -112,14 +102,6 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  try {
-    const orders = await listOrdersForUserDurable(auth.userId)
-    return NextResponse.json({ ok: true, orders }, { headers: { "Cache-Control": "no-store" } })
-  } catch {
-    // Distinguish unavailable history from an empty history; clients can offer retry.
-    return NextResponse.json(
-      { ok: false, error: "ORDER_HISTORY_UNAVAILABLE", retryable: true },
-      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } }
-    )
-  }
+  const orders = await listOrdersForUserDurable(auth.userId)
+  return NextResponse.json({ ok: true, orders }, { headers: { "Cache-Control": "no-store" } })
 }
