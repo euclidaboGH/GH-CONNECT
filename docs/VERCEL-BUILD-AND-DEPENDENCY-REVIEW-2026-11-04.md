@@ -63,3 +63,11 @@ Validation on this inspection environment:
 - Focused checks: wallet Phase 5 17/17; Phase 9 opportunities/matching 9/9; post-curation 12/12; Stories rail 9/9; feed/creator 10/10; wallet/rewards separation 13/13.
 
 Remaining release gate: rerun full prebuild, typecheck, lint, Next.js build and operator verification on the required Node `^24.15.0` runtime, then deploy to a Vercel Preview and verify before production promotion. No GitHub push or deployment was performed.
+
+## GitHub Actions run 7964246570090bjhkjbk / #194 — regional formatter TypeScript contract
+
+- Corrected `RegionalContextValue` formatter signatures in `contexts/regional-context.tsx` to describe the provider-bound API. The provider supplies the locale internally, so consumers receive only the relevant options (`Intl.NumberFormatOptions`, `Intl.DateTimeFormatOptions`, `Intl.ListFormatOptions`) rather than the underlying helper's locale string parameter.
+- Applied the same context-bound signature correction to currency and relative-time formatters to prevent the same parameter-position mismatch from reappearing at other call sites.
+- No casts, `any`, compiler suppressions, or weakened TypeScript settings were introduced.
+- Regional-context checks: 10/10; global-locale formatting checks: 11/11; Phase 12 locale integration checks: 14/14.
+- Local full `tsc --noEmit` could not be treated as a valid project typecheck in this container: project dependencies (including React/Next and their type declarations) are not installed, and the available runtime is Node 22.16.0 rather than the CI-required Node 24.15.0. The compiler consequently reports missing dependency/type-environment errors across the repository. Re-run `npm ci` and `npm run typecheck` on Node 24.15.0 in CI before treating the full TypeScript gate as passed.

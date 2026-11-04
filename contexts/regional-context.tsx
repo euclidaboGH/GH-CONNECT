@@ -30,11 +30,12 @@ type RegionalContextValue = RegionalContextSnapshot & {
   headers: (includeLocation?: boolean) => Record<string, string>
   formatDateTime: typeof formatDateTime
   formatDateTimeWithZone: typeof formatDateTimeWithZone
-  formatRelativeTime: typeof formatRelativeTime
-  formatNumber: typeof formatNumber
-  formatCurrency: typeof formatCurrency
-  formatDate: typeof formatDate
-  formatList: typeof formatList
+  formatRelativeTime: (value: string | number | Date, now?: number) => string
+  // Context-bound formatters expose only caller options; locale is supplied by the provider.
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
+  formatCurrency: (value: number, currency: string) => string
+  formatDate: (value: string | number | Date, options?: Intl.DateTimeFormatOptions) => string
+  formatList: (values: string[], options?: Intl.ListFormatOptions) => string
   formatCompactNumber: (value: number, maximumFractionDigits?: number) => string
   formatPercent: (value: number, maximumFractionDigits?: number) => string
   formatUnit: (value: number, unit: Intl.NumberFormatOptions["unit"], options?: Omit<Intl.NumberFormatOptions, "style" | "unit">) => string
