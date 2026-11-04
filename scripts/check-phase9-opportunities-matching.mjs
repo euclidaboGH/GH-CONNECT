@@ -8,7 +8,7 @@ const checks = [
  ['requests action', match.includes('setShowRequestInbox(true)')],
  ['best next step', match.includes('Best next step:')],
  ['intentional connection language', match.includes('Connect with a clear intent')],
- ['opportunities label', rewards.includes('label: "Opportunities"')],
+ ['opportunities label', rewards.includes('label: msg("opportunities")') && rewards.includes('id: "opportunities"')],
  ['responsible participation copy', rewards.includes('participation path')],
  ['no rewards earn tab label', !rewards.includes('label: "Earn"')],
 ]

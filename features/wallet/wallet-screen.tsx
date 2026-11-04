@@ -1360,7 +1360,7 @@ const lowBalance = balance === 0 && displayPending === 0
               >
                 <p className="text-[12px] font-bold text-violet-900 dark:text-violet-100">Pi earnings</p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Switch to the Pi rail for withdraw, linked identity, and eligibility — one place, no duplicate buttons.
+                  Switch to the Pi rail for PI earnings & cashback, withdrawals, linked identity, and eligibility — one place, no duplicate buttons.
                 </p>
               </button>
             </div>

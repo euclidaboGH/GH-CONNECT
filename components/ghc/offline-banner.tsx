@@ -42,7 +42,7 @@ export function OfflineBanner() {
       >
         <div className="pointer-events-auto flex max-w-md items-center justify-center gap-2 rounded-full bg-amber-600/95 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm">
           <WifiOff size={14} aria-hidden />
-          <span>You&apos;re offline — actions queue until you&apos;re back.</span>
+          <span>You&apos;re offline — some actions can be saved for retry; others need a connection.</span>
           <PendingQueueChip />
         </div>
       </div>

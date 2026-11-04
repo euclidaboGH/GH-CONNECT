@@ -443,7 +443,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         <h2 className="text-[15px] font-bold tracking-tight text-foreground">Stories</h2>
         {ownStory ? (
           <button type="button" onClick={openCreator} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary transition hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Add another story">
-            <Plus size={15} /> Add story
+            <Plus size={15} /> Create
           </button>
         ) : (
           <span className="text-xs text-muted-foreground">24 hours</span>
@@ -482,12 +482,17 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               <Plus size={19} strokeWidth={2.7} aria-hidden />
             </span>
           ) : (
-            <span className="absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] border-white bg-card shadow-md">
-              {profileAvatar ? <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" /> : null}
-            </span>
+            <span className="absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 via-teal-400 to-emerald-600 p-[2px] shadow-md"><span className="block h-full w-full overflow-hidden rounded-full border-2 border-card bg-card">{profileAvatar ? <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" /> : null}</span></span>
           )}
         </button>
 
+        {otherStories.length === 0 ? (
+          <div className="flex h-[158px] w-[104px] shrink-0 flex-col items-center justify-center rounded-[14px] border border-dashed border-border/70 bg-muted/35 px-2 text-center" aria-label="No other stories yet">
+            <Sparkles size={18} className="mb-2 text-emerald-600" aria-hidden />
+            <span className="text-[11px] font-bold text-foreground">Be first</span>
+            <span className="mt-1 text-[9px] leading-snug text-muted-foreground">Share a moment with your community</span>
+          </div>
+        ) : null}
         {otherStories.map((item) => {
           const label = String(item.name || item.ownerId || "Member").trim() || "Member"
           const thumb = item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
@@ -513,7 +518,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               )}
               <span className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/75" />
               {item.media?.type === "video" ? <span className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white"><Video size={13} /></span> : null}
-              <span className={`absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] bg-card ${seen ? "border-white/70" : "border-emerald-400"}`}>
+              <span className={`absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] bg-card ${seen ? "border-white/70 bg-muted-foreground/25" : "border-transparent bg-gradient-to-br from-pink-500 via-amber-400 to-emerald-500 p-[2px]"}`}>
                 {avatar ? <LazyImage src={avatar} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-xs font-bold text-foreground">{label.slice(0, 1).toUpperCase()}</span>}
               </span>
               <span className="absolute inset-x-2 bottom-2 line-clamp-2 text-[11px] font-semibold leading-tight text-white drop-shadow">{label}</span>

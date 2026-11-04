@@ -14,7 +14,7 @@ const t = fs.readFileSync(path.join(root, "components/ghc/profile-story-section.
 ok("circular ring rail gradient unviewed", t.includes("from-pink-500 via-amber-400 to-emerald-500"))
 ok("seen stories muted ring", t.includes("bg-muted-foreground/25"))
 ok("own story emerald ring", t.includes("from-emerald-500 via-teal-400 to-emerald-600"))
-ok("Create CTA on feed header", t.includes(">Create<") || t.includes("Create\n"))
+ok("Create CTA on feed header", t.includes("/> Create") || t.includes("Create</button>"))
 ok("openStory for own and others", t.includes("openStory(ownStory)") && t.includes("openStory(item)"))
 ok("empty state be first", t.includes("Be first"))
 ok("role listitem avatars", t.includes('role="listitem"'))

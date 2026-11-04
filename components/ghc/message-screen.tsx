@@ -731,7 +731,7 @@ export function MessageScreen() {
             className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
             role="status"
           >
-            You are offline. Messages will queue and send automatically when you reconnect.
+            You are offline. Reconnect before sending new messages. Your unsent draft stays in the composer.
           </div>
         ) : null}
 

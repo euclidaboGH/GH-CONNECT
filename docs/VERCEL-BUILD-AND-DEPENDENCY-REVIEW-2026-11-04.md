@@ -37,3 +37,29 @@ Validation after restoring the template:
 - CI-equivalent checks for JSX safety, bounded JSON runtime, Phase 17–19 contracts, security headers, CSRF, production safety scan, payment recovery/timeline, project truth, Pi backend lock, clean migrations, migration release readiness, database recovery/catalog, and recovery-gate runtime tests passed.
 - The broader `verify:production` pack is not clean in this Node 22.16.0 inspection container: it reports existing failures in post-curation dashboard, Stories rail v2, and feed/creator verification checks, and did not complete within the available execution window. These failures are separate from the missing environment template and require their own source-level investigation.
 - Full prebuild/typecheck/lint/Next.js build and Vercel deployment remain unverified here because the available Node runtime is 22.16.0 while the project requires Node 24.15.0 or newer.
+
+## Follow-up — offline messaging copy contract
+
+- Corrected the conversation-thread offline notice: it now tells users to reconnect before sending new messages and confirms that an unsent draft remains in the composer, rather than making a blanket automatic-queue promise from that surface.
+- Corrected the global offline banner so it no longer implies every action is queued. It now distinguishes actions that can be saved for retry from actions that require a live connection.
+- Kept the existing durable offline queue and reconnect flush implementation intact; no send, persistence, retry, or delivery semantics were changed.
+- Verification: `node scripts/check-pass17-relationship-intelligence.mjs` passes 8/8; `node scripts/check-pass47-experience-cohesion.mjs` and `node scripts/check-pass48-accessible-navigation.mjs` pass.
+
+## Follow-up — GitHub Actions run 41813354746 (wallet, matching, stories, curation and feed contracts)
+
+The supplied CI output exposed a mixture of stale source-contract assertions and a few product-surface gaps. The fixes preserve the existing product architecture and do not remove wallet, rewards, matching, creator analytics, or story behavior.
+
+- Wallet Phase 2: clarified the GHC-rail handoff copy to identify the Pi destination as **PI earnings & cashback**. The PI earnings dashboard remains visible only when the Pi rail is selected; the GHC rail keeps its compact handoff. Phase 2 dual-asset wallet now passes 11/11 and the Phase 5 wallet release gate passes 17/17.
+- Opportunities: the rewards tabs use the locale-aware `msg("opportunities")` catalogue entry. Updated the static contract to assert the real localized tab ID and message lookup rather than requiring an English literal in source. Opportunities/matching passes 9/9.
+- Post curation: retained the accessible modal analytics experience, explicit dialog trigger, keyboard focus handling, bounded requests, server-authoritative reward/insights endpoints, event refresh, and truthful unavailable states. Updated the legacy checker to validate the current modal and the actual server/feed view fallback semantics, rather than an older inline expandable-dashboard design. Post curation passes 12/12.
+- Stories rail: added the clear **Create** action, distinct gradient ring for unviewed stories, muted seen-story treatment, emerald own-story ring, and a compact **Be first** empty state. Story ownership, audience filtering, story opening, progress animation, and feed mounting remain intact. Stories rail v2 passes 9/9.
+- Feed/creator: the location, intent and focus controls were already present and localized through translation keys, with preferences persisted locally. Updated the verifier to assert those actual controls and state handlers rather than hard-coded English labels. Feed/creator passes 10/10.
+- Three additional production-pack failures were obsolete assertions: two still pinned release version 0.301.0, and the social-loop verifier expected retired English toolbar/curation labels. Updated them to validate package/app release synchronization and the current accessible/localized interface contract.
+
+Validation on this inspection environment:
+
+- `npm run verify:static`: passed (57/57 top-level static checks; subordinate checks included).
+- `npm run verify:production`: **248 passed, 0 failed**. The report explicitly records Node `v22.16.0` as unsupported; the decision is `SOURCE_CHECKS_PASS — BUILD_AND_OPERATOR_VERIFICATION_STILL_REQUIRED`. This is not a production approval or a successful Node 24 build.
+- Focused checks: wallet Phase 5 17/17; Phase 9 opportunities/matching 9/9; post-curation 12/12; Stories rail 9/9; feed/creator 10/10; wallet/rewards separation 13/13.
+
+Remaining release gate: rerun full prebuild, typecheck, lint, Next.js build and operator verification on the required Node `^24.15.0` runtime, then deploy to a Vercel Preview and verify before production promotion. No GitHub push or deployment was performed.
