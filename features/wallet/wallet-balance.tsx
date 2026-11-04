@@ -258,8 +258,6 @@ export function WalletBalanceCard({
         <button
           type="button"
           aria-pressed={piSelected}
-          role="option"
-          aria-selected={selectedRail === "pi"}
           onClick={() => onSelectRail?.("pi")}
           className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
             piSelected
@@ -308,8 +306,6 @@ export function WalletBalanceCard({
         <button
           type="button"
           aria-pressed={!piSelected}
-          role="option"
-          aria-selected={selectedRail === "ghc"}
           onClick={() => onSelectRail?.("ghc")}
           className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
             !piSelected

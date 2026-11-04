@@ -71,3 +71,22 @@ Remaining release gate: rerun full prebuild, typecheck, lint, Next.js build and 
 - No casts, `any`, compiler suppressions, or weakened TypeScript settings were introduced.
 - Regional-context checks: 10/10; global-locale formatting checks: 11/11; Phase 12 locale integration checks: 14/14.
 - Local full `tsc --noEmit` could not be treated as a valid project typecheck in this container: project dependencies (including React/Next and their type declarations) are not installed, and the available runtime is Node 22.16.0 rather than the CI-required Node 24.15.0. The compiler consequently reports missing dependency/type-environment errors across the repository. Re-run `npm ci` and `npm run typecheck` on Node 24.15.0 in CI before treating the full TypeScript gate as passed.
+
+## GitHub Actions run #195 remediation addendum
+
+The #195 `lint` job reported one React Hooks error and nine warnings. The source was updated rather than suppressing the rules:
+
+- `UnifiedEarningsDashboard`: moved both loading/error early-return branches below all hooks; converted wallet authorization, payout request, quote, and withdrawal orchestration callbacks to dependency-aware `useCallback` functions so the focus listener is registered unconditionally and receives stable dependencies.
+- `comment-sheet`: added `mediaPreview` to the keyboard/focus effect dependency list because the Tab handler reads it.
+- `durable-image`: guarantees an `alt` attribute; callers can provide meaningful text, while the default empty alt is appropriate for decorative imagery.
+- `post-reward-panel`: captures the opener element during effect setup and restores focus to that captured element during cleanup.
+- `ghc-context`: the domain-binding effect now depends on the three domain instances it uses.
+- `wallet-balance`: removed the invalid `role="option"` / `aria-selected` combination from native buttons and retained `aria-pressed` toggle-button semantics.
+- `use-section-refresh`: explicitly passes and tracks each option consumed by the effect, including custom event names.
+- ESLint: migrated the repository from legacy `.eslintrc.json` plus `ESLINT_USE_FLAT_CONFIG=false` to `eslint.config.mjs` using `FlatCompat`, and removed the legacy environment override from npm scripts.
+
+A focused static regression gate, `scripts/check-github-195-lint-remediation.mjs`, is run automatically by `prelint` to protect these contracts.
+
+Validation performed in the available workspace: regional context 10/10, global locale formatting 11/11, locale integration 14/14, section refresh 12/12, unified wallet card 13/13, earnings final static gate 39/39 plus 12/12 child suites, repository consistency 6/6, build type-regression guard 7/7, JSX safety scan 949 files. The new #195 remediation gate is also run separately.
+
+Environment limitation: this workspace currently has Node v22.16.0 and no installed `node_modules`, while the repository correctly requires Node `^24.15.0`. Therefore a real ESLint execution and complete TypeScript `tsc --noEmit` cannot be certified here. CI must rerun `npm ci`, `npm run lint`, and `npm run typecheck` under Node 24.15.0. The #195 excerpt itself contains no TypeScript compiler diagnostics; it is a lint failure. The prior regional formatter signature correction remains in the baseline.

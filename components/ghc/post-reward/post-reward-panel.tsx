@@ -137,6 +137,7 @@ export function PostRewardPanel({
   useEffect(() => {
     if (!open) return
     const previousOverflow = document.body.style.overflow
+    const triggerElement = triggerRef.current
     document.body.style.overflow = "hidden"
     const focusClose = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
     const onKeyDown = (event: KeyboardEvent) => {
@@ -156,7 +157,7 @@ export function PostRewardPanel({
       window.cancelAnimationFrame(focusClose)
       document.body.style.overflow = previousOverflow
       window.removeEventListener("keydown", onKeyDown)
-      triggerRef.current?.focus()
+      triggerElement?.focus()
     }
   }, [open])
 

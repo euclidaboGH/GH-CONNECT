@@ -7921,7 +7921,7 @@ const dismissMatchCelebration = useCallback(() => {
       connectionsDomain.bindCountsGetter(() => ({}))
       discoveryDomain.bindCandidatesGetter(() => [])
     }
-  }, [feedDomain.bindPostsGetter, connectionsDomain.bindCountsGetter, discoveryDomain.bindCandidatesGetter])
+  }, [feedDomain, connectionsDomain, discoveryDomain])
 
   // Stable context value — prevents every consumer re-rendering when only parent re-renders
   const contextValue = useMemo(

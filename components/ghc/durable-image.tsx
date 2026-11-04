@@ -10,6 +10,7 @@ import { isMediaFacadeUrl, resolveDisplayMediaUrl } from "@/lib/media/resolve-di
  */
 export function DurableImage({
   src,
+  alt = "",
   referrerPolicy = "no-referrer",
   ...props
 }: ImgHTMLAttributes<HTMLImageElement>) {
@@ -41,5 +42,5 @@ export function DurableImage({
   }, [raw, viewerEpoch])
 
   const displaySrc = resolved?.source === raw ? resolved.url || undefined : undefined
-  return <img {...props} src={displaySrc} referrerPolicy={referrerPolicy} />
+  return <img {...props} src={displaySrc} alt={alt} referrerPolicy={referrerPolicy} />
 }

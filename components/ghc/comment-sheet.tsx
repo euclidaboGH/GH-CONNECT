@@ -224,7 +224,7 @@ useEffect(() => {
       document.body.style.overflow = previousOverflow
       previousFocus?.focus()
     }
-  }, [open])
+  }, [open, mediaPreview])
 
   // Focus composer when opening
   useEffect(() => {

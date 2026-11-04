@@ -347,7 +347,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
 
 
-  const onAuthorizeWallet = async (): Promise<boolean> => {
+  const onAuthorizeWallet = useCallback(async (): Promise<boolean> => {
     if (authorizingWallet) return false
     setAuthorizingWallet(true)
     setPayoutMsg(null)
@@ -399,7 +399,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     } finally {
       setAuthorizingWallet(false)
     }
-  }
+  }, [authorizingWallet, refresh])
 
 
   const onRevokeWalletAuth = async () => {
@@ -437,7 +437,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     }
   }
 
-  const onRequestPayout = async () => {
+  const onRequestPayout = useCallback(async () => {
     if (requestingPayout) return
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
       setPayoutMsg("Withdrawal is not available until the server confirms eligibility and a linked Pi identity.")
@@ -508,9 +508,9 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     } finally {
       setRequestingPayout(false)
     }
-  }
+  }, [requestingPayout, snap])
 
-  const onPreviewFee = async () => {
+  const onPreviewFee = useCallback(async () => {
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
       setQuoteMsg("A quote is unavailable until the server confirms payout eligibility and a linked Pi identity.")
       return
@@ -569,7 +569,38 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       if (sequence === quoteSequence.current) setQuoting(false)
       if (quoteController.current === controller) quoteController.current = null
     }
-  }
+  }, [snap])
+
+  const runWithdraw = useCallback(async () => {
+    // Phase 4: single primary control — authorize when needed, then quote, then request.
+    if (walletAuthActive !== true) {
+      const granted = await onAuthorizeWallet()
+      if (!granted) return
+      // Continue in the same gesture once server confirms authorization.
+    }
+    if (!quoteDetail) {
+      await onPreviewFee()
+    }
+    await onRequestPayout()
+  }, [walletAuthActive, onAuthorizeWallet, quoteDetail, onPreviewFee, onRequestPayout])
+
+
+  useEffect(() => {
+    const onFocus = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as { action?: string } | undefined
+      const action = detail?.action
+      if (action === "withdraw") {
+        void runWithdraw()
+      } else if (action === "status") {
+        void refresh()
+        setPayoutMsg("Eligibility and linked Pi status are shown above. Withdraw stays on this card.")
+      } else if (action === "linked") {
+        void onAuthorizeWallet()
+      }
+    }
+    window.addEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+    return () => window.removeEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+  }, [runWithdraw, refresh, onAuthorizeWallet])
 
   if (loading && !snap) {
     return (
@@ -612,37 +643,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const available = typeof snap.available === "number" ? snap.available : atomicToDisplay(snap.availableAtomic)
   const pending = typeof snap.pending === "number" ? snap.pending : atomicToDisplay(snap.pendingAtomic)
   const withdrawable = typeof snap.withdrawable === "number" ? snap.withdrawable : atomicToDisplay(snap.withdrawableAtomic)
-
-  const runWithdraw = async () => {
-    // Phase 4: single primary control — authorize when needed, then quote, then request.
-    if (walletAuthActive !== true) {
-      const granted = await onAuthorizeWallet()
-      if (!granted) return
-      // Continue in the same gesture once server confirms authorization.
-    }
-    if (!quoteDetail) {
-      await onPreviewFee()
-    }
-    await onRequestPayout()
-  }
-
-
-  useEffect(() => {
-    const onFocus = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail as { action?: string } | undefined
-      const action = detail?.action
-      if (action === "withdraw") {
-        void runWithdraw()
-      } else if (action === "status") {
-        void refresh()
-        setPayoutMsg("Eligibility and linked Pi status are shown above. Withdraw stays on this card.")
-      } else if (action === "linked") {
-        void onAuthorizeWallet()
-      }
-    }
-    window.addEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
-    return () => window.removeEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
-  }, [runWithdraw, refresh, onAuthorizeWallet])
 
   return (
     <section
