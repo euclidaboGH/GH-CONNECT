@@ -10,6 +10,8 @@ import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startT
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getShellMessage } from "@/lib/i18n/shell"
 import { Compass, Heart, MessagesSquare, Newspaper, Plus, ShoppingBag, ShoppingCart, UserRound, Users, Wallet } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
@@ -20,6 +22,7 @@ import { NetworkResilience } from "./network-resilience"
 import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { AccessibilityAnnouncer } from "./accessibility-announcer"
+import { AccessibleStatus } from "./accessible-status"
 import { SessionResumeToast } from "./session-resume-toast"
 import { getMarketplaceCart } from "@/lib/marketplace/cart"
 import { GlobalHotkeys } from "./global-hotkeys"
@@ -89,12 +92,13 @@ const ProfilePreviewPageLazy = lazy(() =>
   import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
 )
 function TabScreenFallback({ label }: { label: string }) {
+  const regional = useRegionalContext()
+  const loadingLabel = getShellMessage("loading", regional.locale)
   return (
-    <div
+    <AccessibleStatus
       className="flex h-full min-h-[50vh] flex-col gap-3 bg-background px-3 pt-4"
-      role="status"
-      aria-live="polite"
-      aria-label={`Loading ${label}`}
+      label={`${loadingLabel} ${label}`}
+      busy
     >
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
@@ -118,8 +122,8 @@ function TabScreenFallback({ label }: { label: string }) {
         </div>
         <div className="h-20 gh-skeleton rounded-2xl bg-muted/40" />
       </div>
-      <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">Loading {label}…</p>
-    </div>
+      <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">{loadingLabel} {label}…</p>
+    </AccessibleStatus>
   )
 }
 
@@ -242,27 +246,40 @@ function scrollActiveTabToTop() {
  * Hysteresis + near-bottom ignore prevents end-of-list vibration loops.
  */
 function onTabScrollHideNav(e: UIEvent<HTMLElement>) {
-  const el = e.currentTarget
-  const y = el.scrollTop
+  // Scroll events do not bubble, but onScrollCapture can observe nested feed scrollers.
+  // currentTarget is often only the non-scrolling tab wrapper; resolve the real scroll owner.
+  const target = e.target instanceof HTMLElement ? e.target : null
+  const candidates: HTMLElement[] = []
+  let node: HTMLElement | null = target
+  while (node && node !== e.currentTarget) {
+    candidates.push(node)
+    node = node.parentElement
+  }
+  candidates.push(e.currentTarget)
+  const el = candidates.find((candidate) => {
+    const overflowY = typeof window !== "undefined" ? window.getComputedStyle(candidate).overflowY : ""
+    return candidate.scrollHeight > candidate.clientHeight + 2 &&
+      (overflowY === "auto" || overflowY === "scroll" || candidate.classList.contains("gh-premium-feed-scroll") || candidate.classList.contains("gh-scroll-root"))
+  })
+  if (!el) return
+  const y = Math.max(0, el.scrollTop)
   const prev = Number(el.dataset.scrollY || 0)
   const delta = y - prev
   el.dataset.scrollY = String(y)
-  if (Math.abs(delta) < 14) return
-  const maxScroll = el.scrollHeight - el.clientHeight
-  // Near bottom: always show nav — never toggle (stops bounce feedback)
-  if (maxScroll > 0 && y >= maxScroll - 96) {
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-    } catch { /* */ }
+  if (Math.abs(delta) < 12) return
+  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+  // At the true end of a list, reveal navigation and avoid rubber-band oscillation.
+  if (maxScroll > 0 && y >= maxScroll - 72) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
     return
   }
-  try {
-    if (delta > 0 && y > 72) {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true } }))
-    } else if (delta < -10) {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-    }
-  } catch { /* */ }
+  // Finger swipe up (content moves upward / scrollTop increases): hide chrome.
+  // Finger swipe down (content moves downward / scrollTop decreases): restore chrome.
+  if (delta > 0 && y > 48) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true } }))
+  } else if (delta < 0) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
+  }
 }
 
 export function GHConnectApp() {
@@ -304,6 +321,7 @@ export function GHConnectApp() {
     }
   }, [])
 
+  const regional = useRegionalContext()
   const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
@@ -1193,8 +1211,8 @@ export function GHConnectApp() {
     <>
     {themeLayer}
     <ConsentGate>
-    <SkipToContent />
-    <AccessibilityAnnouncer label={NAV_ITEMS.find((item) => item.id === activeTab)?.label || "GreenHaven"} />
+    <SkipToContent locale={regional.locale} />
+    <AccessibilityAnnouncer label={getShellMessage((NAV_ITEMS.find((item) => item.id === activeTab)?.id || "home") as "home" | "messages" | "communities" | "cart" | "profile", regional.locale) || "GreenHaven"} locale={regional.locale} />
     <GlobalHotkeys />
     <div
       className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full"
@@ -1208,7 +1226,7 @@ export function GHConnectApp() {
       <main
         id="ghc-main-content"
         tabIndex={-1}
-        aria-label="GreenHaven main content"
+        aria-label={getShellMessage("mainContent", regional.locale)}
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"
         onPointerDown={() => {
           if (bottomNavHidden) setBottomNavHidden(false)
@@ -1307,18 +1325,23 @@ export function GHConnectApp() {
         className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/50 bg-card/95 backdrop-blur-md px-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] pt-1 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
           bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.75rem] opacity-100"
         }`}
-        aria-label="Main navigation"
+        aria-label={getShellMessage("mainNavigation", regional.locale)}
         role="navigation"
         aria-hidden={bottomNavHidden || showCreateHub}
         inert={bottomNavHidden || showCreateHub}
         style={{
-          minHeight: "var(--gh-bottom-nav-height)",
+          minHeight: bottomNavHidden || showCreateHub ? 0 : "var(--gh-bottom-nav-height)",
+          height: bottomNavHidden || showCreateHub ? 0 : undefined,
+          flexBasis: bottomNavHidden || showCreateHub ? 0 : undefined,
+          paddingTop: bottomNavHidden || showCreateHub ? 0 : undefined,
+          paddingBottom: bottomNavHidden || showCreateHub ? 0 : undefined,
           /* Crisp edge — no soft gradient “shadow band” above the bar */
           boxShadow: "none",
         }}
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
-          {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
+          {NAV_ITEMS.map(({ id, icon: Icon }) => {
+            const localizedLabel = getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
             const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
@@ -1374,7 +1397,7 @@ export function GHConnectApp() {
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
-                aria-label={isActive ? `${label}, current tab` : `Go to ${label}`}
+                aria-label={isActive ? `${localizedLabel}, ${getShellMessage("currentTab", regional.locale)}` : `${getShellMessage("goTo", regional.locale)} ${localizedLabel}`}
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
@@ -1440,7 +1463,7 @@ export function GHConnectApp() {
                     isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  {label}
+                  {localizedLabel}
                 </span>
               </button>
             )

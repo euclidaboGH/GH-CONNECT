@@ -1,5 +1,7 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
+import { DurableVideo } from "./durable-video"
 /**
  * Short Video surface — vertical playback over existing gh_posts + durable media.
  * No monetization, ranking claims, or rewards.
@@ -18,6 +20,8 @@ import {
   Flame,
 } from "lucide-react"
 import { socialRecordAttention } from "@/lib/social/client"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getSocialMessage as socialText } from "@/lib/i18n/social"
 
 type ShortPost = {
   id: string
@@ -37,6 +41,8 @@ interface ShortVideoScreenProps {
 }
 
 export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoScreenProps) {
+  const regional = useRegionalContext()
+  const t = useCallback((key: Parameters<typeof socialText>[0]) => socialText(key, regional.preferredLocale), [regional.preferredLocale])
   const [posts, setPosts] = useState<ShortPost[]>([])
   const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -82,17 +88,17 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
         const seed = seedPosts.filter((p) => p.video && !String(p.video).startsWith("blob:"))
         setPosts(seed)
         if (seed.length === 0) {
-          setError(data.error || "No short videos yet. Publish a video post to get started.")
+          setError(data.error || t("noVideos"))
         }
       }
     } catch {
-      setError("Could not load short videos")
+      setError(t("loadVideosFailed"))
       const seed = seedPosts.filter((p) => p.video && !String(p.video).startsWith("blob:"))
       setPosts(seed)
     } finally {
       setLoading(false)
     }
-  }, [mode, seedPosts])
+  }, [mode, seedPosts, t])
 
   useEffect(() => {
     if (!open) return
@@ -161,16 +167,16 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
       className="fixed inset-0 z-[80] flex flex-col bg-black text-white"
       role="dialog"
       aria-modal="true"
-      aria-label="Short videos"
+      aria-label={t("shortVideos")}
     >
       <header className="flex items-center gap-2 px-3 py-2 safe-area-pt">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold tracking-wide">GH Pulse</p>
           <div className="mt-2 flex gap-1.5 overflow-x-auto">
             {([
-              ["latest", "Latest"],
-              ["following", "Following"],
-              ["trending", "Trending"],
+              ["latest", t("latest")],
+              ["following", t("following")],
+              ["trending", t("trending")],
             ] as const).map(([value, label]) => (
               <button key={value} type="button" onClick={() => { setMode(value); setIndex(0) }} className={`rounded-full px-3 py-1 text-[11px] font-semibold ${mode === value ? "bg-white text-black" : "bg-white/10 text-white/75"}`}>
                 {value === "trending" ? <Flame size={12} className="mr-1 inline" /> : null}{label}
@@ -182,7 +188,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
           type="button"
           onClick={onClose}
           className="rounded-full bg-white/10 p-2 hover:bg-white/20"
-          aria-label="Close"
+          aria-label={t("close")}
         >
           <X size={20} />
         </button>
@@ -192,7 +198,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
         {loading && (
           <div className="flex flex-col items-center gap-2 text-white/80">
             <Loader2 className="animate-spin" size={28} />
-            <span className="text-xs">Loading…</span>
+            <span className="text-xs">{t("loading")}</span>
           </div>
         )}
 
@@ -204,7 +210,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
               onClick={() => void load()}
               className="mt-4 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold"
             >
-              Retry
+              {t("retry")}
             </button>
           </div>
         )}
@@ -215,9 +221,9 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
               type="button"
               className="relative min-h-0 flex-1"
               onClick={() => setPlaying((p) => !p)}
-              aria-label={playing ? "Pause" : "Play"}
+              aria-label={playing ? t("pause") : t("play")}
             >
-              <video
+              <DurableVideo
                 ref={videoRef}
                 key={current.id}
                 src={current.video}
@@ -225,6 +231,11 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                 playsInline
                 loop
                 muted={muted}
+                autoPlay={playing}
+                onLoadedData={() => {
+                  const element = videoRef.current
+                  if (element && playing) void element.play().catch(() => setPlaying(false))
+                }}
                 onTimeUpdate={onTimeUpdate}
                 onEnded={() => {
                   if (current.id && !completeSent.current.has(current.id)) {
@@ -246,7 +257,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
             <div className="space-y-2 px-4 pb-6 pt-2">
               <div className="flex items-center gap-2">
                 {current.authorPhoto ? (
-                  <img
+                  <DurableImage
                     src={current.authorPhoto}
                     alt=""
                     className="h-9 w-9 rounded-full object-cover"
@@ -270,7 +281,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                     type="button"
                     className="rounded-full bg-white/15 p-2"
                     onClick={() => setPlaying((p) => !p)}
-                    aria-label={playing ? "Pause" : "Play"}
+                    aria-label={playing ? t("pause") : t("play")}
                   >
                     {playing ? <Pause size={18} /> : <Play size={18} />}
                   </button>
@@ -278,7 +289,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                     type="button"
                     className="rounded-full bg-white/15 p-2"
                     onClick={() => setMuted((m) => !m)}
-                    aria-label={muted ? "Unmute" : "Mute"}
+                    aria-label={muted ? t("unmute") : t("mute")}
                   >
                     {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                   </button>
@@ -289,7 +300,7 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                     className="rounded-full bg-white/15 p-2 disabled:opacity-30"
                     disabled={index <= 0}
                     onClick={() => go(-1)}
-                    aria-label="Previous"
+                    aria-label={t("previous")}
                   >
                     <ChevronUp size={18} />
                   </button>
@@ -298,14 +309,14 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
                     className="rounded-full bg-white/15 p-2 disabled:opacity-30"
                     disabled={index >= posts.length - 1}
                     onClick={() => go(1)}
-                    aria-label="Next"
+                    aria-label={t("next")}
                   >
                     <ChevronDown size={18} />
                   </button>
                 </div>
               </div>
               <p className="text-center text-[10px] text-white/50">
-                {posts.length ? `${index + 1} / ${posts.length}` : ""} · {mode === "trending" ? "Server-signal discovery" : mode === "following" ? "People you follow" : "Newest Pulse posts"}
+                {posts.length ? `${index + 1} / ${posts.length}` : ""} · {mode === "trending" ? t("trending") : mode === "following" ? t("following") : t("latest")}
               </p>
             </div>
           </div>

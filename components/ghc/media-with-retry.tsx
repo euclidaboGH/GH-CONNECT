@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { DurableImage } from "./durable-image"
 import { optimizedImageUrl, preferReducedData } from "@/lib/mobile-performance"
 import { RefreshCw } from "lucide-react"
 
@@ -46,7 +47,7 @@ export function MediaWithRetry({
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <DurableImage
       key={nonce}
       src={optimizedImageUrl(src, reducedData ? 480 : 720)}
       alt={alt}

@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.287.0
+project_version=0.312.0
 manifest_format_version=1
-canonical_migrations=175
-classification_required=112
+canonical_migrations=177
+classification_required=116
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=60
+classification_review_required=58
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -194,6 +194,8 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=2744 path=supabase/migrations/20261031010002_gh_community_chat_review_membership_order.sql
 [REVIEW_REQUIRED] size=3393 path=supabase/migrations/20261101010001_gh_security_control_plane_retention.sql
 [REQUIRED] size=1872 path=supabase/migrations/20261101090001_pi_wallet_authorization_get_hasmapping_fix.sql
-[REVIEW_REQUIRED] size=1153 path=supabase/migrations/20261101140001_ensure_earnings_payout_policy_fee_bps.sql
-[REVIEW_REQUIRED] size=5091 path=supabase/migrations/20261101150001_fix_notification_list_createdAt_order.sql
-[REVIEW_REQUIRED] size=2120 path=supabase/migrations/20261101160001_harden_notification_rpc_execute_privileges.sql
+[REQUIRED] size=1153 path=supabase/migrations/20261101140001_ensure_earnings_payout_policy_fee_bps.sql
+[REQUIRED] size=5091 path=supabase/migrations/20261101150001_fix_notification_list_createdAt_order.sql
+[REQUIRED] size=2120 path=supabase/migrations/20261101160001_harden_notification_rpc_execute_privileges.sql
+[REQUIRED] size=11163 path=supabase/migrations/20261101160002_marketplace_atomic_order_transitions.sql
+[REVIEW_REQUIRED] size=2651 path=supabase/migrations/20261104170001_marketplace_order_read_cleanup_separation.sql

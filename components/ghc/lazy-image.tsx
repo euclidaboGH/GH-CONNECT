@@ -46,6 +46,17 @@ function LazyImageInner({
     setRetryToken(0)
   }, [rawSrc])
 
+  // A session/account switch invalidates previously resolved signed media URLs.
+  useEffect(() => {
+    const onMediaSessionChange = () => {
+      setDisplaySrc(null)
+      setStatus("loading")
+      setRetryToken((value) => value + 1)
+    }
+    window.addEventListener("ghc:media-session-change", onMediaSessionChange)
+    return () => window.removeEventListener("ghc:media-session-change", onMediaSessionChange)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     setStatus("loading")

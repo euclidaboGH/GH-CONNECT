@@ -40,7 +40,7 @@ ok("CANNOT_BUY_OWN humanized", safe.includes("CANNOT_BUY_OWN") && safe.includes(
 ok("WALLET_AUTHORIZATION_REQUIRED humanized", safe.includes("WALLET_AUTHORIZATION_REQUIRED"))
 
 const earnings = read("components/ghc/unified-earnings-dashboard.tsx")
-ok("Earnings hard timeout 12s", earnings.includes("12_000") && earnings.includes("setFailed(true)"))
+ok("Earnings bounded timeout 10s with fail-closed feedback", earnings.includes("10_000") && earnings.includes("setFailed(true)") && earnings.includes("refreshSequence.current"))
 ok("Earnings Retry control present", earnings.includes("Retry") && earnings.includes("setLoading(true)"))
 
 console.log("")

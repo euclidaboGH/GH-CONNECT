@@ -252,19 +252,20 @@ export async function listCreatorPosts(
     }
   }
 
-  const posts = Array.isArray(res.data)
-    ? res.data
-    : []
+  if (!Array.isArray(res.data)) {
+    return { ok: false, error: "INVALID_POSTS_RESPONSE", posts: [] }
+  }
 
   return {
     ok: true,
-    posts,
+    posts: res.data,
   }
 }
 
 
 export type CreatorEconomySummary = {
   ok: boolean
+  sources: { piTips: boolean; ghcTips: boolean; postRewards: boolean; creatorLedger: boolean }
   tipPiGross: number
   tipPiPayable: number
   tipPiPaid: number
@@ -280,7 +281,7 @@ export type CreatorEconomySummary = {
 
 export async function getCreatorEconomySummary(userId: string, postIds: string[]): Promise<CreatorEconomySummary> {
   const ids = postIds.filter(Boolean).slice(0, 100)
-  const empty: CreatorEconomySummary = { ok: false, tipPiGross: 0, tipPiPayable: 0, tipPiPaid: 0, tipGhcSettled: 0, tipCount: 0, rewardTotal: 0, rewardAuthor: 0, rewardCuration: 0, rewardPosts: 0, walletCreatorCredits: 0, walletCreatorDebits: 0 }
+  const empty: CreatorEconomySummary = { ok: false, sources: { piTips: false, ghcTips: false, postRewards: false, creatorLedger: false }, tipPiGross: 0, tipPiPayable: 0, tipPiPaid: 0, tipGhcSettled: 0, tipCount: 0, rewardTotal: 0, rewardAuthor: 0, rewardCuration: 0, rewardPosts: 0, walletCreatorCredits: 0, walletCreatorDebits: 0 }
   if (!userId) return empty
   const q = (table: string, params: string) => restGet(`${table}?${params}`)
   const postFilter = ids.length ? `post_id=in.(${ids.map(encodeURIComponent).join(',')})` : 'post_id=in.(null)'
@@ -290,7 +291,15 @@ export async function getCreatorEconomySummary(userId: string, postIds: string[]
     q('gh_content_rewards', `${postFilter}&select=post_id,total_earned,author_reward,curation_reward&limit=100`),
     q('ghc_transactions', `user_id=eq.${encodeURIComponent(userId)}&status=eq.posted&select=amount,kind,source_event,reference_id&limit=500`),
   ])
-  if (!tips.ok && !ghcTips.ok && !rewards.ok && !ledger.ok) return empty
+  const sources = {
+    piTips: tips.ok && Array.isArray(tips.data),
+    ghcTips: ghcTips.ok && Array.isArray(ghcTips.data),
+    postRewards: rewards.ok && Array.isArray(rewards.data),
+    creatorLedger: ledger.ok && Array.isArray(ledger.data),
+  }
+  // A combined creator earnings figure is meaningful only when every contributing
+  // source has been read successfully and returned the expected collection shape.
+  if (!Object.values(sources).every(Boolean)) return { ...empty, sources }
   const tipRows = Array.isArray(tips.data) ? tips.data as Array<{gross_amount?: unknown;status?: string}> : []
   const ghcRows = Array.isArray(ghcTips.data) ? ghcTips.data as Array<{amount?: unknown}> : []
   const rewardRows = Array.isArray(rewards.data) ? rewards.data as Array<{total_earned?: unknown;author_reward?: unknown;curation_reward?: unknown}> : []
@@ -300,6 +309,7 @@ export async function getCreatorEconomySummary(userId: string, postIds: string[]
   const creatorDebits = ledgerRows.filter(r => Number(r.amount) < 0 && String(r.source_event||'').includes('CREATOR')).reduce((a,r)=>a+Math.abs(Number(r.amount||0)),0)
   return {
     ok: true,
+    sources,
     tipPiGross: sum(tipRows,'gross_amount'),
     tipPiPayable: tipRows.filter(r=>r.status==='payable').reduce((a,r)=>a+Number(r.gross_amount||0),0),
     tipPiPaid: tipRows.filter(r=>r.status==='paid').reduce((a,r)=>a+Number(r.gross_amount||0),0),

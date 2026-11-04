@@ -1,5 +1,7 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
+import { DurableVideo } from "./durable-video"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Download,
   ArrowLeft, ArrowRight, Camera, Check, Clock3, Eye, ImagePlus, LoaderCircle,
@@ -9,7 +11,7 @@ import { useGHC } from "@/contexts/ghc-context"
 import { socialListStoryViewers, socialViewStory, socialToggleStoryReaction } from "@/lib/social/client"
 import { compressImage } from "@/lib/ghc-data"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
-import { toRelativeMediaFacadeUrl, resolveDisplayMediaUrl, isMediaFacadeUrl } from "@/lib/media/resolve-display-url"
+import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
 import { isBlobUrl } from "@/lib/media/durable-url"
 import { mediaUserMessage } from "@/lib/media/user-messages"
 import type { StoryAudience, StoryItem } from "@/lib/ghc-types"
@@ -436,91 +438,59 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   }
 
   const rail = (
-    <div className="space-y-2.5" aria-label="Stories">
-      {scope === "feed" ? (
-        <div className="flex items-center justify-between gap-2 px-1">
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-black tracking-tight text-foreground">Stories</h2>
-            <p className="text-[11px] text-muted-foreground">
-              {otherStories.length + (ownStory ? 1 : 0) > 0
-                ? `${otherStories.length + (ownStory ? 1 : 0)} live · expire in 24h`
-                : "Share a moment · visible 24 hours"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openCreator}
-            className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm active:scale-[0.98]"
-          >
-            Create
+    <div className="space-y-2" aria-label="Stories">
+      <div className="flex items-center justify-between px-0.5">
+        <h2 className="text-[15px] font-bold tracking-tight text-foreground">Stories</h2>
+        {ownStory ? (
+          <button type="button" onClick={openCreator} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary transition hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Add another story">
+            <Plus size={15} /> Add story
           </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-[13px] font-black tracking-tight text-foreground">Your moments</h2>
-            <p className="text-[11px] text-muted-foreground">Stories disappear after 24 hours</p>
-          </div>
-          <button
-            type="button"
-            onClick={openCreator}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground"
-          >
-            New
-          </button>
-        </div>
-      )}
-
+        ) : (
+          <span className="text-xs text-muted-foreground">24 hours</span>
+        )}
+      </div>
       <div
-        className="gh-stories-rail -mx-1 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-1 pb-1 pt-0.5 scrollbar-hide"
+        className="gh-stories-rail -mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-1 pt-0.5 scrollbar-hide"
         role="list"
-        aria-label="Story avatars"
+        aria-label="Story updates"
       >
-        {/* Own story bubble */}
         <button
           type="button"
           role="listitem"
           onClick={() => (ownStory ? openStory(ownStory) : openCreator())}
-          className="group flex w-[76px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          aria-label={ownStory ? "View your story" : "Add a story"}
+          className="group relative h-[158px] w-[104px] shrink-0 snap-start overflow-hidden rounded-[14px] border border-border/70 bg-card text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          aria-label={ownStory ? "View your story" : "Create a story"}
         >
-          <span
-            className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-full p-[3px] transition group-active:scale-[0.97] ${
-              ownStory
-                ? "bg-gradient-to-tr from-emerald-500 via-teal-400 to-emerald-600 shadow-md shadow-emerald-500/20"
-                : "bg-gradient-to-tr from-border via-muted to-border"
-            }`}
-          >
-            <span className="relative h-full w-full overflow-hidden rounded-full bg-card ring-2 ring-card">
-              {ownStory?.media?.url && !String(ownStory.media.url).startsWith("blob:") ? (
-                ownStory.media.type === "video" ? (
-                  <video src={ownStory.media.url} className="h-full w-full object-cover" muted playsInline />
-                ) : (
-                  <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" />
-                )
-              ) : profileAvatar ? (
-                <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-800 to-teal-500 text-lg font-black text-white">
-                  {(profile?.displayName || profile?.username || "Y").slice(0, 1).toUpperCase()}
-                </span>
-              )}
-            </span>
-            {!ownStory ? (
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-[2.5px] border-card bg-emerald-600 text-white shadow-md">
-                <Plus size={13} strokeWidth={3} aria-hidden />
+          <span className="absolute inset-x-0 top-0 h-[112px] overflow-hidden bg-muted">
+            {ownStory?.media?.url && ownStory.media.type === "image" ? (
+              <LazyImage src={ownStory.media.url} alt="" className="h-full w-full object-cover" />
+            ) : ownStory?.media?.url && ownStory.media.type === "video" && profileAvatar ? (
+              <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" />
+            ) : profileAvatar ? (
+              <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center bg-muted text-3xl font-semibold text-muted-foreground">
+                {(profile?.displayName || profile?.username || "Y").slice(0, 1).toUpperCase()}
               </span>
-            ) : null}
+            )}
           </span>
-          <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-foreground">
-            {ownStory ? "Your story" : "Your story"}
+          <span className="absolute inset-x-0 bottom-0 flex h-[54px] items-end justify-center bg-card px-1.5 pb-2 text-center text-[11px] font-semibold leading-tight text-foreground">
+            {ownStory ? "Your story" : "Create story"}
           </span>
+          {!ownStory ? (
+            <span className="absolute left-1/2 top-[94px] flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-card bg-primary text-primary-foreground shadow-sm">
+              <Plus size={19} strokeWidth={2.7} aria-hidden />
+            </span>
+          ) : (
+            <span className="absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] border-white bg-card shadow-md">
+              {profileAvatar ? <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" /> : null}
+            </span>
+          )}
         </button>
 
         {otherStories.map((item) => {
           const label = String(item.name || item.ownerId || "Member").trim() || "Member"
-          const thumb =
-            item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
+          const thumb = item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
           const avatar = typeof item.photo === "string" && item.photo ? item.photo : null
           const seen = seenStoryIds.includes(item.id)
           return (
@@ -529,54 +499,27 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               type="button"
               role="listitem"
               onClick={() => openStory(item)}
-              className="group flex w-[76px] shrink-0 snap-start flex-col items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="group relative h-[158px] w-[104px] shrink-0 snap-start overflow-hidden rounded-[14px] border border-border/50 bg-muted text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               aria-label={`View story from ${label}${seen ? " (seen)" : ""}`}
             >
-              <span
-                className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-full p-[3px] transition group-active:scale-[0.97] ${
-                  seen
-                    ? "bg-muted-foreground/25"
-                    : "bg-gradient-to-tr from-pink-500 via-amber-400 to-emerald-500 shadow-md shadow-pink-500/15"
-                }`}
-              >
-                <span className="relative h-full w-full overflow-hidden rounded-full bg-card ring-2 ring-card">
-                  {thumb ? (
-                    item.media?.type === "video" ? (
-                      <video src={thumb} className="h-full w-full object-cover" muted playsInline />
-                    ) : (
-                      <LazyImage src={thumb} alt="" className="h-full w-full object-cover" />
-                    )
-                  ) : avatar ? (
-                    <LazyImage src={avatar} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center bg-muted text-base font-bold text-muted-foreground">
-                      {label.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
+              {thumb && item.media?.type === "image" ? (
+                <LazyImage src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              ) : avatar ? (
+                <LazyImage src={avatar} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-700 to-teal-900 text-3xl font-bold text-white">
+                  {label.slice(0, 1).toUpperCase()}
                 </span>
+              )}
+              <span className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/75" />
+              {item.media?.type === "video" ? <span className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white"><Video size={13} /></span> : null}
+              <span className={`absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] bg-card ${seen ? "border-white/70" : "border-emerald-400"}`}>
+                {avatar ? <LazyImage src={avatar} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-xs font-bold text-foreground">{label.slice(0, 1).toUpperCase()}</span>}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-foreground">
-                {label}
-              </span>
+              <span className="absolute inset-x-2 bottom-2 line-clamp-2 text-[11px] font-semibold leading-tight text-white drop-shadow">{label}</span>
             </button>
           )
         })}
-
-        {scope === "feed" && otherStories.length === 0 && !ownStory ? (
-          <button
-            type="button"
-            role="listitem"
-            onClick={openCreator}
-            className="flex h-[72px] min-w-[140px] shrink-0 snap-start items-center gap-2 rounded-full border border-dashed border-border/70 bg-muted/25 px-3 text-left transition hover:bg-muted/40"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/15 text-emerald-700">
-              <Sparkles size={16} />
-            </span>
-            <span className="text-[11px] font-medium leading-snug text-muted-foreground">
-              Be first — share a 24h moment
-            </span>
-          </button>
-        ) : null}
       </div>
     </div>
   )
@@ -596,7 +539,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
       <main className="flex min-h-0 flex-1 items-center justify-center px-3 pb-3 sm:px-6">
         <div className="relative flex h-full max-h-[min(76vh,52rem)] w-full max-w-[27rem] flex-col overflow-hidden rounded-[1.8rem] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,.45)]" style={{ background: !media ? background : "#111827" }}>
-          {cameraOpen ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black"><video ref={cameraVideoRef} autoPlay muted playsInline className="h-full w-full object-cover" /><canvas ref={cameraCanvasRef} className="hidden" /><div className="absolute bottom-5 flex items-center gap-4"><button type="button" onClick={stopCamera} className="rounded-full bg-black/55 px-4 py-2 text-sm">Cancel</button><button type="button" onClick={() => void captureCameraPhoto()} className="flex h-16 w-16 items-center justify-center rounded-full border-[5px] border-white bg-white/20 shadow-xl" aria-label="Take photo"><span className="h-10 w-10 rounded-full bg-white" /></button></div></div> : media?.url ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black">{media.type === "image" ? <img src={media.localPreview || media.url} alt="Story preview" className="h-full w-full object-contain" /> : <video src={media.localPreview || media.url} controls playsInline className="h-full w-full object-contain" />}<button type="button" onClick={() => setMedia(null)} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60" aria-label="Remove selected media"><X size={17} /></button></div> : storyMode === "text" ? <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-4 flex items-center gap-2 text-white/75"><Type size={17} /><span className="text-xs font-semibold uppercase tracking-[.18em]">Text story</span></div><textarea autoFocus value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} placeholder="What’s on your mind?" maxLength={500} className="min-h-[13rem] w-full resize-none bg-transparent text-center text-2xl font-semibold leading-relaxed text-white outline-none placeholder:text-white/50 sm:text-3xl" /><p className="text-center text-xs text-white/60">{text.length}/500</p></div> : <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-5 flex items-center gap-2"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15"><Sparkles size={20} /></span><div><p className="text-lg font-bold">Make it a moment.</p><p className="text-xs text-white/65">Start with a photo, video or words.</p></div></div><div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => void startCamera()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Camera size={24} /><span><span className="block text-sm font-bold">Open camera</span><span className="text-[11px] text-white/60">Capture a moment now</span></span></button><button type="button" onClick={() => imageRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><ImagePlus size={24} /><span><span className="block text-sm font-bold">Photo</span><span className="text-[11px] text-white/60">Choose from gallery</span></span></button><button type="button" onClick={() => videoRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Video size={24} /><span><span className="block text-sm font-bold">Video</span><span className="text-[11px] text-white/60">Choose a video clip</span></span></button><button type="button" onClick={() => { setStoryMode("text"); setMedia(null) }} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Type size={24} /><span><span className="block text-sm font-bold">Text story</span><span className="text-[11px] text-white/60">Words with a mood</span></span></button></div><p className="mt-5 text-center text-[11px] leading-relaxed text-white/50">Your original media stays yours. Choose who can see this moment before sharing.</p></div>}
+          {cameraOpen ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black"><video ref={cameraVideoRef} autoPlay muted playsInline className="h-full w-full object-cover" /><canvas ref={cameraCanvasRef} className="hidden" /><div className="absolute bottom-5 flex items-center gap-4"><button type="button" onClick={stopCamera} className="rounded-full bg-black/55 px-4 py-2 text-sm">Cancel</button><button type="button" onClick={() => void captureCameraPhoto()} className="flex h-16 w-16 items-center justify-center rounded-full border-[5px] border-white bg-white/20 shadow-xl" aria-label="Take photo"><span className="h-10 w-10 rounded-full bg-white" /></button></div></div> : media?.url ? <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black">{media.type === "image" ? <DurableImage src={media.localPreview || media.url} alt="Story preview" className="h-full w-full object-contain" /> : <DurableVideo src={media.localPreview || media.url} controls playsInline className="h-full w-full object-contain" />}<button type="button" onClick={() => setMedia(null)} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60" aria-label="Remove selected media"><X size={17} /></button></div> : storyMode === "text" ? <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-4 flex items-center gap-2 text-white/75"><Type size={17} /><span className="text-xs font-semibold uppercase tracking-[.18em]">Text story</span></div><textarea autoFocus value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} placeholder="What’s on your mind?" maxLength={500} className="min-h-[13rem] w-full resize-none bg-transparent text-center text-2xl font-semibold leading-relaxed text-white outline-none placeholder:text-white/50 sm:text-3xl" /><p className="text-center text-xs text-white/60">{text.length}/500</p></div> : <div className="flex min-h-0 flex-1 flex-col justify-center p-6 sm:p-8"><div className="mb-5 flex items-center gap-2"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15"><Sparkles size={20} /></span><div><p className="text-lg font-bold">Make it a moment.</p><p className="text-xs text-white/65">Start with a photo, video or words.</p></div></div><div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => void startCamera()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Camera size={24} /><span><span className="block text-sm font-bold">Open camera</span><span className="text-[11px] text-white/60">Capture a moment now</span></span></button><button type="button" onClick={() => imageRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><ImagePlus size={24} /><span><span className="block text-sm font-bold">Photo</span><span className="text-[11px] text-white/60">Choose from gallery</span></span></button><button type="button" onClick={() => videoRef.current?.click()} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Video size={24} /><span><span className="block text-sm font-bold">Video</span><span className="text-[11px] text-white/60">Choose a video clip</span></span></button><button type="button" onClick={() => { setStoryMode("text"); setMedia(null) }} className="flex min-h-28 flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/10 p-4 text-left transition hover:bg-white/15"><Type size={24} /><span><span className="block text-sm font-bold">Text story</span><span className="text-[11px] text-white/60">Words with a mood</span></span></button></div><p className="mt-5 text-center text-[11px] leading-relaxed text-white/50">Your original media stays yours. Choose who can see this moment before sharing.</p></div>}
 
           {!cameraOpen && (media || storyMode === "text") && <div className="shrink-0 space-y-3 bg-gradient-to-t from-black/85 via-black/60 to-transparent p-4 pt-8 sm:p-5 sm:pt-8">
             {storyMode === "text" && !media && <div className="flex items-center gap-2 overflow-x-auto pb-1" aria-label="Text background themes">{STORY_BACKGROUNDS.map((item) => <button key={item.name} type="button" title={item.name} aria-label={`${item.name} background`} onClick={() => setBackground(item.value)} className={`h-8 w-8 shrink-0 rounded-full border-2 ${background === item.value ? "border-white ring-2 ring-white/30" : "border-white/25"}`} style={{ background: item.value }} />)}<span className="ml-1 flex items-center gap-1 text-[11px] text-white/65"><Palette size={13} /> Mood · {text.length}/500</span></div>}
@@ -638,7 +581,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
           <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-2 ring-white/40">
             {viewing.photo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={viewing.photo} alt="" className="h-full w-full object-cover" />
+              <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" />
             ) : (
               <span className="text-xs font-bold">{String(viewing.name || "M").slice(0, 1).toUpperCase()}</span>
             )}
@@ -669,15 +612,15 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         </div>
       </div>
       <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
-        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <video key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <img src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
-        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <img src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
+        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <DurableVideo key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <DurableImage src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
+        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
         {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
         {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}
         {viewing.media && viewing.text && <p className="absolute bottom-28 left-4 right-4 z-10 whitespace-pre-wrap rounded-2xl bg-black/35 px-4 py-3 text-sm leading-relaxed sm:bottom-32 sm:left-8 sm:right-8">{viewing.text}</p>}
         {!isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-4 pb-5 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6 sm:pb-7" onClick={(e) => e.stopPropagation()}><div className="mb-3 flex items-center justify-center gap-3">{["💚", "🔥", "👏", "😂", "😍"].map((emoji) => { const counts = storyReactionOverrides[viewing.id] || viewing.reactionCounts || {}; const count = Number(counts[emoji] || 0); const active = (viewing.viewerReactions || []).includes(emoji); return <button key={emoji} type="button" disabled={replying} onClick={() => void sendStoryReaction(emoji)} className={`relative flex h-12 min-w-12 flex-col items-center justify-center rounded-full border text-lg transition hover:scale-110 disabled:opacity-50 ${active ? "border-emerald-300 bg-emerald-400/25 ring-2 ring-emerald-300/60" : "border-white/15 bg-white/10 hover:bg-white/20"}`} aria-label={`${active ? "Remove" : "Send"} ${emoji} reaction${count ? `; ${count} total` : ""}`} aria-pressed={active}>{emoji}{count > 0 ? <span className="text-[9px] font-bold leading-none text-white/90">{count}</span> : null}</button>})}</div><div className="flex items-center gap-2"><input value={replyText} onChange={(e) => setReplyText(e.target.value.slice(0, 300))} onKeyDown={(e) => { if (e.key === "Enter") void sendReply() }} placeholder="Reply privately…" aria-label="Reply to story" className="h-12 min-w-0 flex-1 rounded-full border border-white/20 bg-black/30 px-5 text-sm text-white outline-none placeholder:text-white/60 focus:border-white/60" /><button type="button" onClick={() => void sendReply()} disabled={!replyText.trim() || replying} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-[#06251a] disabled:opacity-50" aria-label="Send reply">{replying ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}</button></div></div>}
         {isOwnStory(viewing) && <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 to-transparent px-4 pb-6 pt-12 sm:inset-x-4 sm:rounded-b-[1.7rem] sm:px-6"><p className="text-center text-xs text-white/75"><Eye size={14} className="mr-1 inline" />Story insights · Open Viewers to see who watched</p></div>}
       </div>
-      {viewersOpen && <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center" onClick={(e) => { e.stopPropagation(); setViewersOpen(false) }}><div className="max-h-[72vh] w-full max-w-md overflow-hidden rounded-t-3xl border border-white/10 bg-[#101a17] sm:rounded-3xl" onClick={(e) => e.stopPropagation()}><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-bold">Story viewers</p><p className="text-xs text-white/55">People who watched this story</p></div><button type="button" onClick={() => setViewersOpen(false)} aria-label="Close viewers" className="rounded-full bg-white/10 p-2"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{loadingViewers ? <div className="flex items-center justify-center gap-2 p-8 text-sm text-white/70"><LoaderCircle size={18} className="animate-spin" />Loading viewers…</div> : viewerUsers.length ? viewerUsers.map((user, index) => <div key={String(user.userId || index)} className="flex items-center gap-3 rounded-xl px-3 py-3"><span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/10">{typeof user.avatarUrl === "string" && user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span>{String(user.displayName || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{String(user.displayName || "Member")}</span><Check size={16} className="text-emerald-300" /></div>) : <p className="p-8 text-center text-sm text-white/55">No viewers yet. When someone watches, they’ll appear here.</p>}</div></div></div>}
+      {viewersOpen && <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center" onClick={(e) => { e.stopPropagation(); setViewersOpen(false) }}><div className="max-h-[72vh] w-full max-w-md overflow-hidden rounded-t-3xl border border-white/10 bg-[#101a17] sm:rounded-3xl" onClick={(e) => e.stopPropagation()}><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-bold">Story viewers</p><p className="text-xs text-white/55">People who watched this story</p></div><button type="button" onClick={() => setViewersOpen(false)} aria-label="Close viewers" className="rounded-full bg-white/10 p-2"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{loadingViewers ? <div className="flex items-center justify-center gap-2 p-8 text-sm text-white/70"><LoaderCircle size={18} className="animate-spin" />Loading viewers…</div> : viewerUsers.length ? viewerUsers.map((user, index) => <div key={String(user.userId || index)} className="flex items-center gap-3 rounded-xl px-3 py-3"><span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/10">{typeof user.avatarUrl === "string" && user.avatarUrl ? <DurableImage src={user.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span>{String(user.displayName || "M").slice(0, 1).toUpperCase()}</span>}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{String(user.displayName || "Member")}</span><Check size={16} className="text-emerald-300" /></div>) : <p className="p-8 text-center text-sm text-white/55">No viewers yet. When someone watches, they’ll appear here.</p>}</div></div></div>}
     </div>
   ) : null
 

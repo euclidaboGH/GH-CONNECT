@@ -1,6 +1,10 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 
 import { formatPrice, listedWhen, relatedSearchTokens, relatedListingsFor, suggestedCommunitiesFor } from "@/lib/marketplace/discovery-presentation"
 import { mapMarketplaceListingRecord, mapMarketplaceOrderRecord, mapSavedMarketplaceListingRecord } from "@/lib/marketplace/record-mappers"
@@ -842,7 +846,7 @@ function ListingDetail({
                 <li key={c.id} className="flex items-center gap-3">
                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted">
                     {c.photo ? (
-                      <img src={c.photo} alt="" className="h-full w-full object-cover" />
+                      <DurableImage src={c.photo} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-muted-foreground">
                         {(c.name || "?").slice(0, 2).toUpperCase()}
@@ -1007,11 +1011,14 @@ function SellListingForm({
     }
   }
 
+  const regional = useRegionalContext()
+  const wt = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
+
   return (
     <div className="mx-auto max-w-lg space-y-3">
       <div>
         <h2 className="text-[17px] font-bold text-foreground">
-          {mode === "edit" ? "Edit listing" : "Sell on Marketplace"}
+          {mode === "edit" ? wt("editListing") : wt("sellMarketplace")}
         </h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
           {mode === "edit"
@@ -1021,7 +1028,7 @@ function SellListingForm({
       </div>
 
       <div>
-        <span className="text-[12px] font-bold text-muted-foreground">Photos</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("photos")}</span>
         <div className="mt-1 flex flex-wrap gap-2">
           {mediaUrls.map((src) => (
             <div key={src} className="relative h-20 w-20 overflow-hidden rounded-xl border border-border/60">
@@ -1068,7 +1075,7 @@ function SellListingForm({
         />
       </label>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Price</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("price")}</span>
         <input
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -1145,7 +1152,7 @@ function SellListingForm({
         />
       </div>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Description</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("description")}</span>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
@@ -1201,7 +1208,7 @@ function SellListingForm({
           onClick={onSubmit}
           className="min-h-11 flex-1 rounded-full bg-[var(--gh-green)] px-3 text-sm font-bold text-white disabled:opacity-50"
         >
-          {busy ? (mode === "edit" ? "Saving…" : "Publishing…") : cta}
+          {busy ? (mode === "edit" ? wt("saving") : wt("posting")) : cta}
         </button>
       </div>
     </div>
@@ -1611,6 +1618,8 @@ export function MarketplaceScreen({
   onBack: () => void
   initialListingId?: string | null
 }) {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
@@ -2141,7 +2150,7 @@ export function MarketplaceScreen({
   }
 
   return (
-    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven marketplace">
+    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
       <header className="flex shrink-0 flex-col gap-2 border-b border-border/50 px-2.5 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
@@ -2153,9 +2162,9 @@ export function MarketplaceScreen({
             <ArrowLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-bold">Marketplace</h1>
+            <h1 className="truncate text-sm font-bold">{msg("marketplaceTitle")}</h1>
             <p className="truncate text-[11px] text-muted-foreground">
-              Buy &amp; sell with π or GHC
+              {msg("buySellSubtitle")}
             </p>
           </div>
           <span className="gh-icon-tile flex h-10 w-10 items-center justify-center rounded-2xl" aria-hidden>
@@ -2166,12 +2175,12 @@ export function MarketplaceScreen({
         {/* FB-style action chips */}
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 scrollbar-none" role="toolbar" aria-label="Marketplace tools">
           {[
-            { id: "cart" as const, label: `Cart${cartItems.length ? ` · ${cartItems.length}` : ""}`, icon: ShoppingCart },
-            { id: "browse" as const, label: "Browse", icon: Store },
-            { id: "sell" as const, label: "Sell", icon: Plus },
-            { id: "mine" as const, label: "Seller Centre", icon: BarChart3 },
-            { id: "orders" as const, label: "Orders", icon: Package },
-            { id: "saved" as const, label: "Saved", icon: Bookmark },
+            { id: "cart" as const, label: `${msg("cart")}${cartItems.length ? ` · ${cartItems.length}` : ""}`, icon: ShoppingCart },
+            { id: "browse" as const, label: msg("browse"), icon: Store },
+            { id: "sell" as const, label: msg("sell"), icon: Plus },
+            { id: "mine" as const, label: msg("sellerCentre"), icon: BarChart3 },
+            { id: "orders" as const, label: msg("orders"), icon: Package },
+            { id: "saved" as const, label: msg("saved"), icon: Bookmark },
           ].map((chip) => (
             <button
               key={chip.id}
@@ -2203,7 +2212,7 @@ export function MarketplaceScreen({
             }`}
           >
             <Tag size={14} aria-hidden />
-            Categories
+            {msg("categories")}
           </button>
           <button
             type="button"
@@ -2215,7 +2224,7 @@ export function MarketplaceScreen({
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-[12px] font-bold text-foreground hover:bg-muted/80"
           >
             <Search size={14} aria-hidden />
-            Search
+            {msg("searchListings")}
           </button>
         </div>
 
@@ -2242,7 +2251,7 @@ export function MarketplaceScreen({
                 onChange={(e) => setQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
-                placeholder="Search listings…"
+                placeholder={msg("searchListings")}
                 className={`gh-standard-search h-11 w-full border border-border/70 pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 ${
                   searchFocused ? "ring-2 ring-primary/20" : ""
                 }`}

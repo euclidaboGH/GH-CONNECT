@@ -24,7 +24,7 @@ const checks = [
  ['commerce actions and notes are type-checked without coercion', /typeof body\.action==="string"/.test(commerce) && /typeof body\.note==="string"/.test(commerce)],
  ['mutation responses use no-store caching policy', /Cache-Control/.test(create) && /Cache-Control/.test(transition) && /Cache-Control/.test(pay) && /Cache-Control/.test(commerce)],
  ['phase 10 documentation exists', fs.existsSync(path.join(process.cwd(), 'docs/PHASE-10-MARKETPLACE-ORDER-FULFILMENT-INTEGRITY.md'))],
- ['durable order reads are authoritative when DB is configured', /dbConfigured\(\) \? await loadOrder\(orderId\)/.test(store)],
+ ['durable order reads are authoritative when DB is configured', /export async function loadOrder\(id: string\)/.test(store) && /if \(!dbConfigured\(\)\) return map\(\)\.get\(id\)/.test(store) && /gh_marketplace_order_get/.test(store)],
  ['timestamp mapper accepts ISO and epoch values', /function timestampMs\(/.test(store) && /Date\.parse\(value\)/.test(store) && /value > 0 && value < 100_000_000_000/.test(store)],
  ['missing durable timestamps are not fabricated as current time', /createdAt: timestampMs\(data\.createdAt, 0\)/.test(store) && /updatedAt: timestampMs\(data\.updatedAt, 0\)/.test(store)],
  ['order cache is updated only after successful durable write', store.indexOf('const res = await rpcJson("gh_marketplace_order_upsert"') < store.indexOf('map().set(order.id, order)', store.indexOf('const res = await rpcJson("gh_marketplace_order_upsert"'))],

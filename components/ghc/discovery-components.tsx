@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 
 import { useState, useRef, useEffect } from "react"
@@ -293,7 +294,7 @@ function SmartSuggestionsSection({
         className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left shadow-sm transition active:scale-[0.99]"
       >
         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-muted">
-          <img src={safePhoto} alt="" className="h-full w-full object-cover" />
+          <DurableImage src={safePhoto} alt="" className="h-full w-full object-cover" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-bold text-foreground">
@@ -598,7 +599,7 @@ export function TrendingSection({ candidates, onViewProfile, onLike, onMessage }
         {candidates.slice(0, 4).map((c) => (
           <div key={c.id} className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg overflow-hidden border border-orange-200 cursor-pointer hover:shadow-md transition" onClick={() => onViewProfile(c)}>
             <div className="h-20 bg-gray-200 relative">
-              <img loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-full h-full object-cover" />
+              <DurableImage loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-full h-full object-cover" />
               {c.online && <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>}
             </div>
             <div className="p-2">
@@ -619,7 +620,7 @@ export function NearbySection({ candidates, onViewProfile, onLike, onMessage }: 
       <div className="space-y-2">
         {candidates.slice(0, 3).map((c) => (
           <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-muted/40 rounded-lg cursor-pointer transition">
-            <img loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-12 h-12 rounded-full object-cover" />
+            <DurableImage loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-12 h-12 rounded-full object-cover" />
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-sm text-foreground">{c.name}, {c.age}</h4>
               <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
@@ -645,7 +646,7 @@ export function SuggestedCreatorsSection({ candidates, onViewProfile, onFollow }
       <div className="space-y-2">
         {candidates.slice(0, 4).map((c) => (
           <div key={c.id} onClick={() => onViewProfile(c)} className="flex items-center gap-3 p-2 hover:bg-muted/40 rounded-lg cursor-pointer transition">
-            <img loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-200" />
+            <DurableImage loading="lazy" decoding="async" src={c.photo} alt={c.name} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-200" />
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-sm text-foreground flex items-center gap-1">{c.name} {c.verified && <span className="text-blue-500 text-xs">✓</span>}</h4>
               <p className="text-xs text-muted-foreground">Creator</p>
@@ -736,7 +737,7 @@ export function PopularPostsSection({ posts, onViewPost }: { posts: any[]; onVie
       <div className="space-y-2">
         {(posts || []).slice(0, 3).map((p: any) => (
           <button key={p.id} onClick={() => onViewPost(p.id)} className="w-full text-left flex gap-3 p-2 hover:bg-red-50 rounded-lg transition active:scale-95">
-            {p.images?.[0] && <img loading="lazy" decoding="async" src={p.images[0]} alt="" className="w-12 h-12 rounded object-cover flex-shrink-0" />}
+            {p.images?.[0] && <DurableImage loading="lazy" decoding="async" src={p.images[0]} alt="" className="w-12 h-12 rounded object-cover flex-shrink-0" />}
             <div className="min-w-0">
               <h4 className="font-bold text-xs text-foreground truncate">{p.authorName}</h4>
               <p className="text-xs text-muted-foreground line-clamp-2">{p.content}</p>

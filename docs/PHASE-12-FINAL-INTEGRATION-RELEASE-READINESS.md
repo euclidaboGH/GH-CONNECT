@@ -3,7 +3,9 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.287.0` (2026-11-01)
+Release: `0.312.0` (2026-11-04)
+
+The 0.312.0 source baseline includes Phase 20 payout controls, Phase 21 private-surface durable abuse controls, Phase 22 atomic marketplace order transitions, Phase 23 migration/lock-scope hardening, Phase 24 migration-classification/operator-guide synchronization, and Phase 26 wallet ledger resilience/premium wallet presentation. The canonical inventory contains 177 migrations: 116 REQUIRED candidates, 58 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL, and 2 PROPOSAL. The 58/1/2 held migrations remain unapplied pending their documented gates. Runtime/build and operator acceptance remain pending.
 
 ## Delivered in v0.157.12
 
@@ -130,3 +132,41 @@ Phase 25 remains review-required and unapplied. Static contracts do not replace 
 ## v0.201.0 Phase 24 financial exception detail
 
 Adds read-only per-allocation payout reconciliation details and community payment-to-entitlement exception details. It does not perform automatic historical corrections, provider refunds, membership grants or renewals. Migration remains REVIEW_REQUIRED; PostgreSQL concurrency and authenticated Testnet acceptance remain outstanding.
+
+
+## v0.298.0 global locale integration follow-up
+
+Locale preference continuity now survives restricted embedded-browser storage during the active session, cross-tab preference changes remain synchronized, and Intl unit/plural formatting has defensive fallback behavior. See `docs/GLOBAL_LOCALE_INTEGRATION_PHASE12_0.298.0.md`. This does not alter the existing operational release gates: supported-runtime build, browser acceptance, database migration reconciliation and explicit operator approval remain mandatory.
+
+
+## v0.299.0 Phase 13 social Stories and profile media update
+
+The current source replaces the decorative story-bubble rail with compact vertical story cards, resolves private Story media through the existing viewer-authorized media resolver, and separates full-size profile/cover viewing from edit/upload actions. The source UX contract gate passes 13/13. Supported-runtime build, TypeScript, lint, browser/device testing, private-media live checks, migration reconciliation, and operator approval remain required before production release. See `docs/SOCIAL_STORY_PROFILE_MEDIA_PHASE13_0.299.0.md`.
+
+
+## v0.300.0 Phase 14 creator media preview
+
+Post composer photo attachments now open in the shared full-screen gallery before publishing; attached post videos provide inline playback controls. Story photos open in the shared viewer and Story videos use the viewer-authorized DurableVideo resolver. Preview, removal, upload and publishing remain distinct responsibilities. The source regression gate passes 10/10. This is not browser/device acceptance.
+
+
+## 0.306.0 Phase 20 — payout control-plane hardening
+
+Seller payout intake/history, bank beneficiary create/disable, bank account resolution, bank directory, bank transfer execution, PI/GHC/bank reconciliation, operator transitions and exception resolution now use the durable rate-limit control plane. If durable rate-limit storage is unavailable, these routes deny the operation rather than falling back to per-instance counters. Existing authorization, recent step-up, provider verification, payout idempotency, treasury funding and atomic settlement remain unchanged.
+
+
+## 0.309.0 Phase 21 — private-surface control hardening
+
+Ten private messaging, private-media and account privacy rate-limit boundaries now use awaited shared database-backed enforcement with deny-on-unavailable semantics. Repository integrity checks now validate those boundaries, release metadata, migration prefix uniqueness and manifest byte synchronization. No database migration was added or applied. Source checks pass; Node 24.15.x build, live Supabase, provider, browser/device and operator acceptance remain outstanding.
+
+
+## 0.308.0 Phase 22 — marketplace order transition serialization
+
+The durable marketplace transition path now calls a row-locking PostgreSQL RPC rather than loading an order and later overwriting it through the generic upsert. The RPC validates the state graph while holding the order lock, appends the audit event, and returns canonical order data. Service-role-only ACLs and fail-closed RPC transport are enforced. No payment settlement, refund, GHC/Pi, escrow, payout or ledger mutation was added. The new migration is review-required and has not been applied.
+
+
+## 0.309.0 Phase 23 — migration integrity and lock-scope hardening
+- Separated reservation expiry cleanup from the marketplace order snapshot function.
+- Ordinary application reads explicitly run cleanup before fetching the snapshot and fail closed if cleanup is unavailable.
+- Locked transition/commerce RPCs return snapshots without sweeping unrelated reservations inside their transaction.
+- Added repository-wide checks for canonical migration filenames, duplicate versions, empty SQL files and SECURITY DEFINER search_path.
+- The additive migration remains REVIEW_REQUIRED pending disposable PostgreSQL concurrency and Testnet migration-history validation.

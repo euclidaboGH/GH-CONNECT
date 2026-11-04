@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   quoteWithdrawal,
@@ -22,8 +22,8 @@ function reply(body: unknown, status = 200) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rate = checkRateLimit(`earnings-quote:${auth.userId}`, 30, 60_000)
-  if (!rate.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const rate = await checkDurableRateLimit(`earnings-quote:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rate.ok) return reply({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, durableRateLimitStatus(rate))
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {

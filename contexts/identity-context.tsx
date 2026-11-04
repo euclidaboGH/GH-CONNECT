@@ -16,6 +16,7 @@ import {
   type AccountStatus,
 } from "@/lib/identity/identity-service"
 import { createIdentitySeam } from "@/lib/domains/adapters/ghc-context-seams"
+import { setDisplayMediaViewer } from "@/lib/media/resolve-display-url"
 import type { IdentitySnapshot } from "@/lib/domains/contracts/identity"
 import type { DomainResult } from "@/lib/domains/contracts/types"
 
@@ -45,6 +46,10 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return IdentityService.subscribe((next) => setIdentity(next))
   }, [])
+
+  useEffect(() => {
+    setDisplayMediaViewer(identity.userId, identity.authState)
+  }, [identity.userId, identity.authState])
 
   const value = useMemo<IdentityContextValue>(
     () => {

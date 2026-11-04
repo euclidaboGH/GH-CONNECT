@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { memo, useState, useRef, useEffect } from "react"
 import {
@@ -665,7 +666,7 @@ function EnhancedPostCardInner({
                   {draftImages.map((url) => (
                     <div key={url} className="relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border/60">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
+                      <DurableImage loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
                         className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
@@ -967,9 +968,9 @@ function EnhancedPostCardInner({
       )}
 
       {/* Primary actions — quality (left) and social (right), never overlapping */}
-      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
-        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
+      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-2.5 sm:px-4">
+        <p className="text-[11px] font-semibold text-muted-foreground">Community curation</p>
+        <p className="text-[10px] text-muted-foreground">Your vote helps surface useful contributions</p>
       </div>
       <div
         className="px-2 pb-2.5 pt-1 sm:px-3"
@@ -1107,7 +1108,7 @@ function EnhancedPostCardInner({
         postId={post.id}
         upvoteCount={upvoteCount}
         downvoteCount={downvoteCount}
-        views={post.engagement?.views ?? 0}
+        views={post.engagement?.views ?? null}
       />
 
       <EngagementRosterSheet

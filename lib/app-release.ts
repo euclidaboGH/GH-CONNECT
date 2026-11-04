@@ -1,4 +1,4 @@
 /** Keep in sync with package.json; the regression test enforces the match. */
-export const APP_RELEASE_VERSION = "0.287.0"
+export const APP_RELEASE_VERSION = "0.312.0"
 export const APP_RELEASE_SUMMARY =
-  "Centralized marketplace API record normalization into tested domain-boundary mappers for saved listings, seller/public listings, and durable orders, preserving server-authoritative lifecycle and payment fields."
+  "Upgraded the premium wallet experience, scroll immersion and creator analytics sheet and bounded ledger refreshes; synchronized current build context without changing financial authorities or claiming live provider acceptance."

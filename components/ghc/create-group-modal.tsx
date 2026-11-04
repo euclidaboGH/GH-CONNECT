@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
 
 import { onCloseTransientUI } from "@/lib/transient-ui"
@@ -466,7 +467,7 @@ export function CreateGroupModal({ isOpen = true, onClose, onSubmit, isLoading =
                   <div className="flex h-28 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Uploading cover…</div>
                 ) : formData.coverImage ? (
                   <div className="relative overflow-hidden rounded-lg bg-zinc-100">
-                    <img
+                    <DurableImage
                       src={formData.coverImage}
                       alt="Group cover"
                       className="h-48 w-full object-cover"

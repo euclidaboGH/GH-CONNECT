@@ -1,11 +1,13 @@
 "use client"
 
+import { DurableVideo } from "./durable-video"
+import { DurableImage } from "./durable-image"
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
-import { X, Send, ChevronDown, ChevronUp, Heart, MessageCircle } from "lucide-react"
+import { X, Send, ChevronDown, ChevronUp, Heart, MessageCircle, LoaderCircle } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import type { Post, PostComment } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
@@ -54,8 +56,14 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({})
   const [sortMode, setSortMode] = useState<"top" | "newest">("top")
   const [commentsLoadError, setCommentsLoadError] = useState(false)
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false)
+  const [commentsCursor, setCommentsCursor] = useState<{ before: number; beforeId: string } | null>(null)
+  const [mediaPreview, setMediaPreview] = useState<{ url: string; alt: string; kind: "image" | "video" } | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const mediaPreviewRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const isPostOwner = isOwnAuthor(post?.authorId, post?.authorName, profile)
@@ -81,12 +89,20 @@ export function CommentSheet({ post, open, onClose }: CommentSheetProps) {
     if (!open || !post?.id) return
     let cancelled = false
     setCommentsLoadError(false)
+    setCommentsCursor(null)
+    setVisibleCount(40)
+    setCommentsLoading(true)
     ;(async () => {
       try {
         const result = await loadPostComments?.(post.id)
-        if (!cancelled && result && result.ok === false) setCommentsLoadError(true)
+        if (!cancelled && result) {
+          if (result.ok === false) setCommentsLoadError(true)
+          else setCommentsCursor(result.nextCursor || null)
+        }
       } catch {
         if (!cancelled) setCommentsLoadError(true)
+      } finally {
+        if (!cancelled) setCommentsLoading(false)
       }
     })()
     return () => {
@@ -134,18 +150,81 @@ useEffect(() => {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        onClose()
-      }
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      if (mediaPreview) setMediaPreview(null)
+      else onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose])
+  }, [open, onClose, mediaPreview])
+
+  useEffect(() => {
+    if (!mediaPreview) return
+    const previousOverflow = document.body.style.overflow
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    document.body.style.overflow = "hidden"
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>("[data-comment-media-preview-close]")?.focus()
+    })
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return
+      const root = mediaPreviewRef.current
+      if (!root) return
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.getClientRects().length > 0)
+      if (!focusable.length) { event.preventDefault(); return }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
+        event.preventDefault(); first.focus()
+      }
+    }
+    window.addEventListener("keydown", onTab)
+    return () => {
+      window.removeEventListener("keydown", onTab)
+      document.body.style.overflow = previousOverflow
+      window.cancelAnimationFrame(frame)
+      previousFocus?.focus()
+    }
+  }, [mediaPreview])
 
   useEffect(() => {
     if (open) setVisibleCount(40)
   }, [open, post?.id])
+
+  // Keep the modal interaction contained and return focus to its opener.
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    document.body.style.overflow = "hidden"
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || mediaPreview) return
+      const root = dialogRef.current
+      if (!root) return
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.getClientRects().length > 0)
+      if (!focusable.length) { event.preventDefault(); root.focus(); return }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
+        event.preventDefault(); last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
+        event.preventDefault(); first.focus()
+      }
+    }
+    window.addEventListener("keydown", onTab)
+    return () => {
+      window.removeEventListener("keydown", onTab)
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [open])
 
   // Focus composer when opening
   useEffect(() => {
@@ -158,6 +237,7 @@ useEffect(() => {
   // Reset ephemeral state when sheet closes
   useEffect(() => {
     if (!open) {
+      setMediaPreview(null)
       setText("")
       setReplyToId(null)
       setEditingId(null)
@@ -170,6 +250,28 @@ useEffect(() => {
   const isCommentOwner = (c: PostComment) => isOwnAuthor(c.authorId, c.authorName, profile)
   const canDelete = (c: PostComment) => canDeleteComment(c.authorId, c.authorName, post.authorId, profile)
   const canEdit = (c: PostComment) => canEditComment(c.authorId, c.authorName, profile)
+
+  const loadOlderComments = async () => {
+    if (!commentsCursor || commentsLoadingMore || !post?.id) return
+    setCommentsLoadingMore(true)
+    try {
+      const result = await loadPostComments?.(post.id, {
+        before: commentsCursor.before,
+        beforeId: commentsCursor.beforeId,
+        append: true,
+      })
+      if (!result || result.ok === false) {
+        addToast("Could not load older comments. Please try again.", "error")
+        return
+      }
+      setCommentsCursor(result.nextCursor || null)
+      setVisibleCount((count) => Math.max(count, tree.length + result.count))
+    } catch {
+      addToast("Could not load older comments. Please try again.", "error")
+    } finally {
+      setCommentsLoadingMore(false)
+    }
+  }
 
   const handleSubmit = async () => {
     const value = text.trim()
@@ -335,7 +437,8 @@ useEffect(() => {
                   </div>
                 </div>
               ) : (
-                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.text}
+                <div className="mt-0.5 text-sm text-foreground">
+                  <p className="whitespace-pre-wrap">{c.text}</p>
                       {Array.isArray(c.mediaAttachments) && c.mediaAttachments.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {c.mediaAttachments.slice(0, 4).map((m) => {
@@ -345,27 +448,22 @@ useEffect(() => {
                                 <button
                                   key={m.id || m.url}
                                   type="button"
-                                  className="block overflow-hidden rounded-lg"
-                                  aria-label="Hold to download comment photo"
+                                  className="group relative block max-w-full overflow-hidden rounded-xl bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                  aria-label={`View photo attached by ${c.authorName}`}
+                                  onClick={() => setMediaPreview({ url: m.url, alt: `Photo attached by ${c.authorName}`, kind: "image" })}
                                   onContextMenu={(e) => { e.preventDefault(); if (m.url) void downloadMedia(m.url, { kind: "image" }) }}
-                                  onPointerDown={(e) => {
-                                    if (e.button !== 0) return
-                                    const el = e.currentTarget
-                                    const timer = window.setTimeout(() => { if (m.url) void downloadMedia(m.url, { kind: "image" }) }, 500)
-                                    const clear = () => window.clearTimeout(timer)
-                                    el.addEventListener("pointerup", clear, { once: true })
-                                    el.addEventListener("pointercancel", clear, { once: true })
-                                  }}
+                                  title="Open photo · right-click to download"
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={m.url} alt="" className="max-h-40 max-w-full rounded-lg object-cover pointer-events-none" />
+                                  <DurableImage src={m.url} alt={`Photo attached by ${c.authorName}`} loading="lazy" className="max-h-52 max-w-full rounded-xl object-contain transition-transform duration-200 group-hover:scale-[1.02]" />
+                                  <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-semibold text-white">View</span>
                                 </button>
                               )
                             }
                             if (kind === "video") {
                               return (
                                 <div key={m.id || m.url} className="relative">
-                                  <video src={m.url} controls className="max-h-40 max-w-full rounded-lg" />
+                                  <button type="button" onClick={() => setMediaPreview({ url: m.url, alt: `Video attached by ${c.authorName}`, kind: "video" })} className="flex min-h-20 w-40 items-center justify-center rounded-xl bg-black text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">▶ Play video</button>
                                   <button type="button" className="mt-1 text-[10px] font-semibold text-primary" onClick={() => m.url && void downloadMedia(m.url, { kind: "video" })}>Download video</button>
                                 </div>
                               )
@@ -383,7 +481,8 @@ useEffect(() => {
                             )
                           })}
                         </div>
-                      ) : null}</p>
+                      ) : null}
+                </div>
               )}
             </div>
 
@@ -499,7 +598,10 @@ useEffect(() => {
   }
 
   const replyParent = replyToId ? post.comments?.find((c) => c.id === replyToId) : null
-  const totalCount = post.comments?.length ?? 0
+  const totalCount = Math.max(
+    post.comments?.length ?? 0,
+    Number(post.engagement?.comments ?? 0) || 0,
+  )
 
   return (
     <div
@@ -508,6 +610,8 @@ useEffect(() => {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-modal-shadow)] sm:mx-auto sm:max-w-2xl sm:rounded-[1.75rem]"
         role="dialog"
         aria-modal="true"
@@ -552,7 +656,12 @@ useEffect(() => {
               <button type="button" className="shrink-0 font-bold underline" onClick={() => setReloadVersion((n) => n + 1)}>Retry</button>
             </div>
           ) : null}
-          {tree.length === 0 ? (
+          {commentsLoading && tree.length === 0 ? (
+            <div className="space-y-4 py-5" role="status" aria-live="polite">
+              <span className="sr-only">Loading comments</span>
+              {[0, 1, 2].map((item) => <div key={item} className="flex animate-pulse gap-3"><span className="h-9 w-9 rounded-full bg-muted" /><span className="flex-1 space-y-2 pt-1"><span className="block h-3 w-28 rounded bg-muted" /><span className="block h-10 w-full rounded-2xl bg-muted" /></span></div>)}
+            </div>
+          ) : tree.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <MessageCircle size={22} />
@@ -565,15 +674,25 @@ useEffect(() => {
           ) : (
             <>
               {tree.slice(0, visibleCount).map((c) => renderComment(c))}
-              {tree.length > visibleCount && (
+              {tree.length > visibleCount ? (
                 <button
                   type="button"
                   onClick={() => setVisibleCount((n) => n + 40)}
                   className="mx-auto mt-2 block rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
                 >
-                  Load more comments ({tree.length - visibleCount} left)
+                  Show {Math.min(40, tree.length - visibleCount)} more loaded comments
                 </button>
-              )}
+              ) : commentsCursor ? (
+                <button
+                  type="button"
+                  onClick={() => void loadOlderComments()}
+                  disabled={commentsLoadingMore}
+                  className="mx-auto mt-2 flex min-h-10 items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+                  aria-live="polite"
+                >
+                  {commentsLoadingMore ? <><LoaderCircle size={14} className="animate-spin" /> Loading older comments…</> : "Load older comments"}
+                </button>
+              ) : null}
             </>
           )}
         </div>
@@ -627,7 +746,7 @@ useEffect(() => {
                 <div key={m.id} className="relative">
                   {m.type === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                    <DurableImage src={m.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   ) : (
                     <span className="rounded-lg border border-border px-2 py-1 text-[10px]">{m.fileName || m.type}</span>
                   )}
@@ -734,6 +853,21 @@ useEffect(() => {
           </p>
         </div>
       </div>
+      {mediaPreview ? (
+        <div ref={mediaPreviewRef} className="fixed inset-0 z-[230] flex items-center justify-center bg-black/95 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Comment attachment preview" onMouseDown={(event) => { if (event.target === event.currentTarget) setMediaPreview(null) }}>
+          <button type="button" data-comment-media-preview-close onClick={() => setMediaPreview(null)} className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Close attachment preview"><X size={22} /></button>
+          <div className="flex max-h-full max-w-full flex-col items-center justify-center gap-3">
+            {mediaPreview.kind === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <DurableImage src={mediaPreview.url} alt={mediaPreview.alt} className="max-h-[82dvh] max-w-full rounded-lg object-contain" />
+            ) : <DurableVideo src={mediaPreview.url} controls autoPlay playsInline className="max-h-[82dvh] max-w-full rounded-lg" />}
+            <div className="flex items-center gap-3">
+              <p className="max-w-[70vw] truncate text-xs text-white/75">{mediaPreview.alt}</p>
+              <button type="button" onClick={() => void downloadMedia(mediaPreview.url, { kind: mediaPreview.kind })} className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/25">Download</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

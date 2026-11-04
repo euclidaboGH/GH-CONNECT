@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { memo, useState } from "react"
 import { Heart, MessageCircle, Share2, MoreVertical, Plus, Bookmark, Flag, Eye, ThumbsDown, Volume2, Slash, Video, FileText } from "lucide-react"
 import type { Post, PostComment } from "@/lib/ghc-types"
@@ -516,7 +517,7 @@ export function PeopleRecommendation({ people, onFollow }: PeopleRecommendationP
         {people.map((person) => (
           <div key={person.id} className="flex-shrink-0 text-center">
             <div className="relative mb-2">
-              <img
+              <DurableImage
                 src={person.photo || "/placeholder.svg"}
                 alt={person.name}
                 className="w-14 h-14 rounded-full object-cover border-2 border-emerald-300 mx-auto"

@@ -1,7 +1,7 @@
 /** Privileged provider lookup for recovering missed webhooks; this route never trusts client-supplied status. */
 import { createHash, timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { fetchNgnTransfer, paystackLiveTransfersApproved, paystackTransfersEnabled, PaystackError } from "@/lib/server/payouts/paystack"
 
@@ -16,8 +16,8 @@ function authorized(request: Request): boolean {
 
 export async function POST(request: Request, context: { params: Promise<{ requestId: string }> }) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
-  const rl = checkRateLimit("paystack-bank-payout-reconcile", 10, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("paystack-bank-payout-reconcile", 10, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   if (!paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
   if (!paystackLiveTransfersApproved()) return reply({ ok: false, error: "LIVE_BANK_TRANSFERS_NOT_APPROVED" }, 503)
   const { requestId } = await context.params

@@ -24,6 +24,9 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { useGHCMessaging } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { navigateTo } from "@/lib/navigation/navigate"
@@ -275,6 +278,9 @@ function isCommunityConv(c: {
 }
 
 export function CommunitiesScreen() {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
+  const workflow = useCallback((key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale), [regional.locale])
   const ctx = useGHCMessaging() as any as any as any
   const {
     conversations: conversationsRaw,
@@ -1118,9 +1124,9 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven communities">
+    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label={msg("communityTitle")}>
       <CollapsingAppHeader
-        title="Communities"
+        title={msg("communityTitle")}
         compact={headerCompact}
         hidden={headerHidden}
         leading={
@@ -1155,10 +1161,10 @@ export function CommunitiesScreen() {
               type="button"
               onClick={openCreateCommunity}
               className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
-              aria-label="Create community"
+              aria-label={msg("create") + " " + msg("communityTitle")}
             >
               <Plus size={16} strokeWidth={2.5} />
-              Create
+              {msg("create")}
             </button>
           </div>
         }
@@ -1173,8 +1179,8 @@ export function CommunitiesScreen() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, city, topic…"
-                aria-label="Search communities"
+                placeholder={msg("searchCommunity")}
+                aria-label={msg("searchCommunity")}
                 className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
@@ -1206,7 +1212,7 @@ export function CommunitiesScreen() {
                 }`}
               >
                 <Users size={14} aria-hidden />
-                My ({myCommunities.length})
+                {msg("myCommunities")} ({myCommunities.length})
               </button>
               <button
                 type="button"
@@ -1220,7 +1226,7 @@ export function CommunitiesScreen() {
                 }`}
               >
                 <Compass size={14} aria-hidden />
-                Discover ({discoverCommunities.length})
+                {msg("discover")} ({discoverCommunities.length})
               </button>
             </div>
 
@@ -1236,7 +1242,7 @@ export function CommunitiesScreen() {
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
-                  {cat === "all" ? "All topics" : cat}
+                  {cat === "all" ? msg("allTopics") : cat}
                 </button>
               ))}
               <label className="ml-auto shrink-0 text-[11px] text-muted-foreground">
@@ -1362,12 +1368,10 @@ export function CommunitiesScreen() {
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-teal-950/20">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-900 dark:text-emerald-100">
               <Sparkles size={14} aria-hidden />
-              Community hub
+              {workflow("board")}
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/80 dark:text-emerald-200/70">
-              <span className="font-semibold">Board</span> is posts & events ·{" "}
-              <span className="font-semibold">Chat</span> is live talk for members · Private DMs stay
-              in Messages.
+              {workflow("boardPostsEvents")}
             </p>
           </div>
 

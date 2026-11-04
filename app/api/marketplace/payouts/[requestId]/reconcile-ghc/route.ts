@@ -1,7 +1,7 @@
 /** Privileged GHC seller payout settlement. Only a configured, funded treasury can pay. */
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const runtime = "nodejs"
@@ -20,8 +20,8 @@ export async function POST(request: Request, context: { params: Promise<{ reques
   if (process.env.GHC_MARKETPLACE_GHC_PAYOUTS_ENABLED !== "true") return reply({ ok: false, error: "GHC_PAYOUT_RAIL_DISABLED" }, 503)
   const treasuryUserId = String(process.env.GHC_MARKETPLACE_PAYOUT_TREASURY_USER_ID || "").trim()
   if (!treasuryUserId) return reply({ ok: false, error: "GHC_PAYOUT_TREASURY_NOT_CONFIGURED" }, 503)
-  const rl = checkRateLimit("ghc-seller-payout-settlement", 10, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("ghc-seller-payout-settlement", 10, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const { requestId } = await context.params
   if (!/^spr_[a-f0-9]{16,40}$/i.test(requestId)) return reply({ ok: false, error: "INVALID_REQUEST_ID" }, 400)
   const env = readGhcServerEnv()

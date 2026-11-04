@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { getShellMessage } from "@/lib/i18n/shell"
 
 /** Announces major shell navigation changes without stealing focus. */
-export function AccessibilityAnnouncer({ label }: { label: string }) {
+export function AccessibilityAnnouncer({ label, locale = "en-US" }: { label: string; locale?: string }) {
   const liveRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -11,10 +12,10 @@ export function AccessibilityAnnouncer({ label }: { label: string }) {
     if (!node) return
     node.textContent = ""
     const timer = window.setTimeout(() => {
-      node.textContent = `${label} section loaded.`
+      node.textContent = `${label} — ${getShellMessage("sectionLoaded", locale)}`
     }, 40)
     return () => window.clearTimeout(timer)
-  }, [label])
+  }, [label, locale])
 
   return (
     <div
@@ -22,6 +23,7 @@ export function AccessibilityAnnouncer({ label }: { label: string }) {
       className="sr-only"
       aria-live="polite"
       aria-atomic="true"
+      aria-relevant="additions text"
     />
   )
 }

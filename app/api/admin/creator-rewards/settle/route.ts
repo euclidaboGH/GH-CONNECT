@@ -1,7 +1,7 @@
 /** Privileged settlement of an approved GHC reward from the funded protocol reserve. */
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -18,8 +18,8 @@ function authorized(request: Request): boolean {
 }
 export async function POST(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
-  const rl = checkRateLimit("creator-reward-settle", 30, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("creator-reward-settle", 30, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const parsed = await readBoundedJson(request, MAX_SETTLEMENT_BODY_BYTES)
   if (!parsed.ok) {
     const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400

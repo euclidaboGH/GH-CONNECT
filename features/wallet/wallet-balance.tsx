@@ -27,6 +27,7 @@ export function WalletBalanceCard({
   primaryActions,
   selectedRail = "ghc",
   onSelectRail,
+  ghcVerified = false,
 }: {
   balance: number
   balanceVisible: boolean
@@ -41,6 +42,8 @@ export function WalletBalanceCard({
   primaryActions?: ReactNode
   selectedRail?: WalletAssetRail
   onSelectRail?: (rail: WalletAssetRail) => void
+  /** True only for a server-sourced, validated wallet snapshot. */
+  ghcVerified?: boolean
 }) {
   const [piSnapshot, setPiSnapshot] = useState<{
     available: number
@@ -174,12 +177,14 @@ export function WalletBalanceCard({
                   ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
                   : refreshing
                     ? "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-100"
-                    : "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                    : ghcVerified
+                      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                      : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
               }`}
               role="status"
               aria-live="polite"
             >
-              {!walletOnline ? "Offline · showing last verified" : refreshing ? "Syncing…" : "Live"}
+              {!walletOnline ? "Offline · last snapshot only" : refreshing ? "Syncing…" : ghcVerified ? "Confirmed" : "Not confirmed"}
             </span>
           </div>
         </div>
@@ -193,7 +198,62 @@ export function WalletBalanceCard({
         </button>
       </div>
 
-      {/* Dual asset grid — bank / crypto wallet class */}
+      {/* Premium active-asset hero. The selected rail is displayed alone; PI and GHC are never combined. */}
+      <div className="mx-3 mt-3 overflow-hidden rounded-[1.45rem] border border-white/10 bg-[radial-gradient(circle_at_88%_12%,rgba(212,175,55,0.28),transparent_30%),linear-gradient(135deg,#062f35_0%,#0a3d62_58%,#075b50_100%)] p-4 text-white shadow-[0_20px_48px_-25px_rgba(6,47,53,0.8)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/65">{piSelected ? "Pi earnings balance" : "GreenHaven wallet"}</p>
+            <p className="mt-1 text-[11px] text-white/75">{piSelected ? "Pi · separate from GHC" : "GHC · GreenHaven Coin"}</p>
+          </div>
+          <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-white/90">
+            {piSelected ? (piLoading ? "Checking" : piFailed ? "Unavailable" : "Pi rail") : "GHC rail"}
+          </span>
+        </div>
+        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite">
+          {piSelected
+            ? piSnapshot
+              ? maskPi(piSnapshot.available)
+              : piLoading
+                ? "Checking…"
+                : "Unavailable"
+            : ghcVerified ? mask(balance) : "Unavailable"}
+        </p>
+        <p className="mt-2 text-[10px] text-white/65">
+          {piSelected
+            ? piLoading
+              ? "Securely checking the authoritative earnings ledger"
+              : piFailed
+                ? "No fresh balance available. Use refresh to try again."
+                : piSnapshot?.piWalletLinked
+                  ? "Server-reported balance · Pi identity linked"
+                  : "Server-reported balance · Pi identity not linked"
+            : ghcVerified
+              ? "Available GHC balance · server-confirmed snapshot"
+              : "GHC balance not confirmed · retry when the ledger is available"}
+        </p>
+        <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/15 pt-3">
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Withdrawable" : "Pending"}</p>
+            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
+              {piSelected ? (piSnapshot ? maskPi(piSnapshot.withdrawable) : "—") : ghcVerified ? mask(pending) : "—"}
+            </p>
+          </div>
+          <div className="min-w-0 border-l border-white/15 pl-3">
+            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Pending" : "Locked"}</p>
+            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
+              {piSelected ? (piSnapshot ? maskPi(piSnapshot.pending) : "—") : ghcVerified ? mask(locked) : "—"}
+            </p>
+          </div>
+          <div className="min-w-0 border-l border-white/15 pl-3">
+            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Reserved" : "Status"}</p>
+            <p className="mt-1 truncate text-[12px] font-bold text-white">
+              {piSelected ? (piSnapshot ? maskPi(piSnapshot.reserved) : "—") : (ghcVerified ? "Confirmed" : "Unverified")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Asset switcher — each rail remains independently selectable and accounted. */}
       <div className="grid grid-cols-2 gap-2.5 p-3" role="group" aria-label="Choose wallet asset">
         <button
           type="button"
@@ -201,7 +261,7 @@ export function WalletBalanceCard({
           role="option"
           aria-selected={selectedRail === "pi"}
           onClick={() => onSelectRail?.("pi")}
-          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
+          className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
             piSelected
               ? "bg-violet-100/90 shadow-[0_14px_30px_-18px_rgba(124,58,237,0.55)] ring-1 ring-violet-400/40 dark:bg-violet-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
@@ -216,7 +276,7 @@ export function WalletBalanceCard({
               <p className="text-[10px] text-muted-foreground">Pi earnings</p>
             </div>
           </div>
-          <p className="text-[22px] font-black tabular-nums leading-none tracking-tight text-foreground">
+          <p className="text-[17px] font-black tabular-nums leading-none tracking-tight text-foreground">
             {piLoading ? (
               <Loader2 className="inline h-5 w-5 animate-spin text-muted-foreground" />
             ) : piSnapshot ? (
@@ -229,7 +289,7 @@ export function WalletBalanceCard({
           </p>
           <p className="text-[10px] leading-relaxed text-muted-foreground">
             {piLoading
-              ? "Loading ledger…"
+              ? "Checking ledger · up to 10 seconds"
               : piFailed
                 ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
@@ -251,7 +311,7 @@ export function WalletBalanceCard({
           role="option"
           aria-selected={selectedRail === "ghc"}
           onClick={() => onSelectRail?.("ghc")}
-          className={`relative flex min-h-[9.5rem] flex-col gap-2 rounded-[1.35rem] px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
+          className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
             !piSelected
               ? "bg-emerald-100/90 shadow-[0_14px_30px_-18px_rgba(5,150,105,0.55)] ring-1 ring-emerald-400/40 dark:bg-emerald-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
@@ -266,13 +326,15 @@ export function WalletBalanceCard({
               <p className="text-[10px] text-muted-foreground">GreenHaven Credits</p>
             </div>
           </div>
-          <p className="text-[22px] font-black tabular-nums leading-none tracking-tight text-foreground">
-            {balanceVisible ? formatGhc(balance) : "••••"}
+          <p className="text-[17px] font-black tabular-nums leading-none tracking-tight text-foreground">
+            {ghcVerified ? (balanceVisible ? formatGhc(balance) : "••••") : "Unavailable"}
           </p>
           <p className="text-[10px] leading-relaxed text-muted-foreground">
-            {pending > 0 || locked > 0
-              ? `${formatGhc(pending)} pending · ${formatGhc(locked)} locked`
-              : "Available to spend"}
+            {!ghcVerified
+              ? "Server confirmation required"
+              : pending > 0 || locked > 0
+                ? `${formatGhc(pending)} pending · ${formatGhc(locked)} locked`
+                : "Available to spend"}
           </p>
           {!piSelected ? (
             <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">

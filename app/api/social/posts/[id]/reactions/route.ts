@@ -76,8 +76,9 @@ export async function POST(
     )
   }
   const active = data?.active !== undefined ? Boolean(data.active) : Boolean(data?.liked)
-  // Notify post author only when reaction is active (not toggle-off)
-  if (active && reaction === "like") {
+  // Every active reaction is meaningful feedback. Toggle-off never emits;
+  // the durable dedupe key is scoped to actor + post + reaction kind.
+  if (active) {
     void (async () => {
       const authorId = await lookupPostAuthor(postId)
       if (!authorId || authorId === auth.userId) return
@@ -87,9 +88,9 @@ export async function POST(
         type: "post_like",
         entityType: "post",
         entityId: postId,
-        title: reaction === "like" ? "New like on your post" : `New ${reaction} on your post`,
-        body: reaction === "like" ? "Someone liked your post" : `Someone reacted (${reaction}) to your post`,
-        dedupeKey: `like:${auth.userId}:${postId}:${reaction}`,
+        title: reaction === "like" ? "New like on your post" : "New reaction on your post",
+        body: reaction === "like" ? "Someone liked your post" : `Someone reacted with ${reaction} on your post`,
+        dedupeKey: `reaction:${auth.userId}:${postId}:${reaction}`,
         metadata: { postId, reaction, category: "social" },
       })
     })()

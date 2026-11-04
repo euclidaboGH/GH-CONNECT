@@ -1,10 +1,14 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Phase 2 — professional media strip for UnifiedCompose.
- * Preview, remove, counts. Does not upload; parent owns durable URLs.
+ * Preview, remove, counts. Parent owns uploads and durable media URLs.
  */
-import { X, Film } from "lucide-react"
+import { useState } from "react"
+import { X, Film, Expand } from "lucide-react"
+import { MediaLightbox } from "./media-lightbox"
+import { DurableVideo } from "./durable-video"
 
 export function ComposeMediaStrip({
   images,
@@ -21,6 +25,7 @@ export function ComposeMediaStrip({
   onClearImages: () => void
   onRemoveVideo: () => void
 }) {
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
   if (!images.length && !video) return null
 
   return (
@@ -46,22 +51,32 @@ export function ComposeMediaStrip({
             {images.map((src, i) => (
               <div
                 key={`${src.slice(0, 48)}-${i}`}
-                className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-sm [content-visibility:auto] [contain-intrinsic-size:112px_112px]"
+                className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-muted [content-visibility:auto] [contain-intrinsic-size:112px_112px]"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src}
-                  alt={`Attached photo ${i + 1}`}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute bottom-1 left-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                <button
+                  type="button"
+                  className="absolute inset-0 z-0 block h-full w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-primary"
+                  onClick={() => setPreviewIndex(i)}
+                  aria-label={`Preview attached photo ${i + 1} of ${images.length}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <DurableImage
+                    src={src}
+                    alt={`Attached photo ${i + 1}`}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-opacity group-hover:bg-black/15 group-hover:opacity-100 group-focus-within:opacity-100">
+                    <Expand size={18} aria-hidden />
+                  </span>
+                </button>
+                <span className="pointer-events-none absolute bottom-1 left-1 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
                   {i + 1}
                 </span>
                 <button
                   type="button"
-                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white shadow"
+                  className="absolute right-1.5 top-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/75 text-white shadow transition hover:bg-black"
                   onClick={() => onRemoveImage(i)}
                   aria-label={`Remove photo ${i + 1}`}
                 >
@@ -74,21 +89,31 @@ export function ComposeMediaStrip({
       ) : null}
 
       {video ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/40 px-3 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600/15 text-violet-700">
-              <Film size={16} aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-foreground">Video attached</p>
-              <p className="truncate text-[11px] text-muted-foreground">Ready to publish with your post</p>
+        <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/30 p-2.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600/15 text-violet-700">
+                <Film size={16} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-foreground">Video attached</p>
+                <p className="truncate text-[11px] text-muted-foreground">Preview before publishing</p>
+              </div>
             </div>
+            <button type="button" onClick={onRemoveVideo} className="min-h-9 shrink-0 rounded-lg px-2 text-[12px] font-bold text-rose-700 hover:bg-rose-50">
+              Remove
+            </button>
           </div>
-          <button type="button" onClick={onRemoveVideo} className="shrink-0 text-[12px] font-bold text-emerald-700">
-            Remove
-          </button>
+          <DurableVideo src={video} controls playsInline muted={false} preload="metadata" className="max-h-56 w-full rounded-xl bg-black object-contain" />
         </div>
       ) : null}
+      <MediaLightbox
+        open={previewIndex !== null}
+        urls={images.map((url) => ({ url, kind: "image" as const, alt: "Attached photo preview" }))}
+        index={previewIndex ?? 0}
+        caption={images.length > 1 ? `Photo ${(previewIndex ?? 0) + 1} of ${images.length}` : "Photo preview"}
+        onClose={() => setPreviewIndex(null)}
+      />
     </div>
   )
 }

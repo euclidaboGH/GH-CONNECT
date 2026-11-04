@@ -1,11 +1,12 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * World-class inline composer entry — shared by Feed and Profile.
  * Opens the canonical Create hub / UnifiedCompose pipeline. No second publisher.
  */
 import { useEffect, useRef } from "react"
-import { Image as ImageIcon, Smile, Video } from "lucide-react"
+import { Image as ImageIcon, Video } from "lucide-react"
 
 export function ComposerPromptBar({
   avatarLetter = "G",
@@ -41,61 +42,41 @@ export function ComposerPromptBar({
     <section
       id="gh-profile-composer"
       data-composer-root
-      className={`rounded-[1.35rem] border border-border/70 bg-card p-3 shadow-[var(--gh-card-shadow)] transition-shadow hover:shadow-[var(--gh-card-shadow-lg)] ${className}`}
+      className={`rounded-2xl border border-border/60 bg-card px-3 py-3 ${className}`}
       aria-label="Create a post"
     >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex w-full items-center gap-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-      >
-        <span
-          className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 text-sm font-bold text-white shadow-sm"
-          aria-hidden="true"
-        >
+      <div className="flex items-center gap-2.5">
+        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-semibold text-foreground" aria-hidden="true">
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            letter
-          )}
+            <DurableImage src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : letter}
         </span>
-        <span className="min-w-0 flex-1 rounded-full border border-border/60 bg-muted/45 px-4 py-2.5 text-[13px] text-muted-foreground transition hover:border-border hover:bg-muted/70">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="min-h-11 min-w-0 flex-1 rounded-full bg-muted/65 px-4 text-left text-[13px] text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
           {placeholder}
-        </span>
-      </button>
-
-      <div className="mt-2.5 flex items-center gap-1 border-t border-border/50 pt-2.5" role="group" aria-label="Quick create">
+        </button>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2 border-t border-border/50 pt-2.5" role="group" aria-label="Quick create">
         <button
           type="button"
           onClick={onOpenPhoto || onOpen}
-          className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[12px] font-semibold text-foreground/90 transition hover:bg-muted/70 active:scale-[0.98]"
+          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <ImageIcon size={16} className="text-emerald-600" aria-hidden />
+          <ImageIcon size={17} className="text-emerald-600" aria-hidden />
           Photo
         </button>
+        <span className="h-5 w-px bg-border/70" aria-hidden="true" />
         <button
           type="button"
           onClick={onOpenVideo || onOpen}
-          className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[12px] font-semibold text-foreground/90 transition hover:bg-muted/70 active:scale-[0.98]"
+          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <Video size={16} className="text-violet-600" aria-hidden />
+          <Video size={17} className="text-violet-600" aria-hidden />
           Video
-        </button>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[12px] font-semibold text-foreground/90 transition hover:bg-muted/70 active:scale-[0.98]"
-        >
-          <Smile size={16} className="text-amber-600" aria-hidden />
-          Feeling
-        </button>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="ml-1 inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
-        >
-          Create
         </button>
       </div>
     </section>

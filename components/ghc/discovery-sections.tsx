@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Discovery section components — premium, low-noise mini cards.
  * Tap opens full profile; no stacked Follow/Connect/Match on section tiles.
@@ -86,7 +87,7 @@ function MiniPersonCard({
       className={`overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br ${accent} text-left transition hover:shadow-md active:scale-[0.99]`}
     >
       <div className="relative aspect-[4/5] w-full bg-muted">
-        <img src={photo} alt="" className="h-full w-full object-cover" loading="lazy" />
+        <DurableImage src={photo} alt="" className="h-full w-full object-cover" loading="lazy" />
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-8">
           <p className="truncate text-[13px] font-bold text-white">{name}</p>
           <p className="truncate text-[10px] text-white/85">{location}</p>
@@ -185,7 +186,7 @@ export function SuggestedFriendsSection({
               onClick={() => onViewProfile(c)}
               className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-2.5 text-left transition hover:bg-muted/40"
             >
-              <img src={photo} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-background" loading="lazy" />
+              <DurableImage src={photo} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-background" loading="lazy" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-bold text-foreground">{name}</p>
                 <p className="truncate text-[11px] text-muted-foreground">{location}</p>

@@ -39,25 +39,24 @@ import {
 } from "@/lib/domains/adapters/unified-connection-request"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
 import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getExperienceMessage, type ExperienceMessageKey } from "@/lib/i18n/experience"
 import { buildDiscoveryOutcome } from "@/lib/discovery-outcome"
 import {
   submitConnectionFromPicker,
   userFacingConnectError,
 } from "@/lib/domains/adapters/connection-connect-flow"
 
-const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: string }[] = [
-  { id: "people", label: "People" },
-  { id: "friends", label: "Friends" },
-  { id: "professionals", label: "Professionals" },
-  { id: "collaborators", label: "Collaborators" },
-  { id: "mentors", label: "Mentors" },
-  { id: "communities", label: "Communities" },
-  { id: "events", label: "Events" },
-  { id: "activities", label: "Activities" },
-  { id: "services", label: "Services" },
+const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: ExperienceMessageKey }[] = [
+  { id: "people", label: "people" }, { id: "friends", label: "friends" },
+  { id: "professionals", label: "professionals" }, { id: "collaborators", label: "collaborators" },
+  { id: "mentors", label: "mentors" }, { id: "communities", label: "communities" },
+  { id: "events", label: "events" }, { id: "activities", label: "activities" }, { id: "services", label: "services" },
 ]
 
 export function DiscoveryGridScreen() {
+  const regional = useRegionalContext()
+  const t = useCallback((key: ExperienceMessageKey) => getExperienceMessage(key, regional.locale), [regional.locale])
   const [localFollowing, setLocalFollowing] = useState<Set<string>>(() => new Set())
   const ghc = useGHCDiscovery() as {
     candidates?: any[]
@@ -486,27 +485,27 @@ export function DiscoveryGridScreen() {
   }, [])
 
   return (
-    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Discover people and communities">
+    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label={t("discoveryIntroTitle")}>
       <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">Discover</h1>
+            <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">{t("discover")}</h1>
           </div>
           <div className="flex min-h-9 min-w-0 flex-[1.4] items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5 shadow-sm">
             <Search size={14} className="shrink-0 text-muted-foreground" aria-hidden />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search people, interests…"
+              placeholder={t("searchPeople")}
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
-              aria-label="Search people"
+              aria-label={t("searchPeople")}
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 className="shrink-0 text-muted-foreground"
-                aria-label="Clear search"
+                aria-label={t("clearSearch")}
               >
                 <X size={13} />
               </button>
@@ -515,9 +514,9 @@ export function DiscoveryGridScreen() {
           <button
             type="button"
             className="gh-icon-btn h-8 w-8 shrink-0 border border-border/40"
-            aria-label={filtersOpen ? "Hide connection filters" : "Show connection filters"}
+            aria-label={filtersOpen ? `${t("connectionFilters")}: ${t("cancel")}` : t("connectionFilters")}
             aria-expanded={filtersOpen}
-            title="Connection intent filters"
+            title={t("connectionFilters")}
             onClick={() => setFiltersOpen((v) => !v)}
           >
             <SlidersHorizontal size={13} />
@@ -557,10 +556,10 @@ export function DiscoveryGridScreen() {
       </div>
 
 
-      <section className="mx-3 mt-2 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-label="Discovery outcome">
+      <section className="mx-3 mt-2 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-label={t("discoveryOutcome")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Discovery outcome</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{t("discoveryOutcome")}</p>
             <p className="mt-1 text-[13px] font-bold text-foreground">{discoveryOutcome.title}</p>
             <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{discoveryOutcome.detail}</p>
           </div>
@@ -577,9 +576,9 @@ export function DiscoveryGridScreen() {
           className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
         >
-          <p className="font-semibold">You&apos;re offline</p>
+          <p className="font-semibold">{t("youAreOffline")}</p>
           <p className="mt-0.5 text-[11px] leading-snug opacity-90">
-            Showing candidates already on this device. New people load when you reconnect.
+            {t("offlineDiscovery")}
           </p>
         </div>
       ) : null}
@@ -620,7 +619,7 @@ export function DiscoveryGridScreen() {
       <div
         className="flex gap-1.5 overflow-x-auto px-3 pb-2 scrollbar-hide"
         role="tablist"
-        aria-label="Discovery categories"
+        aria-label={t("discover")}
         onKeyDown={(e) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
           e.preventDefault()
@@ -648,7 +647,7 @@ export function DiscoveryGridScreen() {
                 : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             }
           >
-            {cat.label}
+            {t(cat.label)}
           </button>
         ))}
       </div>

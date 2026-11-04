@@ -1,7 +1,7 @@
 /** Authenticated unified earnings balances + statement (Phase 3). Server-authoritative only. */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { getEarningsStatement } from "@/lib/server/earnings/unified-ledger"
 
 export const runtime = "nodejs"
@@ -13,9 +13,9 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
   }
-  const limit = checkRateLimit(`earnings-stmt:${auth.userId}`, 60, 60_000)
+  const limit = await checkDurableRateLimit(`earnings-stmt:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
   if (!limit.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: noStore })
+    return NextResponse.json({ ok: false, error: durableRateLimitCode(limit) }, { status: durableRateLimitStatus(limit), headers: noStore })
   }
   const url = new URL(request.url)
   const rowLimit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50) || 50))

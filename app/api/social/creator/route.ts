@@ -34,11 +34,22 @@ export async function GET(request: Request) {
     const id = (row as { id?: unknown }).id
     return typeof id === "string" && id ? [id] : []
   })
-  const economy = await getCreatorEconomySummary(auth.userId, postIds)
+  // Reward aggregation depends on the authoritative owned-post set. If that read
+  // fails, do not query an empty ID list and misreport post rewards as zero.
+  const economy = posts.ok ? await getCreatorEconomySummary(auth.userId, postIds) : null
 
   return NextResponse.json({
     ok: true,
     durable: profile.ok && profile.exists !== false,
+    dataQuality: {
+      complete: profile.ok && posts.ok && economy?.ok === true && rep.ok,
+      sources: {
+        creatorProfile: profile.ok,
+        publishedPosts: posts.ok,
+        creatorEconomy: economy?.ok === true,
+        reputation: rep.ok,
+      },
+    },
     creator: profile.ok
       ? {
           exists: Boolean(profile.exists),

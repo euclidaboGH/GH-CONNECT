@@ -40,6 +40,7 @@ import { buildCommentTree, sortComments } from "@/lib/comment-thread-utils"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { useRegionalContext } from "@/contexts/regional-context"
+import { getExperienceMessage, type ExperienceMessageKey } from "@/lib/i18n/experience"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 import { FloatingCreateButton } from "./feed-components"
@@ -51,17 +52,17 @@ import { FeedInterstitial, interstitialKindAt } from "./feed-interstitial"
 
 const FEED_FILTERS: {
   value: FeedFilter
-  label: string
-  shortLabel: string
+  label: ExperienceMessageKey
+  shortLabel: ExperienceMessageKey
   icon: React.ReactNode
   hint: string
 }[] = [
-  { value: "for-you", label: "For You", shortLabel: "For You", icon: <Zap size={14} />, hint: "Quality picks for you" },
-  { value: "following", label: "Following", shortLabel: "Following", icon: <Users size={14} />, hint: "People you follow" },
-  { value: "friends", label: "Friends", shortLabel: "Friends", icon: <UsersRound size={14} />, hint: "Your connections" },
-  { value: "communities", label: "Communities", shortLabel: "Communities", icon: <Hash size={14} />, hint: "Community activity" },
-  { value: "trending", label: "Trending", shortLabel: "Trending", icon: <TrendingUp size={14} />, hint: "What's rising now" },
-  { value: "saved", label: "Saved", shortLabel: "Saved", icon: <Bookmark size={14} />, hint: "Posts you saved" },
+  { value: "for-you", label: "forYou", shortLabel: "forYou", icon: <Zap size={14} />, hint: "Quality picks for you" },
+  { value: "following", label: "following", shortLabel: "following", icon: <Users size={14} />, hint: "People you follow" },
+  { value: "friends", label: "friends", shortLabel: "friends", icon: <UsersRound size={14} />, hint: "Your connections" },
+  { value: "communities", label: "communities", shortLabel: "communities", icon: <Hash size={14} />, hint: "Community activity" },
+  { value: "trending", label: "trending", shortLabel: "trending", icon: <TrendingUp size={14} />, hint: "What's rising now" },
+  { value: "saved", label: "saved", shortLabel: "saved", icon: <Bookmark size={14} />, hint: "Posts you saved" },
 ]
 
 
@@ -120,6 +121,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   void shellSetTab
   const perms = usePermissions()
   const regional = useRegionalContext()
+  const t = useCallback((key: ExperienceMessageKey) => getExperienceMessage(key, regional.locale), [regional.locale])
   // Demo/seed posts only when explicit demo policy allows — never as production feed filler
   const seedPostList = useMemo(() => bootstrapPosts(), [])
   const seedPostIds = useMemo(() => new Set(seedPostList.map((post) => post.id)), [seedPostList])
@@ -699,7 +701,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
 
   return (
-    <div className="gh-world-feed gh-feed-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven community feed">
+    <div className="gh-world-feed gh-feed-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={t("feed")}>
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div className="absolute top-0 left-0 right-0 h-20 flex items-center justify-center z-30">
@@ -715,7 +717,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       {/* Premium feed header — emerald identity, clear mode hierarchy */}
       <CollapsingAppHeader
         title=""
-        subtitle={FEED_FILTERS.find((f) => f.value === activeFilter)?.hint || "Social · Stories · Communities"}
+        subtitle={t(FEED_FILTERS.find((f) => f.value === activeFilter)?.label || "feed")}
         compact={headerCompact}
         hidden={headerHidden}
         compactTitle=""
@@ -731,7 +733,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="gh-premium-feed-toolbar border-b border-border/50 bg-background/95 px-3 py-2 backdrop-blur">
           <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Feed filters">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide" role="tablist" aria-label={t("feedFilters")}>
               {FEED_FILTERS.map((filter) => {
                 const active = activeFilter === filter.value
                 return (
@@ -740,7 +742,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  title={filter.hint || filter.label}
+                  title={t(filter.label)}
                   onClick={() => setActiveFilter(filter.value)}
                   className={`relative inline-flex min-h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                     active
@@ -749,32 +751,32 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   }`}
                 >
                   <span className={active ? "opacity-100" : "opacity-80"} aria-hidden>{filter.icon}</span>
-                  <span>{filter.shortLabel}</span>
+                  <span>{t(filter.shortLabel)}</span>
                 </button>
                 )
               })}
             </div>
-            <button type="button" onClick={() => setShowFeedControls((v) => !v)} aria-expanded={showFeedControls} aria-label="Personalize feed" className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card transition-colors ${showFeedControls || focusMode ? "border-emerald-500 text-emerald-700" : "border-border/60 text-muted-foreground hover:text-foreground"}`}>
+            <button type="button" onClick={() => setShowFeedControls((v) => !v)} aria-expanded={showFeedControls} aria-label={t("personalizeFeed")} className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card transition-colors ${showFeedControls || focusMode ? "border-emerald-500 text-emerald-700" : "border-border/60 text-muted-foreground hover:text-foreground"}`}>
               <Filter size={15} />
             </button>
-            <button type="button" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? "Close feed search" : "Search feed"} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground">
+            <button type="button" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? t("cancel") : t("searchFeed")} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground">
               {isSearchOpen ? <X size={16} /> : <Search size={16} />}
             </button>
-            <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} aria-label="Refresh feed" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
+            <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} aria-label={t("refreshFeed")} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
               <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
             </button>
           </div>
           {showFeedControls ? (
-            <section className="mt-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Feed personalization">
+            <section className="mt-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label={t("feedPersonalization")}>
               <div className="flex items-start justify-between gap-3">
-                <div><p className="text-xs font-bold text-foreground">Your feed, your priorities</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. These preferences stay on this device.</p></div>
-                <button type="button" onClick={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false) }} className="text-[10px] font-bold text-emerald-700">Reset</button>
+                <div><p className="text-xs font-bold text-foreground">{t("yourFeedPriorities")}</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. These preferences stay on this device.</p></div>
+                <button type="button" onClick={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false) }} className="text-[10px] font-bold text-emerald-700">{t("reset")}</button>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Location relevance</p><div className="flex flex-wrap gap-1">{([ ["city","Nearby"], ["country","Country"], ["worldwide","Worldwide"] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setLocationLane(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${locationLane === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
-                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">What matters now</p><div className="flex flex-wrap gap-1">{([ ["balanced","Balanced"], ["friendship","Connections"], ["professional","Professional"], ["dating","Matching"] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setIntentionBias(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${intentionBias === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
+                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t("locationRelevance")}</p><div className="flex flex-wrap gap-1">{([ ["city",t("nearby")], ["country",t("country")], ["worldwide",t("worldwide")] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setLocationLane(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${locationLane === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
+                <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t("whatMattersNow")}</p><div className="flex flex-wrap gap-1">{([ ["balanced",t("balanced")], ["friendship",t("connections")], ["professional",t("professional")], ["dating",t("matching")] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setIntentionBias(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${intentionBias === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
               </div>
-              <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"><span><span className="block text-xs font-bold text-foreground">Focus mode</span><span className="block text-[10px] text-muted-foreground">Reduce lower-value feed items and emphasize stronger relevance.</span></span><input type="checkbox" checked={focusMode} onChange={(e) => setFocusMode(e.target.checked)} className="h-4 w-4 accent-emerald-700" /></label>
+              <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"><span><span className="block text-xs font-bold text-foreground">{t("focusMode")}</span><span className="block text-[10px] text-muted-foreground">{t("focusModeHelp")}</span></span><input type="checkbox" checked={focusMode} onChange={(e) => setFocusMode(e.target.checked)} className="h-4 w-4 accent-emerald-700" /></label>
             </section>
           ) : null}
           {isSearchOpen ? (
@@ -782,21 +784,21 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               autoFocus
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search posts, people, hashtags…"
-              aria-label="Search posts, people, and hashtags"
+              placeholder={t("searchPosts")}
+              aria-label={t("searchPosts")}
               className="mt-2 min-h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           ) : null}
           {feedStatusMsg ? <p className="mt-1 text-[10px] text-muted-foreground" role="status">{feedStatusMsg}</p> : null}
         </div>
 
-        {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">Offline — showing available feed data. New actions may require a connection.</div> : null}
+        {isOffline ? <div className="mx-3 mt-2 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">{t("offlineFeed")}</div> : null}
 
 
         {draftPosts.length > 0 ? (
           <div className="mx-3 mt-2 rounded-xl border border-border/60 bg-card px-3 py-2" aria-label="Unpublished drafts">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold text-foreground">Drafts on this device</p>
+              <p className="text-[11px] font-bold text-foreground">{t("draftsOnDevice")}</p>
               <p className="text-[10px] text-muted-foreground">{draftPosts.length} saved</p>
             </div>
             <ul className="space-y-1.5">
@@ -903,7 +905,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             <div className="gh-premium-feed-list gh-feed-column space-y-4 px-2 py-3 sm:px-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
-                  {index > 0 && interstitialKindAt(index) ? (
+                  {index > 0 && !focusMode && activeFilter === "for-you" && interstitialKindAt(index) ? (
                     <FeedInterstitial
                       kind={interstitialKindAt(index)!}
                       onFindPeople={() => setTab("discover")}
@@ -1042,8 +1044,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
             const pid = sharePostId
             setSharePostId(null)
             if (pid) {
-              void import("@/lib/social/client").then(({ socialSharePost, socialRecordAttention }) => {
-                void socialSharePost(pid)
+              void import("@/lib/social/client").then(({ socialRecordAttention }) => {
                 void socialRecordAttention(pid, "share")
               })
               try {

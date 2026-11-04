@@ -1,9 +1,9 @@
 "use client"
 
 import { promptDialog } from "@/lib/ui/global-interactions"
-import { useState, useEffect, useRef, useCallback, lazy, Suspense, type ReactNode } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense, type ReactNode } from "react"
 import { useGHC } from "@/contexts/ghc-context"
-import { LANGUAGES, SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
+import { SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
 import { compressForTheme } from "@/lib/media/compress-image"
 import {
   ChevronLeft,
@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
 import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
@@ -43,11 +44,14 @@ import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-ca
 import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
 import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
+import { AccountDataControls } from "@/components/ghc/account-data-controls"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { getPrivacyHealth } from "@/lib/privacy-health"
 import { matchSettingsSearch } from "@/lib/settings-search"
+import { getLocaleOptions, normalizeLanguagePreference, translate } from "@/lib/i18n"
+import { getShellMessage, getShellTranslationStatus } from "@/lib/i18n/shell"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -114,6 +118,9 @@ export function SettingsScreen({
   const { settings, updateSettings, logout, blockedUsers, unblockUser, candidates } = useGHC()
   const sessionLock = useSessionLock()
   const regional = useRegionalContext()
+  const msg = (key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale)
+  const localeOptions = useMemo(() => getLocaleOptions(), [])
+  const selectedLocale = normalizeLanguagePreference(settings.language)
   const [navStack, setNavStack] = useState<SettingsSection[]>(() =>
     initialSection && initialSection !== "main" ? ["main", initialSection] : ["main"],
   )
@@ -311,6 +318,7 @@ export function SettingsScreen({
 
   const handleSelect = async (key: string, value: string | string[] | number | boolean | null) => {
     await updateSettings({ ...settings, [key]: value })
+    if (key === "language" && typeof value === "string") regional.setPreferredLocale(value)
   }
 
   const setThemeMode = async (mode: ThemeMode) => {
@@ -772,6 +780,8 @@ export function SettingsScreen({
             </div>
           </div>
 
+          <AccountDataControls />
+
           {/* Blocked users */}
           <div className="pt-2">
             <p className="mb-2 text-[15px] font-semibold">Blocked users</p>
@@ -840,18 +850,19 @@ export function SettingsScreen({
           <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Language</p>
             <select
-              value={settings.language || "English"}
+              value={selectedLocale}
               onChange={(e) => void handleSelect("language", e.target.value)}
               className="w-full min-h-11 rounded-xl border border-border bg-background px-3 text-sm font-semibold"
               aria-label="App language"
             >
-              {LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
+              {localeOptions.map((option) => (
+                <option key={option.localeTag} value={option.localeTag}>
+                  {option.nativeName || option.name} — {option.name}{option.translationAvailable ? "" : option.partialTranslationAvailable ? " (partially translated)" : " (not translated yet)"}
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-[11px] text-muted-foreground">Applies to menus and system labels. Chat content stays as written.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{regional.uiTranslationAvailable ? "English interface resources are active." : getShellTranslationStatus(regional.locale) === "partial" ? getShellMessage("languagePartial", regional.locale) : translate("language.translationPending")}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{getShellMessage("contentUnchanged", regional.locale)}</p>
           </section>
 
           {/* Device date, time & optional live location */}
@@ -1256,16 +1267,18 @@ export function SettingsScreen({
           <div>
             <p className="text-[13px] font-bold text-muted-foreground mb-2">Language</p>
             <select
-              value={settings.language}
-              onChange={(e) => handleSelect("language", e.target.value)}
+              value={selectedLocale}
+              onChange={(e) => void handleSelect("language", e.target.value)}
               className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm text-foreground"
+              aria-label="App language"
             >
-              {LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
+              {localeOptions.map((option) => (
+                <option key={option.localeTag} value={option.localeTag}>
+                  {option.nativeName || option.name} — {option.name}{option.translationAvailable ? "" : option.partialTranslationAvailable ? " (partially translated)" : " (not translated yet)"}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-[11px] text-muted-foreground">{regional.uiTranslationAvailable ? "English interface resources are active." : getShellTranslationStatus(regional.locale) === "partial" ? getShellMessage("languagePartial", regional.locale) : translate("language.translationPending")}</p>
           </div>
         </div>
       </div>
@@ -1413,7 +1426,7 @@ export function SettingsScreen({
   const settingsResultCount = filteredGroups.reduce((count, group) => count + group.items.length, 0)
 
   return (
-    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven settings">
+    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label={msg("settingsTitle")}>
       <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"
@@ -1423,7 +1436,7 @@ export function SettingsScreen({
         >
           <ChevronLeft size={24} strokeWidth={2} />
         </button>
-        <h2 className="text-[18px] font-bold tracking-tight text-foreground">Settings</h2>
+        <h2 className="text-[18px] font-bold tracking-tight text-foreground">{msg("settingsTitle")}</h2>
       </div>
 
       <div className="shrink-0 border-b border-border/50 px-4 py-2.5">
@@ -1433,9 +1446,9 @@ export function SettingsScreen({
             type="search"
             value={settingsQuery}
             onChange={(e) => setSettingsQuery(e.target.value)}
-            placeholder="Search wallet, privacy, messages, language…"
+            placeholder={msg("searchSettings")}
             className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-11 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
-            aria-label="Search settings"
+            aria-label={msg("searchSettings")}
             aria-describedby="settings-search-hint"
           />
           {settingsQuery ? (

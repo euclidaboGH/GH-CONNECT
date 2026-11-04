@@ -32,6 +32,8 @@ import {
   DAILY_STREAK_GHC,
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
@@ -138,6 +140,8 @@ export function RewardsCentreScreen({
   onBack: () => void
   onOpenWallet?: () => void
 }) {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const [tab, setTab] = useState<Tab>("challenges")
   const [tick, setTick] = useState<number>(0)
   const [showLearnMore, setShowLearnMore] = useState(false)
@@ -443,7 +447,7 @@ const claimPendingReward = useCallback(
   )
 
   return (
-    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven Rewards Centre">
+    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("rewardsTitle")}>
 
       <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
@@ -455,7 +459,7 @@ const claimPendingReward = useCallback(
           <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">Rewards</h1>
+          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">{msg("rewardsTitle")}</h1>
           <p className="text-[10px] leading-tight text-muted-foreground">Daily · missions · not pay-to-win</p>
         </div>
         {onOpenWallet && (
@@ -724,10 +728,10 @@ const claimPendingReward = useCallback(
         >
           {(
             [
-              { id: "challenges" as const, label: "Missions" },
-              { id: "opportunities" as const, label: "Opportunities" },
-              { id: "history" as const, label: "History" },
-              { id: "achievements" as const, label: "Achievements" },
+              { id: "challenges" as const, label: msg("missions") },
+              { id: "opportunities" as const, label: msg("opportunities") },
+              { id: "history" as const, label: msg("history") },
+              { id: "achievements" as const, label: msg("achievements") },
             ] as const
           ).map((item) => (
             <button

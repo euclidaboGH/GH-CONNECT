@@ -16,6 +16,7 @@ import { onCloseTransientUI } from "@/lib/transient-ui"
 import { isMediaFacadeUrl, resolveDisplayMediaUrl } from "@/lib/media/resolve-display-url"
 import { downloadMedia, shareMediaUrl } from "@/lib/media/download-media"
 import { DurableVideo } from "./durable-video"
+import { DurableImage } from "./durable-image"
 
 export type MediaLightboxItem = {
   url: string
@@ -57,8 +58,22 @@ export function MediaLightbox({
   const [index, setIndex] = useState(Math.min(Math.max(0, initialIndex), Math.max(0, items.length - 1)))
   const [resolved, setResolved] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
+  const [viewerEpoch, setViewerEpoch] = useState(0)
+
+  useEffect(() => {
+    const onMediaSessionChange = () => {
+      setResolved(null)
+      setResolving(true)
+      setViewerEpoch((value) => value + 1)
+    }
+    window.addEventListener("ghc:media-session-change", onMediaSessionChange)
+    return () => window.removeEventListener("ghc:media-session-change", onMediaSessionChange)
+  }, [])
   const [busy, setBusy] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
 
@@ -90,7 +105,7 @@ export function MediaLightbox({
     return () => {
       cancelled = true
     }
-  }, [open, current?.url])
+  }, [open, current?.url, viewerEpoch])
 
   const goPrev = useCallback(() => {
     setIndex((i) => Math.max(0, i - 1))
@@ -103,6 +118,8 @@ export function MediaLightbox({
 
   useEffect(() => {
     if (!open) return
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeButtonRef.current?.focus()
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     const onKey = (e: KeyboardEvent) => {
@@ -112,6 +129,25 @@ export function MediaLightbox({
       }
       if (e.key === "ArrowLeft") goPrev()
       if (e.key === "ArrowRight") goNext()
+      if (e.key === "Tab") {
+        const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        if (!focusable?.length) {
+          e.preventDefault()
+          dialogRef.current?.focus()
+          return
+        }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     window.addEventListener("keydown", onKey)
     const off = onCloseTransientUI(() => onClose())
@@ -119,6 +155,7 @@ export function MediaLightbox({
       document.body.style.overflow = prevOverflow
       window.removeEventListener("keydown", onKey)
       off()
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
     }
   }, [open, onClose, goPrev, goNext, toolsOpen])
 
@@ -175,10 +212,12 @@ export function MediaLightbox({
 
   const node = (
     <div
+      ref={dialogRef}
       className="gh-world-media-viewer fixed inset-0 z-[220] flex flex-col bg-black"
       role="dialog"
       aria-modal="true"
       aria-label="Full screen media"
+      tabIndex={-1}
     >
       <div className="flex items-center justify-between gap-2 px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <p className="min-w-0 truncate text-sm font-semibold text-white/90">
@@ -186,6 +225,7 @@ export function MediaLightbox({
         </p>
         <div className="flex shrink-0 items-center gap-1">
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={() => void handleDownload()}
             disabled={busy || !current?.url}
@@ -282,8 +322,8 @@ export function MediaLightbox({
           </div>
         ) : resolved ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolved}
+          <DurableImage
+            src={current?.url || resolved}
             alt={current?.alt || alt || "Full screen media"}
             className="max-h-full max-w-full object-contain"
             onClick={(e) => e.stopPropagation()}

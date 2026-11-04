@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { createNubanRecipient, paystackTransfersEnabled, PaystackError, resolveNubanAccount } from "@/lib/server/payouts/paystack"
@@ -30,8 +30,8 @@ export async function POST(request: Request) {
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   const stepUp = await requireRecentStepUp(auth)
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
-  const rl = checkRateLimit(`payout-bank-beneficiary-create:${auth.userId}`, 3, 60 * 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`payout-bank-beneficiary-create:${auth.userId}`, 3, 60 * 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   if (!paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
   const fingerprintKey = String(process.env.GHC_BENEFICIARY_FINGERPRINT_KEY || "").trim()
   if (fingerprintKey.length < 32) return reply({ ok: false, error: "BENEFICIARY_FINGERPRINT_KEY_NOT_CONFIGURED" }, 503)
@@ -81,8 +81,8 @@ export async function DELETE(request: Request) {
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   const stepUp = await requireRecentStepUp(auth)
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
-  const rl = checkRateLimit(`payout-bank-beneficiary-disable:${auth.userId}`, 5, 60 * 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`payout-bank-beneficiary-disable:${auth.userId}`, 5, 60 * 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const parsedBody = await readBoundedJson(request, 4 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsedBody.value

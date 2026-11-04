@@ -174,8 +174,19 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [crossStatus, setCrossStatus] = useState<"healthy" | "attention" | "degraded" | null>(null)
   const quoteController = useRef<AbortController | null>(null)
   const quoteSequence = useRef(0)
+  const refreshController = useRef<AbortController | null>(null)
+  const refreshSequence = useRef(0)
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  const refresh = useCallback(async (externalSignal?: AbortSignal) => {
+    const sequence = ++refreshSequence.current
+    refreshController.current?.abort()
+    const controller = new AbortController()
+    refreshController.current = controller
+    const abortFromCaller = () => controller.abort()
+    if (externalSignal?.aborted) controller.abort()
+    else externalSignal?.addEventListener("abort", abortFromCaller, { once: true })
+    const timeout = window.setTimeout(() => controller.abort(), 10_000)
+    const signal = controller.signal
     setLoading(true)
     try {
       const [wRes, sRes, cRes, xRes] = await Promise.all([
@@ -204,6 +215,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           signal,
         }),
       ])
+      if (sequence !== refreshSequence.current || signal.aborted) return
       const wJson = (await wRes.json().catch(() => null)) as Withdrawable | null
       const sJson = (await sRes.json().catch(() => null)) as Statement | null
       const cJson = (await cRes.json().catch(() => null)) as {
@@ -266,6 +278,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setEntries([])
       }
 
+      if (sequence !== refreshSequence.current || signal.aborted) return
+
       // Explicit A2U payout consent status (separate from Pi identity link)
       try {
         setWalletAuthLoading(true)
@@ -300,40 +314,26 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setSnap(null)
       }
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      window.clearTimeout(timeout)
+      externalSignal?.removeEventListener("abort", abortFromCaller)
+      if (sequence === refreshSequence.current) {
+        refreshController.current = null
+        setLoading(false)
+        if (signal.aborted) setFailed(true)
+      }
     }
   }, [])
 
   useEffect(() => {
-    const ac = new AbortController()
-    // Phase 1: never leave "Loading PI earnings…" stuck — hard timeout + fail closed
-    const hardTimeout = window.setTimeout(() => {
-      try {
-        ac.abort()
-      } catch { /* */ }
-      setLoading(false)
-      setFailed(true)
-    }, 12_000)
-    void refresh(ac.signal).finally(() => {
-      window.clearTimeout(hardTimeout)
-    })
-    const onRefresh = () => {
-      const next = new AbortController()
-      const t = window.setTimeout(() => {
-        try {
-          next.abort()
-        } catch { /* */ }
-        setLoading(false)
-        setFailed(true)
-      }, 12_000)
-      void refresh(next.signal).finally(() => window.clearTimeout(t))
-    }
+    void refresh()
+    const onRefresh = () => { void refresh() }
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-auth-changed", onRefresh)
     return () => {
-      window.clearTimeout(hardTimeout)
-      ac.abort()
+      refreshSequence.current += 1
+      refreshController.current?.abort()
+      refreshController.current = null
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
       window.removeEventListener("ghc:wallet-auth-changed", onRefresh)
@@ -597,15 +597,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
               onClick={() => {
                 setFailed(false)
                 setLoading(true)
-                const ac = new AbortController()
-                const t = window.setTimeout(() => {
-                  try {
-                    ac.abort()
-                  } catch { /* */ }
-                  setLoading(false)
-                  setFailed(true)
-                }, 12_000)
-                void refresh(ac.signal).finally(() => window.clearTimeout(t))
+                void refresh()
               }}
             >
               <RefreshCw className="h-3 w-3" /> Retry

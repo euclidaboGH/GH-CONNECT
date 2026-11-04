@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   claimRegistrationBonus,
   getRegistrationBonusStatus,
@@ -21,8 +21,8 @@ function reply(body: Record<string, unknown>, status = 200) {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`reg-bonus-get:${auth.userId}`, 60, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`reg-bonus-get:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   const status = await getRegistrationBonusStatus(auth.userId)
   const http =
     status.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : status.ok ? 200 : 409
@@ -32,8 +32,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`reg-bonus-claim:${auth.userId}`, 10, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`reg-bonus-claim:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   // Body ignored — amount and eligibility are server-derived only
   const result = await claimRegistrationBonus(auth.userId)
   if (result.error === "EARNINGS_LEDGER_UNAVAILABLE") {

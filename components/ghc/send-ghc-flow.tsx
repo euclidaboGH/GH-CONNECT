@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Phase D2 — production-quality Send GHC flow.
  * Money moves only via economy.sendGhcToUser (domain → Phase B/C).
@@ -504,7 +505,7 @@ export function SendGhcFlow({
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
                         {r.photo ? (
-                          <img src={r.photo} alt="" className="h-full w-full object-cover" />
+                          <DurableImage src={r.photo} alt="" className="h-full w-full object-cover" />
                         ) : (
                           <User size={18} className="text-muted-foreground" />
                         )}

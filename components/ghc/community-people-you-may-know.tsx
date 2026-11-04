@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { UserPlus } from "lucide-react"
 import type { CommunityMemberSuggestion } from "@/lib/domains/adapters/community-people-you-may-know"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
@@ -56,7 +57,7 @@ export function CommunityPeopleYouMayKnow({
               aria-label={`View ${s.displayName}`}
             >
               {s.avatarUrl ? (
-                <img src={s.avatarUrl} alt="" className="h-full w-full object-cover" />
+                <DurableImage src={s.avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="text-xs font-bold">{s.displayName.slice(0, 1)}</span>
               )}

@@ -1,7 +1,7 @@
 /** Owner-scoped JSON export. Fails closed if any required source cannot be read; never includes secrets or service credentials. */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 
@@ -42,8 +42,8 @@ export async function GET(request: Request) {
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   const stepUp = await requireRecentStepUp(auth)
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
-  const rl = checkRateLimit(`account-export:${auth.userId}`, 2, 60 * 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`account-export:${auth.userId}`, 2, 60 * 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "EXPORT_UNAVAILABLE" }, 503)
 

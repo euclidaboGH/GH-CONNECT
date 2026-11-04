@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Community invitation card — Accept/Decline via authoritative context actions.
  */
@@ -94,7 +95,7 @@ export function CommunityInviteCard({
       <div className="flex gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-100 dark:bg-emerald-950">
           {invite.coverImage ? (
-            <img src={invite.coverImage} alt="" className="h-full w-full object-cover" />
+            <DurableImage src={invite.coverImage} alt="" className="h-full w-full object-cover" />
           ) : (
             <Users size={20} className="text-emerald-800 dark:text-emerald-200" aria-hidden />
           )}

@@ -1,7 +1,7 @@
 /** Requests a transfer only against a separately recorded, verified NGN funding obligation. */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
@@ -16,8 +16,8 @@ export async function POST(request: Request) {
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   const stepUp = await requireRecentStepUp(auth)
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
-  const rl = checkRateLimit(`payout-bank-request:${auth.userId}`, 3, 60 * 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`payout-bank-request:${auth.userId}`, 3, 60 * 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   if (process.env.PAYSTACK_TRANSFERS_ENABLED !== "true" || !paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
@@ -47,8 +47,8 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rl = checkRateLimit(`payout-bank-history:${auth.userId}`, 30, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`payout-bank-history:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)
   const query = new URLSearchParams({ seller_id: `eq.${auth.userId}`, select: "id,amount_kobo,currency,status,provider_status,created_at,updated_at,paid_at", order: "created_at.desc", limit: "100" })

@@ -1,7 +1,7 @@
 /** Durable account export/deletion request intake. Destructive deletion is never executed by this endpoint. */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
@@ -16,8 +16,8 @@ function reply(body: unknown, status = 200) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rl = checkRateLimit(`account-lifecycle:${auth.userId}`, 5, 60 * 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`account-lifecycle:${auth.userId}`, 5, 60 * 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
 
   const parsedBody = await readBoundedJson(request, 4 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)

@@ -5,7 +5,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { piGetPayment, amountsMatch } from "@/lib/server/payments/pi-api"
 import { resolvePiSandbox } from "@/lib/pi-env"
@@ -27,8 +27,8 @@ export async function POST(request: Request, context: { params: Promise<{ reques
   if (!configuredKey || suppliedBytes.length !== configuredBytes.length || !timingSafeEqual(suppliedBytes, configuredBytes)) {
     return reply({ ok: false, error: "FORBIDDEN" }, 403)
   }
-  const rl = checkRateLimit("payout-reconciliation-privileged", 20, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("payout-reconciliation-privileged", 20, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
 
   const { requestId } = await context.params
   if (!/^spr_[a-f0-9]{16,40}$/i.test(requestId)) return reply({ ok: false, error: "INVALID_REQUEST_ID" }, 400)

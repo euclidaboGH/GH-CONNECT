@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, memo } from "react"
 import { useGHCMessaging, useGHC } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { useDomainEvents } from "@/lib/realtime/use-domain-events"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -55,6 +57,8 @@ function isCommunityConversation(c: Conversation): boolean {
 }
 
 export function MessageScreen() {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
@@ -924,29 +928,29 @@ export function MessageScreen() {
   }
 
   const filters: { id: InboxFilter; label: string; count?: number }[] = [
-    { id: "all", label: "All" },
-    { id: "dms", label: "DMs" },
-    { id: "unread", label: "Unread", count: unreadCount },
-    { id: "requests", label: "Requests", count: requestCount },
-    { id: "communities", label: "Communities" },
+    { id: "all", label: msg("all") },
+    { id: "dms", label: msg("directMessages") },
+    { id: "unread", label: msg("unread"), count: unreadCount },
+    { id: "requests", label: msg("requests"), count: requestCount },
+    { id: "communities", label: msg("communities") },
   ]
 
 
   return (
-    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Messages inbox">
+    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("messagesTitle")}>
       <div className="px-3 pt-2" role="status">
         {isOffline ? (
           <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            Offline — existing conversations remain available where cached. Reconnect before sending new messages or attachments.
+            {msg("offlineNotice")}
           </p>
         ) : null}
       </div>
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-[17px] font-bold tracking-tight text-foreground">Messages</h1>
+            <h1 className="text-[17px] font-bold tracking-tight text-foreground">{msg("messagesTitle")}</h1>
             <p className="text-[11px] text-muted-foreground">
-              People, requests and community conversations in one place
+              {msg("messagesSubtitle")}
             </p>
           </div>
           {unreadCount > 0 ? (
@@ -972,9 +976,9 @@ export function MessageScreen() {
                     window.setTimeout(() => setStatusMsg?.(null), 1600)
                   } catch { /* */ }
                 }}
-                aria-label="Mark all conversations as read"
+                aria-label={msg("markAllRead")}
               >
-                Mark all read
+                {msg("markAllRead")}
               </button>
             </div>
           ) : null}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { paystackTransfersEnabled, PaystackError, resolveNubanAccount } from "@/lib/server/payouts/paystack"
 
@@ -15,8 +15,8 @@ export async function POST(request: Request) {
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   const stepUp = await requireRecentStepUp(auth)
   if (stepUp) return reply({ ok: false, error: stepUp.code, message: stepUp.message }, stepUp.status)
-  const rl = checkRateLimit(`payout-bank-resolve:${auth.userId}`, 5, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit(`payout-bank-resolve:${auth.userId}`, 5, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   if (!paystackTransfersEnabled()) return reply({ ok: false, error: "BANK_PAYOUT_PROVIDER_DISABLED" }, 503)
   const parsedBody = await readBoundedJson(request, 64 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)

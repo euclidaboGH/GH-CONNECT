@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 
@@ -66,8 +66,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
 
-  const limit = checkRateLimit(`media-sign:${auth.userId}`, 60, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`media-sign:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
 
   const { id } = await context.params
   if (!/^media_[a-z0-9]+_[a-z0-9]+$/i.test(id) || id.length > 100) {

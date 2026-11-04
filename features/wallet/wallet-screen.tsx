@@ -40,6 +40,8 @@ import { PiPaymentDetail, type PiPaymentDetailRecord } from "@/components/ghc/pi
 import { GhcRequestsPanel } from "@/components/ghc/ghc-requests-panel"
 import { GhcSocialFuelNote } from "@/components/ghc/ghc-social-fuel-note"
 import { useGHCShell } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { EMPTY_STATES, PRIMARY_ACTIONS, formatGhcAmount, mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
@@ -195,6 +197,8 @@ function navigateSettingsSection(section: string) {
 
 export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHCShell()
+  const regional = useRegionalContext()
+  const workflowText = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
   const { snapshot: authoritativeWallet, refresh: refreshWalletAuthority } = useWalletRead()
   /* wallet-refresh listener attached below */
 
@@ -1230,6 +1234,7 @@ const lowBalance = balance === 0 && displayPending === 0
             onOpenPending={() => setShowPendingSheet(true)}
             selectedRail={assetRail}
             onSelectRail={(rail) => setAssetRail(rail)}
+            ghcVerified={authoritativeWallet.status === "ready" && authoritativeWallet.source === "server"}
             primaryActions={
               <WalletPrimaryActions
                 embedded
@@ -2288,8 +2293,8 @@ const lowBalance = balance === 0 && displayPending === 0
                 </button>
               ) : null}
               <p className="mt-3 text-center text-[10px] leading-relaxed text-muted-foreground">
-                Claim moves GHC to your available balance. Only available GHC can be sent. Pending
-                is never spendable.
+                Pending holds mature after validation. Release ready rewards to your available
+                balance here; only available GHC can be sent or spent.
               </p>
             </div>
           </div>
@@ -2391,7 +2396,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-bold">Transaction history</h2>
+              <h2 className="text-base font-bold">{workflowText("transactionHistory")}</h2>
               <p className="text-[11px] text-muted-foreground">GHC ledger and π payments are kept on separate rails</p>
             </div>
           </header>

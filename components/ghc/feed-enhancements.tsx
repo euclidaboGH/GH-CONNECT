@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { ActionSheet, ActionSheetItem, closeAllActionSheets } from "./action-sheet"
 
 import { useState, useEffect } from "react"
@@ -334,7 +335,7 @@ export function EnhancedComment({
                   className="w-16 h-16 rounded overflow-hidden bg-muted flex items-center justify-center text-xs text-muted-foreground"
                 >
                   {media.type === "image" && media.url ? (
-                    <img src={media.url} alt="attachment" className="w-full h-full object-cover" />
+                    <DurableImage src={media.url} alt="attachment" className="w-full h-full object-cover" />
                   ) : media.type === "gif" ? (
                     <span>GIF</span>
                   ) : media.type === "voice" ? (
@@ -541,7 +542,7 @@ export function LinkPreview({
     >
       <div className="flex gap-3 p-2">
         {image && (
-          <img
+          <DurableImage
             src={image}
             alt=""
             className="h-16 w-16 flex-shrink-0 rounded object-cover"
