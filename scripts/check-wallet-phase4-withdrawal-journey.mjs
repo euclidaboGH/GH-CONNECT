@@ -14,7 +14,7 @@ const checks = [
   ["rewards links to Wallet for Pi withdraw", /Open Wallet · Withdraw Pi/.test(rewards)],
   ["settings retains authorization card for revoke/manage", /PiPayoutAuthorizationCard/.test(settings)],
   ["wallet dashboard posts wallet-authorization", /\/api\/identity\/wallet-authorization/.test(dash)],
-  ["authorize returns boolean for journey chaining", /const onAuthorizeWallet = async \(\): Promise<boolean>/.test(dash)],
+  ["authorize returns boolean for journey chaining", /const onAuthorizeWallet = (?:useCallback\()?async \(\): Promise<boolean>/.test(dash)],
   ["runWithdraw authorizes then continues when granted", /const granted = await onAuthorizeWallet\(\)/.test(dash)],
   ["primary control labels cover authorize and withdraw", /Authorize Pi wallet/.test(dash) && /Withdraw to Pi/.test(dash)],
   ["fee quote still server-side", /\/api\/economy\/earnings\/quote/.test(dash)],
