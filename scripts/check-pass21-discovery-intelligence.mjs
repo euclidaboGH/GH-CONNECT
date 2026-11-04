@@ -11,7 +11,7 @@ check("release metadata is 0.243.0", release.includes(`APP_RELEASE_VERSION = "${
 check("global search exposes outcome summary", search.includes("Search outcome") && search.includes("resultCounts") && search.includes("relevant result"))
 check("search keeps unified categories", ["people", "creators", "posts", "videos", "communities", "events", "activities", "services", "ids"].every((x) => search.includes(`\"${x}\"`)))
 check("result categories are actionable", search.includes("setSearchTab(key as SearchTab)") && search.includes("ArrowRight"))
-check("discovery has outcome model", discover.includes("buildDiscoveryOutcome") && discover.includes("Discovery outcome"))
+check("discovery renders the shared outcome model", discover.includes('import { buildDiscoveryOutcome } from "@/lib/discovery-outcome"') && discover.includes("buildDiscoveryOutcome({") && discover.includes('aria-label={t("discoveryOutcome")}'))
 check("discovery guidance uses real visible state", ["visiblePeople", "selectedIntentCount", "hasQuery", "onlineOnly"].every((x) => model.includes(x)))
 check("privacy language remains explicit", search.includes("Privacy and block rules stay enforced") && model.includes("privacy, block, connection and request boundaries"))
 check("no fake opportunity scoring introduced", !model.includes("income") && !model.includes("guaranteed") && !search.includes("guaranteed opportunity"))
