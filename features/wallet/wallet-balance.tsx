@@ -51,7 +51,6 @@ export function WalletBalanceCard({
     pending: number
     reserved: number
     eligible: boolean
-    economyEligible: boolean
     authorizationActive: boolean
     piWalletLinked: boolean
     reasons: string[]
@@ -113,9 +112,8 @@ export function WalletBalanceCard({
           withdrawable: Number(data.withdrawable),
           pending: Number(data.pending),
           reserved: Number(data.reserved),
-          // Economy-eligible alone is not payout-ready; require explicit A2U consent.
-          eligible: data.eligible === true && authActive === true,
-          economyEligible: data.eligible === true,
+          // Server economy eligibility (ledger/policy). Payout readiness also needs authorizationActive.
+          eligible: data.eligible === true,
           authorizationActive: authActive === true,
           piWalletLinked: data.piWalletLinked === true,
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
@@ -306,9 +304,9 @@ export function WalletBalanceCard({
                 ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
                   ? piSnapshot.authorizationActive
-                    ? piSnapshot.economyEligible
+                    ? piSnapshot.eligible
                       ? "Pi identity linked · payout authorized"
-                      : "Pi identity linked · authorized · not economy-eligible"
+                      : "Pi identity linked · authorized · not currently eligible"
                     : "Pi identity linked · authorize wallet to withdraw"
                   : "Link your Pi identity to enable withdrawals"}
           </p>
