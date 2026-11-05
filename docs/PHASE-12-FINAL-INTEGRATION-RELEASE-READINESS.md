@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.313.1` (2026-11-04)
+Release: `0.313.2` (2026-11-05)
 
 The 0.312.0 source baseline includes Phase 20 payout controls, Phase 21 private-surface durable abuse controls, Phase 22 atomic marketplace order transitions, Phase 23 migration/lock-scope hardening, Phase 24 migration-classification/operator-guide synchronization, and Phase 26 wallet ledger resilience/premium wallet presentation. The canonical inventory contains 178 migrations: 116 REQUIRED candidates, 59 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL, and 2 PROPOSAL. The 58/1/2 held migrations remain unapplied pending their documented gates. Runtime/build and operator acceptance remain pending.
 
