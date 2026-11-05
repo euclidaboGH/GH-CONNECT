@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2, ShieldCheck, X, Wallet } from "lucide-react"
-import { apiRequest } from "@/lib/api/request"
+import { apiRequest } from "@/lib/client/api-request"
 import { userFacingError } from "@/lib/ux/user-facing-errors"
 
 function humanizeApiError(code?: string | null, message?: string | null): string {

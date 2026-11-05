@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/security/rate-limit"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   getWithdrawalPinStatus,
