@@ -46,7 +46,7 @@ Do not enable Mainnet or payout execution while authorization and funded Testnet
 
 The latest uploaded 0.313.1 source is the baseline. The Phase 2 source completion now includes:
 
-1. `202611050001_pi_wallet_authorization_explicit_consent_only.sql`: additive replacement of the grant RPC. It accepts only `user_explicit`, validates the current durable `gh_pi_identities` mapping, serializes concurrent grants by user and Pi UID, supersedes stale active grants, writes the consent audit event, and retains service-role-only execution.
+1. `20261105160001_pi_wallet_authorization_explicit_consent_only.sql`: additive replacement of the grant RPC. It accepts only `user_explicit`, validates the current durable `gh_pi_identities` mapping, serializes concurrent grants by user and Pi UID, supersedes stale active grants, writes the consent audit event, and retains service-role-only execution.
 2. The authorization POST independently reads the grant back and returns success only when the active authorization matches the same Pi UID resolved from the server-side identity mapping.
 3. The server authorization store treats `authorizationActive` as true only when `uidMatchesAuthorization` is also true.
 4. The withdrawable endpoint exposes the UID-match result and derives its active flag from both conditions.

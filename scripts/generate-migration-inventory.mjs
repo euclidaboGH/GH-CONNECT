@@ -83,6 +83,8 @@ const reviewRequired = new Set([
   '20261101010001_gh_security_control_plane_retention.sql',
   '20261104170001_marketplace_order_read_cleanup_separation.sql',
   '20261104180001_gh_community_list_memberships_viewer.sql',
+  '20261105160001_pi_wallet_authorization_explicit_consent_only.sql',
+  '20261105170001_phase3_earnings_ledger_integrity_hardening.sql',
 ])
 
 const notes = {
@@ -90,6 +92,8 @@ const notes = {
   '20261101010001_gh_security_control_plane_retention.sql': 'Security-control-plane retention and bounded cleanup. Validate cleanup query plans, sampled invocation frequency, event expiry behavior, row-lock/concurrency behavior, and service_role-only RPC execution on disposable PostgreSQL before applying; do not infer remote migration status.',
   '20261104170001_marketplace_order_read_cleanup_separation.sql': 'Phase 23 lock-scope hardening. Validate the side-effect-free order snapshot, explicit application cleanup RPC, service_role ACL, expired reservation behavior, and concurrent order transition/cleanup behavior on disposable PostgreSQL and Testnet. Review migration ordering/history before applying.',
   '20261104180001_gh_community_list_memberships_viewer.sql': 'New viewer-scoped community membership read view. Validate grants, RLS/view security semantics, owner/member/non-member visibility, and query plans on disposable PostgreSQL; reconcile target migration history before any application.',
+  '20261105160001_pi_wallet_authorization_explicit_consent_only.sql': 'Security-sensitive Pi payout-consent grant replacement. Validate exact identity mapping, user-explicit-only source enforcement, advisory-lock concurrency, superseding of stale active authorizations, audit-event insertion, service_role-only ACLs, and rollback behavior on disposable PostgreSQL/Testnet before applying. Reconcile target migration history first; this migration does not authorize users or enable payouts.',
+  '20261105170001_phase3_earnings_ledger_integrity_hardening.sql': 'Financially sensitive append-only PI earnings ledger hardening. Validate trigger behavior, per-user advisory-lock serialization, exact payload-bound idempotency for credit/reserve/settle/release, service_role-only RPC grants, and payout reconciliation on disposable PostgreSQL/Testnet before applying. Additive only; does not execute or enable payouts.',
   '20261022010015_connection_request_intents.sql': 'Product/security review; do not auto-apply.',
   '20261025010001_gh_community_create_idempotency_guard.sql': 'Review community ID-conflict behavior and verify same-owner retries plus cross-owner rejection on disposable PostgreSQL/Testnet before applying; reconcile remote migration history first.',
   '20261027010003_gh_media_upload_finalize_identity.sql': 'Review upload-session finalization against concurrent retries and media asset lifecycle on disposable PostgreSQL; verify asset/session identity matching and service-role ACL before applying.',

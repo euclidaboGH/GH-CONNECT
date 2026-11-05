@@ -4,7 +4,7 @@ import { join } from 'node:path'
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
 const migration = read('supabase/migrations/20261029010005_pi_identity_wallet_authorization.sql')
-const phase2Completion = read('supabase/migrations/202611050001_pi_wallet_authorization_explicit_consent_only.sql')
+const phase2Completion = read('supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql')
 const store = read('lib/server/identity/wallet-authorization.ts')
 const api = read('app/api/identity/wallet-authorization/route.ts')
 const claim = read('app/api/economy/rewards/pi-cashback/claim/route.ts')
@@ -37,7 +37,7 @@ test('Wallet UI confirms active consent and matching UID from fresh server read'
 test('Withdrawal retries reuse an idempotency key until the request is confirmed', /payoutIdempotencyRef = useRef/.test(payoutUi) && /pendingIntent\.amountAtomic !== amountAtomic/.test(payoutUi) && /payoutIdempotencyRef\.current = null/.test(payoutUi))
 
 
-test('Additive Phase 2 completion migration exists', existsSync(join(root, 'supabase/migrations/202611050001_pi_wallet_authorization_explicit_consent_only.sql')))
+test('Additive Phase 2 completion migration exists', existsSync(join(root, 'supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql')))
 test('Grant RPC accepts only user_explicit consent source', /v_source <> 'user_explicit'/.test(phase2Completion) && /'user_explicit'\);/.test(phase2Completion) && !/auth_bridge|operator/.test(phase2Completion.replace(/--[^\\n]*/g, '')))
 test('Grant RPC serializes concurrent grants by user and Pi UID', /pg_advisory_xact_lock\(v_user_lock\)/.test(phase2Completion) && /pg_advisory_xact_lock\(v_uid_lock\)/.test(phase2Completion))
 test('Grant API independently verifies persisted authorization and mapped UID', /getWalletAuthorization\(auth\.userId\)/.test(api) && /verified\.uidMatchesAuthorization !== true/.test(api) && /verified\.authorizedPiAppUid !== mapping\.piAppUid/.test(api))
