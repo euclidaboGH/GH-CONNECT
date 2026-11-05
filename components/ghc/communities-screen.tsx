@@ -1326,6 +1326,7 @@ export function CommunitiesScreen() {
                 </label>
               </div>
             )}
+          </>
         }
       />
 

@@ -1,3 +1,5 @@
+> **Status:** Current engineering note for 0.313.1 Phase 3 unified earnings ledger (2026-11-05). Does not claim Mainnet or live payout success.
+
 # Phase 3 — Unified PI Earnings Ledger Hardening
 
 ## Scope

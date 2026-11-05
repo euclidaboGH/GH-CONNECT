@@ -49,7 +49,7 @@ async function rpc<T extends Record<string, unknown>>(
   }
 
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\\/$/, "")}/rest/v1/rpc/${name}`, {
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
