@@ -1549,7 +1549,7 @@ function SellerCommandCenter({
   onOpenOrders: () => void
 }) {
   const viewerId = IdentityService.getCurrentUserId() || ""
-  const sellerOrders = useMemo(() => orders.filter((order) => isOwnedByCurrentUser(order.sellerId)), [orders, viewerId])
+  const sellerOrders = useMemo(() => orders.filter((order) => isOwnedByCurrentUser(order.sellerId)), [orders])
   const activeListings = listings.filter((listing) => listing.status === "active").length
   const openOrders = sellerOrders.filter((order) => !["completed", "cancelled", "refunded"].includes(String(order.status))).length
   const completedOrders = sellerOrders.filter((order) => String(order.status) === "completed").length

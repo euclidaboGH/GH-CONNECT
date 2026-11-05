@@ -590,7 +590,6 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-2 ring-white/40">
             {viewing.photo ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" />
             ) : (
               <span className="text-xs font-bold">{String(viewing.name || "M").slice(0, 1).toUpperCase()}</span>

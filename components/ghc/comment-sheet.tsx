@@ -745,7 +745,6 @@ useEffect(() => {
               {pendingMedia.map((m) => (
                 <div key={m.id} className="relative">
                   {m.type === "image" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <DurableImage src={m.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   ) : (
                     <span className="rounded-lg border border-border px-2 py-1 text-[10px]">{m.fileName || m.type}</span>
@@ -858,7 +857,6 @@ useEffect(() => {
           <button type="button" data-comment-media-preview-close onClick={() => setMediaPreview(null)} className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Close attachment preview"><X size={22} /></button>
           <div className="flex max-h-full max-w-full flex-col items-center justify-center gap-3">
             {mediaPreview.kind === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <DurableImage src={mediaPreview.url} alt={mediaPreview.alt} className="max-h-[82dvh] max-w-full rounded-lg object-contain" />
             ) : <DurableVideo src={mediaPreview.url} controls autoPlay playsInline className="max-h-[82dvh] max-w-full rounded-lg" />}
             <div className="flex items-center gap-3">

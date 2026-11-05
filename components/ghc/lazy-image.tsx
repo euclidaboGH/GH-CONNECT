@@ -167,7 +167,6 @@ function LazyImageInner({
     >
       {status === "loading" && <ImageSkeleton className="absolute inset-0" />}
       {displaySrc ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           key={displaySrc}
           src={displaySrc}

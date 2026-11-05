@@ -91,6 +91,8 @@ export function useIdentity(): IdentityContextValue {
     return {
       identity: IdentityService.getIdentity(),
       getCurrentUserId: () => IdentityService.getCurrentUserId(),
+      matchesUserId: (candidate) => IdentityService.matchesUserId(candidate),
+      getIdentityAliases: () => IdentityService.getIdentityAliases(),
       getPiUserId: () => IdentityService.getPiUserId(),
       getUsername: () => IdentityService.getUsername(),
       getAuthState: () => IdentityService.getAuthState(),

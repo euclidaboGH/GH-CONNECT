@@ -1532,7 +1532,6 @@ export function PremiumCommunityHub({
                 >
                   <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
                     {m.photo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <LazyImage src={m.photo} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-xs font-bold text-muted-foreground">

@@ -321,7 +321,6 @@ export function MediaLightbox({
             />
           </div>
         ) : resolved ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <DurableImage
             src={current?.url || resolved}
             alt={current?.alt || alt || "Full screen media"}

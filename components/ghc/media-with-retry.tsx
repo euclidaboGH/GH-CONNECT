@@ -46,7 +46,6 @@ export function MediaWithRetry({
     )
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <DurableImage
       key={nonce}
       src={optimizedImageUrl(src, reducedData ? 480 : 720)}
