@@ -1,0 +1,324 @@
+// Real-time notifications system
+
+export type NotificationType =
+  | "match"
+  | "message"
+  | "like"
+  | "comment"
+  | "friend_request"
+  | "follow"
+  | "system"
+  | "story_reply"
+  | "share"
+  | "group"
+  | "ghc_received"
+  | "ghc_sent"
+  | "reward"
+  | "payment"
+  | "mention"
+  | "post_like"
+  | "post_comment"
+  | "connection_request"
+  | "curation"
+  | "upvote"
+  | "downvote"
+  | "comment_reply"
+  | "marketplace_listing"
+  | "marketplace_order"
+  | "marketplace_comment"
+  | "marketplace_reaction"
+
+export interface Notification {
+  id: string
+  type: NotificationType
+  title: string
+  message: string
+  icon: string
+  timestamp: number
+  read: boolean
+  data?: Record<string, any>
+}
+
+export const NOTIFICATIONS_CHANGED_EVENT = "ghc:notifications-changed" as const
+
+const NOTIFICATIONS_KEY = "ghc_notifications"
+const MAX_NOTIFICATIONS = 300
+
+export const notificationSystem = {
+  // Add notification
+  addNotification: (
+    type: NotificationType,
+    title: string,
+    message: string,
+    icon: string,
+    data?: Record<string, any>
+  ): Notification => {
+    try {
+      const notification: Notification = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type,
+        title,
+        message,
+        icon,
+        timestamp: Date.now(),
+        read: false,
+        data,
+      }
+
+      const stored = localStorage.getItem(NOTIFICATIONS_KEY)
+      const notifs: Notification[] = stored ? JSON.parse(stored) : []
+
+      // Phase D6: dedupe by data.dedupeKey when present
+      const dedupeKey = data && typeof data === "object" ? (data as any).dedupeKey : undefined
+      if (dedupeKey) {
+        const existing = notifs.find((n) => (n.data as any)?.dedupeKey === dedupeKey)
+        if (existing) return existing
+      }
+
+      // Prevent near-duplicate notifications (same type+title within 30s)
+      const dup = notifs.some(
+        (n) =>
+          n.type === type &&
+          n.title === title &&
+          n.message === message &&
+          Date.now() - (n.timestamp || 0) < 30_000,
+      )
+      if (!dup) {
+        notifs.push(notification)
+      }
+
+      // Keep only last MAX_NOTIFICATIONS
+      const trimmed = notifs.slice(-MAX_NOTIFICATIONS)
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(trimmed))
+
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "add", type } }))
+      } catch { /* */ }
+
+      // Try to show browser notification if allowed
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, {
+          body: message,
+          icon: icon,
+          tag: type,
+        })
+      }
+
+      return notification
+    } catch (e) {
+      console.warn("[v0] Failed to add notification:", e)
+      return {
+        id: "",
+        type,
+        title,
+        message,
+        icon,
+        timestamp: Date.now(),
+        read: false,
+      }
+    }
+  },
+
+  // Get all notifications
+  getNotifications: (): Notification[] => {
+    try {
+      const stored = localStorage.getItem(NOTIFICATIONS_KEY)
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  },
+
+  /**
+   * Suppress notifications from blocked or muted actors.
+   * Restrict does not hide notifications by itself.
+   */
+  getVisibleNotifications: (
+    blockedUserIds: string[] = [],
+    mutedUserIds: string[] = []
+  ): Notification[] => {
+    const all = notificationSystem.getNotifications()
+    const set = new Set([...blockedUserIds, ...mutedUserIds])
+    if (!set.size) return all
+    return all.filter((n) => {
+      const from = (
+        n.data?.fromUserId ||
+        n.data?.userId ||
+        n.data?.actorId ||
+        n.data?.actorUserId
+      ) as string | undefined
+      if (from && set.has(String(from))) return false
+      return true
+    })
+  },
+
+  // Get unread notifications
+  getUnreadNotifications: (): Notification[] => {
+    return notificationSystem.getNotifications().filter((n) => !n.read)
+  },
+
+  // Get unread count
+  getUnreadCount: (): number => {
+    return notificationSystem.getUnreadNotifications().length
+  },
+
+  // Mark as read
+  markAsRead: (notifId: string): void => {
+    try {
+      const stored = localStorage.getItem(NOTIFICATIONS_KEY)
+      if (!stored) return
+
+      const notifs: Notification[] = JSON.parse(stored)
+      const updated = notifs.map((n) => (n.id === notifId ? { ...n, read: true } : n))
+
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read" } }))
+      } catch { /* */ }
+    } catch (e) {
+      console.warn("[v0] Failed to mark as read:", e)
+    }
+  },
+
+  // Mark all as read
+  markAllAsRead: (): void => {
+    try {
+      const stored = localStorage.getItem(NOTIFICATIONS_KEY)
+      if (!stored) return
+
+      const notifs: Notification[] = JSON.parse(stored)
+      const updated = notifs.map((n) => ({ ...n, read: true }))
+
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "read-all" } }))
+      } catch { /* */ }
+    } catch (e) {
+      console.warn("[v0] Failed to mark all as read:", e)
+    }
+  },
+
+  // Delete notification
+  deleteNotification: (notifId: string): void => {
+    try {
+      const stored = localStorage.getItem(NOTIFICATIONS_KEY)
+      const notifs: Notification[] = stored ? JSON.parse(stored) : []
+      const updated = notifs.filter((n) => n.id !== notifId)
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated))
+      try {
+        const delKey = "ghc_notifications_deleted"
+        const deleted: string[] = JSON.parse(localStorage.getItem(delKey) || "[]")
+        if (notifId && !deleted.includes(notifId)) {
+          deleted.push(notifId)
+          localStorage.setItem(delKey, JSON.stringify(deleted.slice(-500)))
+        }
+      } catch { /* */ }
+      try {
+        window.dispatchEvent(
+          new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { reason: "delete", id: notifId } }),
+        )
+      } catch { /* */ }
+    } catch (e) {
+      console.warn("[ghc] Failed to delete notification:", e)
+    }
+  },
+
+  isDeleted: (notifId: string): boolean => {
+    try {
+      const deleted: string[] = JSON.parse(localStorage.getItem("ghc_notifications_deleted") || "[]")
+      return deleted.includes(notifId)
+    } catch {
+      return false
+    }
+  },
+
+  // Request browser notification permission
+  requestPermission: async (): Promise<boolean> => {
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") return true
+      if (Notification.permission !== "denied") {
+        const permission = await Notification.requestPermission()
+        return permission === "granted"
+      }
+    }
+    return false
+  },
+}
+
+
+/** Phase 5 — in-app reward notification (no balance invention). */
+export function notifyRewardClaimed(input: {
+  title?: string
+  message: string
+  amountLabel?: string
+}): void {
+  notificationSystem.addNotification(
+    "reward",
+    input.title || "Daily reward",
+    input.message,
+    "🎁",
+    { kind: "daily_claim", amountLabel: input.amountLabel },
+  )
+}
+
+/** Local mirror when you receive engagement on your content (author-only). */
+export function notifyContentEngagement(input: {
+  kind: "comment" | "like" | "curation" | "upvote" | "downvote" | "comment_reply"
+  title: string
+  message: string
+  postId?: string
+  fromUserId?: string
+  actorId?: string
+}): void {
+  const typeMap: Record<string, NotificationType> = {
+    comment: "post_comment",
+    like: "post_like",
+    curation: "curation",
+    upvote: "upvote",
+    downvote: "downvote",
+    comment_reply: "comment_reply",
+  }
+  const type = typeMap[input.kind] || "system"
+  const icon =
+    input.kind === "upvote" ? "⬆️" :
+    input.kind === "downvote" ? "⬇️" :
+    input.kind === "like" ? "❤️" :
+    input.kind === "comment" || input.kind === "comment_reply" ? "💬" : "🔔"
+  notificationSystem.addNotification(type, input.title, input.message, icon, {
+    postId: input.postId,
+    fromUserId: input.fromUserId,
+    actorId: input.actorId || input.fromUserId,
+    kind: input.kind,
+    category: "social",
+    open: "feed",
+  })
+}
+
+export function notifyMarketplaceEvent(input: {
+  kind: "listing" | "order" | "comment" | "reaction"
+  title: string
+  message: string
+  listingId?: string
+}): void {
+  const type =
+    input.kind === "listing" ? "marketplace_listing" :
+    input.kind === "order" ? "marketplace_order" :
+    input.kind === "comment" ? "marketplace_comment" : "marketplace_reaction"
+  notificationSystem.addNotification(type, input.title, input.message, "🛒", {
+    listingId: input.listingId,
+    kind: `marketplace_${input.kind}`,
+    category: "marketplace",
+    open: "marketplace",
+  })
+}
+
+/** Soft-request browser notification permission once (fail-soft). */
+export function requestBrowserNotificationPermission(): void {
+  if (typeof window === "undefined" || !("Notification" in window)) return
+  if (Notification.permission !== "default") return
+  try {
+    void Notification.requestPermission()
+  } catch {
+    /* */
+  }
+}

@@ -1,0 +1,91 @@
+import type React from "react"
+import type { Metadata, Viewport } from "next"
+import { GeistSans } from "geist/font/sans"
+import { GeistMono } from "geist/font/mono"
+import Script from "next/script"
+import { AppWrapper } from "@/components/app-wrapper"
+import "./globals.css"
+
+const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
+
+export const metadata: Metadata = {
+  ...(appUrl ? { metadataBase: new URL(appUrl.startsWith("http") ? appUrl : `https://${appUrl}`) } : {}),
+  title: {
+    default: "GreenHaven",
+    template: "%s · GreenHaven",
+  },
+  description:
+    "GreenHaven is a Pi Browser social app: profiles, communities, messaging, and marketplace utility with π payments. Internal GHC rewards are optional and separate from π.",
+  applicationName: "GreenHaven",
+  authors: [{ name: "GreenHaven" }],
+  generator: "GreenHaven",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-light-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "GreenHaven",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "GreenHaven",
+    title: "GreenHaven",
+    description:
+      "Social, communities, messaging and marketplace for Pioneers — π payments in-app, built for Pi Browser.",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#059669" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en" className="bg-background" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://sdk.minepi.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://sdk.minepi.com" />
+        <link rel="preconnect" href="https://api.minepi.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://api.minepi.com" />
+        <style>{`
+html {
+  font-family: ${GeistSans.style.fontFamily};
+  --font-sans: ${GeistSans.variable};
+  --font-mono: ${GeistMono.variable};
+}
+        `}</style>
+        {/* Official Pi SDK — required; Pi Browser does NOT inject window.Pi for you */}
+        <Script
+          src="https://sdk.minepi.com/pi-sdk.js"
+          strategy="beforeInteractive"
+        />
+      </head>
+      <body className="bg-background antialiased">
+        <AppWrapper>{children}</AppWrapper>
+      </body>
+    </html>
+  )
+}
