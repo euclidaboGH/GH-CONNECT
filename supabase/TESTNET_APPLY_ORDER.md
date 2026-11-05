@@ -1,14 +1,25 @@
-# Testnet migration apply order (source inventory only)
+# GreenHaven Testnet migration review order
 
-**Date:** 2026-11-05 · **Release:** 0.315.3  
-**On-disk SQL files:** 181  
-**Classification:** REQUIRED **116** · REQUIRES_APPROVAL **1** · PROPOSAL **2** · REVIEW_REQUIRED **62**
+**Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
+**Current source inventory:** 181 migrations.
 
-This file is generated from `MIGRATION-SOURCE-MANIFEST.csv`. It is **not** applied-state evidence.
-Do not `db push` while REVIEW_REQUIRED / PROPOSAL / REQUIRES_APPROVAL rows remain unreviewed.
+> **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
-| # | Migration | Class | Operator action |
-|---|-----------|-------|-----------------|
+## Required operator procedure
+
+1. Export and verify a restorable backup of the target project.
+2. Reconcile `supabase migration list` with the target project's migration history; investigate every missing, extra, or divergent version.
+3. Validate each candidate against the exact target schema on a disposable PostgreSQL database.
+4. Apply one approved migration at a time to Testnet, then run its read-only postflight and feature-specific tests.
+5. Keep provider, payout, wallet, GHC, Pi, and Mainnet features disabled until their independent financial/provider gates pass.
+6. Promote to Mainnet only through a separately reviewed release and rollback plan.
+
+## Canonical ordered inventory
+
+The rows are sorted by the canonical migration identifier for review. Dependencies and approval status take precedence over this display order.
+
+| # | Migration | Classification | Operator action |
+|---:|---|---|---|
 | 1 | `20261022010001_ghc_economy_ledger.sql` | REQUIRED | REVIEW_THEN_APPLY |
 | 2 | `20261022010002_ghc_economy_events_rls.sql` | REQUIRED | REVIEW_THEN_APPLY |
 | 3 | `20261022010003_ghc_notification_events.sql` | REQUIRED | REVIEW_THEN_APPLY |
@@ -189,4 +200,13 @@ Do not `db push` while REVIEW_REQUIRED / PROPOSAL / REQUIRES_APPROVAL rows remai
 | 178 | `20261104180001_gh_community_list_memberships_viewer.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 179 | `20261105160001_pi_wallet_authorization_explicit_consent_only.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 180 | `20261105170001_phase3_earnings_ledger_integrity_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 181 | `20261105200001_withdrawal_pin_security.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 181 | `20261105200001_withdrawal_pin_security.sql` | REQUIRED | REVIEW_THEN_APPLY |
+
+## Classification meanings
+
+- `REQUIRED`: candidate only; review schema/history and test on disposable PostgreSQL/Testnet before explicit approval.
+- `REVIEW_REQUIRED`: hold until its named dependency, security, concurrency, and provider checks are completed.
+- `REQUIRES_APPROVAL`: hold for explicit product/security approval.
+- `PROPOSAL`: do not apply without explicit written approval.
+
+**Never infer applied status from filename order, repository presence, static checks, or this document. Testnet and Mainnet histories must be reconciled independently.**
