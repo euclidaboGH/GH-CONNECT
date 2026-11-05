@@ -68,12 +68,14 @@ export function MessageScreen() {
     matches,
     friends,
     candidates,
+    following,
   } = useGHC() as unknown as {
     deleteMessage?: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
     replyToMessage?: (conversationId: string, replyToMessageId: string, text: string) => Promise<boolean>
     matches?: unknown[]
     friends?: unknown[]
     candidates?: unknown[]
+    following?: Array<Record<string, unknown> | string>
   }
   const ghc = {
     pinConversation: async (id: string) => {
@@ -91,6 +93,7 @@ export function MessageScreen() {
     matches: Array.isArray(matches) ? matches : [],
     friends: Array.isArray(friends) ? friends : [],
     candidates: Array.isArray(candidates) ? candidates : [],
+    following: Array.isArray(following) ? following : [],
     refreshConversations: (messaging as { refreshConversations?: () => Promise<unknown> }).refreshConversations,
     loadConversations: (messaging as { loadConversations?: () => Promise<unknown> }).loadConversations,
   }
