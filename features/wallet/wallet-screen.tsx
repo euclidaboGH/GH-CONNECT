@@ -66,6 +66,7 @@ import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
+import { PiWithdrawSheet } from "@/components/ghc/pi-withdraw-sheet"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 import { EconomyOutcomeCentre } from "@/components/ghc/economy-outcome-centre"
 
@@ -227,6 +228,53 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [piWithdrawOpen, setPiWithdrawOpen] = useState(false)
+  const [piWithdrawAvailable, setPiWithdrawAvailable] = useState<number | null>(null)
+  const [piWithdrawUser, setPiWithdrawUser] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!piWithdrawOpen) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/economy/earnings/withdrawable", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        })
+        const body = (await res.json().catch(() => null)) as {
+          ok?: boolean
+          available?: number
+          withdrawable?: number
+          linkedPiUsername?: string | null
+          walletAuthorization?: { mappedUsername?: string | null }
+        } | null
+        if (cancelled || !res.ok || !body) return
+        const avail =
+          typeof body.withdrawable === "number"
+            ? body.withdrawable
+            : typeof body.available === "number"
+              ? body.available
+              : null
+        if (typeof avail === "number") setPiWithdrawAvailable(avail)
+        const un =
+          body.linkedPiUsername ||
+          body.walletAuthorization?.mappedUsername ||
+          null
+        if (un) setPiWithdrawUser(un)
+      } catch { /* */ }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [piWithdrawOpen])
+
+  useEffect(() => {
+    const open = () => setPiWithdrawOpen(true)
+    window.addEventListener("ghc:open-pi-withdraw", open)
+    return () => window.removeEventListener("ghc:open-pi-withdraw", open)
+  }, [])
+
 
 
   const [showUtilityPanel, setShowUtilityPanel] = useState(false)
@@ -1243,14 +1291,10 @@ const lowBalance = balance === 0 && displayPending === 0
                 onSend={() => {
                   if (assetRail === "pi") {
                     setSendEducate(null)
-                    setHistoryRail("pi")
-                    setTab("activity")
+                    setPiWithdrawOpen(true)
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "withdraw" } }))
                     } catch { /* */ }
-                    requestAnimationFrame(() => {
-                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    })
                     return
                   }
                   // Always open Send flow — zero balance is handled inside the flow, not by dead buttons.
@@ -1344,6 +1388,7 @@ const lowBalance = balance === 0 && displayPending === 0
           {/* Single PI earnings surface — source of truth for withdraw / auth / eligibility (no duplicate CTAs) */}
           {assetRail === "pi" ? (
             <div id="gh-pi-earnings-tools" className="mx-3 mt-3 scroll-mt-20 space-y-3">
+              {/* Consent + PIN + submit live in the single Withdraw sheet — no duplicate auth card here. */}
               <UnifiedEarningsDashboard compact />
               <PiCashbackSummary />
             </div>
@@ -2452,6 +2497,19 @@ const lowBalance = balance === 0 && displayPending === 0
         open={!!selectedTx}
         tx={selectedTx}
         onClose={() => setSelectedTx(null)}
+      />
+      <PiWithdrawSheet
+        open={piWithdrawOpen}
+        onClose={() => setPiWithdrawOpen(false)}
+        availablePi={piWithdrawAvailable}
+        linkedUsername={piWithdrawUser}
+        onCompleted={() => {
+          setPiWithdrawOpen(false)
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+          } catch { /* */ }
+        }}
       />
     </div>
   )

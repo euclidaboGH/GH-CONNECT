@@ -1,6 +1,6 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.313.7`
+**Current source version:** `0.315.1`
 - Phase 23 (0.309.0): migration audit hardening separates reservation expiry cleanup from locked order snapshot reads. Application reads explicitly run cleanup and fail closed; transition RPC snapshots no longer sweep unrelated rows while holding an order lock. Added whole-migration SECURITY DEFINER search_path audit. No financial settlement behavior is added.
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.

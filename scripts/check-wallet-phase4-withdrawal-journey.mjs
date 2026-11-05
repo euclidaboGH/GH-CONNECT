@@ -16,7 +16,7 @@ const checks = [
   ["wallet dashboard posts wallet-authorization", /\/api\/identity\/wallet-authorization/.test(dash)],
   ["authorize returns boolean for journey chaining", /const onAuthorizeWallet = (?:useCallback\()?async \(\): Promise<boolean>/.test(dash)],
   ["runWithdraw authorizes then continues when granted", /const granted = await onAuthorizeWallet\(\)/.test(dash)],
-  ["primary control labels cover authorize and withdraw", /Authorize Pi wallet/.test(dash) && /Withdraw to Pi/.test(dash)],
+  ["primary control is a single Withdraw CTA that opens the sheet", /data-testid="wallet-withdraw-cta"/.test(dash) && /ghc:open-pi-withdraw/.test(dash)],
   ["fee quote still server-side", /\/api\/economy\/earnings\/quote/.test(dash)],
   ["roadmap documents phase 4 boundaries", /Single primary control/.test(roadmap) && /Does not weaken/.test(roadmap)],
   ["phase 4 checker registered in verify:static", (pkg.scripts["verify:static"] || "").includes("check-wallet-phase4-withdrawal-journey.mjs")],

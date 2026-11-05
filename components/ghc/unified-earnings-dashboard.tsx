@@ -760,58 +760,30 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       ) : null}
 
       <div className="px-4 pb-3 space-y-2">
-        {walletAuthActive !== true ? (
-          <div
-            className="rounded-xl border border-violet-300/70 bg-violet-50/90 px-3 py-2.5 dark:border-violet-800 dark:bg-violet-950/40"
-            role="status"
-            data-wallet-auth-required
-          >
-            <p className="text-[12px] font-semibold text-violet-950 dark:text-violet-100">
-              Authorize Pi wallet before withdrawing
-            </p>
-            <p className="mt-1 text-[11px] text-violet-900/90 dark:text-violet-100/85">
-              Your Pi identity is linked, but GreenHaven still needs one explicit consent to send App-to-User payouts to @{snap.linkedPiUsername || "your Pi wallet"}. This is not automatic.
-            </p>
-          </div>
+        {walletAuthActive !== true && snap.piWalletLinked === true ? (
+          <p className="text-[11px] leading-relaxed text-muted-foreground" role="status" data-wallet-auth-required>
+            One-time Pi payout consent and fee preview happen when you tap Withdraw — not as separate buttons here.
+          </p>
         ) : null}
+        {/* Single primary control: opens PiWithdrawSheet (consent + amount + PIN + submit). */}
         <button
           type="button"
-          onClick={() => void onPreviewFee()}
-          disabled={
-            requestingPayout ||
-            snap.eligible !== true ||
-            snap.piWalletLinked !== true ||
-            !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)
-          }
-          className="inline-flex min-h-10 w-full items-center justify-center rounded-full border border-border/70 bg-background px-4 text-[13px] font-semibold text-foreground transition hover:bg-muted/50 disabled:opacity-50"
-        >
-          Preview 3% fee
-        </button>
-        <button
-          type="button"
-          onClick={() => void runWithdraw()}
-          disabled={
-            requestingPayout ||
-            authorizingWallet ||
-            walletAuthLoading ||
-            snap.piWalletLinked !== true ||
-            (walletAuthActive === true &&
-              (snap.eligible !== true ||
-                !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)))
-          }
+          onClick={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:open-pi-withdraw"))
+            } catch { /* */ }
+          }}
+          disabled={snap.piWalletLinked !== true}
           className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
-          data-primary-withdraw={walletAuthActive === true ? "withdraw" : "authorize"}
+          data-primary-withdraw="withdraw"
+          data-testid="wallet-withdraw-cta"
+          aria-label="Withdraw to Pi wallet"
         >
-          {authorizingWallet
-            ? "Authorizing…"
-            : requestingPayout
-              ? "Submitting request…"
-              : walletAuthActive !== true
-                ? "Authorize Pi wallet for payouts"
-                : !quoteDetail
-                  ? "Review fee & withdraw"
-                  : "Withdraw to Pi wallet"}
+          Withdraw
         </button>
+        <p className="text-center text-[10px] text-muted-foreground">
+          3% fee is calculated in the withdraw sheet. Manage payout consent in Settings if you need to revoke.
+        </p>
         {payoutMsg ? (
           <p className="mt-2 text-center text-[12px] font-medium text-amber-800 dark:text-amber-200" role="status">
             {humanizeApiError(
@@ -819,16 +791,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
               payoutMsg,
             )}
           </p>
-        ) : null}
-        {walletAuthActive === true && snap.linkedPiUsername ? (
-          <button
-            type="button"
-            disabled={authorizingWallet}
-            onClick={() => void onRevokeWalletAuth()}
-            className="mt-2 w-full text-center text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
-          >
-            Revoke payout authorization
-          </button>
         ) : null}
       </div>
 
