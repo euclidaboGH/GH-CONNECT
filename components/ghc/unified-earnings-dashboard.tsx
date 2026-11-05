@@ -760,6 +760,20 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       ) : null}
 
       <div className="px-4 pb-3 space-y-2">
+        {walletAuthActive !== true ? (
+          <div
+            className="rounded-xl border border-violet-300/70 bg-violet-50/90 px-3 py-2.5 dark:border-violet-800 dark:bg-violet-950/40"
+            role="status"
+            data-wallet-auth-required
+          >
+            <p className="text-[12px] font-semibold text-violet-950 dark:text-violet-100">
+              Authorize Pi wallet before withdrawing
+            </p>
+            <p className="mt-1 text-[11px] text-violet-900/90 dark:text-violet-100/85">
+              Your Pi identity is linked, but GreenHaven still needs one explicit consent to send App-to-User payouts to @{snap.linkedPiUsername || "your Pi wallet"}. This is not automatic.
+            </p>
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={() => void onPreviewFee()}
@@ -780,18 +794,20 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             requestingPayout ||
             authorizingWallet ||
             walletAuthLoading ||
-            snap.eligible !== true ||
             snap.piWalletLinked !== true ||
-            !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)
+            (walletAuthActive === true &&
+              (snap.eligible !== true ||
+                !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)))
           }
           className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
+          data-primary-withdraw={walletAuthActive === true ? "withdraw" : "authorize"}
         >
           {authorizingWallet
             ? "Authorizing…"
             : requestingPayout
-              ? "Submitting…"
+              ? "Submitting request…"
               : walletAuthActive !== true
-                ? "Authorize Pi wallet"
+                ? "Authorize Pi wallet for payouts"
                 : !quoteDetail
                   ? "Review fee & withdraw"
                   : "Withdraw to Pi wallet"}

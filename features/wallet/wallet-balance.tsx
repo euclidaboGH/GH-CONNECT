@@ -51,6 +51,8 @@ export function WalletBalanceCard({
     pending: number
     reserved: number
     eligible: boolean
+    economyEligible: boolean
+    authorizationActive: boolean
     piWalletLinked: boolean
     reasons: string[]
   } | null>(null)
@@ -85,6 +87,11 @@ export function WalletBalanceCard({
         eligible?: boolean
         piWalletLinked?: boolean
         reasons?: unknown
+        walletAuthorization?: {
+          active?: boolean
+          authorizationActive?: boolean
+          uidMatchesAuthorization?: boolean
+        } | null
       } | null
       const validAmounts = [data?.available, data?.withdrawable, data?.pending, data?.reserved].every(
         (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
@@ -96,13 +103,20 @@ export function WalletBalanceCard({
         }
         return
       }
+      const authActive =
+        data.walletAuthorization?.active === true ||
+        (data.walletAuthorization?.authorizationActive === true &&
+          data.walletAuthorization?.uidMatchesAuthorization === true)
       if (requestId === piRequestIdRef.current) {
         setPiSnapshot({
           available: Number(data.available),
           withdrawable: Number(data.withdrawable),
           pending: Number(data.pending),
           reserved: Number(data.reserved),
-          eligible: data.eligible === true,
+          // Economy-eligible alone is not payout-ready; require explicit A2U consent.
+          eligible: data.eligible === true && authActive === true,
+          economyEligible: data.eligible === true,
+          authorizationActive: authActive === true,
           piWalletLinked: data.piWalletLinked === true,
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
         })
@@ -291,9 +305,11 @@ export function WalletBalanceCard({
               : piFailed
                 ? "PI balance unavailable — refresh to retry"
                 : piSnapshot?.piWalletLinked
-                  ? piSnapshot.eligible
-                    ? "Pi identity linked · payout eligible"
-                    : "Pi identity linked · payout not currently eligible"
+                  ? piSnapshot.authorizationActive
+                    ? piSnapshot.economyEligible
+                      ? "Pi identity linked · payout authorized"
+                      : "Pi identity linked · authorized · not economy-eligible"
+                    : "Pi identity linked · authorize wallet to withdraw"
                   : "Link your Pi identity to enable withdrawals"}
           </p>
           {piSelected ? (
