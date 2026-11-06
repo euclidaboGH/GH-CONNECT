@@ -4,34 +4,74 @@ name: CI
 
 on:
   push:
-    branches: [main, master, develop, "release/**"]
+    branches: [main, master, develop, testnet, "release/**"]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, master, develop, testnet]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   static:
     name: Static verification
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version-file: ".nvmrc"
+          node-version: 24.15.0
           cache: npm
+
+      - name: Dependency lock integrity
+        run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
         run: npm ci --legacy-peer-deps
 
       - name: Phase 5 production readiness gate
         run: node scripts/check-phase5-production-readiness.mjs
+
+      - name: Bounded JSON runtime behavior
+        run: npm run test:bounded-json-runtime
+
+      - name: Request-boundary follow-up contracts
+        run: node scripts/check-phase1-12-request-boundary-followup.mjs
+
+      - name: Database RLS coverage
+        run: node scripts/check-database-rls-coverage.mjs
+
+      - name: SECURITY DEFINER ACL coverage
+        run: node scripts/check-security-definer-acl.mjs
+
+      - name: Marketplace integrity
+        run: node scripts/check-phase10-marketplace-integrity.mjs
+
+      - name: Cross-feature wallet reconciliation
+        run: node scripts/check-phase11-wallet-cross-feature-reconciliation.mjs
+
+      - name: Treasury completion
+        run: node scripts/check-phase7-treasury-completion.mjs
+
+      - name: Payment recovery lifecycle
+        run: npm run check:phase15-payment-recovery
+
+      - name: Payment timeline lifecycle
+        run: npm run check:phase16-payment-timeline
+
+      - name: Phase 18 marketplace payment binding
+        run: npm run check:phase18-marketplace-payment-binding
+
+      - name: Phase 19 marketplace RPC transport
+        run: npm run check:phase19-marketplace-rpc-transport
 
       - name: Typecheck
         run: npm run typecheck
@@ -41,18 +81,21 @@ jobs:
 
   build:
     name: Production build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: static
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version-file: ".nvmrc"
+          node-version: 24.15.0
           cache: npm
+
+      - name: Dependency lock integrity
+        run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
         run: npm ci --legacy-peer-deps
@@ -64,4 +107,3 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'public-anon-placeholder' }}
           NEXT_PUBLIC_PI_SANDBOX: "true"
-
