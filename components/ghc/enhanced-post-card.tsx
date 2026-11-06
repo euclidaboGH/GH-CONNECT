@@ -1021,7 +1021,7 @@ function EnhancedPostCardInner({
               onPointerLeave={() => endCurationRosterLongPress(true)}
               onContextMenu={(e) => { e.preventDefault(); openRoster("upvotes") }}
               title="Upvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
-              className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
+              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
                 curationChoice === "upvote"
                   ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
                   : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
@@ -1051,7 +1051,7 @@ function EnhancedPostCardInner({
               onPointerLeave={() => endCurationRosterLongPress(true)}
               onContextMenu={(e) => { e.preventDefault(); openRoster("downvotes") }}
               title="Downvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
-              className={`inline-flex h-9 min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
+              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
                 curationChoice === "downvote"
                   ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
                   : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
@@ -1066,7 +1066,7 @@ function EnhancedPostCardInner({
             type="button"
             aria-label="Comment"
             onClick={() => onComment(post.id)}
-            className="inline-flex h-9 min-h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
           >
             <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
             <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
@@ -1085,7 +1085,7 @@ function EnhancedPostCardInner({
                 }))
               } catch { /* */ }
             }}
-            className={`inline-flex h-9 min-h-9 min-w-9 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
+            className={`inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
               isSaved
                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                 : "text-muted-foreground hover:bg-muted"
@@ -1097,7 +1097,7 @@ function EnhancedPostCardInner({
             type="button"
             aria-label="Share"
             onClick={() => onShare(post.id)}
-            className="inline-flex h-9 min-h-9 min-w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
           >
             <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
           </button>

@@ -37,7 +37,7 @@ console.log("Phase 5 production readiness gate\n")
 // 1. Version consistency
 try {
   const pkg = JSON.parse(read("package.json"))
-  if (pkg.version !== "0.330.14") fail(`package.json version expected 0.330.14, got ${pkg.version}`)
+  if (pkg.version !== "0.330.15") fail(`package.json version expected 0.330.15, got ${pkg.version}`)
   else ok(`package.json version ${pkg.version}`)
 } catch (e) {
   fail(`package.json unreadable: ${e.message}`)
@@ -45,8 +45,8 @@ try {
 
 if (exists("VERIFIED_MANIFEST.txt")) {
   const m = read("VERIFIED_MANIFEST.txt")
-  if (!m.includes("project_version=0.330.14")) fail("VERIFIED_MANIFEST project_version not 0.330.14")
-  else ok("VERIFIED_MANIFEST project_version=0.330.14")
+  if (!m.includes("project_version=0.330.15")) fail("VERIFIED_MANIFEST project_version not 0.330.15")
+  else ok("VERIFIED_MANIFEST project_version=0.330.15")
   if (!m.includes("canonical_migrations=189")) warn("VERIFIED_MANIFEST canonical_migrations not 189")
   else ok("canonical_migrations=189")
 } else {

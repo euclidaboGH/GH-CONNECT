@@ -13,7 +13,7 @@ This roadmap preserves the user's ten-phase product sequence. A source implement
 | 7 | Wallet | Source implementation closed in 0.320.0; external Node 24 build, browser/device and Pi Testnet financial acceptance remain release blockers |
 | 8 | Rewards | Source implementation closed in 0.323.0; Testnet migration/runtime/security acceptance remains required before production approval |
 | 9 | Membership | Source implementation complete in 0.327.0; external runtime, database, Testnet, browser/device and operator acceptance remains open |
-| 10 | Settings and platform performance | Active: 0.330.14
+| 10 | Settings and platform performance | Active: 0.330.15
 
 ## Phase 7 — Wallet completion sequence
 
