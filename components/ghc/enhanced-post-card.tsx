@@ -980,6 +980,7 @@ function EnhancedPostCardInner({
       >
         <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide" role="group" aria-label="Community curation and engagement">
           <div className="flex min-w-0 shrink-0 items-center gap-1" role="group" aria-label="Quality votes">
+            <span className="sr-only">Your vote helps surface useful contributions</span>
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Choose how strongly this vote contributes to curation. Voting does not create GHC."

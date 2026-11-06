@@ -1,6 +1,6 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.330.11`
+**Current source version:** `0.330.12`
 **Current status:** **NOT APPROVED** for production release.
 
 ## 0.330.9 — Build-gate continuity (curation language + version truth)
@@ -18,7 +18,7 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.330.11`.
+- Package and lockfile version: `0.330.12`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
 - Canonical Supabase migrations: **189** SQL files.
 - Duplicate migration numeric prefixes: **0**.
