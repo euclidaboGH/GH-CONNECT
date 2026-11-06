@@ -1,6 +1,6 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.330.10`
+**Current source version:** `0.330.11`
 **Current status:** **NOT APPROVED** for production release.
 
 ## 0.330.9 — Build-gate continuity (curation language + version truth)
@@ -18,7 +18,7 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.330.10`.
+- Package and lockfile version: `0.330.11`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
 - Canonical Supabase migrations: **189** SQL files.
 - Duplicate migration numeric prefixes: **0**.
@@ -49,7 +49,7 @@ The corrected release archive must keep the Next.js application at repository ro
 
 ## Navigation contract
 
-- Canonical navigation: **Home · Messages · Communities · Cart · Profile**. Wallet remains an overlay; Discovery is secondary navigation.
+- Canonical navigation: **Home · Discover · Messages · Communities · Cart · Profile** (visible bottom bar). Historical five-item baseline remains documented as Home · Messages · Communities · Cart · Profile. Wallet remains an overlay.
 
 ## Release boundary
 
