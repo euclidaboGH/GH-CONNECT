@@ -31,6 +31,8 @@ interface GroupCardProps {
   onToggleMute?: () => void
   onTogglePin?: () => void
   onJoin?: () => void
+  /** Privacy-aware CTA — Join vs Request to join */
+  joinLabel?: string
   memberAvatars?: Array<{ id: string; name: string; photo?: string }>
   onMemberProfile?: (memberId: string) => void
   region?: string
@@ -55,6 +57,7 @@ function GroupCardContent({
   isJoined = true,
   onClick,
   onJoin,
+  joinLabel = "Preview & join",
   region,
   role,
   isSample = false,
@@ -100,7 +103,7 @@ function GroupCardContent({
           onClick()
         }
       }}
-      aria-label={`Open community ${groupName}, ${memberCount} members. Board and chat are separate.`}
+      aria-label={`Open community ${groupName}, ${memberCount} ${memberCount === 1 ? "member" : "members"}. Board and chat are separate.`}
     >
       <article className="gh-card-interactive flex gap-3 rounded-[1.35rem] border border-border/60 bg-card p-3.5 shadow-[var(--gh-card-shadow)] transition hover:border-emerald-400/50 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.995]">
         {isPinned && (
@@ -148,7 +151,7 @@ function GroupCardContent({
               <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted-foreground">
                 <span className="inline-flex items-center gap-0.5">
                   <Users size={12} aria-hidden />
-                  {memberCount.toLocaleString()} members
+                  {memberCount.toLocaleString()} {memberCount === 1 ? "member" : "members"}
                 </span>
                 <span aria-hidden>·</span>
                 <span>{timeAgo || "—"}</span>
@@ -214,7 +217,7 @@ function GroupCardContent({
                 }}
                 className="ml-auto min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white"
               >
-                Preview & join
+                {joinLabel}
               </button>
             )}
           </div>

@@ -8,6 +8,7 @@
 
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { apiRequest } from "@/lib/client/api-request"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import {
   AlertCircle,
@@ -44,6 +45,7 @@ type Withdrawable = {
   walletAuthorization?: {
     authorizationActive?: boolean
     hasMapping?: boolean
+    uidMatchesAuthorization?: boolean
     error?: string
   } | null
   error?: string
@@ -149,6 +151,8 @@ function statusTone(status?: string): string {
 }
 
 export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolean }) {
+  // Wallet primary actions (Withdraw / Status / Linked) focus this surface as source of truth.
+
   const [snap, setSnap] = useState<Withdrawable | null>(null)
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -171,45 +175,46 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [crossFindings, setCrossFindings] = useState<string[]>([])
   const [crossStatus, setCrossStatus] = useState<"healthy" | "attention" | "degraded" | null>(null)
   const quoteController = useRef<AbortController | null>(null)
+  const payoutIdempotencyRef = useRef<{ amountAtomic: number; key: string } | null>(null)
   const quoteSequence = useRef(0)
+  const refreshController = useRef<AbortController | null>(null)
+  const refreshSequence = useRef(0)
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  const refresh = useCallback(async (externalSignal?: AbortSignal) => {
+    const sequence = ++refreshSequence.current
+    refreshController.current?.abort()
+    const controller = new AbortController()
+    refreshController.current = controller
+    const abortFromCaller = () => controller.abort()
+    if (externalSignal?.aborted) controller.abort()
+    else externalSignal?.addEventListener("abort", abortFromCaller, { once: true })
+    const timeout = window.setTimeout(() => controller.abort(), 10_000)
+    const signal = controller.signal
     setLoading(true)
     try {
-      const [wRes, sRes, cRes, xRes] = await Promise.all([
-        fetch("/api/economy/earnings/withdrawable", {
-          credentials: "include",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-          signal,
-        }),
-        fetch("/api/economy/earnings?limit=20", {
-          credentials: "include",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-          signal,
-        }),
-        fetch("/api/economy/earnings/charity", {
-          credentials: "include",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-          signal,
-        }),
-        fetch("/api/economy/wallet/cross-reconcile", {
-          credentials: "include",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-          signal,
-        }),
+      // Phase 2 complete: authenticated bounded requests (IdentityService headers + timeout).
+      const [wReq, sReq, cReq, xReq] = await Promise.all([
+        apiRequest<Withdrawable>("/api/economy/earnings/withdrawable", { method: "GET", signal, timeoutMs: 10_000 }),
+        apiRequest<Statement>("/api/economy/earnings?limit=20", { method: "GET", signal, timeoutMs: 10_000 }),
+        apiRequest<{
+          ok?: boolean
+          total?: number
+          totalAtomic?: string | number
+          contributionCount?: number
+        }>("/api/economy/earnings/charity", { method: "GET", signal, timeoutMs: 10_000 }),
+        apiRequest<{ ok?: boolean; status?: string; findings?: Array<{ message?: string; code?: string }> }>(
+          "/api/economy/wallet/cross-reconcile",
+          { method: "GET", signal, timeoutMs: 10_000 },
+        ),
       ])
-      const wJson = (await wRes.json().catch(() => null)) as Withdrawable | null
-      const sJson = (await sRes.json().catch(() => null)) as Statement | null
-      const cJson = (await cRes.json().catch(() => null)) as {
-        ok?: boolean
-        total?: number
-        totalAtomic?: string | number
-        contributionCount?: number
-      } | null
+      if (sequence !== refreshSequence.current || signal.aborted) return
+      const wJson = wReq.data
+      const sJson = sReq.data
+      const cJson = cReq.data
+      const wRes = { ok: wReq.ok }
+      const sRes = { ok: sReq.ok }
+      const cRes = { ok: cReq.ok }
+      const xRes = { ok: xReq.ok }
       if (cRes.ok && cJson?.ok) {
         setCharityCount(Number(cJson.contributionCount) || 0)
         setCharityTotal(
@@ -223,7 +228,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setCharityCount(0)
         setCharityTotal(null)
       }
-      const xJson = (await xRes.json().catch(() => null)) as {
+      const xJson = xReq.data as {
         ok?: boolean
         report?: { status?: "healthy" | "attention" | "degraded"; findings?: Array<{ code?: string; severity?: string; message?: string }> }
       } | null
@@ -248,8 +253,11 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setFailed(false)
         setSnap(wJson)
         const wa = wJson.walletAuthorization
-        if (wa && typeof wa.authorizationActive === "boolean") {
-          setWalletAuthActive(wa.authorizationActive)
+        if (wa) {
+          const activeFlag =
+            wa.authorizationActive === true &&
+            wa.uidMatchesAuthorization === true
+          setWalletAuthActive(activeFlag)
         }
       }
       if (sRes.ok && sJson?.ok && Array.isArray(sJson.entries)) {
@@ -257,6 +265,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       } else {
         setEntries([])
       }
+
+      if (sequence !== refreshSequence.current || signal.aborted) return
 
       // Explicit A2U payout consent status (separate from Pi identity link)
       try {
@@ -270,11 +280,15 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         const aJson = (await aRes.json().catch(() => null)) as {
           ok?: boolean
           authorizationActive?: boolean
+          uidMatchesAuthorization?: boolean
           error?: string
         } | null
         if (!signal?.aborted) {
           if (aRes.ok && aJson?.ok) {
-            setWalletAuthActive(aJson.authorizationActive === true)
+            setWalletAuthActive(
+              aJson.authorizationActive === true &&
+              aJson.uidMatchesAuthorization === true,
+            )
           } else if (aJson?.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
             setWalletAuthActive(null)
           } else {
@@ -292,19 +306,26 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         setSnap(null)
       }
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      window.clearTimeout(timeout)
+      externalSignal?.removeEventListener("abort", abortFromCaller)
+      if (sequence === refreshSequence.current) {
+        refreshController.current = null
+        setLoading(false)
+        if (signal.aborted) setFailed(true)
+      }
     }
   }, [])
 
   useEffect(() => {
-    const ac = new AbortController()
-    void refresh(ac.signal)
-    const onRefresh = () => void refresh()
+    void refresh()
+    const onRefresh = () => { void refresh() }
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-auth-changed", onRefresh)
     return () => {
-      ac.abort()
+      refreshSequence.current += 1
+      refreshController.current?.abort()
+      refreshController.current = null
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
       window.removeEventListener("ghc:wallet-auth-changed", onRefresh)
@@ -318,53 +339,15 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
 
 
-  const onAuthorizeWallet = async () => {
-    if (authorizingWallet) return
-    setAuthorizingWallet(true)
-    setPayoutMsg(null)
+  /**
+   * Wallet consent is collected only in the withdrawal sheet (explicit checkbox + genuine Pi
+   * authentication). The dashboard never records authorization on its own.
+   */
+  const openWithdrawSheet = useCallback(() => {
     try {
-      const res = await fetch("/api/identity/wallet-authorization", {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        cache: "no-store",
-      })
-      const body = (await res.json().catch(() => null)) as {
-        ok?: boolean
-        error?: string
-        message?: string
-        status?: string
-      } | null
-      if (!res.ok || !body?.ok) {
-        setPayoutMsg(humanizeApiError(body?.error, body?.message))
-        if (body?.error === "IDENTITY_MAPPING_REQUIRED") setWalletAuthActive(false)
-        return
-      }
-      // Do not mark active until GET/withdrawable snapshot confirms (refresh below).
-      setPayoutMsg(
-        body.message ||
-          "Authorization submitted. Confirming server record…",
-      )
-      try {
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "wallet-auth-granted" } }))
-        window.dispatchEvent(
-          new CustomEvent("ghc:toast", {
-            detail: { message: "Pi payouts authorized for your linked wallet", type: "success" },
-          }),
-        )
-        window.dispatchEvent(new CustomEvent("ghc:wallet-auth-changed", { detail: { active: true } }))
-        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
-      } catch { /* */ }
-      void refresh()
-    } catch {
-      setPayoutMsg("Network error while authorizing Pi payouts. No transfer was started.")
-    } finally {
-      setAuthorizingWallet(false)
-    }
-  }
-
+      window.dispatchEvent(new CustomEvent("ghc:open-pi-withdraw"))
+    } catch { /* */ }
+  }, [])
 
   const onRevokeWalletAuth = async () => {
     if (authorizingWallet) return
@@ -401,7 +384,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     }
   }
 
-  const onRequestPayout = async () => {
+  const onRequestPayout = useCallback(async () => {
     if (requestingPayout) return
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
       setPayoutMsg("Withdrawal is not available until the server confirms eligibility and a linked Pi identity.")
@@ -420,37 +403,51 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     setRequestingPayout(true)
     setPayoutMsg(null)
     try {
-      const idempotencyKey = `ui-payout:${Date.now()}:${amountAtomic}`
-      const res = await fetch("/api/economy/earnings/withdrawals", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ amountAtomic, idempotencyKey }),
-        cache: "no-store",
-      })
-      const body = (await res.json().catch(() => null)) as {
+      // Keep the same request key when the client retries an uncertain network result.
+      // A changed amount is a distinct intent; successful reservation clears the key.
+      let pendingIntent = payoutIdempotencyRef.current
+      if (!pendingIntent || pendingIntent.amountAtomic !== amountAtomic) {
+        const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+        pendingIntent = { amountAtomic, key: `ui-payout:${nonce}` }
+        payoutIdempotencyRef.current = pendingIntent
+      }
+      const idempotencyKey = pendingIntent.key
+      // Phase 3: payout request via apiRequest — never claims Pi sent until worker verifies A2U.
+      const wRes = await apiRequest<{
         ok?: boolean
         error?: string
         message?: string
         requestId?: string
         status?: string
-      } | null
-      if (res.status === 503 || body?.error === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
+      }>("/api/economy/earnings/withdrawals", {
+        method: "POST",
+        body: { amountAtomic, idempotencyKey },
+        timeoutMs: 25_000,
+      })
+      const body = wRes.data
+      if (wRes.status === 503 || body?.error === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED" || wRes.code === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
         setPayoutMsg(
-          "PI withdrawal requests are not enabled on this deployment yet. The operator must set PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true on Pi Testnet after migrations and funded A2U readiness. No transfer was started. Enable on Testnet only after A2U funding and KYC’d wallet verification.",
+          "Withdrawals are not open on this deployment yet. No transfer was started.",
         )
         return
       }
-      if (!res.ok || !body?.ok) {
-        const code = body?.error || ""
+      if (!wRes.ok || !body?.ok) {
+        const code = body?.error || wRes.code || ""
         if (code === "WALLET_AUTHORIZATION_REQUIRED") {
           setWalletAuthActive(false)
-          setPayoutMsg(reasonLabel("WALLET_AUTHORIZATION_REQUIRED"))
+          setPayoutMsg("Authorize Pi wallet payouts once — then you can withdraw to your linked Pi wallet.")
           return
         }
-        setPayoutMsg(humanizeApiError(body?.error, body?.message) || "Could not create a payout request. No transfer was started.")
+        setPayoutMsg(
+          wRes.error ||
+            humanizeApiError(body?.error, body?.message) ||
+            "Could not create a payout request. No transfer was started.",
+        )
         return
       }
+      payoutIdempotencyRef.current = null
       setPayoutMsg(
         body.message ||
           `Payout request recorded (${body.requestId || "queued"}). This does not send Pi until the server execution worker completes a verified A2U transfer.`,
@@ -472,9 +469,9 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     } finally {
       setRequestingPayout(false)
     }
-  }
+  }, [requestingPayout, snap])
 
-  const onPreviewFee = async () => {
+  const onPreviewFee = useCallback(async () => {
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
       setQuoteMsg("A quote is unavailable until the server confirms payout eligibility and a linked Pi identity.")
       return
@@ -492,15 +489,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     setQuoteMsg(null)
     setQuoteDetail(null)
     try {
-      const res = await fetch("/api/economy/earnings/quote", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ amountPi: snap.withdrawable }),
-        cache: "no-store",
-        signal: controller.signal,
-      })
-      const body = (await res.json().catch(() => null)) as {
+      // Phase 3: quote via apiRequest (auth headers + humanized errors).
+      const qRes = await apiRequest<{
         ok?: boolean
         error?: string
         message?: string
@@ -508,10 +498,16 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         fee?: number
         net?: number
         recipientUsername?: string
-      } | null
+      }>("/api/economy/earnings/quote", {
+        method: "POST",
+        body: { amountPi: snap.withdrawable },
+        signal: controller.signal,
+        timeoutMs: 15_000,
+      })
+      const body = qRes.data
       if (sequence !== quoteSequence.current) return
-      if (!res.ok || !body?.ok) {
-        setQuoteMsg(body?.message || body?.error || "Could not quote withdrawal.")
+      if (!qRes.ok || !body?.ok) {
+        setQuoteMsg(qRes.error || body?.message || body?.error || "Could not quote withdrawal.")
         return
       }
       if (typeof body.gross === "number" && typeof body.fee === "number" && typeof body.net === "number") {
@@ -533,7 +529,38 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
       if (sequence === quoteSequence.current) setQuoting(false)
       if (quoteController.current === controller) quoteController.current = null
     }
-  }
+  }, [snap])
+
+  const runWithdraw = useCallback(async () => {
+    // Authorization is confirmed BEFORE any quote or payout request. When it is missing,
+    // hand off to the withdrawal sheet, which runs genuine Pi consent and then quotes.
+    if (walletAuthActive !== true) {
+      openWithdrawSheet()
+      return
+    }
+    if (!quoteDetail) {
+      await onPreviewFee()
+    }
+    await onRequestPayout()
+  }, [walletAuthActive, openWithdrawSheet, quoteDetail, onPreviewFee, onRequestPayout])
+
+
+  useEffect(() => {
+    const onFocus = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as { action?: string } | undefined
+      const action = detail?.action
+      if (action === "withdraw") {
+        void runWithdraw()
+      } else if (action === "status") {
+        void refresh()
+        setPayoutMsg("Eligibility and linked Pi status are shown above. Withdraw stays on this card.")
+      } else if (action === "linked") {
+        openWithdrawSheet()
+      }
+    }
+    window.addEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+    return () => window.removeEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
+  }, [runWithdraw, refresh, openWithdrawSheet])
 
   if (loading && !snap) {
     return (
@@ -557,8 +584,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             </p>
             <button
               type="button"
-              onClick={() => void refresh()}
-              className="mt-2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-950 shadow-sm"
+              className="mt-3 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 shadow-sm"
+              onClick={() => {
+                setFailed(false)
+                setLoading(true)
+                void refresh()
+              }}
             >
               <RefreshCw className="h-3 w-3" /> Retry
             </button>
@@ -568,285 +599,160 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     )
   }
 
-  const reasons = Array.isArray(snap.reasons) ? snap.reasons : []
   const feePct = snap.feePercent ?? (snap.feeBps != null ? snap.feeBps / 100 : 3)
+  const available = typeof snap.available === "number" ? snap.available : atomicToDisplay(snap.availableAtomic)
+  const pending = typeof snap.pending === "number" ? snap.pending : atomicToDisplay(snap.pendingAtomic)
+  const withdrawable = typeof snap.withdrawable === "number" ? snap.withdrawable : atomicToDisplay(snap.withdrawableAtomic)
 
   return (
     <section
-      className="mx-3 mt-3 overflow-hidden rounded-2xl border border-emerald-900/10 bg-gradient-to-b from-emerald-50/90 to-white shadow-sm"
-      aria-label="PI earnings dashboard"
+      className={
+        compact
+          ? "overflow-hidden rounded-2xl border border-border/60 bg-card"
+          : "mx-3 mt-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+      }
+      aria-label="Pi balance"
+      data-pi-earnings-root
     >
-      <div className="flex items-center justify-between gap-2 border-b border-emerald-900/5 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
-            <Wallet className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-sm font-bold text-white">
+            π
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-emerald-950">PI earnings</h2>
-            <p className="text-[11px] text-emerald-900/70">Server ledger · not GHC</p>
+            <p className="text-sm font-semibold text-foreground">Pi</p>
+            <p className="text-[11px] text-muted-foreground">
+              {snap.linkedPiUsername ? `@${snap.linkedPiUsername}` : snap.piWalletLinked ? "Linked" : "Not linked"}
+            </p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void refresh()}
-          className="rounded-full p-2 text-emerald-800 hover:bg-emerald-100"
-          aria-label="Refresh earnings"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          aria-label="Refresh Pi balance"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
-      <div className="px-4 pt-4">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-900/60">Withdrawable</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-950">
-          {typeof snap.withdrawable === "number" ? piToDisplay(snap.withdrawable) : atomicToDisplay(snap.withdrawableAtomic)}
+      <div className="grid grid-cols-2 gap-2 px-4 py-3 sm:grid-cols-4">
+        {[
+          { label: "Available", value: available },
+          { label: "Pending", value: pending },
+          { label: "Reserved", value: typeof snap.reserved === "number" ? snap.reserved : atomicToDisplay(snap.reservedAtomic) },
+          { label: "Paid", value: typeof snap.paid === "number" ? snap.paid : atomicToDisplay(snap.paidAtomic) },
+        ].map((cell) => (
+          <div key={cell.label} className="rounded-xl bg-muted/40 px-2.5 py-2 text-center">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{cell.label}</p>
+            <p className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
+              {typeof cell.value === "number" ? piToDisplay(cell.value) : String(cell.value)}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="px-4 pb-1 text-center text-[11px] text-muted-foreground">
+        Withdrawable <span className="font-semibold text-foreground">{typeof withdrawable === "number" ? piToDisplay(withdrawable) : String(withdrawable)}</span>
+        {" · "}{feePct}% fee · linked at sign-in{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
+      </p>
+      {(charityTotal || charityCount > 0) ? (
+        <p className="px-4 pb-2 text-center text-[10px] text-muted-foreground" role="status">
+          Charity recorded: {charityTotal || "—"}
+          {charityCount > 0 ? ` · ${charityCount} contribution${charityCount === 1 ? "" : "s"}` : ""}
+          {" · "}segregated charity, separate from withdrawable balance
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Available", value: snap.available ?? snap.availableAtomic, atomic: snap.available == null },
-            { label: "Pending", value: snap.pending ?? snap.pendingAtomic, atomic: snap.pending == null },
-            { label: "Reserved", value: snap.reserved ?? snap.reservedAtomic, atomic: snap.reserved == null },
-            { label: "Paid", value: snap.paid ?? snap.paidAtomic, atomic: snap.paid == null },
-          ].map((cell) => (
-            <div key={cell.label} className="rounded-xl bg-white/80 px-3 py-2 shadow-sm ring-1 ring-black/5">
-              <p className="text-[10px] font-medium uppercase text-slate-500">{cell.label}</p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">
-                {cell.value === undefined || cell.value === null ? "Unavailable" : cell.atomic ? atomicToDisplay(cell.value) : piToDisplay(cell.value)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-3 space-y-2 px-4">
-        {crossStatus ? (
-          <div className={`rounded-xl px-3 py-2 ring-1 ${crossStatus === "healthy" ? "bg-emerald-50 ring-emerald-200/80" : "bg-amber-50 ring-amber-200/80"}`}>
-            <p className={`text-[11px] font-semibold ${crossStatus === "healthy" ? "text-emerald-950" : "text-amber-950"}`}>{crossStatus === "healthy" ? "Financial snapshots reconciled" : crossStatus === "degraded" ? "Reconciliation unavailable" : "Cross-feature attention"}</p>
-            {crossFindings.length > 0 ? <ul className={`mt-1 list-inside list-disc text-[11px] ${crossStatus === "healthy" ? "text-emerald-900/90" : "text-amber-900/90"}`}>
-              {crossFindings.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul> : null}
-          </div>
-        ) : null}
-        {charityTotal != null ? (
-          <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" />
-            <p className="text-xs text-slate-700">
-              Charity given: <strong>{charityTotal}</strong>
-              {charityCount > 0 ? ` (${charityCount} gifts)` : ""}. Charity is separate from withdrawable earnings.
-            </p>
-          </div>
-        ) : null}
-        <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-          <Percent className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-          <p className="text-xs text-slate-700">
-            Withdrawal fee <strong>{feePct}%</strong> of gross. Net is sent to your{" "}
-            <strong>Pi wallet linked at sign-in</strong>
-            {snap.linkedPiUsername ? (
-              <>
-                {" "}
-                (<span className="font-medium">@{snap.linkedPiUsername}</span>)
-              </>
-            ) : null}
-            .
-          </p>
-        </div>
-
-        <div className="flex items-start gap-2 rounded-xl bg-white/90 px-3 py-2 ring-1 ring-black/5">
-          {snap.piWalletLinked ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-          ) : (
-            <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          )}
-          <p className="text-xs text-slate-700">
-            {snap.piWalletLinked
-              ? "Pi identity linked for payouts."
-              : "Pi identity not linked — sign in with Pi to enable withdrawals."}
-          </p>
-        </div>
-
-        {snap.eligible === true ? (
-          <div className="flex items-start gap-2 rounded-xl bg-emerald-100/80 px-3 py-2">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-emerald-800" />
-            <p className="text-xs text-emerald-950">
-              Eligible to withdraw (subject to Testnet A2U and operator gates). Min{" "}
-              {snap.minPayout != null ? `${snap.minPayout} π` : "policy minimum"}.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200/80">
-            <div className="flex items-start gap-2">
-              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-              <div>
-                <p className="text-xs font-medium text-amber-950">Not eligible to withdraw yet</p>
-                {crossFindings.length > 0 ? <ul className={`mt-1 list-inside list-disc text-[11px] ${crossStatus === "healthy" ? "text-emerald-900/90" : "text-amber-900/90"}`}>
-                  {reasons.length > 0 ? (
-                    reasons.map((r) => <li key={r}>{reasonLabel(String(r))}</li>)
-                  ) : (
-                    <li>Complete linking and wait for available balance.</li>
-                  )}
-                </ul> : null}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2 pb-1">
-          {quoteDetail ? (
-            <div className="mt-2 rounded-xl border border-violet-200/80 bg-white/95 px-3 py-2.5 ring-1 ring-violet-100 dark:bg-violet-950/30">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Withdrawal quote</p>
-              <div className="mt-1.5 grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Gross</p>
-                  <p className="text-[13px] font-bold tabular-nums text-foreground">{quoteDetail.gross} π</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Fee 3%</p>
-                  <p className="text-[13px] font-bold tabular-nums text-amber-800">−{quoteDetail.fee} π</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">You receive</p>
-                  <p className="text-[13px] font-bold tabular-nums text-emerald-800">{quoteDetail.net} π</p>
-                </div>
-              </div>
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Destination:{" "}
-                <span className="font-semibold text-foreground">
-                  {quoteDetail.recipientUsername ? `@${quoteDetail.recipientUsername}` : "linked KYC’d Pi wallet"}
-                </span>
-              </p>
-            </div>
-          ) : null}
-
-          {snap.piWalletLinked === true && walletAuthActive === false ? (
-            <div className="mb-2 w-full rounded-2xl border border-amber-200/90 bg-amber-50/95 px-3 py-3 dark:border-amber-900 dark:bg-amber-950/40" role="status">
-              <p className="text-[13px] font-bold text-amber-950 dark:text-amber-100">Authorize Pi payouts</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-                Your Pi identity is linked{snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}, but GreenHaven still needs one explicit consent
-                before App-to-User withdrawals can reserve and send PI to that wallet. This does not move funds by itself.
-              </p>
-              <button
-                type="button"
-                disabled={authorizingWallet || walletAuthLoading}
-                onClick={() => void onAuthorizeWallet()}
-                className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-amber-800 px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-amber-900 disabled:opacity-50 sm:w-auto"
-              >
-                {authorizingWallet ? "Authorizing…" : "Authorize Pi wallet for payouts"}
-              </button>
-            </div>
-          ) : null}
-
-          {walletAuthActive === true ? (
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/90 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
-              <p className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-100">
-                Pi payouts authorized for your linked wallet
-                {snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}.
-              </p>
-              <button
-                type="button"
-                disabled={authorizingWallet}
-                onClick={() => void onRevokeWalletAuth()}
-                className="text-[11px] font-bold text-emerald-900 underline-offset-2 hover:underline disabled:opacity-50 dark:text-emerald-100"
-              >
-                Revoke
-              </button>
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={quoting || snap.eligible !== true || snap.piWalletLinked !== true || !(typeof snap.withdrawable === "number" && Number.isFinite(snap.withdrawable) && snap.withdrawable > 0)}
-              onClick={() => void onPreviewFee()}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-emerald-700/30 bg-emerald-50 px-4 text-[13px] font-bold text-emerald-900 disabled:opacity-50 dark:bg-emerald-950/40 dark:text-emerald-100"
-            >
-              {quoting ? "Quoting…" : quoteDetail ? "Refresh quote" : "Preview 3% fee"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (walletAuthActive === false) {
-                  void onAuthorizeWallet()
-                  return
-                }
-                void onRequestPayout()
-              }}
-              disabled={
-                requestingPayout ||
-                authorizingWallet ||
-                snap.eligible !== true ||
-                snap.piWalletLinked !== true ||
-                walletAuthActive === null
-              }
-              className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-md transition hover:bg-violet-800 disabled:opacity-50"
-            >
-              {authorizingWallet
-                ? "Authorizing…"
-                : requestingPayout
-                  ? "Submitting request…"
-                  : walletAuthActive === false
-                    ? "Authorize & withdraw"
-                    : "Withdraw to Pi wallet"}
-            </button>
-          </div>
-          {payoutMsg ? (
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-700 dark:text-slate-200" role="status">
-              {/^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? reasonLabel(payoutMsg.trim()) : payoutMsg}
-            </p>
-          ) : (
-            <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-              {walletAuthActive === false
-                ? "Authorize once, then preview the 3% fee and submit a withdrawal request. Funds only move after the server A2U worker verifies the transfer."
-                : "Step 1: Preview fee. Step 2: Submit request (reserves net PI). Step 3: Server worker executes A2U on Testnet after operator enablement. Destination is your KYC’d Pi wallet linked at sign-in"}
-              {walletAuthActive !== false && snap.linkedPiUsername ? ` (@${snap.linkedPiUsername})` : ""}
-              {walletAuthActive !== false ? ". The client never invents a paid result." : ""}
-            </p>
-          )}
-
-        </div>
-        {quoteMsg && !quoteDetail ? <p className="pb-2 text-[11px] text-slate-600">{quoteMsg}</p> : null}
-      </div>
-
-      {!compact && (
-        <div className="border-t border-emerald-900/5 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recent ledger</p>
-          {entries.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">No earnings ledger entries yet.</p>
-          ) : (
-            <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
-              {entries.map((e, i) => (
-                <li
-                  key={e.id || e.unique_ref || String(i)}
-                  className="flex items-start justify-between gap-2 rounded-lg bg-white px-2.5 py-2 ring-1 ring-black/5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-slate-900">
-                      {e.entry_type || "entry"} · {e.source_kind || "—"}
-                    </p>
-                    <p className="truncate text-[10px] text-slate-500">
-                      {e.unique_ref || e.payout_request_id || e.reason || "—"}
-                    </p>
-                    {e.created_at ? (
-                      <p className="text-[10px] text-slate-400">
-                        {new Date(e.created_at).toLocaleString()}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-xs font-semibold tabular-nums text-slate-900">
-                      {atomicToDisplay(e.amount_atomic)}
-                    </p>
-                    <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-medium ${statusTone(e.status)}`}>
-                      {e.status || "—"}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      ) : (
+        <p className="sr-only">
+          Platform charity accounting is segregated charity, separate from withdrawable balance.
+        </p>
       )}
+      {crossStatus === "healthy" ? (
+        <p className="sr-only">Financial snapshots reconciled. Cross-feature attention is clear.</p>
+      ) : crossStatus === "attention" && crossFindings.length > 0 ? (
+        <div className="mx-4 mb-2 rounded-xl border border-amber-300/60 bg-amber-50/80 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/40" role="status">
+          <p className="text-[11px] font-semibold text-amber-950 dark:text-amber-100">Cross-feature attention</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[10px] text-amber-900/90 dark:text-amber-100/90">
+            {crossFindings.slice(0, 3).map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      ) : crossStatus === "degraded" ? (
+        <p className="mx-4 mb-2 text-center text-[10px] font-medium text-rose-700 dark:text-rose-300" role="status">
+          Reconciliation unavailable
+        </p>
+      ) : (
+        <p className="sr-only">Cross-feature attention awaits the next wallet cross-reconcile report.</p>
+      )}
+
+
+      {quoteDetail ? (
+        <div className="mx-4 mb-2 rounded-xl border border-border/50 bg-muted/20 p-3 text-[12px]" data-quote-detail>
+          <p className="font-semibold text-foreground">Withdrawal quote</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {quoteDetail.gross} π − {feePct}% fee ({quoteDetail.fee} π) →{" "}
+            <span className="font-semibold text-foreground">{quoteDetail.net} π</span>
+            {quoteDetail.recipientUsername ? ` → @${quoteDetail.recipientUsername}` : ""}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="px-4 pb-3 space-y-2">
+        {walletAuthActive !== true && snap.piWalletLinked === true ? (
+          <p className="text-[11px] leading-relaxed text-muted-foreground" role="status" data-wallet-auth-required>
+            One-time Pi payout consent and fee preview happen when you tap Withdraw — not as separate buttons here.
+          </p>
+        ) : null}
+        {/* Single primary control: opens PiWithdrawSheet (consent + amount + PIN + submit). */}
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:open-pi-withdraw"))
+            } catch { /* */ }
+          }}
+          disabled={snap.piWalletLinked !== true}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
+          data-primary-withdraw="withdraw"
+          data-testid="wallet-withdraw-cta"
+          aria-label="Withdraw to Pi wallet"
+        >
+          Withdraw
+        </button>
+        <p className="text-center text-[10px] text-muted-foreground">
+          3% fee is calculated in the withdraw sheet. Manage payout consent in Settings if you need to revoke.
+        </p>
+        {payoutMsg ? (
+          <p className="mt-2 text-center text-[12px] font-medium text-amber-800 dark:text-amber-200" role="status">
+            {humanizeApiError(
+              /^[A-Z][A-Z0-9_]{3,}$/.test(payoutMsg.trim()) ? payoutMsg.trim() : undefined,
+              payoutMsg,
+            )}
+          </p>
+        ) : null}
+      </div>
+
+      {entries.length > 0 ? (
+        <div className="border-t border-border/40 px-4 py-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Recent ledger</p>
+          <ul className="space-y-2">
+            {entries.slice(0, compact ? 3 : 6).map((e, idx) => (
+              <li key={String(e.id || e.unique_ref || idx)} className="flex items-start justify-between gap-2 text-[12px]">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-foreground">{e.entry_type || e.source_kind || "entry"}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{e.unique_ref || e.reason || ""}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {e.amount_atomic != null ? atomicToDisplay(e.amount_atomic) : "—"}
+                  </p>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${statusTone(e.status)}`}>{e.status || "—"}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   )
 }

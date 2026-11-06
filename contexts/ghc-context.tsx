@@ -245,7 +245,7 @@ interface GHCContextType {
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
   addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<void>
-  loadPostComments: (postId: string) => Promise<{ ok: boolean; count: number; durable?: boolean; error?: string }>
+  loadPostComments: (postId: string, options?: { before?: number; beforeId?: string; append?: boolean }) => Promise<{ ok: boolean; count: number; durable?: boolean; nextCursor?: { before: number; beforeId: string } | null; error?: string }>
   editComment: (postId: string, commentId: string, newText: string) => Promise<void>
   deleteComment: (postId: string, commentId: string) => Promise<void>
   addCommentReaction: (postId: string, commentId: string, emoji: string) => Promise<void>
@@ -1057,7 +1057,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               /* */
             }
           }
-          if (stories?.ok && Array.isArray(stories.stories) && stories.stories.length > 0) {
+          if (stories?.ok && stories.durable && Array.isArray(stories.stories)) {
             next.stories = stories.stories.map((st) => ({
               id: String(st.id),
               ownerId: st.ownerId ? String(st.ownerId) : undefined,
@@ -1070,6 +1070,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               expiresAt: st.expiresAt ? Number(st.expiresAt) : undefined,
               audience: st.audience as StoryItem["audience"],
               status: (st.status as StoryItem["status"]) || "published",
+              viewerHasViewed: st.viewerHasViewed === true,
+              reactionCounts: st.reactionCounts && typeof st.reactionCounts === "object" ? st.reactionCounts as Record<string, number> : {},
+              viewerReactions: Array.isArray(st.viewerReactions) ? st.viewerReactions.filter((value): value is string => typeof value === "string") : [],
+              reactionCount: Number.isFinite(Number(st.reactionCount)) ? Number(st.reactionCount) : 0,
             }))
           }
           // Phase 1: accept follow graph whenever API succeeds (durable preferred)
@@ -3450,12 +3454,19 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
 
   /** Phase 3: hydrate comments from durable API into the shared posts array (feed + profile). */
-  const loadPostComments = useCallback(async (postId: string) => {
+  const loadPostComments = useCallback(async (
+    postId: string,
+    options?: { before?: number; beforeId?: string; append?: boolean },
+  ) => {
     const id = String(postId || "").trim()
     if (!id) return { ok: false as const, count: 0 }
     try {
       const { socialListComments } = await import("@/lib/social/client")
-      const remote = await socialListComments(id, { limit: 80 })
+      const remote = await socialListComments(id, {
+        limit: 40,
+        before: options?.before,
+        beforeId: options?.beforeId,
+      })
       if (!remote.ok || !Array.isArray(remote.comments)) {
         return { ok: false as const, count: 0, error: remote.error }
       }
@@ -3493,15 +3504,15 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ...s,
         posts: s.posts.map((post) => {
           if (post.id !== id) return post
-          // Durable server list is authoritative for cross-account visibility.
-          // When durable, prefer mapped; only keep local rows missing from server if not durable.
+          // The server page is authoritative. Append mode preserves earlier pages,
+          // then lets newer server rows replace stale copies by stable comment ID.
+          // Initial refreshes replace the durable page but retain local-only rows
+          // only when the server explicitly reports a non-durable read.
           const byId = new Map<string, (typeof mapped)[0]>()
-          for (const c of mapped) byId.set(c.id, c)
-          if (!remote.durable) {
-            for (const c of post.comments || []) {
-              if (!byId.has(c.id)) byId.set(c.id, c as (typeof mapped)[0])
-            }
+          if (options?.append || !remote.durable) {
+            for (const c of post.comments || []) byId.set(c.id, c as (typeof mapped)[0])
           }
+          for (const c of mapped) byId.set(c.id, c)
           const nextComments = Array.from(byId.values()).sort(
             (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
           )
@@ -3519,7 +3530,12 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         kind: "comment",
         commentCount: knownCommentCount,
       })
-      return { ok: true as const, count: mapped.length, durable: Boolean(remote.durable) }
+      return {
+        ok: true as const,
+        count: mapped.length,
+        durable: Boolean(remote.durable),
+        nextCursor: remote.nextCursor || null,
+      }
     } catch (e) {
       return { ok: false as const, count: 0, error: e instanceof Error ? e.message : "load_failed" }
     }
@@ -7909,7 +7925,7 @@ const dismissMatchCelebration = useCallback(() => {
       connectionsDomain.bindCountsGetter(() => ({}))
       discoveryDomain.bindCandidatesGetter(() => [])
     }
-  }, [feedDomain.bindPostsGetter, connectionsDomain.bindCountsGetter, discoveryDomain.bindCandidatesGetter])
+  }, [feedDomain, connectionsDomain, discoveryDomain])
 
   // Stable context value — prevents every consumer re-rendering when only parent re-renders
   const contextValue = useMemo(

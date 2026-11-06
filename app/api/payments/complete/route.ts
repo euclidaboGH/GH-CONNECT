@@ -142,6 +142,7 @@ export async function POST(request: Request) {
             intent: {
               id: intent.id,
               userId: intent.userId,
+              provider: intent.provider,
               purpose: intent.purpose,
               status: intent.status,
               amount: intent.amount,
@@ -159,6 +160,14 @@ export async function POST(request: Request) {
         } catch {
           /* grant is best-effort on idempotent path; client recovery remains */
         }
+      }
+      if (intent.purpose === "membership" && !membershipGrant?.granted) {
+        return NextResponse.json({
+          ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
+          error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
+          message: "Pi payment is complete, but membership is not yet confirmed. Retry recovery; do not pay again.",
+          paymentId, intentId: intent.id,
+        }, { status: 503, headers: { "Cache-Control": "no-store" } })
       }
       const tipSettlement = await settleVerifiedCreatorTip(intent, paymentId, intent.txid || txid)
       if (tipSettlement.applicable && !tipSettlement.ok) {
@@ -275,6 +284,7 @@ export async function POST(request: Request) {
           intent: {
             id: completedIntent.id,
             userId: completedIntent.userId,
+            provider: completedIntent.provider,
             purpose: completedIntent.purpose,
             status: completedIntent.status,
             amount: completedIntent.amount,
@@ -306,6 +316,16 @@ export async function POST(request: Request) {
           error: e instanceof Error ? e.message : "GRANT_FAILED",
         }
       }
+    }
+
+    const membershipIntent = completedIntent || intent
+    if (membershipIntent?.purpose === "membership" && !membershipGrant?.granted) {
+      return NextResponse.json({
+        ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
+        error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
+        message: "Pi payment is complete, but membership is not yet confirmed. Retry recovery; do not pay again.",
+        paymentId, intentId: membershipIntent.id,
+      }, { status: 503, headers: { "Cache-Control": "no-store" } })
     }
 
     return NextResponse.json({

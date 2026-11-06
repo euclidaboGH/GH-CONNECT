@@ -193,7 +193,7 @@ export function getDevicePerformanceProfile(): DevicePerformanceProfile {
 /** Only prefetch non-critical data on a visible, adequately connected device. */
 export function shouldPrefetchNonCritical(): boolean {
   const profile = getDevicePerformanceProfile()
-  return !profile.lowPower && typeof document !== "undefined" && document.visibilityState === "visible" && navigator.onLine
+  return !profile.lowPower && !preferReducedData() && typeof document !== "undefined" && document.visibilityState === "visible" && navigator.onLine
 }
 
 /** Defer non-critical work until the browser has idle time. */
@@ -218,13 +218,28 @@ export function shouldLoadVideo(isNearViewport: boolean, saveData?: boolean): bo
   return isNearViewport
 }
 
+const REDUCED_DATA_STORAGE_KEY = "ghc:prefer-reduced-data:v1"
+
+/** System Data Saver / constrained network always wins over the local preference. */
 export function preferReducedData(): boolean {
-  if (typeof navigator === "undefined") return false
-  const conn = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } })
-    .connection
-  if (conn?.saveData) return true
-  if (conn?.effectiveType === "2g" || conn?.effectiveType === "slow-2g") return true
-  return false
+  const profile = getDevicePerformanceProfile()
+  if (profile.saveData || profile.effectiveType === "2g" || profile.effectiveType === "slow-2g") return true
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(REDUCED_DATA_STORAGE_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+/** Persist only a device-local loading preference; never changes account or payment state. */
+export function setPreferReducedData(enabled: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return
+    if (enabled) localStorage.setItem(REDUCED_DATA_STORAGE_KEY, "1")
+    else localStorage.removeItem(REDUCED_DATA_STORAGE_KEY)
+  } catch {
+    // Storage may be unavailable in private browsing or restricted WebViews.
+  }
 }
 
 
@@ -242,12 +257,17 @@ export function scheduleIdle(fn: () => void, timeoutMs = 1200): void {
 /** Prefetch a list of media facade URLs into the signed-url cache (best-effort). */
 export function prefetchMediaFacades(urls: string[], limit = 4): void {
   if (typeof window === "undefined" || !Array.isArray(urls) || urls.length === 0) return
-  scheduleIdle(() => {
+  // Do not warm signed URLs when the user, browser, or network has requested
+  // reduced data. Re-check at execution time because connectivity can change
+  // between scheduling and the idle callback.
+  if (!shouldPrefetchNonCritical()) return
+  scheduleNonCriticalWork(() => {
+    if (!shouldPrefetchNonCritical()) return
     void import("@/lib/media/resolve-display-url")
       .then(({ resolveDisplayMediaUrl, isMediaFacadeUrl }) => {
-        const slice = urls.filter((u) => typeof u === "string" && isMediaFacadeUrl(u)).slice(0, limit)
+        const slice = Array.from(new Set(urls.filter((u) => typeof u === "string" && isMediaFacadeUrl(u)))).slice(0, Math.max(0, Math.min(4, limit)))
         return Promise.allSettled(slice.map((u) => resolveDisplayMediaUrl(u)))
       })
       .catch(() => undefined)
-  }, 800)
+  }, 1200)
 }

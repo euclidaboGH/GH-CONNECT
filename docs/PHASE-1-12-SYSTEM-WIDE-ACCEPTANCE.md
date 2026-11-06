@@ -5,11 +5,16 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.271.3` (2026-11-01). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.329.0` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.271.3)
+## Current audit status (v0.329.0)
+
+- Phase 7 Wallet source implementation is closed in 0.320.0; dedicated Wallet entry contract: 14/14. External Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. This remains a read-only snapshot; consent, quote, withdrawal execution, GHC ledger and provider authorities are unchanged.
+- Phase 8 Rewards source implementation is closed in 0.323.0. It includes bounded account-scoped snapshots, authenticated GHC ledger history/search/filtering, server-authoritative daily claims and seven durable server-verified idempotent non-financial mission achievement unlocks. Dedicated Phase 8 contracts pass 18/18, 20/20, 15/15 and 24/24. Mission GHC issuance remains disabled; the new additive migration is REVIEW_REQUIRED and unapplied. Node 24, Testnet, browser/device and operator acceptance remain production blockers.
+
+- Phase 7 creator/business identity increment (0.319.0) adds safe public portfolio presentation, account-scoped server achievement hydration and professional-interest discovery relevance. Dedicated Phase 7 identity showcase contract passes 10/10. The consolidated static suite must pass before source-only audit closure.
 
 - The v0.194.0 CI-hardening increment adds explicit CI visibility for RLS source coverage, SECURITY DEFINER ACL source inspection, production safety, Phase 15 payment recovery, Phase 16 payment lifecycle and Phase 7 treasury completion. These remain source-level checks, not deployed-database or provider acceptance.
 
@@ -18,8 +23,8 @@
 - The v0.157.12 Phase 12 increment repairs the consolidated static runner registration for the audit-UX check, adds a stronger release gate for migration inventory/classification drift and duplicate migration prefixes, and synchronizes current release truth across documentation and artifacts. This remains source-only evidence.
 - The v0.157.13 cross-phase hardening increment applied streaming byte limits to seven previously unbounded JSON write routes across account lifecycle, social, notifications, communities, and marketplace features.
 - The v0.157.14 follow-up adds streaming byte limits to twelve further high-impact financial, identity, and social write routes, tightens payout amount type validation, and makes social follow target identifiers string-only. The v0.157.16 follow-up extends this to connection requests, reports, matching signals, creator tips, and bank-beneficiary mutations, with runtime tests for the bounded JSON parser. These are source-level safeguards and isolated helper tests, not full application or live-system acceptance.
-- The available audit container runs Node.js 22.16.0, while the project requires Node.js 24.15.0; `node_modules` is absent. TypeScript, lint, production build and browser E2E have therefore not been run here.
-- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. This is a source inventory only; each target's remote migration history must be reconciled independently.
+- The available audit container runs Node.js 22.16.0, while the project requires Node.js 24.15.0; `node_modules` is absent. TypeScript, lint, production build and browser E2E have therefore not been run here. Phase 16 post-interaction and Phase 17 cohesive social-engagement source checks are registered in the current release.
+- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. The current 189-file inventory is 117 REQUIRED, 69 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL and 2 PROPOSAL. This is a source inventory only; each target's remote migration history must be reconciled independently.
 - No live Supabase/Pi/Vercel operation, database migration, restore drill, or financial mutation was performed.
 
 ## Improvements made
@@ -144,3 +149,87 @@ The Phase 25 SQL source-contract checker is static only. Provider integration, c
 ## v0.201.0 Phase 24 financial exception detail
 
 Added bounded, read-only service-role reports for per-allocation payout evidence discrepancies and membership payment-to-entitlement exceptions. Historical rows are not rewritten, access is not granted from payment status alone, and provider settlement evidence remains a separate requirement. Migration `20261030010013_phase24_financial_exception_detail.sql` remains REVIEW_REQUIRED and unapplied.
+
+
+## Phase 8 locale presentation update (v0.295.0)
+
+The shared internationalisation layer now exposes locale-aware compact numbers, percentages, units, relative time, plural selection, text collation and presentation metadata. Static checks verify API wiring and fallback boundaries. Runtime TypeScript/build gates remain separate and must be completed under Node.js 24.15.0.
+
+
+## Phase 10 accessibility interaction update (v0.297.0)
+
+The current source release adds shared live-status semantics, localized main landmark and navigation announcements, 44px interactive target sizing, consistent keyboard focus, reduced-motion support and forced-colors error affordances. These source checks do not replace browser/screen-reader acceptance.
+
+
+## Phase 12 locale integration update (v0.298.0)
+
+Locale preference lifecycle now tolerates unavailable embedded-browser storage and synchronizes cross-tab changes. Intl unit/plural formatting has defensive fallback behavior. The dedicated source contract is registered in prebuild and static verification. This is source-level verification only; supported-runtime build and browser/device acceptance remain outstanding.
+
+
+## Phase 13 social Stories and profile media update (v0.300.0)
+
+The current source now includes a simplified story-card rail, viewer-authorized full-screen story media resolution, and separate view/edit actions for profile and cover images. See `docs/SOCIAL_STORY_PROFILE_MEDIA_PHASE13_0.300.0.md`.
+
+
+## Phase 14 creator media preview update (v0.300.0)
+
+Post and Story composition now support full-screen image preview before publishing. Attached post and Story videos provide inline playback controls and resolve private media through the existing durable-media resolver. The preview layer does not upload, persist, publish, or alter media authorization. Dedicated source gate: `scripts/check-creator-media-preview-phase14.mjs`. Device/browser validation remains pending.
+
+
+## Current baseline update — 0.310.0 (2026-11-04)
+
+Phase 20 moved all 21 payout, rewards and financial-reporting route modules from process-local rate limits to the shared database-backed security control plane with explicit fail-closed behavior when durable storage is unavailable. This is a source-level abuse-control improvement only. It does not change payout settlement, provider verification, treasury funding, or migration state.
+
+
+## Current baseline update — 0.310.0 (2026-11-04)
+
+Phase 21 moved private messaging read/write, private-media signing/upload/resolution, and account export/lifecycle intake rate limits onto the shared durable security control plane with fail-closed behavior. The new repository-integrity gate verifies the ten protected boundaries, pipeline registration, release metadata, migration prefix uniqueness and exact migration-manifest byte counts. No migration was added or applied. Supported-runtime build and operational acceptance remain outstanding.
+
+
+## Current baseline update — 0.310.0 (2026-11-04)
+
+Phase 22 adds atomic, row-locked durable marketplace order transitions and an expanded canonical order read contract. The new migration is review-required and not applied. Source-level verification does not establish PostgreSQL execution, concurrent transaction behavior, live provider settlement, or production acceptance.
+
+
+## Current baseline update — 0.310.0 (2026-11-04)
+Phase 23 separates marketplace reservation cleanup from order snapshot reads to avoid broad expiry sweeps inside row-locked state transitions. Repository migration integrity checks now cover 177 source migrations and SECURITY DEFINER search_path declarations. Live database validation remains outstanding.
+
+
+## Current Phase 3 handoff (0.315.8)
+
+Marketplace browse filters, GHC/PI currency-safe price sorting, premium listing-card presentation and durable marketplace listing-report intake are included in source. The new listing-report migration is REVIEW_REQUIRED. Source checks do not establish SQL deployment, operator moderation, Node 24 build, browser/device acceptance or Testnet readiness. Phase 1/2 runtime and database acceptance gates remain open.
+
+
+## Current Phase 4 handoff (0.315.9)
+
+The marketplace cart now validates and bounds local cache records, synchronizes across browser tabs, locks cart edits during checkout, and selectively removes only successfully reserved order lines. The server remains authoritative for listing price, seller, inventory, order reservation and payment. See `docs/PHASE-4-CART-CHECKOUT-PREMIUM-UPGRADE-0.315.9.md`. This is source-only verification, not live checkout or production acceptance.
+
+
+## Current Phase 6 and Phase 7 handoff (0.319.0)
+
+Profile and Identity now uses per-domain cached relationship indexes derived from canonical social arrays. Derived sets are independently invalidated when their immutable source arrays change, and people/profile lists can batch-hydrate unique IDs from one prepared snapshot. Block-first relationship safety remains intact; private wallet/GHC data is excluded. No migration or financial authority change. The focused Phase 6 runtime and source checks pass; full supported-runtime acceptance remains open.
+
+
+## 0.323.0 Phase 8 source completion
+
+The mission progress endpoint now derives identity from server authentication, applies a durable fail-closed rate limit, parses bounded JSON and ignores client metadata. A service-role-only SQL function verifies community membership, posts, comments, profile onboarding and connection request state against durable rows, then unlocks a non-financial achievement idempotently. Mission GHC issuance remains disabled under the current economy policy. Migration `20261106170001_phase8_verified_mission_achievements.sql` is REVIEW_REQUIRED and has not been applied. Phase 8 source implementation is closed; production approval remains pending Node.js 24.15.0 build, disposable PostgreSQL/Testnet, browser/device and operator acceptance.
+
+
+### Current increment — 0.325.0 Membership foundation
+
+The current source release begins Product Phase 9 with strict membership entitlement row parsing, paid-expiry validation, bounded status reads and conflict-safe plan selection. This is source-only evidence; Node 24.15.x build, browser/device and external database/provider acceptance remain outstanding.
+
+
+## 0.326.0 current-increment note
+
+The current source baseline adds Phase 9 Membership lifecycle/access controls. Its own static/runtime contracts are 20/20 and 15/15; existing membership session/foundation/parser contracts remain passing. This note does not supersede historical system-wide acceptance results or claim a full production build. Node 24.15.x dependency-backed typecheck/lint/build, disposable PostgreSQL/Testnet, browser/device and operator verification remain required.
+
+
+## 0.327.0 current-increment note
+
+Phase 9 Membership now requires exact durable Pi provider, PI currency, membership purpose and COMPLETED/FULFILLED state for every membership grant/recovery path. The new SQL follow-up is REVIEW_REQUIRED and unapplied. Strict Pi intent policy tests pass 10/10 and source wiring/security checks pass 10/10. Node 24.15.0 dependency-backed typecheck/lint/build, disposable PostgreSQL/Testnet, browser/device and operator acceptance remain pending.
+
+
+## 0.329.0 current-increment note
+
+Phase 10 tightens the service worker to cache only explicitly allowlisted public static assets. Navigations, authenticated documents, Next.js RSC responses, all API routes and private media remain network-only. Feed and Story speculative media prefetch now respects Data Saver, constrained connections and the local reduced-data preference, rechecks before work and applies strict caps. The reconnect banner cleans up its timer. Phase 10 focused checks pass 14/14 settings/performance, 17/17 resilience and 11/11 service-worker policy tests. This remains source-only; Node 24.15.0 typecheck/lint/build, browser/device and operational acceptance remain outstanding.

@@ -9,7 +9,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { listIntentsForUserAsync, PAYMENT_INTENT_HISTORY_LIMIT } from "@/lib/server/payments/intent-store"
 import { loadOrder, marketplaceOrdersDurable } from "@/lib/server/marketplace/order-store"
 import { tryGetEntitlementAuthoritative } from "@/lib/server/membership/entitlement-store"
-import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -62,12 +62,11 @@ export async function GET(request: Request) {
 
   // Reconciliation is read-only but can trigger multiple durable feature-store reads.
   // Limit repeated diagnostic polling per user to reduce avoidable database load.
-  pruneRateLimitBuckets()
-  const limit = checkRateLimit(`payment-reconciliation:${auth.userId}`, 10, 60_000)
+  const limit = await checkDurableRateLimit(`payment-reconciliation:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
   if (!limit.ok) {
     return NextResponse.json(
-      { ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec },
-      { status: 429, headers: { ...noStore, "Retry-After": String(limit.retryAfterSec) } },
+      { ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec },
+      { status: durableRateLimitStatus(limit), headers: { ...noStore, "Retry-After": String(limit.retryAfterSec) } },
     )
   }
 

@@ -39,8 +39,9 @@ import { GhcTransactionDetail } from "@/components/ghc/ghc-transaction-detail"
 import { PiPaymentDetail, type PiPaymentDetailRecord } from "@/components/ghc/pi-payment-detail"
 import { GhcRequestsPanel } from "@/components/ghc/ghc-requests-panel"
 import { GhcSocialFuelNote } from "@/components/ghc/ghc-social-fuel-note"
-import { GhPayPanel } from "@/components/ghc/gh-pay-panel"
 import { useGHCShell } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { EMPTY_STATES, PRIMARY_ACTIONS, formatGhcAmount, mapGhcUxError } from "@/lib/domains/ghc-wallet-ux"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
@@ -65,6 +66,7 @@ import { PaymentRecoveryPanel } from "@/components/ghc/payment-recovery-panel"
 import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-status"
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
+import { PiWithdrawSheet } from "@/components/ghc/pi-withdraw-sheet"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 import { EconomyOutcomeCentre } from "@/components/ghc/economy-outcome-centre"
 
@@ -196,6 +198,8 @@ function navigateSettingsSection(section: string) {
 
 export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHCShell()
+  const regional = useRegionalContext()
+  const workflowText = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
   const { snapshot: authoritativeWallet, refresh: refreshWalletAuthority } = useWalletRead()
   /* wallet-refresh listener attached below */
 
@@ -224,6 +228,72 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [piWithdrawOpen, setPiWithdrawOpen] = useState(false)
+  const [piWithdrawAvailable, setPiWithdrawAvailable] = useState<number | null>(null)
+  const [piWithdrawUser, setPiWithdrawUser] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!piWithdrawOpen) return
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8_000)
+
+    // Never carry a previous sheet's withdrawable snapshot into a new session.
+    // This endpoint is read-only; the quote and withdrawal APIs remain authoritative.
+    setPiWithdrawAvailable(null)
+    setPiWithdrawUser(null)
+
+    ;(async () => {
+      try {
+        const res = await fetch("/api/economy/earnings/withdrawable", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        })
+        const body = (await res.json().catch(() => null)) as {
+          ok?: boolean
+          available?: number
+          withdrawable?: number
+          linkedPiUsername?: string | null
+          walletAuthorization?: { mappedUsername?: string | null }
+        } | null
+        if (cancelled || controller.signal.aborted || !res.ok || body?.ok !== true) return
+        const avail =
+          typeof body.withdrawable === "number" && Number.isFinite(body.withdrawable) && body.withdrawable >= 0
+            ? body.withdrawable
+            : typeof body.available === "number" && Number.isFinite(body.available) && body.available >= 0
+              ? body.available
+              : null
+        if (avail !== null) setPiWithdrawAvailable(avail)
+        const un =
+          typeof body.linkedPiUsername === "string" && body.linkedPiUsername.trim()
+            ? body.linkedPiUsername.trim()
+            : typeof body.walletAuthorization?.mappedUsername === "string" && body.walletAuthorization.mappedUsername.trim()
+              ? body.walletAuthorization.mappedUsername.trim()
+              : null
+        if (un) setPiWithdrawUser(un)
+      } catch {
+        // An unavailable snapshot stays unknown; quote/withdrawal remain server-gated.
+      } finally {
+        window.clearTimeout(timeout)
+      }
+    })()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [piWithdrawOpen])
+
+  useEffect(() => {
+    const open = () => setPiWithdrawOpen(true)
+    window.addEventListener("ghc:open-pi-withdraw", open)
+    return () => window.removeEventListener("ghc:open-pi-withdraw", open)
+  }, [])
+
+
+
   const [showUtilityPanel, setShowUtilityPanel] = useState(false)
 
   useEffect(() => {
@@ -481,6 +551,26 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showFullHistory, setShowFullHistory] = useState(false)
   const [historyRail, setHistoryRail] = useState<"ghc" | "pi">("ghc")
+  // Phase 5: deep-link from Rewards "Open Wallet · Withdraw Pi" (and similar).
+  useEffect(() => {
+    let focus: string | null = null
+    try {
+      focus = sessionStorage.getItem("ghc.wallet.focus")
+      if (focus) sessionStorage.removeItem("ghc.wallet.focus")
+    } catch { /* */ }
+    if (!focus) return
+    setAssetRail("pi")
+    setHistoryRail("pi")
+    const targetId =
+      focus === "gh-pi-earnings-tools" || focus.startsWith("gh-") ? focus : "gh-pi-earnings-tools"
+    const timer = window.setTimeout(() => {
+      try {
+        document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })
+      } catch { /* */ }
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const [showAddGhc, setShowAddGhc] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<SendRecipient | null>(null)
   const [selectedTx, setSelectedTx] = useState<GhcTransaction | null>(null)
@@ -635,6 +725,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       return
     }
     setClaimingHoldId(holdId)
+    // Safety: never leave primary wallet actions locked if claim hangs
+    window.setTimeout(() => {
+      setClaimingHoldId((cur) => (cur === holdId ? null : cur))
+    }, 45000)
     setClaimFeedback(null)
     try {
       const hold = pendingHolds.find((h) => h.id === holdId)
@@ -804,7 +898,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       if (txFilter === "received" && tx.kind !== "transfer_in") return false
       if (txFilter === "pending" && tx.status !== "pending" && tx.kind !== "pending" && tx.kind !== "transfer_request") return false
       if (q) {
-        const hay = `${tx.reason} ${tx.sourceEvent} ${tx.kind} ${statusLabel(tx.status).text}`.toLowerCase()
+        const hay = `${tx.id} ${tx.referenceId || ""} ${tx.reason} ${tx.sourceEvent} ${tx.kind} ${tx.status} ${statusLabel(tx.status).text}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       const now = Date.now()
@@ -930,7 +1024,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     lines.push(
       "",
       "GHC is an in-app utility only — not Pi and not an investment product.",
-      "Balances are private and ledger-backed."
+      "Ledger-backed balances."
     )
     return lines.join("\n")
   }, [balance, locked, displayPending, earned, spent, monthInsight, txs])
@@ -1155,11 +1249,8 @@ const lowBalance = balance === 0 && displayPending === 0
         <div className="mx-3 mt-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" role="status">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Your GHC wallet is currently empty</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Social actions do not mint GHC. Use an available daily claim or another funded GreenHaven source first; curation can then move existing GHC to creators.
-              </p>
-              {claimableToday ? <p className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim is available.</p> : null}
+              <p className="text-sm font-semibold">GHC balance is 0</p>
+              {claimableToday ? <p className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Daily claim available in Rewards.</p> : <p className="mt-1 text-xs text-muted-foreground">Add or earn GHC to transfer.</p>}
             </div>
             <span className="shrink-0 rounded-full border border-border bg-background px-2 py-1 text-[10px] font-bold uppercase tracking-wide">Ledger-backed</span>
           </div>
@@ -1208,26 +1299,22 @@ const lowBalance = balance === 0 && displayPending === 0
             onOpenPending={() => setShowPendingSheet(true)}
             selectedRail={assetRail}
             onSelectRail={(rail) => setAssetRail(rail)}
+            ghcVerified={authoritativeWallet.status === "ready" && authoritativeWallet.source === "server"}
             primaryActions={
               <WalletPrimaryActions
                 embedded
                 assetRail={assetRail}
-                disabled={!!claimingHoldId}
+                disabled={false}
                 onSend={() => {
                   if (assetRail === "pi") {
                     setSendEducate(null)
-                    setHistoryRail("pi")
-                    // PI "send" is earnings withdrawal — scroll to PI tools in dashboard
-                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    setPiWithdrawOpen(true)
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "withdraw" } }))
+                    } catch { /* */ }
                     return
                   }
-                  if (balance <= 0 && (displayPending > 0 || pending > 0)) {
-                    setSendEducate(
-                      "Claim pending GHC to send — only available balance can be transferred."
-                    )
-                    setShowPendingSheet(true)
-                    return
-                  }
+                  // Always open Send flow — zero balance is handled inside the flow, not by dead buttons.
                   setSendEducate(null)
                   setP2pMode("send")
                   setP2pError(null)
@@ -1235,8 +1322,14 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onRequest={() => {
                   if (assetRail === "pi") {
-                    setSendEducate("PI requests use your linked Pi identity at sign-in. Request a payout from PI earnings below.")
-                    document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    setSendEducate(null)
+                    setTab("activity")
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "status" } }))
+                    } catch { /* */ }
+                    requestAnimationFrame(() => {
+                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    })
                     return
                   }
                   setSendEducate(null)
@@ -1246,7 +1339,14 @@ const lowBalance = balance === 0 && displayPending === 0
                 }}
                 onReceive={() => {
                   if (assetRail === "pi") {
-                    setSendEducate("PI is credited to your earnings ledger from rewards and cashback — not via P2P receive.")
+                    setSendEducate(null)
+                    setTab("activity")
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "linked" } }))
+                    } catch { /* */ }
+                    requestAnimationFrame(() => {
+                      document.getElementById("gh-pi-earnings-tools")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    })
                     return
                   }
                   setSendEducate(null)
@@ -1284,7 +1384,7 @@ const lowBalance = balance === 0 && displayPending === 0
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[13px] font-black tracking-tight text-foreground">Money & benefits</p>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">One place to move from balance to the action that matters next. GHC and Pi remain separate rails.</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Wallet holds balances and History. Claims open in Rewards; VIP plans open in Membership. GHC and Pi remain separate rails.</p>
               </div>
               <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Protected</span>
             </div>
@@ -1297,28 +1397,34 @@ const lowBalance = balance === 0 && displayPending === 0
               <button type="button" onClick={() => navigateSettingsSection("membership")} className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-left transition hover:bg-muted/60 active:scale-[.99]">
                 <CreditCard size={17} className="text-violet-700 dark:text-violet-300" aria-hidden />
                 <p className="mt-2 text-[12px] font-bold text-foreground">Membership</p>
-                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Free, VIP and VVIP benefits</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">VIP plans open on Membership — Free, VIP and VVIP benefits · not paid from this balance card</p>
               </button>
             </div>
           </section>
 
-          {/* Phase 2: asset-aware secondary panels — PI tools when PI selected */}
+          {/* Single PI earnings surface — source of truth for withdraw / auth / eligibility (no duplicate CTAs) */}
           {assetRail === "pi" ? (
-            <div id="gh-pi-earnings-tools" className="scroll-mt-20 space-y-3">
-              <UnifiedEarningsDashboard />
+            <div id="gh-pi-earnings-tools" className="mx-3 mt-3 scroll-mt-20 space-y-3">
+              {/* Consent + PIN + submit live in the single Withdraw sheet — no duplicate auth card here. */}
+              <UnifiedEarningsDashboard compact />
               <PiCashbackSummary />
             </div>
           ) : (
-            <div id="gh-pi-earnings-tools" className="scroll-mt-20">
-              <details className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card open:shadow-sm">
-                <summary className="cursor-pointer list-none px-3.5 py-3 text-[12px] font-bold text-muted-foreground [&::-webkit-details-marker]:hidden">
-                  PI earnings & cashback
-                </summary>
-                <div className="space-y-3 border-t border-border/50 px-2 pb-3 pt-2">
-                  <UnifiedEarningsDashboard compact />
-                  <PiCashbackSummary />
-                </div>
-              </details>
+            <div className="mx-3 mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAssetRail("pi")
+                  setHistoryRail("pi")
+                  setTab("activity")
+                }}
+                className="w-full rounded-2xl border border-violet-200/80 bg-violet-50/60 px-3.5 py-3 text-left transition hover:bg-violet-50 dark:border-violet-900 dark:bg-violet-950/30"
+              >
+                <p className="text-[12px] font-bold text-violet-900 dark:text-violet-100">Pi earnings</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Switch to the Pi rail for PI earnings & cashback, withdrawals, linked identity, and eligibility — one place, no duplicate buttons.
+                </p>
+              </button>
             </div>
           )}
 
@@ -1433,7 +1539,7 @@ const lowBalance = balance === 0 && displayPending === 0
             <Info size={14} className="mt-0.5 shrink-0 text-amber-700" />
             <p className="text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-100/90">
               GHC is an <strong>in-app utility</strong> for rewards, transfers, and features.
-              It is <strong>not Pi</strong> and not an investment product. Balances are private and ledger-backed.
+              GHC is separate from Pi. Balances are ledger-backed.
             </p>
           </div>
           <GhcSocialFuelNote />
@@ -1471,7 +1577,7 @@ const lowBalance = balance === 0 && displayPending === 0
           {(
             [
               { id: "activity" as const, label: "Activity" },
-              { id: "rewards" as const, label: "Rewards" },
+              { id: "rewards" as const, label: "Earn" },
               { id: "about" as const, label: "About" },
             ] as const
           ).map((item) => (
@@ -1568,16 +1674,17 @@ const lowBalance = balance === 0 && displayPending === 0
                 {(
                   [
                     { id: "today" as const, label: "Today" },
-                    { id: "7d" as const, label: "7d" },
-                    { id: "30d" as const, label: "30d" },
-                    { id: "all" as const, label: "All" },
+                    { id: "7d" as const, label: "7 days" },
+                    { id: "30d" as const, label: "30 days" },
+                    { id: "all" as const, label: "All time" },
                   ] as const
                 ).map((r) => (
                   <button
                     key={r.id}
                     type="button"
+                    aria-pressed={txDateRange === r.id}
                     onClick={() => setTxDateRange(r.id)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    className={`min-h-9 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
                       txDateRange === r.id
                         ? "bg-foreground text-background"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1603,8 +1710,9 @@ const lowBalance = balance === 0 && displayPending === 0
                   <button
                     key={f.id}
                     type="button"
+                    aria-pressed={txFilter === f.id}
                     onClick={() => setTxFilter(f.id)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    className={`min-h-9 rounded-full px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
                       txFilter === f.id
                         ? "bg-emerald-600 text-white"
                         : "bg-muted text-muted-foreground"
@@ -1621,15 +1729,30 @@ const lowBalance = balance === 0 && displayPending === 0
                 <Search
                   size={14}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
                 />
                 <input
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search reference, reason…"
-                  className="w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus:ring-2"
-                  aria-label="Search transactions"
+                  placeholder="Search description or reference…"
+                  className="min-h-11 w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2"
+                  aria-label="Search GHC transactions by description or reference"
                 />
+              </div>
+              <div className="flex min-h-8 items-center justify-between gap-3" aria-live="polite" aria-atomic="true">
+                <p className="text-[11px] text-muted-foreground">
+                  {filteredTxs.length} {filteredTxs.length === 1 ? "transaction" : "transactions"} shown
+                </p>
+                {(query.trim() || txFilter !== "all" || txDateRange !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(""); setTxFilter("all"); setTxDateRange("all") }}
+                    className="min-h-9 rounded-lg px-3 text-xs font-semibold text-emerald-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:text-emerald-300"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
 
               {refreshing && filteredTxs.length === 0 ? (
@@ -1903,87 +2026,51 @@ const lowBalance = balance === 0 && displayPending === 0
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            <p className="font-semibold text-foreground">Buy GHC with π</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pack purchases only. Membership, profile boosts, and other services are paid on their own screens (Membership / Settings → Account &amp; economy).
-            </p>
-            <p className="mt-1">{ASSET_POLICY.ghcRailsCopy}</p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground/90">
-              GreenHaven device PIN only unlocks this app — Pi Wallet authorizes π charges.
-            </p>
-          </div>
-          <div id="ghc-wallet-gh-pay" className="scroll-mt-4">
-          {selectedGhcPack ? (
-            <div className="mx-3 mb-2 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2 text-[12px] dark:border-violet-900 dark:bg-violet-950/40">
-              <p className="font-bold text-violet-900 dark:text-violet-100">
-                Pack selected: {selectedGhcPack.label || `${selectedGhcPack.ghcAmount} GHC`}
-              </p>
-              <p className="text-muted-foreground">
-                Pay {selectedGhcPack.piAmount} π via GH Pay, then server credits GHC (product {selectedGhcPack.productId}).
-              </p>
+          {/* Phase 3: packs are not primary Wallet chrome — open Add GHC sheet only */}
+          <div id="ghc-wallet-gh-pay" className="mx-3 mt-2 scroll-mt-4 rounded-2xl border border-border/70 bg-card px-3.5 py-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-foreground">Add GHC</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Buy GHC utility packs with π when needed. VIP / VVIP membership is only sold on the Membership screen — never from Wallet.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddGhc(true)}
+                className="shrink-0 rounded-xl bg-emerald-700 px-3 py-2 text-[11px] font-bold text-white"
+              >
+                Open packs
+              </button>
             </div>
-          ) : null}
-          <GhPayPanel
-            compact
-            onToast={(msg, type) => {
-              const level =
-                type === "error" || type === "success" || type === "info" ? type : "info"
-              addToast(msg, level)
-            }}
-          />
-        </div>
+            {selectedGhcPack ? (
+              <p className="mt-2 text-[11px] text-violet-800 dark:text-violet-200">
+                Pack selected: {selectedGhcPack.label || `${selectedGhcPack.ghcAmount} GHC`} · {selectedGhcPack.piAmount} π
+              </p>
+            ) : null}
+          </div>
         </div>
 
           {tab === "rewards" && (
-            <>
-              <div className="mx-3 mb-3 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="mx-3 mb-3 space-y-3">
+              <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
                 <p className="text-sm font-bold text-foreground">Claims live in Rewards</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Daily claim, registration bonus, cashback, and missions are claimed in Rewards — not here — so Wallet stays balances, transfers, and History only.
+                  Daily claim, registration bonus, cashback and missions are claimed in Rewards only.
+                  This Wallet shows balances, Send / Request / Receive, dual-rail History, and Pi withdraw.
                 </p>
                 <button
                   type="button"
                   onClick={() => navigateSettingsSection("rewards")}
-                  className="mt-2.5 inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white"
                 >
-                  Open Rewards
+                  Open Rewards Centre
                 </button>
               </div>
-              {rewards.length === 0 ? (
-                <EmptyBlock
-                  title="No reward activity on this device"
-                  body="Open Rewards to claim. Wallet only shows settled ledger effects after a successful claim."
-                />
-              ) : (
-                rewards.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded-2xl border border-border bg-card px-3 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">
-                        {r.category || r.ruleId || "Reward"}
-                      </p>
-                      <span className="inline-flex items-center gap-1 text-sm font-bold text-emerald-700">
-                        <GhcCoinIcon size={16} />
-                        +{formatGhc(r.amount)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      Status:{" "}
-                      <span className="font-semibold">
-                        {r.validationStatus}
-                      </span>
-                      {r.sourceEvent ? ` · ${r.sourceEvent}` : ""}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80">
-                      {formatWhen(r.createdAt)}
-                    </p>
-                  </div>
-                ))
-              )}
-            </>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Settled claims appear in Activity / History after the server credits available balance — Wallet never invents claim amounts.
+              </p>
+            </div>
           )}
 
           {tab === "about" && (
@@ -2092,7 +2179,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-bold text-white">π</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-foreground">Pi (GH Pay)</p>
-                  <p className="text-[11px] text-muted-foreground">External π rail · membership & packs · not mixed with GHC</p>
+                  <p className="text-[11px] text-muted-foreground">External π rail · earnings withdraw and GH Pay · not mixed with GHC</p>
                   <span className="mt-1 inline-block rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-800 dark:text-violet-200">Available</span>
                 </div>
               </li>
@@ -2211,7 +2298,7 @@ const lowBalance = balance === 0 && displayPending === 0
                             ) : null}
                           </div>
                           <p className="mt-1 text-sm font-semibold text-foreground">
-                            {formatGhc(h.amount)} GHC · {h.claimState === "review" ? "Pending validation" : "Ready to claim"}
+                            {formatGhc(h.amount)} GHC · {h.claimState === "review" ? "Pending validation" : "Ready to release"}
                           </p>
                           <p className="mt-1 text-[11px] font-medium text-foreground">{h.reason}</p>
                           <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
@@ -2222,7 +2309,7 @@ const lowBalance = balance === 0 && displayPending === 0
                             <span className="font-semibold text-foreground">What happens next: </span>
                             {h.claimState === "review"
                               ? h.expectedClearLabel
-                              : "Tap Claim to move this amount into your available balance. Then you can send or spend it."}
+                              : "When ready, release this amount into available balance so you can send or spend it."}
                           </p>
                           <p className="mt-1 text-[10px] text-muted-foreground/80">
                             Source: {SOURCE_LABEL[h.source]} · Created {formatWhen(h.createdAt)}
@@ -2242,10 +2329,10 @@ const lowBalance = balance === 0 && displayPending === 0
                         {h.claimState === "review"
                           ? "Under review"
                           : claimingHoldId === h.id
-                            ? "Claiming…"
+                            ? "Releasing…"
                             : (h.stackCount || 1) > 1
-                              ? `Claim ×${h.stackCount} to available`
-                              : "Claim to available balance"}
+                              ? `Release ×${h.stackCount} to available`
+                              : "Release to available balance"}
                       </button>
                     </li>
                   ))}
@@ -2268,8 +2355,8 @@ const lowBalance = balance === 0 && displayPending === 0
                 </button>
               ) : null}
               <p className="mt-3 text-center text-[10px] leading-relaxed text-muted-foreground">
-                Claim moves GHC to your available balance. Only available GHC can be sent. Pending
-                is never spendable.
+                Pending holds mature after validation. Release ready rewards to your available
+                balance here; only available GHC can be sent or spent.
               </p>
             </div>
           </div>
@@ -2371,7 +2458,7 @@ const lowBalance = balance === 0 && displayPending === 0
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-bold">Transaction history</h2>
+              <h2 className="text-base font-bold">{workflowText("transactionHistory")}</h2>
               <p className="text-[11px] text-muted-foreground">GHC ledger and π payments are kept on separate rails</p>
             </div>
           </header>
@@ -2427,6 +2514,19 @@ const lowBalance = balance === 0 && displayPending === 0
         open={!!selectedTx}
         tx={selectedTx}
         onClose={() => setSelectedTx(null)}
+      />
+      <PiWithdrawSheet
+        open={piWithdrawOpen}
+        onClose={() => setPiWithdrawOpen(false)}
+        availablePi={piWithdrawAvailable}
+        linkedUsername={piWithdrawUser}
+        onCompleted={() => {
+          setPiWithdrawOpen(false)
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
+            window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
+          } catch { /* */ }
+        }}
       />
     </div>
   )

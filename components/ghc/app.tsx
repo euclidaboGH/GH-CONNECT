@@ -10,6 +10,8 @@ import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startT
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getShellMessage } from "@/lib/i18n/shell"
 import { Compass, Heart, MessagesSquare, Newspaper, Plus, ShoppingBag, ShoppingCart, UserRound, Users, Wallet } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
@@ -20,6 +22,7 @@ import { NetworkResilience } from "./network-resilience"
 import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { AccessibilityAnnouncer } from "./accessibility-announcer"
+import { AccessibleStatus } from "./accessible-status"
 import { SessionResumeToast } from "./session-resume-toast"
 import { getMarketplaceCart } from "@/lib/marketplace/cart"
 import { GlobalHotkeys } from "./global-hotkeys"
@@ -89,12 +92,13 @@ const ProfilePreviewPageLazy = lazy(() =>
   import("./profile-preview-page").then((m) => ({ default: m.ProfilePreviewPage }))
 )
 function TabScreenFallback({ label }: { label: string }) {
+  const regional = useRegionalContext()
+  const loadingLabel = getShellMessage("loading", regional.locale)
   return (
-    <div
+    <AccessibleStatus
       className="flex h-full min-h-[50vh] flex-col gap-3 bg-background px-3 pt-4"
-      role="status"
-      aria-live="polite"
-      aria-label={`Loading ${label}`}
+      label={`${loadingLabel} ${label}`}
+      busy
     >
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
@@ -118,8 +122,8 @@ function TabScreenFallback({ label }: { label: string }) {
         </div>
         <div className="h-20 gh-skeleton rounded-2xl bg-muted/40" />
       </div>
-      <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">Loading {label}…</p>
-    </div>
+      <p className="pt-2 text-center text-[11px] font-semibold text-muted-foreground">{loadingLabel} {label}…</p>
+    </AccessibleStatus>
   )
 }
 
@@ -242,27 +246,40 @@ function scrollActiveTabToTop() {
  * Hysteresis + near-bottom ignore prevents end-of-list vibration loops.
  */
 function onTabScrollHideNav(e: UIEvent<HTMLElement>) {
-  const el = e.currentTarget
-  const y = el.scrollTop
+  // Scroll events do not bubble, but onScrollCapture can observe nested feed scrollers.
+  // currentTarget is often only the non-scrolling tab wrapper; resolve the real scroll owner.
+  const target = e.target instanceof HTMLElement ? e.target : null
+  const candidates: HTMLElement[] = []
+  let node: HTMLElement | null = target
+  while (node && node !== e.currentTarget) {
+    candidates.push(node)
+    node = node.parentElement
+  }
+  candidates.push(e.currentTarget)
+  const el = candidates.find((candidate) => {
+    const overflowY = typeof window !== "undefined" ? window.getComputedStyle(candidate).overflowY : ""
+    return candidate.scrollHeight > candidate.clientHeight + 2 &&
+      (overflowY === "auto" || overflowY === "scroll" || candidate.classList.contains("gh-premium-feed-scroll") || candidate.classList.contains("gh-scroll-root"))
+  })
+  if (!el) return
+  const y = Math.max(0, el.scrollTop)
   const prev = Number(el.dataset.scrollY || 0)
   const delta = y - prev
   el.dataset.scrollY = String(y)
-  if (Math.abs(delta) < 14) return
-  const maxScroll = el.scrollHeight - el.clientHeight
-  // Near bottom: always show nav — never toggle (stops bounce feedback)
-  if (maxScroll > 0 && y >= maxScroll - 96) {
-    try {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-    } catch { /* */ }
+  if (Math.abs(delta) < 12) return
+  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+  // At the true end of a list, reveal navigation and avoid rubber-band oscillation.
+  if (maxScroll > 0 && y >= maxScroll - 72) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
     return
   }
-  try {
-    if (delta > 0 && y > 72) {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true } }))
-    } else if (delta < -10) {
-      window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
-    }
-  } catch { /* */ }
+  // Finger swipe up (content moves upward / scrollTop increases): hide chrome.
+  // Finger swipe down (content moves downward / scrollTop decreases): restore chrome.
+  if (delta > 0 && y > 48) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: true } }))
+  } else if (delta < 0) {
+    window.dispatchEvent(new CustomEvent("ghc:bottom-nav-visibility", { detail: { hidden: false } }))
+  }
 }
 
 export function GHConnectApp() {
@@ -304,12 +321,32 @@ export function GHConnectApp() {
     }
   }, [])
 
+  const regional = useRegionalContext()
   const { ready, tab, setTab, toasts, addToast, matchCelebration, dismissMatchCelebration, startConversation } = useGHCShell()
   const { profile } = useGHCProfile()
   const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
   const { conversations } = useGHCMessaging()
   const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
+
+  // After session is server-verified, soft-refresh primary sections once so login is not stale.
+  useEffect(() => {
+    if (!authLifecycle?.serverVerified) return
+    const sections: SectionRefreshId[] = [
+      "feed",
+      "messages",
+      "communities",
+      "marketplace",
+      "wallet",
+      "notifications",
+      "profile",
+      "rewards",
+    ]
+    for (const section of sections) {
+      emitSectionRefresh(section, { reason: "post-login" }, { minIntervalMs: 0 })
+    }
+  }, [authLifecycle?.serverVerified, authLifecycle?.ghUserId])
+
   const [connectionRequestBadge, setConnectionRequestBadge] = useState<number>(0)
   const [socialAttentionCount, setSocialAttentionCount] = useState(0)
   const [economyAttentionCount, setEconomyAttentionCount] = useState(0)
@@ -324,6 +361,16 @@ export function GHConnectApp() {
   // Section attention indicators use authenticated server counts plus local in-app
   // alerts. Polling and event-driven refresh cover new activity without requiring a tap.
   const refreshSectionAttention = useCallback(async () => {
+    // Phase 5: fail closed — never leave sticky red dots when the server denies or errors.
+    try {
+      if (!authLifecycle?.serverVerified) {
+        setSocialAttentionCount(0)
+        setEconomyAttentionCount(0)
+        return
+      }
+    } catch {
+      /* authLifecycle may be undefined during boot */
+    }
     const [socialResponse, economyResponse] = await Promise.all([
       fetch("/api/social/notifications?countOnly=1", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
       fetch("/api/economy/notifications/unread-count", { credentials: "include", cache: "no-store", headers: { Accept: "application/json" } }).catch(() => null),
@@ -332,9 +379,17 @@ export function GHConnectApp() {
       socialResponse?.json().catch(() => ({})) || {},
       economyResponse?.json().catch(() => ({})) || {},
     ]) as [{ ok?: boolean; unreadCount?: number }, { ok?: boolean; count?: number }]
-    if (social.ok && typeof social.unreadCount === "number") setSocialAttentionCount(Math.max(0, social.unreadCount))
-    if (economy.ok && typeof economy.count === "number") setEconomyAttentionCount(Math.max(0, economy.count))
-  }, [])
+    if (socialResponse && socialResponse.ok && social.ok && typeof social.unreadCount === "number") {
+      setSocialAttentionCount(Math.max(0, Math.min(99, social.unreadCount)))
+    } else if (socialResponse && (socialResponse.status === 401 || socialResponse.status === 403)) {
+      setSocialAttentionCount(0)
+    }
+    if (economyResponse && economyResponse.ok && economy.ok && typeof economy.count === "number") {
+      setEconomyAttentionCount(Math.max(0, Math.min(99, economy.count)))
+    } else if (economyResponse && (economyResponse.status === 401 || economyResponse.status === 403)) {
+      setEconomyAttentionCount(0)
+    }
+  }, [authLifecycle?.serverVerified])
 
   // Invite links: capture ?ref= and attribute once session is ready
   useEffect(() => {
@@ -355,6 +410,10 @@ export function GHConnectApp() {
     void refreshSectionAttention()
     const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
     const onAttention = () => void refreshSectionAttention()
+    const onNotificationsRead = () => {
+      setSocialAttentionCount(0)
+      void refreshSectionAttention()
+    }
     const onVisible = () => { if (document.visibilityState === "visible") void refreshSectionAttention() }
     window.addEventListener("focus", onAttention)
     window.addEventListener("online", onAttention)
@@ -364,7 +423,7 @@ export function GHConnectApp() {
     window.addEventListener("ghc:post-engagement", onAttention)
     window.addEventListener("ghc:daily-reward-claimed", onAttention)
     window.addEventListener("ghc:community-updated", onAttention)
-    window.addEventListener("ghc:notifications-read", onAttention)
+    window.addEventListener("ghc:notifications-read", onNotificationsRead)
     document.addEventListener("visibilitychange", onVisible)
     return () => {
       window.clearInterval(timer)
@@ -376,7 +435,7 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:post-engagement", onAttention)
       window.removeEventListener("ghc:daily-reward-claimed", onAttention)
       window.removeEventListener("ghc:community-updated", onAttention)
-      window.removeEventListener("ghc:notifications-read", onAttention)
+      window.removeEventListener("ghc:notifications-read", onNotificationsRead)
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [refreshSectionAttention])
@@ -1152,8 +1211,8 @@ export function GHConnectApp() {
     <>
     {themeLayer}
     <ConsentGate>
-    <SkipToContent />
-    <AccessibilityAnnouncer label={NAV_ITEMS.find((item) => item.id === activeTab)?.label || "GreenHaven"} />
+    <SkipToContent locale={regional.locale} />
+    <AccessibilityAnnouncer label={getShellMessage((NAV_ITEMS.find((item) => item.id === activeTab)?.id || "home") as "home" | "messages" | "communities" | "cart" | "profile", regional.locale) || "GreenHaven"} locale={regional.locale} />
     <GlobalHotkeys />
     <div
       className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full"
@@ -1167,7 +1226,7 @@ export function GHConnectApp() {
       <main
         id="ghc-main-content"
         tabIndex={-1}
-        aria-label="GreenHaven main content"
+        aria-label={getShellMessage("mainContent", regional.locale)}
         className="relative z-0 min-h-0 flex-1 overflow-hidden bg-background"
         onPointerDown={() => {
           if (bottomNavHidden) setBottomNavHidden(false)
@@ -1266,18 +1325,23 @@ export function GHConnectApp() {
         className={`gh-bottom-nav relative z-40 flex w-full shrink-0 items-end border-t border-border/50 bg-card/95 backdrop-blur-md px-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] pt-1 transition-[max-height,opacity,transform] duration-200 ease-out sm:px-2 ${
           bottomNavHidden || showCreateHub ? "max-h-0 overflow-hidden opacity-0 pointer-events-none border-transparent" : "max-h-[4.75rem] opacity-100"
         }`}
-        aria-label="Main navigation"
+        aria-label={getShellMessage("mainNavigation", regional.locale)}
         role="navigation"
         aria-hidden={bottomNavHidden || showCreateHub}
         inert={bottomNavHidden || showCreateHub}
         style={{
-          minHeight: "var(--gh-bottom-nav-height)",
+          minHeight: bottomNavHidden || showCreateHub ? 0 : "var(--gh-bottom-nav-height)",
+          height: bottomNavHidden || showCreateHub ? 0 : undefined,
+          flexBasis: bottomNavHidden || showCreateHub ? 0 : undefined,
+          paddingTop: bottomNavHidden || showCreateHub ? 0 : undefined,
+          paddingBottom: bottomNavHidden || showCreateHub ? 0 : undefined,
           /* Crisp edge — no soft gradient “shadow band” above the bar */
           boxShadow: "none",
         }}
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
-          {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
+          {NAV_ITEMS.map(({ id, icon: Icon }) => {
+            const localizedLabel = getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
             const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
@@ -1305,7 +1369,12 @@ export function GHConnectApp() {
                   if (isActive) {
                     if (id === "home" && socialAttentionCount > 0) {
                       try {
-                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "connections" } }))
+                        window.dispatchEvent(new CustomEvent("ghc:open-notifications", { detail: { filter: "all" } }))
+                        emitSectionRefresh("feed", { reason: "attention" })
+                      } catch { /* */ }
+                    } else if (id === "messages" && unreadMessageCount > 0) {
+                      try {
+                        emitSectionRefresh("messages", { reason: "attention" })
                       } catch { /* */ }
                     }
                     scrollActiveTabToTop()
@@ -1318,12 +1387,17 @@ export function GHConnectApp() {
                   }
                   if (isPrimaryTab(id)) {
                     startTransition(() => setTab(id))
+                    if (id === "home") {
+                      try {
+                        emitSectionRefresh("feed", { reason: "tab" })
+                      } catch { /* */ }
+                    }
                   }
                 }}
                 className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-safe:active:scale-95 ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
-                aria-label={isActive ? `${label}, current tab` : `Go to ${label}`}
+                aria-label={isActive ? `${localizedLabel}, ${getShellMessage("currentTab", regional.locale)}` : `${getShellMessage("goTo", regional.locale)} ${localizedLabel}`}
                 aria-current={isActive ? "page" : undefined}
               >
                 <span
@@ -1356,14 +1430,30 @@ export function GHConnectApp() {
                       </span>
                     ) : null}
                   </span>
-                    {((id === "home" && socialAttentionCount > 0) ||
-                      (id === "messages" && unreadMessageCount > 0) ||
-                      (id === "communities" && unreadGroupCount > 0) ||
-                      (id === "profile" && economyAttentionCount > 0)) ? (
+                    {((id === "home" && socialAttentionCount > 0 && tab !== "home") ||
+                      (id === "messages" && unreadMessageCount > 0 && tab !== "messages") ||
+                      (id === "communities" && unreadGroupCount > 0 && tab !== "communities") ||
+                      (id === "profile" && economyAttentionCount > 0 && tab !== "profile")) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
-                        aria-label="New activity"
-                        title="New activity — open this section to review"
+                        aria-label={
+                          id === "home"
+                            ? `${socialAttentionCount} unread notification${socialAttentionCount === 1 ? "" : "s"} — open Home again for inbox`
+                            : id === "messages"
+                              ? `${unreadMessageCount} unread message${unreadMessageCount === 1 ? "" : "s"}`
+                              : id === "communities"
+                                ? `${unreadGroupCount} community update${unreadGroupCount === 1 ? "" : "s"}`
+                                : `${economyAttentionCount} wallet or rewards update${economyAttentionCount === 1 ? "" : "s"}`
+                        }
+                        title={
+                          id === "home"
+                            ? "Unread notifications — tap Home again to open the inbox"
+                            : id === "messages"
+                              ? "Unread messages"
+                              : id === "communities"
+                                ? "Community activity"
+                                : "Wallet or rewards activity — open Profile → Wallet / Rewards"
+                        }
                       />
                     ) : null}
                   </span>
@@ -1373,7 +1463,7 @@ export function GHConnectApp() {
                     isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  {label}
+                  {localizedLabel}
                 </span>
               </button>
             )
@@ -1488,7 +1578,7 @@ export function GHConnectApp() {
       <ProfileStorySection creatorHost />
 
       <div
-        className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[var(--gh-content-max,28rem)] flex-col items-center gap-2 px-3 pb-1"
+        className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[min(24rem,calc(100vw-1.25rem))] flex-col items-center gap-2 px-3 pb-2"
         aria-live="polite"
       >
         {visibleToasts.map((toast) => (

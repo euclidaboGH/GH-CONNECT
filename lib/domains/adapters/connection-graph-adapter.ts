@@ -109,12 +109,13 @@ export function eligibleConnectionActions(state: ConnectionUiState): ConnectionC
     case "outgoing_pending":
       return ["view_profile"]
     case "matched_opportunity":
-      return ["like", "connect", "view_profile", "message"]
+      // Message / Connect primary; Like is interest only (not post-like)
+      return ["message", "connect", "like", "view_profile"]
     case "suggested":
     case "none":
     case "declined":
-      // like/pass = matching interest; connect = relationship request
-      return ["like", "pass", "connect", "view_profile"]
+      // Connect primary; Like = match interest only; Pass dismisses
+      return ["connect", "like", "pass", "view_profile"]
     default:
       return ["view_profile"]
   }

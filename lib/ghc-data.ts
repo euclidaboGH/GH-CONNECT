@@ -77,6 +77,10 @@ export function sanitizeStory(value: unknown): StoryItem | null {
     expiresAt: typeof raw.expiresAt === "number" && Number.isFinite(raw.expiresAt) ? raw.expiresAt : undefined,
     archivedAt: typeof raw.archivedAt === "number" && Number.isFinite(raw.archivedAt) ? raw.archivedAt : undefined,
     highlightedAt: typeof raw.highlightedAt === "number" && Number.isFinite(raw.highlightedAt) ? raw.highlightedAt : undefined,
+    viewerHasViewed: raw.viewerHasViewed === true,
+    reactionCounts: raw.reactionCounts && typeof raw.reactionCounts === "object" ? Object.fromEntries(Object.entries(raw.reactionCounts).filter(([key, count]) => key.length <= 8 && typeof count === "number" && Number.isFinite(count) && count >= 0).slice(0, 8)) : undefined,
+    viewerReactions: Array.isArray(raw.viewerReactions) ? raw.viewerReactions.filter((value): value is string => typeof value === "string" && ["💚", "🔥", "👏", "😂", "😍"].includes(value)).slice(0, 5) : undefined,
+    reactionCount: typeof raw.reactionCount === "number" && Number.isFinite(raw.reactionCount) && raw.reactionCount >= 0 ? raw.reactionCount : undefined,
     createdAt,
   }
 }

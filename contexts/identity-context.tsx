@@ -16,12 +16,15 @@ import {
   type AccountStatus,
 } from "@/lib/identity/identity-service"
 import { createIdentitySeam } from "@/lib/domains/adapters/ghc-context-seams"
+import { setDisplayMediaViewer } from "@/lib/media/resolve-display-url"
 import type { IdentitySnapshot } from "@/lib/domains/contracts/identity"
 import type { DomainResult } from "@/lib/domains/contracts/types"
 
 export interface IdentityContextValue {
   identity: SessionIdentity
   getCurrentUserId: () => string
+  matchesUserId: (candidate: string | null | undefined) => boolean
+  getIdentityAliases: () => string[]
   getPiUserId: () => string | null
   getUsername: () => string | null
   getAuthState: () => AuthState
@@ -46,6 +49,10 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     return IdentityService.subscribe((next) => setIdentity(next))
   }, [])
 
+  useEffect(() => {
+    setDisplayMediaViewer(identity.userId, identity.authState)
+  }, [identity.userId, identity.authState])
+
   const value = useMemo<IdentityContextValue>(
     () => {
       const identitySeam = createIdentitySeam(() => ({
@@ -56,6 +63,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       return {
         identity,
         getCurrentUserId: () => IdentityService.getCurrentUserId(),
+        matchesUserId: (candidate) => IdentityService.matchesUserId(candidate),
+        getIdentityAliases: () => IdentityService.getIdentityAliases(),
         getPiUserId: () => IdentityService.getPiUserId(),
         getUsername: () => IdentityService.getUsername(),
         getAuthState: () => IdentityService.getAuthState(),
@@ -82,6 +91,8 @@ export function useIdentity(): IdentityContextValue {
     return {
       identity: IdentityService.getIdentity(),
       getCurrentUserId: () => IdentityService.getCurrentUserId(),
+      matchesUserId: (candidate) => IdentityService.matchesUserId(candidate),
+      getIdentityAliases: () => IdentityService.getIdentityAliases(),
       getPiUserId: () => IdentityService.getPiUserId(),
       getUsername: () => IdentityService.getUsername(),
       getAuthState: () => IdentityService.getAuthState(),

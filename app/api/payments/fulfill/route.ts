@@ -100,6 +100,7 @@ export async function POST(request: Request) {
           intent: {
             id: intent.id,
             userId: intent.userId,
+            provider: intent.provider,
             purpose: intent.purpose,
             status: intent.status,
             amount: intent.amount,
@@ -116,6 +117,14 @@ export async function POST(request: Request) {
         }
       } catch {
         /* */
+      }
+      if (intent.purpose === "membership" && !membershipGrant?.granted) {
+        return NextResponse.json({
+          ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
+          error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
+          message: "Pi payment is fulfilled, but membership is not yet confirmed. Retry recovery; do not pay again.",
+          paymentId: intent.providerPaymentId, intentId: intent.id,
+        }, { status: 503, headers: { "Cache-Control": "no-store" } })
       }
       return NextResponse.json({
         ok: true,
@@ -178,6 +187,7 @@ export async function POST(request: Request) {
         intent: {
           id: finalIntent.id,
           userId: finalIntent.userId,
+          provider: finalIntent.provider,
           purpose: finalIntent.purpose,
           status: finalIntent.status || "FULFILLED",
           amount: finalIntent.amount,
@@ -210,6 +220,15 @@ export async function POST(request: Request) {
       }
     }
 
+
+    if (finalIntent.purpose === "membership" && !membershipGrant?.granted) {
+      return NextResponse.json({
+        ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
+        error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
+        message: "Pi payment is fulfilled, but membership is not yet confirmed. Retry recovery; do not pay again.",
+        paymentId: finalIntent.providerPaymentId, intentId: finalIntent.id,
+      }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
 
     // Phase 3: governed GHC pack credit when product is a pack
     let ghcPackGrant: {

@@ -3,6 +3,7 @@
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 
 import { IdentityService } from "@/lib/identity/identity-service"
+import { isSameIdentity, idListIncludes } from "@/lib/identity/identity-match"
 import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/domains/community-persistence"
 
 /**
@@ -24,6 +25,9 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { useGHCMessaging } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { navigateTo } from "@/lib/navigation/navigate"
@@ -275,6 +279,9 @@ function isCommunityConv(c: {
 }
 
 export function CommunitiesScreen() {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
+  const workflow = useCallback((key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale), [regional.locale])
   const ctx = useGHCMessaging() as any as any as any
   const {
     conversations: conversationsRaw,
@@ -308,7 +315,7 @@ export function CommunitiesScreen() {
     () => (Array.isArray(conversationsRaw) ? conversationsRaw : []),
     [conversationsRaw],
   )
-  const [directory, setDirectory] = useState<DirectoryTab>("discover")
+  const [directory, setDirectory] = useState<DirectoryTab>("my")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"recent" | "active" | "unread" | "name">("recent")
   const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "request" | "invite">("all")
@@ -339,12 +346,22 @@ export function CommunitiesScreen() {
   const [joinError, setJoinError] = useState<string | null>(null)
   const [localJoined, setLocalJoined] = useState<string[]>(() => {
     if (typeof window === "undefined") return []
-    if (!communityLocalCacheAllowed()) return []
     try {
-      const raw = window.localStorage.getItem("ghc.community.joinedIds")
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as string[]
-      return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+      // Phase 3: session markers always; durable local only when demo policy allows.
+      const sessionRaw = window.sessionStorage.getItem("ghc.community.joinedIds.session")
+      const durableRaw = communityLocalCacheAllowed()
+        ? window.localStorage.getItem("ghc.community.joinedIds")
+        : null
+      const parse = (raw: string | null): string[] => {
+        if (!raw) return []
+        try {
+          const parsed = JSON.parse(raw) as string[]
+          return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+        } catch {
+          return []
+        }
+      }
+      return Array.from(new Set([...parse(sessionRaw), ...parse(durableRaw)]))
     } catch {
       return []
     }
@@ -383,6 +400,15 @@ export function CommunitiesScreen() {
     let cancelled = false
     setDirectoryLoading(true)
     setDirectoryError(null)
+    const hardTimeout =
+      typeof window !== "undefined"
+        ? window.setTimeout(() => {
+            if (!cancelled) {
+              setDirectoryLoading(false)
+              setDirectoryError((prev) => prev || "Directory is taking longer than expected. Pull to retry.")
+            }
+          }, 15_000)
+        : null
     void import("@/lib/social/client")
       .then(({ socialListCommunities }) => socialListCommunities(50))
       .then((res) => {
@@ -397,11 +423,24 @@ export function CommunitiesScreen() {
           const createdBy = String(r.createdBy || r.created_by || "").trim()
           const cover = String(r.coverImage || r.cover_image || r.photo || "").trim()
           const memberCount = Number(r.memberCount || r.member_count || 0) || 0
-          const membersFromRemote = Array.isArray(r.members)
+          const viewerIsMember = r.viewerIsMember === true || r.viewer_is_member === true
+          const viewerRole = String(r.viewerRole || r.viewer_role || (viewerIsMember ? "member" : "")).trim()
+          let membersFromRemote = Array.isArray(r.members)
             ? (r.members as unknown[]).map(String).filter(Boolean)
             : createdBy
               ? [createdBy]
               : []
+          const groupRoles: Record<string, string> =
+            r.groupRoles && typeof r.groupRoles === "object"
+              ? { ...(r.groupRoles as Record<string, string>) }
+              : {}
+          // Phase 3: trust server viewerIsMember enrichment for My tab.
+          const meHint = IdentityService.getCurrentUserId() || ""
+          if (viewerIsMember && meHint) {
+            if (!membersFromRemote.includes(meHint)) membersFromRemote = [...membersFromRemote, meHint]
+            if (!groupRoles[meHint]) groupRoles[meHint] = viewerRole || "member"
+          }
+          const resolvedCount = Math.max(memberCount, membersFromRemote.length, viewerIsMember ? 1 : 0)
           rows.push({
             id,
             conversationType: "group",
@@ -419,7 +458,8 @@ export function CommunitiesScreen() {
                   ? r.created_at
                   : Date.parse(String(r.createdAt || r.created_at || "")) || 0,
             members: membersFromRemote,
-            memberCount: memberCount || membersFromRemote.length || undefined,
+            memberCount: resolvedCount || undefined,
+            groupRoles: Object.keys(groupRoles).length ? groupRoles : undefined,
             createdBy,
             description: r.description != null ? String(r.description) : undefined,
             privacy: r.privacy != null ? String(r.privacy) : "public",
@@ -434,6 +474,26 @@ export function CommunitiesScreen() {
         setRemoteDirectory(rows)
         setDirectoryDurable(Boolean(res.durable))
         setDirectoryLoading(false)
+        if (hardTimeout != null) window.clearTimeout(hardTimeout)
+        // Seed session membership markers so My (n) matches the list.
+        try {
+          const me = IdentityService.getCurrentUserId() || ""
+          if (me) {
+            const owned = rows
+              .filter((c) => {
+                if (c.createdBy && (c.createdBy === me || isSameIdentity(c.createdBy))) return true
+                if (Array.isArray(c.members) && idListIncludes(c.members, me)) return true
+                if (c.groupRoles && (c.groupRoles[me] || Object.keys(c.groupRoles).some((k) => isSameIdentity(k)))) return true
+                return false
+              })
+              .map((c) => c.id)
+            if (owned.length) {
+              setLocalJoined((prev) => Array.from(new Set([...(prev || []), ...owned])))
+            }
+          }
+        } catch {
+          /* identity unavailable */
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -445,10 +505,16 @@ export function CommunitiesScreen() {
       })
     return () => {
       cancelled = true
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
     }
   }, [directoryTick])
 
   useEffect(() => {
+    try {
+      window.sessionStorage.setItem("ghc.community.joinedIds.session", JSON.stringify(localJoined))
+    } catch {
+      /* */
+    }
     if (!communityLocalCacheAllowed()) return
     try {
       window.localStorage.setItem("ghc.community.joinedIds", JSON.stringify(localJoined))
@@ -488,8 +554,9 @@ export function CommunitiesScreen() {
   useEffect(() => {
     const onRefresh = (e: Event) => {
       const id = String((e as CustomEvent).detail?.communityId || "").trim()
+      const detail = (e as CustomEvent<{ communityId?: string; skipHubRemount?: boolean }>).detail
       if (id && id !== selectedCommunityId) return
-      setHubKey((k) => k + 1)
+      if (!detail?.skipHubRemount) setHubKey((k) => k + 1)
       setDirectoryLoading(true)
       // The directory loader is intentionally mounted once; this event only
       // forces the selected hub to re-read its durable parent snapshot.
@@ -591,10 +658,15 @@ export function CommunitiesScreen() {
   const visibleGroups = useMemo(() => {
     const pool = directory === "my" ? myCommunities : discoverCommunities
     const q = searchQuery.trim().toLowerCase()
+    // Phase 1 honesty: "My" lists membership truth — do not hide joined spaces behind
+    // Discover-oriented privacy/category chips. Search still applies so users can find
+    // among many memberships. Discover keeps full filters.
     return pool
       .filter((c) => {
-        if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
-        if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
+        if (directory === "discover") {
+          if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
+          if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
+        }
         if (!q) return true
         const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""} ${c.privacy || ""}`.toLowerCase()
         return hay.includes(q)
@@ -697,6 +769,10 @@ export function CommunitiesScreen() {
       if (ok) {
         // Domain join / request succeeded. Toast authority is in joinCommunity
         // (Joined vs Request sent vs device-only) — never blanket "Joined" for pending.
+        try {
+          // Prefer My so the community is visible without hunting the Discover list.
+          setDirectory("my")
+        } catch { /* */ }
         if (communityLocalCacheAllowed()) {
           const meId = IdentityService.getCurrentUserId()
           const after = resolveMembershipState(
@@ -786,20 +862,20 @@ export function CommunitiesScreen() {
     communityId: string,
     body: string,
     kind?: "text" | "question" | "resource"
-  ) => {
+  ): Promise<boolean> => {
     if (createBoardPost) {
       const ok = await createBoardPost(communityId, body, kind)
       if (ok) {
         setHubKey((k) => k + 1)
-        return
+        return true
       }
       if (!allowLocalBoardFallback()) {
         addToast("Could not post to the board. Please try again.", "error")
-        return
+        return false
       }
     } else if (!allowLocalBoardFallback()) {
       addToast("Board posting is unavailable right now.", "error")
-      return
+      return false
     }
     // Studio/demo only — Class D local board cache (not production authority)
     const post = {
@@ -820,6 +896,7 @@ export function CommunitiesScreen() {
     }))
     addToast("Posted to board (studio cache)", "success")
     setHubKey((k) => k + 1)
+    return true
   }
 
   if (selected) {
@@ -828,9 +905,10 @@ export function CommunitiesScreen() {
       isJoined(selected) ||
       selected.createdBy === me ||
       selected.createdBy === "current-user" ||
+      isSameIdentity(selected.createdBy) ||
       Boolean(selected.groupRoles?.[me]) ||
       Boolean(selected.groupRoles?.["current-user"]) ||
-      (selected.members || []).includes(me) ||
+      idListIncludes(selected.members || [], me) ||
       (selected.members || []).includes("current-user")
     const rules = normalizeRules(selected.rules)
     const rawRole =
@@ -1079,9 +1157,9 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven communities">
+    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col overscroll-y-contain bg-background" role="region" aria-label={msg("communityTitle")}>
       <CollapsingAppHeader
-        title="Communities"
+        title={msg("communityTitle")}
         compact={headerCompact}
         hidden={headerHidden}
         leading={
@@ -1116,10 +1194,10 @@ export function CommunitiesScreen() {
               type="button"
               onClick={openCreateCommunity}
               className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
-              aria-label="Create community"
+              aria-label={msg("create") + " " + msg("communityTitle")}
             >
               <Plus size={16} strokeWidth={2.5} />
-              Create
+              {msg("create")}
             </button>
           </div>
         }
@@ -1134,8 +1212,8 @@ export function CommunitiesScreen() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, city, topic…"
-                aria-label="Search communities"
+                placeholder={msg("searchCommunity")}
+                aria-label={msg("searchCommunity")}
                 className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
@@ -1167,7 +1245,7 @@ export function CommunitiesScreen() {
                 }`}
               >
                 <Users size={14} aria-hidden />
-                My ({myCommunities.length})
+                {msg("myCommunities")} ({myCommunities.length})
               </button>
               <button
                 type="button"
@@ -1181,55 +1259,75 @@ export function CommunitiesScreen() {
                 }`}
               >
                 <Compass size={14} aria-hidden />
-                Discover ({discoverCommunities.length})
+                {msg("discover")} ({discoverCommunities.length})
               </button>
             </div>
 
-            <div className="mt-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setCategoryFilter(cat)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
-                    categoryFilter === cat
-                      ? "bg-[var(--gh-green)] text-white"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  }`}
-                >
-                  {cat === "all" ? "All topics" : cat}
-                </button>
-              ))}
-              <label className="ml-auto shrink-0 text-[11px] text-muted-foreground">
-                <span className="sr-only">Sort</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                  className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground"
-                >
-                  <option value="recent">Recent</option>
-                  <option value="unread">Needs attention</option>
-                  <option value="active">Most members</option>
-                  <option value="name">Name</option>
-                </select>
-              </label>
-            </div>
-            <div className="mt-1.5 flex items-center gap-2 overflow-x-auto scrollbar-hide" aria-label="Access filter">
-              {(["all", "public", "request", "invite"] as CommunityPrivacyFilter[]).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPrivacyFilter(id)}
-                  className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold transition ${
-                    privacyFilter === id
-                      ? "bg-sky-700 text-white"
-                      : "border border-border/70 bg-card text-muted-foreground"
-                  }`}
-                >
-                  {privacyFilterLabel(id)}
-                </button>
-              ))}
-            </div>
+            {directory === "discover" ? (
+              <>
+                <div className="mt-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoryFilter(cat)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                        categoryFilter === cat
+                          ? "bg-[var(--gh-green)] text-white"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {cat === "all" ? msg("allTopics") : cat}
+                    </button>
+                  ))}
+                  <label className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                    <span className="sr-only">Sort</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                      className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground"
+                    >
+                      <option value="recent">Recent</option>
+                      <option value="unread">Needs attention</option>
+                      <option value="active">Most members</option>
+                      <option value="name">Name</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2 overflow-x-auto scrollbar-hide" aria-label="Access filter">
+                  {(["all", "public", "request", "invite"] as CommunityPrivacyFilter[]).map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setPrivacyFilter(id)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold transition ${
+                        privacyFilter === id
+                          ? "bg-sky-700 text-white"
+                          : "border border-border/70 bg-card text-muted-foreground"
+                      }`}
+                    >
+                      {privacyFilterLabel(id)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 flex items-center justify-end">
+                <label className="shrink-0 text-[11px] text-muted-foreground">
+                  <span className="sr-only">Sort</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                    className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground"
+                  >
+                    <option value="recent">Recent</option>
+                    <option value="unread">Needs attention</option>
+                    <option value="active">Most members</option>
+                    <option value="name">Name</option>
+                  </select>
+                </label>
+              </div>
+            )}
           </>
         }
       />
@@ -1286,7 +1384,7 @@ export function CommunitiesScreen() {
         </div>
       ) : null}
       <div
-        className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
+        className="gh-scroll-stable min-h-0 flex-1 overflow-y-auto overscroll-y-contain scrollbar-hide" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
         onScroll={onHeaderScroll}
       >
         <div className="mx-auto max-w-2xl space-y-3 px-3 pb-8 pt-3 sm:px-5" role="region" aria-label="Community directory">
@@ -1323,12 +1421,10 @@ export function CommunitiesScreen() {
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-teal-950/20">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-900 dark:text-emerald-100">
               <Sparkles size={14} aria-hidden />
-              Community hub
+              {workflow("board")}
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/80 dark:text-emerald-200/70">
-              <span className="font-semibold">Board</span> is posts & events ·{" "}
-              <span className="font-semibold">Chat</span> is live talk for members · Private DMs stay
-              in Messages.
+              {workflow("boardPostsEvents")}
             </p>
           </div>
 
@@ -1406,15 +1502,27 @@ export function CommunitiesScreen() {
             </p>
           ) : null}
 
-          {visibleGroups.length === 0 ? (
+          {!directoryLoading && visibleGroups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center">
               <p className="text-[14px] font-bold text-foreground">
-                {directory === "my" ? "No communities yet" : "No communities match"}
+                {directory === "my"
+                  ? myCommunities.length === 0
+                    ? "No communities yet"
+                    : "No communities match your search"
+                  : discoverCommunities.length === 0
+                    ? myCommunities.length > 0
+                      ? "You're already in every community we found"
+                      : "No communities to discover yet"
+                    : "No communities match"}
               </p>
               <p className="mt-1 text-[12px] text-muted-foreground">
                 {directory === "my"
-                  ? "Join a space from Discover, or create one for your city or interest."
-                  : "Try another search or category."}
+                  ? myCommunities.length === 0
+                    ? "Join a space from Discover, or create one for your city or interest."
+                    : "Clear search to see all of your communities."
+                  : discoverCommunities.length === 0
+                    ? "Create a new space, or open My communities for spaces you already joined."
+                    : "Try another search or category."}
               </p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {directory === "my" ? (
@@ -1424,6 +1532,14 @@ export function CommunitiesScreen() {
                     className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Discover communities
+                  </button>
+                ) : myCommunities.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setDirectory("my")}
+                    className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
+                  >
+                    Open My communities ({myCommunities.length})
                   </button>
                 ) : null}
                 <button
@@ -1478,6 +1594,13 @@ export function CommunitiesScreen() {
                   coverImage={community.groupPhoto || community.photo}
                   groupAvatar={community.participantPhoto || community.groupPhoto}
                   onClick={() => setSelectedCommunityId(community.id)}
+                  joinLabel={
+                    ["invite-only", "invite", "private", "approval", "request"].includes(
+                      String(community.privacy || "").toLowerCase(),
+                    )
+                      ? "Request to join"
+                      : "Join"
+                  }
                   onJoin={!joined ? () => setJoinGate(community) : undefined}
                 />
               )
@@ -1490,15 +1613,25 @@ export function CommunitiesScreen() {
               description={
                 searchQuery
                   ? `No results for “${searchQuery}”. Try another keyword — or create a community.`
-                  : "Board = posts & events · Chat = member conversation."
+                  : privacyFilter !== "all" || categoryFilter !== "all"
+                    ? "No communities match these filters. Clear filters or create a new community."
+                    : "Board = posts & events · Chat = member conversation. Create one if nothing fits."
               }
-              action={
-                searchQuery
+              action={{ label: "Create community", onClick: openCreateCommunity }}
+              secondaryAction={
+                searchQuery || privacyFilter !== "all" || categoryFilter !== "all"
                   ? {
-                      label: "Create community",
-                      onClick: openCreateCommunity,
+                      label: "Clear filters",
+                      onClick: () => {
+                        setSearchQuery("")
+                        setPrivacyFilter("all")
+                        setCategoryFilter("all")
+                      },
                     }
-                  : { label: "Create community", onClick: openCreateCommunity }
+                  : {
+                      label: "Retry directory",
+                      onClick: () => setDirectoryTick((n) => n + 1),
+                    }
               }
             />
           ) : null}

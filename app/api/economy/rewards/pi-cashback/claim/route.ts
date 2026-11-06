@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       await rpc(base, key, "gh_pi_a2u_release_sequence_lease", { p_lease_token: leaseToken, p_request_id: requestId }).catch(() => null)
       return reply({ ok: false, error: "INVALID_PAYOUT_REQUEST_ID" }, 503)
     }
-    if (begin.alreadyPaid || begin.status === "paid") return reply({ ok: true, idempotent: true, requestId, status: "paid", paid: true, amount: Number(begin.amount), currency: "PI", network: "Pi Testnet", txid: begin.txid || undefined })
+    const alreadyPaid = begin.alreadyPaid === true || begin.status === "paid"
     const amount = Number(begin.amount)
     if (begin.network !== "Pi Testnet" || begin.recipientUid !== recipientUid || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 1e7 - Math.round(amount * 1e7)) > 1e-7) {
       await rpc(base, key, "gh_pi_a2u_release_sequence_lease", { p_lease_token: leaseToken, p_request_id: requestId }).catch(() => null)
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     // Phase 3: mirror cashback entitlement into unified earnings ledger (idempotent).
     const amountAtomic = Number(begin.amountAtomic)
     const atomic = Number.isFinite(amountAtomic) && amountAtomic > 0 ? Math.round(amountAtomic) : piToAtomic(amount)
-    await postEarningsCredit({
+    const ledgerCredit = await postEarningsCredit({
       userId: auth.userId,
       amountAtomic: atomic,
       sourceKind: "cashback",
@@ -104,14 +104,48 @@ export async function POST(request: Request) {
       sourceTable: "gh_pi_cashback_a2u_payouts",
       sourceId: requestId,
       reason: "cashback_payout_begin",
-    }).catch(() => null)
-    await reserveEarningsForPayout({
+    })
+    if (!ledgerCredit.ok) {
+      return reply({
+        ok: false,
+        error: "EARNINGS_LEDGER_CREDIT_REQUIRED",
+        ledgerError: ledgerCredit.error || "EARNINGS_LEDGER_UNAVAILABLE",
+        retryable: true,
+        requestId,
+        transferSubmitted: false,
+      }, 503)
+    }
+    const ledgerReservation = await reserveEarningsForPayout({
       userId: auth.userId,
       amountAtomic: atomic,
       uniqueRef: `cashback_reserve:${requestId}`,
       payoutRequestId: requestId,
       reason: "cashback_a2u_reservation",
-    }).catch(() => null)
+    })
+    if (!ledgerReservation.ok) {
+      return reply({
+        ok: false,
+        error: "EARNINGS_LEDGER_RESERVATION_REQUIRED",
+        ledgerError: ledgerReservation.error || "EARNINGS_LEDGER_UNAVAILABLE",
+        retryable: true,
+        requestId,
+        transferSubmitted: false,
+      }, 503)
+    }
+
+    if (alreadyPaid) {
+      const recoveredSettlement = await settleEarningsPayout({
+        userId: auth.userId,
+        amountAtomic: atomic,
+        uniqueRef: `cashback_settle:${requestId}`,
+        payoutRequestId: requestId,
+        reason: "cashback_a2u_settled_recovered",
+      })
+      if (!recoveredSettlement.ok) {
+        return reply({ ok: false, error: "CASHBACK_PAID_LEDGER_RECONCILIATION_REQUIRED", ledgerError: recoveredSettlement.error || "EARNINGS_LEDGER_UNAVAILABLE", providerCompleted: true, payoutSettled: true, retryable: true, requestId }, 503)
+      }
+      return reply({ ok: true, idempotent: true, requestId, status: "paid", paid: true, amount, currency: "PI", network: "Pi Testnet", txid: begin.txid || undefined })
+    }
 
     let providerPaymentId = String(begin.providerPaymentId || "")
     let txid = String(begin.txid || "")
@@ -186,13 +220,26 @@ export async function POST(request: Request) {
       const evidenceHash = createHash("sha256").update(JSON.stringify({ paymentId: providerPaymentId, txid, amount: payment.amount, recipientUid, network: payment.network, status: payment.status, metadata: payment.metadata })).digest("hex")
       const settled = await rpc<{ ok?: boolean; error?: string; paid?: boolean; duplicate?: boolean }>(base, key, "gh_pi_cashback_a2u_settle", { p_request_id: requestId, p_payment_id: providerPaymentId, p_txid: txid, p_evidence_hash: evidenceHash })
       if (!settled.ok || settled.paid !== true) return reply({ ok: false, error: settled.error || "CASHBACK_PAYOUT_RECONCILIATION_FAILED", providerCompleted: true, payoutSettled: false, retryable: true, requestId, providerPaymentId, txid }, 503)
-      await settleEarningsPayout({
+      const ledgerSettlement = await settleEarningsPayout({
         userId: auth.userId,
         amountAtomic: atomic,
         uniqueRef: `cashback_settle:${requestId}`,
         payoutRequestId: requestId,
         reason: "cashback_a2u_settled",
-      }).catch(() => null)
+      })
+      if (!ledgerSettlement.ok) {
+        return reply({
+          ok: false,
+          error: "CASHBACK_PAID_LEDGER_RECONCILIATION_REQUIRED",
+          ledgerError: ledgerSettlement.error || "EARNINGS_LEDGER_UNAVAILABLE",
+          providerCompleted: true,
+          payoutSettled: true,
+          retryable: true,
+          requestId,
+          providerPaymentId,
+          txid,
+        }, 503)
+      }
       const receipt = verifyA2uReceipt({
         requestId,
         recipientUid,

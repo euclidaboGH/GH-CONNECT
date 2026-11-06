@@ -22,7 +22,7 @@ function genId() {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   // Listing public communities may be useful pre-auth; still prefer session when present
-  void auth
+  // auth used for membership enrichment below
 
   if (!socialDbConfigured()) {
     const nd = nonDurableReadResponse("Communities list", { communities: [] })
@@ -38,11 +38,69 @@ export async function GET(request: Request) {
   )
   const result = await socialRpc("gh_community_list_public", { p_limit: limit })
   const data = result.data as { communities?: unknown[] }
+  let communities: unknown[] = Array.isArray(data?.communities) ? data.communities : []
+
+  // Phase 3: when authenticated, mark viewer membership so "My communities" is truthful.
+  if (auth?.userId) {
+    try {
+      const mine = await socialRpc("gh_community_list_memberships", {
+        p_user_id: auth.userId,
+        p_limit: 100,
+      })
+      const mdata = mine.data as { memberships?: Array<Record<string, unknown>> }
+      const memberships = Array.isArray(mdata?.memberships) ? mdata.memberships : []
+      const byId = new Map<string, Record<string, unknown>>()
+      for (const row of memberships) {
+        const cid = String(row.communityId || row.community_id || "").trim()
+        if (cid) byId.set(cid, row)
+      }
+      const seen = new Set<string>()
+      communities = communities.map((raw) => {
+        if (!raw || typeof raw !== "object") return raw
+        const c = { ...(raw as Record<string, unknown>) }
+        const id = String(c.id || "").trim()
+        const m = id ? byId.get(id) : undefined
+        if (m) {
+          c.viewerIsMember = true
+          c.viewerRole = m.role || "member"
+          const members = Array.isArray(c.members) ? [...(c.members as string[])] : []
+          if (!members.includes(auth.userId)) members.push(auth.userId)
+          c.members = members
+          const roles = { ...((c.groupRoles as Record<string, string>) || {}) }
+          roles[auth.userId] = String(m.role || "member")
+          c.groupRoles = roles
+          seen.add(id)
+        } else {
+          c.viewerIsMember = false
+        }
+        return c
+      })
+      // Include private/invite communities the user belongs to that public list omitted
+      for (const [cid, m] of byId) {
+        if (seen.has(cid)) continue
+        communities.push({
+          id: cid,
+          name: m.name || "Community",
+          memberCount: m.memberCount ?? m.member_count,
+          privacy: m.privacy,
+          category: m.category,
+          createdBy: m.createdBy || m.created_by,
+          viewerIsMember: true,
+          viewerRole: m.role || "member",
+          members: [auth.userId],
+          groupRoles: { [auth.userId]: String(m.role || "member") },
+        })
+      }
+    } catch {
+      /* membership enrichment is best-effort; public list still returns */
+    }
+  }
+
   return NextResponse.json(
     {
       ok: true,
       durable: result.ok,
-      communities: Array.isArray(data?.communities) ? data.communities : [],
+      communities,
     },
     { headers: { "Cache-Control": "no-store" } }
   )

@@ -1,7 +1,7 @@
 /** Privileged review transition for NGN bank payouts. This route cannot mark a request paid. */
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
@@ -17,8 +17,8 @@ function authorized(request: Request): boolean {
 
 export async function POST(request: Request, context: { params: Promise<{ requestId: string }> }) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
-  const rl = checkRateLimit("bank-payout-operator-transition", 20, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("bank-payout-operator-transition", 20, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
   const { requestId } = await context.params
   if (!/^gbp_[a-f0-9]{32}$/i.test(requestId)) return reply({ ok: false, error: "INVALID_REQUEST_ID" }, 400)
   const parsedBody = await readBoundedJson(request, 64 * 1024)

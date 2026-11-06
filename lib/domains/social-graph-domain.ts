@@ -200,8 +200,7 @@ export function createSocialGraphDomain(getCtx: () => GraphCtx) {
     },
 
     isMutual(userId: string) {
-      const s = getCtx()
-      return s.following.includes(userId) && (s.followers || []).includes(userId)
+      return this.isFollowing(userId) && this.isFollower(userId)
     },
 
     isMatched(userId: string) {

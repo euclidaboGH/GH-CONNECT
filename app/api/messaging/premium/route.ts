@@ -22,6 +22,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { allowMemoryServer, isDatabaseConfigured } from "@/lib/server/economy/http"
+import { checkMembershipTierAccess } from "@/lib/server/membership/membership-access"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -41,6 +42,24 @@ export async function POST(request: Request) {
   const product = getMessagingPremiumProduct(productId)
   if (!product) {
     return NextResponse.json({ ok: false, error: "UNKNOWN_PRODUCT" }, { status: 400 })
+  }
+
+  // Product catalog tier requirements are authorization rules, not UI hints.
+  // Resolve them against the canonical server entitlement before any GHC debit.
+  if (product.requiresTier?.length) {
+    const access = await checkMembershipTierAccess(auth.userId, product.requiresTier)
+    if (!access.ok) {
+      return NextResponse.json(
+        { ok: false, error: access.error, message: "Membership access could not be verified. No GHC was charged." },
+        { status: access.status, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    if (!access.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "MEMBERSHIP_REQUIRED", requiredTiers: product.requiresTier, currentTier: access.tier, message: "An active VIP or VVIP entitlement is required. No GHC was charged." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      )
+    }
   }
 
   if (product.priceGhc <= 0) {

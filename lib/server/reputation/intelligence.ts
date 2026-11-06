@@ -30,6 +30,7 @@ async function rpc(fn: string, body: Record<string, unknown>): Promise<RpcResult
       },
       body: JSON.stringify(body),
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     const payload: unknown = await res.json().catch(() => null)
     const data = payload && typeof payload === "object" && !Array.isArray(payload)

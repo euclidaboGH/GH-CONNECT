@@ -1,5 +1,7 @@
 "use client"
+import { toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 
+import { DurableImage } from "./durable-image"
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { memo, useState, useRef, useEffect } from "react"
 import {
@@ -239,7 +241,7 @@ function EnhancedPostCardInner({
       if (!res.ok) {
         try {
           window.dispatchEvent(new CustomEvent("ghc:toast", {
-            detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : (res.error || "Could not record vote"), type: "error" },
+            detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : toClientSafeErrorMessage(res.error, "Could not record vote"), type: "error" },
           }))
         } catch { /* */ }
         return
@@ -610,7 +612,15 @@ function EnhancedPostCardInner({
           </ActionSheetItem>
         )}
         {onSave && (
-          <ActionSheetItem icon={<Bookmark size={16} />} onClick={() => { onSave(post.id); setShowMenu(false) }}>
+          <ActionSheetItem icon={<Bookmark size={16} />} onClick={() => {
+              onSave(post.id)
+              setShowMenu(false)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:toast", {
+                  detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
+                }))
+              } catch { /* */ }
+            }}>
             {isSaved ? "Remove from saved" : "Save post"}
           </ActionSheetItem>
         )}
@@ -657,7 +667,7 @@ function EnhancedPostCardInner({
                   {draftImages.map((url) => (
                     <div key={url} className="relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border/60">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
+                      <DurableImage loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
                         className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
@@ -958,19 +968,18 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-      {/* Primary actions — separate quality curation from everyday response actions. */}
-      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-3 sm:px-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Quality signal</p>
-        <p className="text-[10px] text-muted-foreground">Vote on contribution quality · respond on the right</p>
+      {/* Primary actions — quality (left) and social (right), never overlapping */}
+      <div className="gh-post-action-context flex items-center justify-between gap-3 border-t border-border/35 px-3 pt-2.5 sm:px-4">
+        <p className="text-[11px] font-semibold text-muted-foreground">Community curation</p>
+        <p className="text-[10px] text-muted-foreground">Your vote helps surface useful contributions</p>
       </div>
       <div
-        className="px-2 pb-2 pt-1 sm:px-3"
+        className="px-2 pb-2.5 pt-1 sm:px-3"
         role="toolbar"
         aria-label="Post engagement and curation actions"
       >
-        <div className="flex min-w-0 w-full flex-wrap items-center gap-y-1.5">
-          {/* Curation cluster — shrinks first on narrow screens */}
-          <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="flex w-full flex-wrap items-center justify-between gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 sm:gap-1.5" role="group" aria-label="Quality votes">
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
               title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
@@ -1051,42 +1060,46 @@ function EnhancedPostCardInner({
               <span className="tabular-nums">{downvoteCount}</span>
             </button>
           </div>
-
-          {/* Response cluster — never shrinks away; share/save always visible */}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            <div className="mx-0.5 hidden h-5 w-px bg-border/70 xs:block sm:mx-1 sm:h-6" aria-hidden />
-            <button
-              type="button"
-              aria-label="Comment"
-              onClick={() => onComment(post.id)}
-              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-            >
-              <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
-              <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
-                {visibleCommentCount}
-              </span>
-            </button>
-            <button
-              type="button"
-              aria-label={isSaved ? "Unsave" : "Save"}
-              aria-pressed={isSaved}
-              onClick={() => onSave(post.id)}
-              className={`inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full transition active:scale-95 ${
-                isSaved
-                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Share"
-              onClick={() => onShare(post.id)}
-              className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-            >
-              <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
-            </button>
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1" role="group" aria-label="Respond">
+          <button
+            type="button"
+            aria-label="Comment"
+            onClick={() => onComment(post.id)}
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+          >
+            <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
+            <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
+              {visibleCommentCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={isSaved ? "Unsave" : "Save"}
+            aria-pressed={isSaved}
+            onClick={() => {
+              onSave(post.id)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:toast", {
+                  detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
+                }))
+              } catch { /* */ }
+            }}
+            className={`inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
+              isSaved
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Share"
+            onClick={() => onShare(post.id)}
+            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+          >
+            <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
+          </button>
           </div>
         </div>
       </div>
@@ -1096,7 +1109,7 @@ function EnhancedPostCardInner({
         postId={post.id}
         upvoteCount={upvoteCount}
         downvoteCount={downvoteCount}
-        views={post.engagement?.views ?? 0}
+        views={post.engagement?.views ?? null}
       />
 
       <EngagementRosterSheet

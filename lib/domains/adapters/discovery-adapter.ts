@@ -9,6 +9,7 @@ import {
   type DiscoveryCandidate,
   type DiscoveryCategory,
   type DiscoveryQuery,
+  type PersonCandidate,
 } from "@/lib/domains/contracts/discovery"
 import type { DomainResult } from "@/lib/domains/contracts/types"
 import {
@@ -28,6 +29,10 @@ export type RawDiscoveryCandidate = Record<string, unknown> & {
   bio?: string
   profession?: string
   occupation?: string
+  professional?: PersonCandidate["professional"]
+  business?: PersonCandidate["business"]
+  profileMode?: "social" | "professional" | "business"
+  skills?: string[]
   interests?: string[]
   connectionIntents?: string[]
   primaryMode?: string
@@ -81,9 +86,9 @@ export function normalizeDiscoveryCandidate(
   if (!id || id === viewer.userId) return null
   if (!isDemoDataAllowed() && isSeedCandidateId(id)) return null
 
-  const interests = Array.isArray(raw.interests)
-    ? raw.interests.map(String).filter(Boolean)
-    : []
+  const baseInterests = Array.isArray(raw.interests) ? raw.interests.map(String) : []
+  const professionalInterests = Array.isArray(raw.professional?.professionalInterests) ? raw.professional.professionalInterests.map(String) : []
+  const interests = [...new Set([...baseInterests, ...professionalInterests].map((value) => value.trim()).filter(Boolean))].slice(0, 32)
   const intents = resolveUserIntents(id, {
     connectionIntents: raw.connectionIntents as string[] | undefined,
     primaryMode: raw.primaryMode as string | undefined,
@@ -156,6 +161,8 @@ export function normalizeDiscoveryCandidate(
   const interestBoost = sharedInterests.length * 3
   const rankScore = intentBoost * 4 + interestBoost + (sameLocation ? 2 : 0)
 
+  const profession = String(raw.profession || raw.professional?.title || raw.occupation || "").trim().slice(0, 120)
+
   const avatar =
     (raw.avatar as string) ||
     (raw.photoUrl as string) ||
@@ -168,12 +175,16 @@ export function normalizeDiscoveryCandidate(
     kind: personKind,
     category,
     displayName: String(raw.displayName || raw.name || "Member"),
-    subtitle: String(raw.profession || raw.occupation || raw.bio || "").slice(0, 140) || undefined,
+    subtitle: String(profession || raw.bio || "").slice(0, 140) || undefined,
     avatarUrl: avatar,
     locationLabel,
     interests,
     intents,
-    profession: raw.profession ? String(raw.profession) : undefined,
+    profession: profession || undefined,
+    profileMode: raw.profileMode === "professional" || raw.profileMode === "business" ? raw.profileMode : "social",
+    professional: raw.professional,
+    business: raw.business,
+    skills: Array.isArray(raw.skills) ? raw.skills.map(String).slice(0, 8) : [],
     reasons,
     rankScore,
   }

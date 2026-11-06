@@ -4,11 +4,16 @@ import { join } from 'node:path'
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
 const migration = read('supabase/migrations/20261029010005_pi_identity_wallet_authorization.sql')
+const phase2Completion = read('supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql')
 const store = read('lib/server/identity/wallet-authorization.ts')
 const api = read('app/api/identity/wallet-authorization/route.ts')
 const claim = read('app/api/economy/rewards/pi-cashback/claim/route.ts')
 const a2u = read('app/api/payments/a2u/create/route.ts')
 const me = read('app/api/identity/me/route.ts')
+const payoutRequest = read('app/api/economy/earnings/withdrawals/route.ts')
+const payoutUi = read('components/ghc/unified-earnings-dashboard.tsx')
+const authCard = read('components/ghc/pi-payout-authorization-card.tsx')
+const withdrawable = read('app/api/economy/earnings/withdrawable/route.ts')
 const checks = []
 const test = (name, ok) => { checks.push(Boolean(ok)); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`) }
 
@@ -25,6 +30,22 @@ test('Cashback claim asserts wallet authorization before begin', /assertPayoutWa
 test('Seller A2U create asserts authorization for seller_id not caller alone', /assertPayoutWalletAuthorization\(\{ ghUserId: payout\.seller_id/.test(a2u))
 test('Identity me reports walletAuthorization snapshot', /walletAuthorization/.test(me) && /getWalletAuthorization/.test(me))
 test('Link events audit consent grant and revoke', /consent_granted/.test(migration) && /consent_revoked/.test(migration))
+test('RPC failures produce sanitized server diagnostics', /RPC request failed/.test(store) && /httpStatus/.test(store) && /errorName/.test(store) && !/console\.error\([^\n]*supabaseServiceRoleKey/.test(store))
+test('Authorization UI uses genuine Pi consent helper and never shows raw HTTP/error strings', /requestPiWalletConsent/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(payoutUi))
+test('Payout request requires active wallet authorization before reservation', /assertPayoutWalletAuthorization/.test(payoutRequest) && /WALLET_AUTHORIZATION_REQUIRED/.test(payoutRequest))
+test('Consent helper confirms active consent and matching UID from a fresh server read', /authorizationActive: body\.authorizationActive === true && uidMatches/.test(read('lib/client/pi-wallet-consent.ts')) && /verified\.status\.uidMatchesAuthorization/.test(read('lib/client/pi-wallet-consent.ts')))
+test('Withdrawal retries reuse an idempotency key until the request is confirmed', /payoutIdempotencyRef = useRef/.test(payoutUi) && /pendingIntent\.amountAtomic !== amountAtomic/.test(payoutUi) && /payoutIdempotencyRef\.current = null/.test(payoutUi))
+
+
+test('Additive Phase 2 completion migration exists', existsSync(join(root, 'supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql')))
+test('Grant RPC accepts only user_explicit consent source', /v_source <> 'user_explicit'/.test(phase2Completion) && /'user_explicit'\);/.test(phase2Completion) && !/auth_bridge|operator/.test(phase2Completion.replace(/--[^\\n]*/g, '')))
+test('Grant RPC serializes concurrent grants by user and Pi UID', /pg_advisory_xact_lock\(v_user_lock\)/.test(phase2Completion) && /pg_advisory_xact_lock\(v_uid_lock\)/.test(phase2Completion))
+test('Grant API independently verifies persisted authorization and mapped UID', /getWalletAuthorization\(auth\.userId\)/.test(api) && /verified\.uidMatchesAuthorization !== true/.test(api) && /verified\.authorizedPiAppUid !== mapping\.piAppUid/.test(api))
+test('Grant API exposes only sanitized diagnostic code and upstream status', /diagnosticCode/.test(api) && /upstreamStatus/.test(api) && !/rawBody|serviceRoleKey/.test(api))
+test('Authorization store fails closed unless active authorization matches mapped UID', /authorizationActive: value\.authorizationActive === true && uidMatches/.test(store) && /uidMatchesAuthorization: uidMatches/.test(store))
+test('Withdrawable API exposes UID match and derives active from match', /uidMatchesAuthorization: walletAuth\.uidMatchesAuthorization === true/.test(withdrawable) && /authorizationActive: walletAuth\.authorizationActive === true && walletAuth\.uidMatchesAuthorization === true/.test(withdrawable))
+test('Authorization card shows active only from server status with UID match', /requestPiWalletConsent/.test(authCard) && /snap\?\.uidMatchesAuthorization === true/.test(authCard))
+test('Dashboard never unlocks from authorizationActive without UID match', /wa\.uidMatchesAuthorization === true/.test(payoutUi) && /aJson\.uidMatchesAuthorization === true/.test(payoutUi))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 2 wallet authorization: ${checks.length - failed}/${checks.length} passed`)

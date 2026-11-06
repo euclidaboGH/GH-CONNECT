@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useState, useEffect, useCallback } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHC } from "@/contexts/ghc-context"
 import { getUnifiedConnectionState } from "@/lib/domains/adapters/unified-connection-request"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -38,6 +39,12 @@ import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
 
 export function MatchScreen() {
+  useSectionRefresh("discover", () => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:matches-refresh", { detail: { reason: "soft" } }))
+    } catch { /* */ }
+  }, { minIntervalMs: 10_000 })
+
   const {
     matches,
     likes,
@@ -426,8 +433,9 @@ export function MatchScreen() {
             <EmptyState
               variant="matches"
               title="No likes yet"
-              description="When someone likes you on Discover, they appear here until you match. Liking is interest only — Connect is a separate request."
+              description="Likes from Discover show here. Like someone back to match — Connect is a separate request."
               action={{ label: "Open Discover", onClick: handleStartSwiping }}
+              secondaryAction={{ label: "Refresh", onClick: () => { try { window.dispatchEvent(new CustomEvent("ghc:section-refresh", { detail: { section: "matches" } })) } catch { /* */ } } }}
             />
           ) : (
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4" role="list" aria-label="People who liked you">

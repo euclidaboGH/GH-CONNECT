@@ -286,6 +286,8 @@ export type WithdrawalQuote = {
   recipientPiAppUid?: string
   recipientUsername?: string | null
   availableAtomic?: number
+  minPayoutAtomic?: number
+  maxSinglePayoutAtomic?: number
   destination?: string
   message?: string
 }

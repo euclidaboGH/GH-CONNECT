@@ -15,6 +15,7 @@ import {
 import type { ConnectionIntentId } from "@/lib/connection-intents"
 import { MATCH_CLARITY, formatIntentChip } from "@/lib/discovery/match-clarity"
 import { formatReasonsForUi } from "@/lib/domains/adapters/discovery-adapter"
+import { LazyImage } from "./lazy-image"
 
 
 /** Safe media/location accessors for the DiscoveryCandidate discriminated union */
@@ -67,7 +68,7 @@ export function ConnectionCard({
       <div className="flex gap-3">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-background dark:bg-emerald-950">
           {avatarUrl ? (
-            <img
+            <LazyImage
               src={avatarUrl}
               alt=""
               className="h-full w-full object-cover"
@@ -121,19 +122,22 @@ export function ConnectionCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {actions.map((action) => (
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {actions.map((action) => {
+          const isPrimary = action === "connect" || action === "accept" || action === "message"
+          const isQuiet = action === "like" || action === "pass" || action === "view_profile"
+          return (
           <button
             key={action}
             type="button"
             disabled={busy || connectionState === "blocked"}
             onClick={() => onAction?.(action, candidate)}
             className={
-              action === "connect" || action === "accept" || action === "like"
-                ? "rounded-full bg-primary px-3.5 py-2 text-[12px] font-bold text-primary-foreground shadow-sm disabled:opacity-50"
-                : action === "pass"
-                  ? "rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
-                  : "rounded-full border border-border bg-background px-3.5 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+              isPrimary
+                ? "min-h-10 rounded-full bg-primary px-4 py-2 text-[12px] font-bold text-primary-foreground shadow-sm disabled:opacity-50"
+                : isQuiet
+                  ? "min-h-9 rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground disabled:opacity-50"
+                  : "min-h-9 rounded-full border border-border bg-background px-3.5 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
             }
             title={
               action === "like"
@@ -147,7 +151,8 @@ export function ConnectionCard({
           >
             {labelForAction(action)}
           </button>
-        ))}
+          )
+        })}
       </div>
     </article>
   )

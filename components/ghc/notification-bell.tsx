@@ -45,6 +45,7 @@ import {
   type NotificationCenterBucket,
 } from "@/lib/notification-center"
 import { useRegionalContext } from "@/contexts/regional-context"
+import { getSocialMessage as socialText } from "@/lib/i18n/social"
 import { useLiveNow } from "@/hooks/use-live-now"
 import {
   groupNotificationsIntoThreads,
@@ -128,12 +129,20 @@ export function NotificationBell({
   onOpenTarget?: (n: Notification) => void
 }) {
   const regional = useRegionalContext()
+  const t = (key: Parameters<typeof socialText>[0], values?: Record<string, string | number>) => socialText(key, regional.preferredLocale, values)
   const liveNow = useLiveNow(30_000)
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
-  const [readFilter, setReadFilter] = useState<"all" | "unread" | "priority">("all")
+  const [readFilter, setReadFilter] = useState<"all" | "unread" | "priority">(() => {
+    if (typeof window === "undefined") return "priority"
+    try {
+      const saved = window.sessionStorage.getItem("ghc.notif.focus")
+      if (saved === "priority" || saved === "unread" || saved === "all") return saved
+    } catch { /* */ }
+    return "priority"
+  })
   const [isOffline, setIsOffline] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
@@ -500,9 +509,11 @@ export function NotificationBell({
     const bucketed = filterByBucket(items, bucket)
     if (readFilter === "unread") return bucketed.filter((n) => !n.read)
     if (readFilter === "priority") {
+      // Phase 4: priority = high-signal unread (money, messages, social requests, orders).
       const priorityTypes = new Set([
-        "message", "friend_request", "marketplace_order", "payment", "ghc_received",
-        "reward", "system", "mention", "comment_reply",
+        "message", "friend_request", "connection_request", "connection_accept", "friend_accept",
+        "marketplace_order", "order", "payment", "ghc_received", "withdrawal", "payout",
+        "reward", "system", "mention", "comment_reply", "security",
       ])
       return bucketed.filter((n) => !n.read && priorityTypes.has(n.type))
     }
@@ -651,6 +662,10 @@ export function NotificationBell({
     try { notificationSystem.markAllAsRead?.() } catch { /* */ }
     setItems((prev) => prev.map((x) => ({ ...x, read: true })))
     setUnread(0)
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { unread: 0 } }))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "All notifications marked read", type: "success" } }))
+    } catch { /* */ }
     const results = await Promise.all([
       fetch("/api/social/notifications", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -683,8 +698,8 @@ export function NotificationBell({
         type="button"
         onClick={openPanel}
         className="relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-foreground transition hover:border-amber-400/30 hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-        aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
-        title="Notifications"
+        aria-label={unread > 0 ? `${unread} ${t("unread").toLowerCase()} ${t("notifications").toLowerCase()}` : t("notifications")}
+        title={t("notifications")}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
@@ -698,26 +713,26 @@ export function NotificationBell({
 
       {open && typeof document !== "undefined"
         ? createPortal(
-        <div className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label="Notifications">
-          <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label="Close notifications" onClick={closePanel} />
+        <div className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label={t("notifications")}>
+          <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label={t("closeNotifications")} onClick={closePanel} />
           <div className="absolute inset-0 flex flex-col bg-background sm:inset-x-auto sm:left-1/2 sm:top-0 sm:h-full sm:w-full sm:max-w-[28rem] sm:-translate-x-1/2 sm:border-x sm:border-border sm:shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-background/95 px-4 py-3.5 backdrop-blur-xl">
               <div>
-                <p className="text-[18px] font-extrabold tracking-tight text-foreground">Notifications</p>
+                <p className="text-[18px] font-extrabold tracking-tight text-foreground">{t("notifications")}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {unread > 0 ? `${unread} unread` : "All caught up"}
+                  {unread > 0 ? `${unread} ${t("unread").toLowerCase()}` : t("allCaughtUp")}
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => { setStatusMsg("Refreshing notifications…"); refresh() }}
+                  onClick={() => { setStatusMsg(t("refreshing")); refresh() }}
                   disabled={listLoading}
                   className="inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
-                  aria-label="Refresh notifications"
+                  aria-label={t("refresh")}
                 >
                   <RefreshCw size={14} className={listLoading ? "animate-spin" : ""} />
-                  <span className="hidden sm:inline">Refresh</span>
+                  <span className="hidden sm:inline">{t("refresh")}</span>
                 </button>
                 {unread > 0 ? (
                   <button
@@ -725,14 +740,14 @@ export function NotificationBell({
                     onClick={markAll}
                     className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300"
                   >
-                    <CheckCheck size={14} /> Mark all read
+                    <CheckCheck size={14} /> {t("markAllRead")}
                   </button>
                 ) : null}
                 <button
                   type="button"
                   onClick={closePanel}
                   className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
-                  aria-label="Close"
+                  aria-label={t("closeNotifications")}
                 >
                   <X size={18} />
                 </button>
@@ -740,22 +755,63 @@ export function NotificationBell({
             </div>
 
             <div className="sr-only" role="status" aria-live="polite">
-              {statusMsg || (listLoading ? "Refreshing notifications" : "")}
+              {statusMsg || (listLoading ? t("refreshing") : "")}
             </div>
             {isOffline ? (
               <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
-                Offline — showing notifications already on this device. New activity syncs when you reconnect.
+                {t("offlineNotifications")}
               </div>
             ) : null}
             {durableOk === false && !isOffline ? (
               <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-muted/40 px-3.5 py-2 text-[11px] leading-snug text-muted-foreground" role="status">
-                Some notifications are temporarily unavailable. Please try again shortly.
+                {t("notificationUnavailable")}
               </div>
             ) : null}
+            {/* Focus first: All · Unread · Priority (simple segment control) */}
+            <div className="border-b border-border/50 px-3 py-2.5">
+              <div
+                className="flex rounded-2xl bg-muted/70 p-1"
+                role="tablist"
+                aria-label={t("notificationFocus")}
+              >
+                {([
+                  { id: "all" as const, label: t("all") },
+                  {
+                    id: "unread" as const,
+                    label:
+                      unread > 0 ? `Unread · ${unread > 99 ? "99+" : unread}` : "Unread",
+                  },
+                  { id: "priority" as const, label: t("priority") },
+                ]).map((mode) => {
+                  const active = readFilter === mode.id
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => {
+                        setReadFilter(mode.id)
+                        try { window.sessionStorage.setItem("ghc.notif.focus", mode.id) } catch { /* */ }
+                      }}
+                      className={`min-h-9 flex-1 rounded-xl px-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                        active
+                          ? "bg-card text-foreground shadow-sm ring-1 ring-border/60"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Category chips with per-bucket unread counts */}
             <div
-              className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-hide"
+              className="flex gap-1.5 overflow-x-auto border-b border-border/50 px-3 py-2.5 scrollbar-hide"
               role="tablist"
-              aria-label="Notification categories"
+              aria-label={t("notificationCategories")}
               onKeyDown={(e) => {
                 const ids = NOTIFICATION_CENTER_BUCKETS.map((b) => b.id as NotificationCenterBucket)
                 const idx = ids.indexOf(bucket)
@@ -777,6 +833,7 @@ export function NotificationBell({
             >
               {NOTIFICATION_CENTER_BUCKETS.map((b) => {
                 const active = bucket === b.id
+                const count = bucketUnreadCounts[b.id] || 0
                 return (
                   <button
                     key={b.id}
@@ -785,49 +842,78 @@ export function NotificationBell({
                     aria-selected={active}
                     tabIndex={active ? 0 : -1}
                     onClick={() => setBucket(b.id)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                       active
-                        ? "bg-[var(--gh-green)] text-white"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
+                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
+                        : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
-                    {b.label}
+                    <span>{t(b.id)}</span>
+                    {count > 0 ? (
+                      <span
+                        className={`min-w-[1.15rem] rounded-full px-1 text-center text-[10px] font-extrabold tabular-nums ${
+                          active ? "bg-white/25 text-white" : "bg-emerald-600/15 text-emerald-800 dark:text-emerald-200"
+                        }`}
+                      >
+                        <bdi className="gh-bidi-number">{count > 99 ? "99+" : regional.formatNumber(count)}</bdi>
+                      </span>
+                    ) : null}
                   </button>
                 )
               })}
-            </div>
-            <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2" aria-label="Notification read filter">
-              {(["all", "unread", "priority"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setReadFilter(mode)}
-                  className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${readFilter === mode ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}
-                >
-                  {mode === "all" ? "All" : mode === "priority" ? "Priority" : `Unread${bucketUnreadCounts[bucket] ? ` (${bucketUnreadCounts[bucket]})` : ""}`}
-                </button>
-              ))}
-              <span className="ml-auto text-[10px] text-muted-foreground">{listLoading ? "Syncing…" : "Up to date"}</span>
+              <span className="ml-auto shrink-0 self-center pl-2 text-[10px] font-medium text-muted-foreground">
+                {listLoading ? "Syncing…" : "Up to date"}
+              </span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto [content-visibility:auto] overscroll-contain">
               <AttentionCommandCard signal={bucket === "all" && readFilter === "all" ? primaryAttention : null} onOpen={openAttention} />
               {filtered.length > 0 ? (
                 <p className="px-4 pt-2 text-[11px] font-medium text-muted-foreground" aria-live="polite">
-                  {filtered.length} notification{filtered.length === 1 ? "" : "s"}
-                  {bucket !== "all" ? " in this category" : ""}
-                  {listLoading ? " · refreshing…" : ""}
+                  <bdi className="gh-bidi-number">{regional.formatNumber(filtered.length)}</bdi> {t("notifications").toLowerCase()}
+                  {bucket !== "all" ? t("inThisCategory") : ""}
+                  {listLoading ? ` · ${t("refreshing")}` : ""}
                 </p>
               ) : null}
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center px-6 py-14 text-center">
-                  <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">
                     <Bell size={26} />
                   </span>
-                  <p className="text-[15px] font-bold text-foreground">{EMPTY_COPY[bucket]?.title || "Nothing here"}</p>
-                  <p className="mt-1 max-w-[16rem] text-[12px] leading-relaxed text-muted-foreground">
-                    {EMPTY_COPY[bucket]?.body}
+                  <p className="text-[15px] font-bold text-foreground">
+                    {readFilter === "unread"
+                      ? t("noUnread")
+                      : readFilter === "priority"
+                        ? t("noPriority")
+                        : EMPTY_COPY[bucket]?.title || t("nothingHere")}
                   </p>
+                  <p className="mt-1 max-w-[17rem] text-[12px] leading-relaxed text-muted-foreground">
+                    {readFilter === "unread"
+                      ? "You’re caught up in this category. Switch to All to review history."
+                      : readFilter === "priority"
+                        ? "Priority covers messages, orders, and money notices that still need attention."
+                        : EMPTY_COPY[bucket]?.body}
+                  </p>
+                  {readFilter !== "all" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReadFilter("all")
+                        try { window.sessionStorage.setItem("ghc.notif.focus", "all") } catch { /* */ }
+                      }}
+                      className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm"
+                    >
+                      {t("showAllNotifications")}
+                    </button>
+                  ) : bucket !== "all" ? (
+                    <button
+                      type="button"
+                      onClick={() => setBucket("all")}
+                      className="mt-4 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground"
+                    >
+                      {t("viewAllCategories")}
+                    </button>
+                  ) : null}
                 </div>
               ) : expanded && activeThread ? (
                   <div className="flex flex-col">
@@ -946,7 +1032,7 @@ export function NotificationBell({
                         </span>
                         {th.unreadCount > 0 ? (
                           <span className="mt-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] px-1 text-[10px] font-bold text-white">
-                            {th.unreadCount > 9 ? "9+" : th.unreadCount}
+                            {th.unreadCount > 9 ? "9+" : regional.formatNumber(th.unreadCount)}
                           </span>
                         ) : null}
                       </button>

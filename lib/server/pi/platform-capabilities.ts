@@ -57,7 +57,7 @@ export function buildPlatformCapabilities(): {
       title: "Commerce fee rail",
       status: "live",
       detail: piOnly
-        ? "Pi-only fees for listing/community (GHC earn-only: claim, referral, missions)."
+        ? "Pi-only fees for listing/community. GHC is earned through eligible server-approved claims; mission achievements are non-financial under current policy."
         : "Dual-rail fees enabled — review before mainnet listing.",
     },
     {

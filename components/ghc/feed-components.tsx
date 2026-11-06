@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { memo, useState } from "react"
 import { Heart, MessageCircle, Share2, MoreVertical, Plus, Bookmark, Flag, Eye, ThumbsDown, Volume2, Slash, Video, FileText } from "lucide-react"
 import type { Post, PostComment } from "@/lib/ghc-types"
@@ -174,7 +175,16 @@ export const PostCard = memo(function PostCard({
         <QuoteRepost
           originalPost={post}
           quoteText={post.content}
-          onViewOriginal={() => console.log("View original")}
+          onViewOriginal={() => {
+            const origId = (post as { quoteOf?: string; quote_of?: string }).quoteOf || (post as { quote_of?: string }).quote_of
+            try {
+              if (origId) {
+                window.dispatchEvent(new CustomEvent("ghc:open-post", { detail: { postId: String(origId), action: "view" } }))
+              } else {
+                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Original post unavailable", type: "info" } }))
+              }
+            } catch { /* */ }
+          }}
         />
       )}
 
@@ -184,7 +194,15 @@ export const PostCard = memo(function PostCard({
         <EnhancedPostContent
           content={post.content}
           onMentionClick={(userId) => onFollowFromPost?.(userId)}
-          onHashtagClick={(hashtag) => console.log("Hashtag:", hashtag)}
+          onHashtagClick={(hashtag) => {
+            const tag = String(hashtag || "").trim()
+            if (!tag) return
+            const q = tag.startsWith("#") ? tag : `#${tag}`
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:feed-search", { detail: { query: q } }))
+              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "home" }))
+            } catch { /* */ }
+          }}
           onLinkClick={(url) => window.open(url, "_blank")}
         />
         </div>
@@ -499,7 +517,7 @@ export function PeopleRecommendation({ people, onFollow }: PeopleRecommendationP
         {people.map((person) => (
           <div key={person.id} className="flex-shrink-0 text-center">
             <div className="relative mb-2">
-              <img
+              <DurableImage
                 src={person.photo || "/placeholder.svg"}
                 alt={person.name}
                 className="w-14 h-14 rounded-full object-cover border-2 border-emerald-300 mx-auto"

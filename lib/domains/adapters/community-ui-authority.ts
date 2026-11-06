@@ -8,6 +8,7 @@
  */
 
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
+import { isSameIdentity, idListIncludes, getSessionIdentityAliases } from "@/lib/identity/identity-match"
 import {
   resolveMembershipState,
   type CommunityRowLike,
@@ -36,10 +37,14 @@ export function isCommunityMemberDomain(
     /* fall through to explicit fields */
   }
   const members = row.members || []
-  if (members.includes(viewerId)) return true
-  if (row.createdBy && row.createdBy === viewerId) return true
-  const role = row.groupRoles?.[viewerId]
-  if (role && MEMBER_STATES.has(String(role).toLowerCase()) || role === "mod") return true
+  // Phase 4: membership survives Pi UID ↔ profile id form drift.
+  if (idListIncludes(members, viewerId)) return true
+  if (row.createdBy && (row.createdBy === viewerId || isSameIdentity(row.createdBy))) return true
+  const roles = row.groupRoles || {}
+  const role =
+    roles[viewerId] ||
+    getSessionIdentityAliases().map((a) => roles[a]).find(Boolean)
+  if (role && (MEMBER_STATES.has(String(role).toLowerCase()) || role === "mod")) return true
   return false
 }
 
@@ -54,7 +59,7 @@ export function isCommunityMemberWithOptionalCache(
 ): boolean {
   if (isCommunityMemberDomain(row, viewerId)) return true
   // Creator / owner markers (handles current-user → Pi uid drift after create)
-  if (row?.createdBy && (row.createdBy === viewerId || row.createdBy === "current-user")) {
+  if (row?.createdBy && (row.createdBy === viewerId || row.createdBy === "current-user" || isSameIdentity(row.createdBy))) {
     return true
   }
   if (row?.groupRoles) {

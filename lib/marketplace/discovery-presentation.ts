@@ -116,7 +116,6 @@ export function suggestedCommunitiesFor(listing: MarketplaceListing, limit = 5):
     })
     return scored
       .filter((x) => x.score > 0 && x.id)
-      .sort((a, b) => b.score - a.score)
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
       .slice(0, safeLimit)
       .map(({ id, name, memberCount, photo }) => ({ id, name, memberCount, photo }))

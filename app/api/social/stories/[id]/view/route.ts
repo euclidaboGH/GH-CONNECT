@@ -3,6 +3,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 
@@ -17,6 +18,10 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const limit = checkRateLimit(`story-view:${auth.userId}`, 180, 60_000)
+  if (!limit.ok) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec) } })
+  }
   const { id } = await ctx.params
   const storyId = String(id || "").trim()
   if (!storyId) {
@@ -26,7 +31,7 @@ export async function POST(
     const nd = nonDurableWriteResponse("Story view", { allowNonDurableInDev: true })
     return NextResponse.json(nd.body, { status: nd.status })
   }
-  const result = await socialRpc("gh_story_view", {
+  const result = await socialRpc("gh_story_view_authorized_v2", {
     p_story_id: storyId,
     p_viewer_id: auth.userId,
   })

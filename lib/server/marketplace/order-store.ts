@@ -205,6 +205,11 @@ export async function loadOrder(id: string): Promise<ServerMarketOrder | null> {
   // When Supabase is configured, always refresh from the authoritative database.
   // A process-local cache can be stale after reservation expiry or another instance's payment/cancellation transition.
   if (!dbConfigured()) return map().get(id) || null
+  // Expire stale inventory holds before the read, not inside the order snapshot
+  // RPC. Transition RPCs call the same snapshot while holding a row lock; keeping
+  // global cleanup outside that transaction avoids cross-order lock contention.
+  const cleanup = await rpcJson("gh_marketplace_release_expired_reservations", {})
+  if (!cleanup || typeof cleanup !== "object" || (cleanup as Record<string, unknown>).ok !== true) return null
   const data = await rpcJson("gh_marketplace_order_get", { p_id: id })
   if (!data || typeof data !== "object") return null
   const order = rowToOrder(data as Record<string, unknown>)
@@ -346,9 +351,32 @@ export async function transitionOrder(
   actor: string,
   detail?: string
 ): Promise<{ ok: true; order: ServerMarketOrder } | { ok: false; error: string }> {
-  // Durable state is authoritative whenever configured: never transition from a
-  // process-local snapshot that may predate another instance’s payment/fulfilment.
-  let order = dbConfigured() ? await loadOrder(orderId) : (map().get(orderId) || null)
+  // Durable state transitions are serialized by a row-locking RPC. Never use
+  // read/modify/upsert for a production order: concurrent payment and cancel
+  // requests must be decided against one locked database state.
+  if (dbConfigured()) {
+    const result = await rpcJson("gh_marketplace_order_transition", {
+      p_order_id: orderId,
+      p_to: to,
+      p_actor_id: actor,
+      p_detail: detail || null,
+    })
+    if (!result || typeof result !== "object") {
+      return { ok: false, error: "DURABLE_TRANSITION_RPC_UNAVAILABLE" }
+    }
+    const payload = result as Record<string, unknown>
+    if (payload.ok !== true) {
+      return { ok: false, error: String(payload.error || "DURABLE_TRANSITION_FAILED") }
+    }
+    if (!payload.order || typeof payload.order !== "object") {
+      return { ok: false, error: "DURABLE_TRANSITION_RESPONSE_INVALID" }
+    }
+    const durableOrder = rowToOrder(payload.order as Record<string, unknown>)
+    map().set(durableOrder.id, durableOrder)
+    return { ok: true, order: durableOrder }
+  }
+
+  let order = map().get(orderId) || null
   if (!order) return { ok: false, error: "NOT_FOUND" }
   if (order.status === to) return { ok: true, order }
 

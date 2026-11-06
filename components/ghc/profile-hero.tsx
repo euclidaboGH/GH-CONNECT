@@ -18,7 +18,8 @@ import { ReputationBadge } from "./reputation-badge"
 
 function toHandle(displayName: string, username?: string | null): string {
   if (username && username.trim()) {
-    const u = username.trim().replace(/^@/, "")
+    // Phase 2: canonical handle is always lower-case for visual consistency.
+    const u = username.trim().replace(/^@/, "").toLowerCase()
     return `@${u}`
   }
   const base = (displayName || "member")

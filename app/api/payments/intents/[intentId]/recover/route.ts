@@ -61,6 +61,7 @@ async function ensureRecoveredMembership(userId: string, intent: NonNullable<Awa
       intent: {
         id: intent.id,
         userId: intent.userId,
+        provider: intent.provider,
         purpose: intent.purpose,
         status: intent.status,
         amount: intent.amount,

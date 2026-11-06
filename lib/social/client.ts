@@ -24,7 +24,12 @@ async function json<T>(
   const method = String(init?.method || "GET").toUpperCase()
   const run = async () => {
     const controller = !init?.signal ? new AbortController() : null
-    const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), 12_000) : null
+    // Phase 3: marketplace order create/pay needs a longer bound than social reads.
+    const isOrderMutation =
+      method !== "GET" &&
+      (path.includes("/api/marketplace/orders") || path.includes("/api/marketplace/listing-fee"))
+    const timeoutMs = isOrderMutation ? 45_000 : 12_000
+    const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), timeoutMs) : null
     let res: Response
     try {
       res = await fetch(path, {
@@ -71,7 +76,17 @@ async function json<T>(
     }
   }
   if (!res.ok && data.ok !== true) {
-    return { ...data, ok: false, error: data.error || `HTTP_${res.status}`, durable: Boolean(data.durable) }
+    const msg = typeof (data as { message?: unknown }).message === "string"
+      ? String((data as { message?: string }).message).trim()
+      : ""
+    // Prefer human message when server sent one; keep machine code for mediaUserMessage mapping.
+    const code = data.error || `HTTP_${res.status}`
+    return {
+      ...data,
+      ok: false,
+      error: msg && !/^[A-Z][A-Z0-9_]{2,}$/.test(msg) ? msg : code,
+      durable: Boolean(data.durable),
+    }
   }
   return data
 }
@@ -100,6 +115,19 @@ export async function socialFetchFeed(opts?: {
 
 export async function socialGetPost(postId: string): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post> & { contentReward?: unknown }; error?: string }> {
   return json(`/api/social/posts/${encodeURIComponent(String(postId || "").trim())}`)
+}
+
+export async function socialListCommunityPosts(
+  communityId: string,
+  limit = 40,
+  cursor?: { before: number; beforeId: string },
+): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; error?: string }> {
+  const id = String(communityId || "").trim()
+  if (!id) return { ok: false, durable: false, posts: [], error: "COMMUNITY_REQUIRED" }
+  const query = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.floor(limit)))) })
+  if (cursor) { query.set("before", String(cursor.before)); query.set("beforeId", cursor.beforeId) }
+  const data = await json<{ posts?: Partial<Post>[]; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
+  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], error: data.error }
 }
 
 export async function socialCreatePost(

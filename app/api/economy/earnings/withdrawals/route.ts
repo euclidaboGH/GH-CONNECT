@@ -5,6 +5,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { quoteWithdrawal, createPiEarningsPayoutRequest } from "@/lib/server/earnings/unified-ledger"
+import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,9 +38,30 @@ export async function POST(request: Request) {
   if (!quote.ok || !Number.isSafeInteger(quote.grossAtomic) || !Number.isSafeInteger(quote.feeAtomic) || !Number.isSafeInteger(quote.netAtomic)) {
     return reply({ ok: false, error: quote.error || "WITHDRAWAL_QUOTE_INVALID" }, quote.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : 409)
   }
+  const recipientUid = String(quote.recipientPiAppUid || "").trim()
+  if (!recipientUid) {
+    return reply({ ok: false, error: "VERIFIED_PI_RECIPIENT_REQUIRED" }, 409)
+  }
+  // Require explicit, active consent before even reserving a payout request.
+  // The execution worker independently rechecks consent immediately before A2U.
+  const walletAuthorization = await assertPayoutWalletAuthorization({
+    ghUserId: auth.userId,
+    recipientUid,
+  })
+  if (!walletAuthorization.ok) {
+    const error = walletAuthorization.error || "WALLET_AUTHORIZATION_REQUIRED"
+    return reply({
+      ok: false,
+      error,
+      message: error === "WALLET_AUTHORIZATION_REQUIRED"
+        ? "Authorize Pi wallet payouts before requesting a withdrawal."
+        : undefined,
+    }, error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : 409)
+  }
+
   const fingerprint = createHash("sha256").update([
     auth.userId, "PI", "Pi Testnet", quote.grossAtomic, quote.feeAtomic, quote.netAtomic,
-    quote.recipientPiAppUid || "",
+    recipientUid,
   ].join("|")).digest("hex")
   const result = await createPiEarningsPayoutRequest({
     userId: auth.userId, idempotencyKey: key, requestFingerprint: fingerprint,

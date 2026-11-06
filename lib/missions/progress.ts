@@ -1,6 +1,6 @@
 /**
  * Mission progress client — records durable completion when server accepts it.
- * GHC issuance remains server-authoritative (activity emission + flags).
+ * Mission completion unlocks non-financial achievements only. GHC issuance remains disabled for activity missions by current policy.
  */
 import { IdentityService } from "@/lib/identity/identity-service"
 
@@ -8,6 +8,7 @@ export type MissionCode =
   | "join_community"
   | "first_post"
   | "first_comment"
+  | "meaningful_contribution"
   | "complete_profile"
   | "send_connection"
   | "accept_connection"
@@ -18,8 +19,11 @@ export async function reportMissionProgress(
 ): Promise<{
   ok: boolean
   completed?: boolean
+  verified?: boolean
   alreadyCompleted?: boolean
+  achievementId?: string
   grantedGhc?: number
+  rewardStatus?: string
   message?: string
   error?: string
 }> {
@@ -37,8 +41,11 @@ export async function reportMissionProgress(
     const data = (await res.json().catch(() => ({}))) as {
       ok?: boolean
       completed?: boolean
+      verified?: boolean
       alreadyCompleted?: boolean
+      achievementId?: string
       grantedGhc?: number
+      rewardStatus?: string
       message?: string
       error?: string
     }
@@ -48,8 +55,11 @@ export async function reportMissionProgress(
     return {
       ok: data.ok !== false,
       completed: data.completed,
+      verified: data.verified,
       alreadyCompleted: data.alreadyCompleted,
+      achievementId: data.achievementId,
       grantedGhc: data.grantedGhc,
+      rewardStatus: data.rewardStatus,
       message: data.message,
       error: data.error,
     }

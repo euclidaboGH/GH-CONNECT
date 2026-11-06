@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /** @deprecated Prefer Messages tab group conversation + PremiumCommunityHub chat entry. Kept for parse compatibility. */
 
 import { useState, useMemo, memo } from "react"
@@ -81,7 +82,7 @@ function MediaAttachment({
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <DurableImage
               src={attachment.url}
               alt={attachment.fileName || "Attachment"}
               loading="lazy"
@@ -227,7 +228,7 @@ const EnhancedGroupMessageComponent = ({
         {shouldShowSender ? (
           <div className="w-8 h-8 rounded-full bg-primary/20 flex-shrink-0 flex items-center justify-center text-xs font-bold">
             {senderPhoto ? (
-              <img src={senderPhoto} alt={senderName} className="w-full h-full rounded-full" loading="lazy" />
+              <DurableImage src={senderPhoto} alt={senderName} className="w-full h-full rounded-full" loading="lazy" />
             ) : (
               senderName.charAt(0).toUpperCase()
             )}

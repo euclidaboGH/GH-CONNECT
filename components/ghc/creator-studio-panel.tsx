@@ -8,9 +8,10 @@ type CreatorState = { exists?: boolean; tipsEnabled?: boolean; displayName?: str
 type PostRow = { id: string; content?: string; visibility?: string; community_id?: string | null; community_name?: string | null; like_count?: number; comment_count?: number; share_count?: number; view_count?: number; qualified_view_count?: number; upvote_count?: number; downvote_count?: number }
 type CreatorEconomy = { tipPiGross?: number; tipPiPayable?: number; tipPiPaid?: number; tipGhcSettled?: number; tipCount?: number; rewardTotal?: number; rewardAuthor?: number; rewardCuration?: number; rewardPosts?: number; walletCreatorCredits?: number; walletCreatorDebits?: number }
 type EconomyState = { available?: number; pending?: number; locked?: number; balance?: number; curationBalance?: number; currency?: string; server?: { curationRedistributeEnabled?: boolean; issuanceFromSocialActions?: boolean } }
+type DataQuality = { complete?: boolean; sources?: { creatorProfile?: boolean; publishedPosts?: boolean; creatorEconomy?: boolean; reputation?: boolean } }
 
 const n = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
-const fmt = (value: unknown) => n(value).toLocaleString(undefined, { maximumFractionDigits: 2 })
+const fmt = (value: unknown) => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? "—" : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })
 
 export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
   const [loading, setLoading] = useState(true)
@@ -19,6 +20,7 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
   const [rep, setRep] = useState<{ level?: number; levelName?: string; totalPoints?: number } | null>(null)
   const [economy, setEconomy] = useState<EconomyState | null>(null)
   const [creatorEconomy, setCreatorEconomy] = useState<CreatorEconomy | null>(null)
+  const [dataQuality, setDataQuality] = useState<DataQuality | null>(null)
   const [windowDays, setWindowDays] = useState<"all" | 7 | 30>("all")
   const [tipsEnabled, setTipsEnabled] = useState(false)
   const [msg, setMsg] = useState("")
@@ -33,11 +35,16 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
       ])
       const [data, economyData] = await Promise.all([creatorRes.json().catch(() => ({})), economyRes.json().catch(() => ({}))])
       if (data?.ok) {
-        setCreator(data.creator || {})
-        setTipsEnabled(Boolean(data.creator?.tipsEnabled))
-        setPosts(Array.isArray(data.posts) ? data.posts : [])
-        setRep(data.reputation || null)
-        setCreatorEconomy(data.creatorEconomy || null)
+        setDataQuality(data.dataQuality || null)
+        if (data.dataQuality?.sources?.creatorProfile !== false) {
+          setCreator(data.creator || {})
+          setTipsEnabled(Boolean(data.creator?.tipsEnabled))
+        }
+        if (data.dataQuality?.sources?.publishedPosts !== false) setPosts(Array.isArray(data.posts) ? data.posts : [])
+        if (data.dataQuality?.sources?.reputation !== false) setRep(data.reputation || null)
+        setCreatorEconomy(data.creatorEconomy?.ok === true ? data.creatorEconomy : null)
+      } else {
+        setDataQuality({ complete: false })
       }
       setEconomy(economyData?.ok ? economyData : null)
     } catch { /* fail-soft; never invent creator/economy state */ }
@@ -103,6 +110,7 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
     </div>
 
     {loading ? <p className="text-sm text-muted-foreground">Loading verified creator state…</p> : <>
+      {dataQuality?.complete === false ? <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">Some creator records are temporarily unavailable. Incomplete sources are not counted as zero, and affected totals are hidden until the records can be verified.</div> : null}
       <div className="flex items-center justify-between gap-2 rounded-2xl border border-border bg-card p-2">
         <p className="px-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Performance window</p>
         <div className="flex rounded-full bg-muted p-1" role="group" aria-label="Creator performance window">
@@ -137,7 +145,7 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Content performance</p><p className="text-[10px] text-muted-foreground">{totals.comments} comments · {totals.shares} shares</p></div>
-        {filteredPosts.length === 0 ? <p className="text-sm text-muted-foreground">No published posts yet.</p> : <ul className="max-h-80 space-y-2 overflow-y-auto">{filteredPosts.map((p) => <li key={p.id}><button type="button" onClick={() => openPost(p.id)} className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-left text-xs hover:bg-muted/60"><div className="flex items-start justify-between gap-2"><p className="line-clamp-2 font-medium text-foreground">{p.content || "(media post)"}</p>{p.community_name ? <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-700">{p.community_name}</span> : null}</div><p className="mt-1 tabular-nums text-muted-foreground">views {p.view_count ?? 0} · qualified {p.qualified_view_count ?? 0} · likes {p.like_count ?? 0} · comments {p.comment_count ?? 0} · shares {p.share_count ?? 0} · ↑{p.upvote_count ?? 0}/↓{p.downvote_count ?? 0}</p></button></li>)}</ul>}
+        {dataQuality?.sources?.publishedPosts === false ? <p className="text-sm text-muted-foreground">Content performance is temporarily unavailable. Refresh to try again.</p> : filteredPosts.length === 0 ? <p className="text-sm text-muted-foreground">No published posts yet.</p> : <ul className="max-h-80 space-y-2 overflow-y-auto">{filteredPosts.map((p) => <li key={p.id}><button type="button" onClick={() => openPost(p.id)} className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-left text-xs hover:bg-muted/60"><div className="flex items-start justify-between gap-2"><p className="line-clamp-2 font-medium text-foreground">{p.content || "(media post)"}</p>{p.community_name ? <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-700">{p.community_name}</span> : null}</div><p className="mt-1 tabular-nums text-muted-foreground">views {p.view_count ?? 0} · qualified {p.qualified_view_count ?? 0} · likes {p.like_count ?? 0} · comments {p.comment_count ?? 0} · shares {p.share_count ?? 0} · ↑{p.upvote_count ?? 0}/↓{p.downvote_count ?? 0}</p></button></li>)}</ul>}
       </div>
 
       <UnifiedActivityCenter limit={12} />

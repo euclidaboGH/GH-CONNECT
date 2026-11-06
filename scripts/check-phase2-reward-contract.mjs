@@ -23,7 +23,7 @@ check('daily claim POST bypasses browser cache', /postDailyClaim[\s\S]*?cache: "
 check('daily reward remains a pending 48-hour entitlement', dailyApi.includes('atomic.pending !== true || !atomic.redeemableAt'))
 check('wallet partial settlement does not display aggregate as available', wallet.includes('const allSettled = claimed === ids.length') && wallet.includes('if (allSettled)'))
 check('wallet requests authoritative refresh after claim attempts', wallet.includes('await refreshWalletAuthority()') && wallet.includes('pending-hold-claimed'))
-check('Rewards Centre avoids timestamp-generated retry identity', !rewards.includes('reward-claim-${Date.now()}-${rewardId}') && rewards.includes('body: JSON.stringify({ holdId: rewardId })'))
+check('Rewards Centre avoids timestamp-generated retry identity', !rewards.includes('reward-claim-${Date.now()}-${rewardId}') && rewards.includes('body: { holdId: rewardId }'))
 check('marketplace listing activation verifies payment intent', marketplace.includes('verifyListingFeePayment') && marketplace.includes('listingFeeRequiresSettlement'))
 check('community creation fails closed without durable storage', community.includes('if (!socialDbConfigured())') && community.includes('nonDurableWriteResponse("Community create"'))
 check('feed marketplace interstitial uses canonical overlay navigation', feed.includes('onOpenMarketplace={() => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "marketplace" }))}') && !feed.includes('onOpenMarketplace={() => setTab("marketplace")}'))

@@ -251,13 +251,13 @@ export function ReceiveGhcFlow({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Receive GHC"
     >
-      <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]">
+      <button type="button" className="absolute inset-0 z-0" aria-label="Close" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-border/50 bg-card shadow-[var(--gh-modal-shadow)] sm:rounded-[1.75rem]">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <button
             type="button"

@@ -22,5 +22,17 @@ const checks = [
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }
+
+const safeApi = read("lib/client/safe-api-error.ts")
+checks.push(
+  ["intelligence snapshots enforce a 24-hour freshness bound", /INTELLIGENCE_MAX_AGE_MS = 24 \* 60 \* 60 \* 1000/.test(voteWeight) && /calculated_at/.test(voteWeight)],
+  ["reputation RPC and snapshot reads have bounded timeouts", (intelligence.match(/AbortSignal\.timeout\(8_000\)/g) || []).length >= 1 && (voteWeight.match(/AbortSignal\.timeout\(8_000\)/g) || []).length >= 2],
+  ["curation outage code maps to a safe user message", /CURATION_INTELLIGENCE_UNAVAILABLE:/.test(safeApi)],
+)
+for (const [label, ok] of checks.slice(-3)) {
+  console.log(`${ok ? "PASS" : "FAIL"} ${label}`)
+  if (!ok) failed++
+}
+
 console.log(`Phase 5 reliability checks: ${checks.length - failed}/${checks.length} passed`)
 if (failed) process.exit(1)

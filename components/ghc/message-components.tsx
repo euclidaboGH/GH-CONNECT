@@ -142,6 +142,15 @@ function ConversationItemBase({
 }) {
   const hasUnread = conversation.unread || Boolean(conversation.unreadCount)
   const unreadCount = conversation.unreadCount || (conversation.unread ? 1 : 0)
+  const isCommunity =
+    conversation.conversationType === "group" ||
+    Boolean((conversation as { isCommunity?: boolean }).isCommunity) ||
+    (conversation as { kind?: string }).kind === "community"
+  const displayName = (
+    isCommunity
+      ? conversation.groupName || conversation.participantName
+      : conversation.participantName || conversation.groupName
+  )?.trim() || (isCommunity ? "Community" : "Member")
   const messagePreview = useMemo(() => {
     if (conversation.isTyping) return `${conversation.typingUser || conversation.participantName} is typing…`
     if (!conversation.lastMessage) return "Start a conversation"
@@ -168,8 +177,8 @@ function ConversationItemBase({
                 conversation.conversationType === "group" ||
                 (conversation as { isCommunity?: boolean }).isCommunity ||
                 (conversation as { kind?: string }).kind === "community"
-                  ? `Open community ${conversation.groupName || conversation.participantName}`
-                  : `Open ${conversation.participantName}'s profile`
+                  ? `Open community ${displayName}`
+                  : `Open ${displayName}'s profile`
               }
             >
               <LazyImage
@@ -180,8 +189,8 @@ function ConversationItemBase({
                 alt={
                   conversation.conversationType === "group" ||
                   (conversation as { isCommunity?: boolean }).isCommunity
-                    ? `${conversation.groupName || conversation.participantName} community`
-                    : `${conversation.participantName} profile photo`
+                    ? `${displayName} community`
+                    : `${displayName} profile photo`
                 }
                 className={
                   conversation.conversationType === "group" ||
@@ -213,13 +222,13 @@ function ConversationItemBase({
             type="button"
             onClick={onClick}
             className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
-            aria-label={`Open conversation with ${conversation.participantName}`}
+            aria-label={`Open conversation with ${displayName}`}
           >
             <div className="flex items-center gap-2">
               <p className={`min-w-0 flex-1 truncate text-[15px] text-foreground ${hasUnread ? "font-semibold" : "font-medium"}`}>
                 {(conversation.conversationType === "group" || (conversation as { isCommunity?: boolean }).isCommunity)
-                  ? `Community · ${conversation.groupName || conversation.participantName}`
-                  : conversation.participantName}
+                  ? `Community · ${displayName}`
+                  : displayName}
                 {(conversation as { isRequest?: boolean }).isRequest ? (
                   <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">Request</span>
                 ) : conversation.conversationType === "group" || (conversation as { isCommunity?: boolean }).isCommunity ? (

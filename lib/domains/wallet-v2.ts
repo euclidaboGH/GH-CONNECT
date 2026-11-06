@@ -145,7 +145,7 @@ export async function fetchWalletV2(options?: { signal?: AbortSignal }): Promise
     credentials: "include",
     cache: "no-store",
     headers: { Accept: "application/json" },
-    signal: options?.signal,
+    signal: options?.signal ?? AbortSignal.timeout(10_000),
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok || !payload?.ok || !payload?.wallet) {

@@ -74,8 +74,11 @@ export function formatDateTime(
 
 export function formatDateTimeWithZone(value: string | number | Date, context?: Pick<RegionalContextSnapshot, "locale" | "timeZone">): string {
   return formatDateTime(value, {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZoneName: "short",
   }, context)
 }

@@ -441,7 +441,11 @@ export function createMembershipDomain(deps: {
       return [MEMBERSHIP_PLANS.free, MEMBERSHIP_PLANS.vip, MEMBERSHIP_PLANS.vvip]
     },
 
-    /** Single entitlement check for UI / domains */
+    /**
+     * Presentation hint for UI/domain composition only. Server APIs must call
+     * lib/server/membership/membership-access.ts before protected operations;
+     * this browser cache is never an authorization authority.
+     */
     hasEntitlement(key: EntitlementKey, forUserId?: string): boolean {
       const status = forUserId ? loadStatus(forUserId) : effectiveStatus()
       if (!status.active) return false

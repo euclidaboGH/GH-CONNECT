@@ -1,7 +1,10 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { confirmDialog } from "@/lib/ui/global-interactions"
 import { useEffect, useRef, useState } from "react"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { Image as ImageIcon, Video, X, Globe, Users, Lock, FileText, BarChart3, Save } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
@@ -18,6 +21,8 @@ import { COMPOSE_LIMITS, textMaxForMode } from "@/lib/composer/compose-limits"
 import { a11y } from "@/lib/accessibility"
 import { prefersReducedMotion } from "@/lib/ui/prefers-reduced-motion"
 import { ComposeMediaStrip, ComposeUploadProgress, ComposeDraftBanner } from "./compose-media-strip"
+import { MediaLightbox } from "./media-lightbox"
+import { DurableVideo } from "./durable-video"
 
 export type ComposeMode = "post" | "story"
 export type Audience = "public" | "followers" | "mutuals" | "private"
@@ -57,6 +62,8 @@ interface UnifiedComposeProps {
  */
 export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: UnifiedComposeProps) {
   const { createPost, publishStory, profile, addToast, candidates, following, conversations } = useGHC()
+  const regional = useRegionalContext()
+  const t = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
   const [mode, setMode] = useState<ComposeMode>(initialMode)
   const [text, setText] = useState("")
   const [selectedImages, setSelectedImages] = useState<string[]>([])
@@ -64,6 +71,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
   const [selectedDocName, setSelectedDocName] = useState<string | null>(null)
   const [storyMedia, setStoryMedia] = useState<StoryItem["media"]>(null)
+  const [storyPreviewOpen, setStoryPreviewOpen] = useState(false)
   const [audience, setAudience] = useState<Audience>("public")
   const [showAudience, setShowAudience] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
@@ -691,7 +699,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           <X size={22} />
         </button>
         <h1 id="unified-compose-title" className="flex-1 text-center text-[17px] font-extrabold tracking-tight text-foreground">
-          {mode === "post" ? "New post" : "New story"}
+          {mode === "post" ? t("composeTitle") : t("newStory")}
         </h1>
         <button
           type="button"
@@ -700,7 +708,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           aria-busy={isPublishing || Boolean(uploadProgress)}
           className="min-h-9 rounded-full bg-[var(--gh-green)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
         >
-          {isPublishing ? (mode === "post" ? "Posting…" : "Sharing…") : mode === "post" ? "Post" : "Share"}
+          {isPublishing ? (mode === "post" ? t("posting") : t("sharing")) : mode === "post" ? t("publish") : t("share")}
         </button>
       </header>
 
@@ -709,7 +717,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
         >
-          You&apos;re offline — drafts save on this device. Publishing needs a connection; media will upload when you reconnect.
+          {t("composeOffline")}
         </div>
       ) : null}
 
@@ -721,7 +729,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         {mode === "post" && communityOptions.length > 0 && (
           <div className="px-3 pb-2">
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Community board (optional)
+              {t("communityBoard")}
             </label>
             <select
               value={selectedCommunityId}
@@ -729,7 +737,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground"
               aria-label="Post to community"
             >
-              <option value="">Personal feed only</option>
+              <option value="">{t("personalFeed")}</option>
               {communityOptions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -738,7 +746,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             </select>
             {selectedCommunityId ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Also shares to the community board. Still respects your visibility setting.
+                {t("alsoCommunity")}
               </p>
             ) : null}
           </div>
@@ -746,7 +754,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
         <div className="px-4 pt-4">
           <div className="mb-3 flex items-center gap-3">
-            <img
+            <DurableImage
               src={profile.photos?.[0] || "/placeholder.svg?width=48&height=48"}
               alt=""
               className="h-11 w-11 rounded-full object-cover ring-2 ring-emerald-100"
@@ -976,26 +984,37 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             />
           ) : null}
           {mode === "story" && storyMedia?.type === "image" && (
-            <div className="relative mt-3 overflow-hidden rounded-2xl">
-              <img src={storyMedia.url} alt="" className="max-h-64 w-full object-cover" />
+            <div className="relative mt-3 overflow-hidden rounded-2xl bg-black/5">
+              <button type="button" onClick={() => setStoryPreviewOpen(true)} className="block w-full cursor-zoom-in" aria-label="Preview story photo full screen">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <DurableImage src={storyMedia.url} alt="Story photo preview" className="max-h-[min(62vh,34rem)] w-full object-contain" />
+                <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white">Tap to preview</span>
+              </button>
               <button
                 type="button"
-                className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"
+                className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white"
                 onClick={() => setStoryMedia(null)}
-                aria-label="Remove media"
+                aria-label="Remove story media"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
           )}
           {mode === "story" && storyMedia?.type === "video" && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5 text-sm font-semibold text-foreground/90">
-              <span>Video ready for story</span>
-              <button type="button" onClick={() => setStoryMedia(null)} className="text-emerald-700">
-                Remove
-              </button>
+            <div className="mt-3 space-y-2 rounded-xl bg-muted/40 p-2.5">
+              <div className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">
+                <span>Story video preview</span>
+                <button type="button" onClick={() => setStoryMedia(null)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
+              </div>
+              <DurableVideo src={storyMedia.url} controls playsInline muted={false} preload="metadata" className="max-h-[min(62vh,34rem)] w-full rounded-xl bg-black object-contain" />
             </div>
           )}
+          <MediaLightbox
+            open={storyPreviewOpen && mode === "story" && storyMedia?.type === "image"}
+            url={storyMedia?.type === "image" ? storyMedia.url : null}
+            caption="Story photo preview"
+            onClose={() => setStoryPreviewOpen(false)}
+          />
         </div>
       </div>
 

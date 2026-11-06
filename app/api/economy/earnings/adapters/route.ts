@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   evaluateAndCreditReward,
   getRewardAdapterPolicy,
@@ -37,8 +37,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rate = checkRateLimit(`earnings-adapter:${auth.userId}`, 20, 60_000)
-  if (!rate.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const rate = await checkDurableRateLimit(`earnings-adapter:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!rate.ok) return reply({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, durableRateLimitStatus(rate))
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)

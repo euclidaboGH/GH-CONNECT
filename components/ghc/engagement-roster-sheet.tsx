@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Long-press / open roster of users who liked, voted, or viewed content.
  * Data is server-authoritative; owner-gated lists may return FORBIDDEN.
@@ -173,7 +174,7 @@ export function EngagementRosterSheet({
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-muted/60"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <DurableImage
                     src={u.avatarUrl || "/placeholder.svg?width=40&height=40"}
                     alt=""
                     className="h-9 w-9 rounded-full object-cover bg-muted"

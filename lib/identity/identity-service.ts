@@ -126,6 +126,31 @@ export const IdentityService = {
     return identity.userId
   },
 
+  /**
+   * Phase 2: true if candidate equals canonical userId or linked Pi UID.
+   * Prefer lib/identity/identity-match for multi-alias ownership checks.
+   */
+  matchesUserId(candidate: string | null | undefined): boolean {
+    const id = String(candidate || "").trim()
+    if (!id) return false
+    if (id === identity.userId) return true
+    if (identity.piUserId && id === identity.piUserId) return true
+    return false
+  },
+
+  /** Alias list for ownership and graph filters (userId + piUserId). */
+  getIdentityAliases(): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const r of [identity.userId, identity.piUserId]) {
+      const id = String(r || "").trim()
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      out.push(id)
+    }
+    return out
+  },
+
   getPiUserId(): string | null {
     return identity.piUserId
   },

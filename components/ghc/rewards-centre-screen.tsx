@@ -1,6 +1,9 @@
 "use client"
 
-import { useMemo, useState, useCallback, useEffect } from "react"
+import { apiRequest } from "@/lib/client/api-request"
+
+
+import { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import {
   ArrowLeft,
   Award,
@@ -11,6 +14,8 @@ import {
   ChevronRight,
   Flame,
   Info,
+  Search,
+  X,
 } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { GhcSocialFuelNote } from "./ghc-social-fuel-note"
@@ -31,20 +36,44 @@ import {
   DAILY_STREAK_GHC,
 } from "@/lib/domains/reward-level-domain"
 import { useGHC } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
-import { UnifiedEarningsDashboard } from "./unified-earnings-dashboard"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import { SurfaceIntro } from "./ui/product-surface"
 import { EconomyProgramStatus } from "./economy-program-status"
 import { ReferralShareCard } from "./referral-share-card"
 import { fetchServerAchievements } from "@/lib/profile/server-profile-sync"
 import { navigateGhcActivityTarget, resolveRewardActivityTarget } from "@/lib/domains/ghc-activity-attribution"
+import { reportMissionProgress, type MissionCode } from "@/lib/missions/progress"
 
 type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
 /** Canonical unlocked achievement row from achievement domain */
 type UnlockedAchievementRow = AchievementDefinition & { unlockedAt: number }
+
+type ServerRewardTransaction = {
+  id: string
+  amount: number
+  status: "pending" | "posted" | "reversed" | "expired" | "failed"
+  reason: string
+  sourceEvent: string
+  referenceId?: string
+  createdAt: number
+}
+
+
+const MISSION_CODE_BY_CHALLENGE: Record<string, MissionCode> = {
+  challenge_profile_complete: "complete_profile",
+  challenge_join_community: "join_community",
+  challenge_meaningful_contribution: "meaningful_contribution",
+}
+
+function missionCodeForChallenge(challengeId: string): MissionCode | null {
+  return MISSION_CODE_BY_CHALLENGE[challengeId] || null
+}
 
 type RewardsSnapshot = {
   wallet: GhcWalletSnapshot | null | undefined
@@ -67,6 +96,17 @@ function formatGhc(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
+}
+
+function readNonNegativeAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0 ? value : null
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+  }
+  return null
 }
 
 function formatWhen(ts: number) {
@@ -94,8 +134,8 @@ const STATUS_STYLE: Record<ChallengeStatus, string> = {
 const STATUS_LABEL: Record<ChallengeStatus, string> = {
   available: "Available",
   in_progress: "In progress",
-  pending_validation: "Ready to claim",
-  completed: "Credited",
+  pending_validation: "Ready to verify",
+  completed: "Progress complete",
   expired: "Expired",
   locked: "Locked",
 }
@@ -137,14 +177,22 @@ export function RewardsCentreScreen({
   onBack: () => void
   onOpenWallet?: () => void
 }) {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const [tab, setTab] = useState<Tab>("challenges")
   const [tick, setTick] = useState<number>(0)
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
+  const [historyQuery, setHistoryQuery] = useState("")
+  const [historyStatus, setHistoryStatus] = useState<"all" | ServerRewardTransaction["status"]>("all")
+  const [serverRewardTransactions, setServerRewardTransactions] = useState<ServerRewardTransaction[] | null>(null)
+  const [serverHistoryStatus, setServerHistoryStatus] = useState<"loading" | "ready" | "unavailable">("loading")
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [achievementsHydrating, setAchievementsHydrating] = useState(true)
+  const [achievementRefreshTick, setAchievementRefreshTick] = useState(0)
+  const [verifyingMissionId, setVerifyingMissionId] = useState<string | null>(null)
   /** Durable unlocks from /api/profile/achievements (merged with local domain) */
   const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
     []
@@ -156,6 +204,8 @@ export function RewardsCentreScreen({
     curationBalance: number | null
     canFundCuration: boolean | null
   }>({ balance: null, pending: null, locked: null, curationBalance: null, canFundCuration: null })
+  const [economyStatus, setEconomyStatus] = useState<"loading" | "refreshing" | "ready" | "unavailable">("loading")
+  const economyOwnerRef = useRef<string | null>(null)
   const ghc = useGHC()
   const profile = ghc.profile
   // Optional community lists may be present on the provider value without being
@@ -205,17 +255,9 @@ export function RewardsCentreScreen({
       const engine = createChallengeEngine(userId)
       const challenges = engine.getChallengeCards(signals)
       const streak = engine.getQualityStreak()
-      const localAchievements: UnlockedAchievementRow[] =
-        services?.achievements?.getUnlockedForProfile?.() || []
-      // Prefer durable server unlocks when present; union by id
-      const byId = new Map<string, UnlockedAchievementRow>()
-      for (const a of localAchievements) {
-        if (a?.id) byId.set(String(a.id), a)
-      }
-      for (const a of serverAchievements) {
-        if (a?.id) byId.set(String(a.id), a)
-      }
-      const achievements = Array.from(byId.values())
+      // Only durable server unlocks are presented as achievements. Browser-local
+      // progress can guide a journey, but it is not proof of an unlocked milestone.
+      const achievements = serverAchievements.filter((row) => Boolean(row?.id))
       return { wallet, rewards, rules, pending, challenges, achievements, streak }
     } catch {
       return {
@@ -236,33 +278,129 @@ export function RewardsCentreScreen({
   }, [tick, userId, signals, serverAchievements])
 
   // Use the same server-authoritative economy snapshot as Wallet.
-  // Rewards Centre is presentation only; it never invents balances or issuance.
+  // Bound the request, isolate account changes, and reject null/invalid amounts
+  // rather than accidentally presenting Number(null) as a confirmed zero.
   useEffect(() => {
     let cancelled = false
-    void fetch("/api/social/economy/status", { credentials: "include", cache: "no-store" })
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8_000)
+    if (economyOwnerRef.current !== userId) {
+      economyOwnerRef.current = userId
+      setServerEconomy({ balance: null, pending: null, locked: null, curationBalance: null, canFundCuration: null })
+      setEconomyStatus("loading")
+    } else {
+      setEconomyStatus("refreshing")
+    }
+
+    void fetch("/api/social/economy/status", {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then(async (response) => {
-        if (!response.ok) return null
+        if (!response.ok) throw new Error(`Economy snapshot failed (${response.status})`)
         return response.json()
       })
-      .then((data) => {
-        if (cancelled || !data?.ok) return
+      .then((data: {
+        ok?: boolean
+        userId?: unknown
+        wallet?: { balance?: unknown; pending?: unknown; locked?: unknown }
+        curation?: { spendableBalance?: unknown; canFundSuggestedContribution?: unknown }
+      } | null) => {
+        if (cancelled) return
+        if (!data || data.ok !== true || (typeof data.userId === "string" && data.userId !== userId)) {
+          setEconomyStatus("unavailable")
+          return
+        }
         setServerEconomy({
-          balance: Number.isFinite(Number(data.wallet?.balance)) ? Number(data.wallet.balance) : null,
-          pending: Number.isFinite(Number(data.wallet?.pending)) ? Number(data.wallet.pending) : null,
-          locked: Number.isFinite(Number(data.wallet?.locked)) ? Number(data.wallet.locked) : null,
-          curationBalance: Number.isFinite(Number(data.curation?.spendableBalance)) ? Number(data.curation.spendableBalance) : null,
+          balance: readNonNegativeAmount(data.wallet?.balance),
+          pending: readNonNegativeAmount(data.wallet?.pending),
+          locked: readNonNegativeAmount(data.wallet?.locked),
+          curationBalance: readNonNegativeAmount(data.curation?.spendableBalance),
           canFundCuration: typeof data.curation?.canFundSuggestedContribution === "boolean"
             ? data.curation.canFundSuggestedContribution
             : null,
         })
+        setEconomyStatus("ready")
       })
-      .catch(() => { /* retain last confirmed snapshot */ })
-    return () => { cancelled = true }
+      .catch(() => {
+        if (!cancelled) setEconomyStatus("unavailable")
+      })
+      .finally(() => window.clearTimeout(timeout))
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
   }, [tick, userId])
+
+  // Hydrate the authenticated GHC ledger for cross-device reward history.
+  // The endpoint enforces same-user access and returns authoritative transactions;
+  // local domain history remains a fallback only when the server is unavailable.
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8_000)
+    setServerRewardTransactions(null)
+    setServerHistoryStatus("loading")
+    if (!userId || userId === "current-user" || userId === "anonymous") {
+      setServerHistoryStatus("unavailable")
+      window.clearTimeout(timeout)
+      return () => controller.abort()
+    }
+    void fetch(`/api/economy/wallet/${encodeURIComponent(userId)}?limit=200`, {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Ledger history unavailable (${response.status})`)
+        return response.json()
+      })
+      .then((data: { ok?: boolean; transactions?: Array<Record<string, unknown>> } | null) => {
+        if (cancelled) return
+        if (!data || data.ok !== true || !Array.isArray(data.transactions)) {
+          setServerHistoryStatus("unavailable")
+          return
+        }
+        const rows: ServerRewardTransaction[] = data.transactions.flatMap((raw) => {
+          if (!raw || typeof raw !== "object" || raw.kind !== "earned") return []
+          const amount = Number(raw.amount)
+          const createdAt = typeof raw.createdAt === "number" ? raw.createdAt : Date.parse(String(raw.createdAt || ""))
+          const status = String(raw.status || "")
+          if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(createdAt) ||
+              !["pending", "posted", "reversed", "expired", "failed"].includes(status)) return []
+          const rowUserId = typeof raw.userId === "string" ? raw.userId : userId
+          if (rowUserId !== userId) return []
+          return [{
+            id: String(raw.id || "").slice(0, 160),
+            amount,
+            status: status as ServerRewardTransaction["status"],
+            reason: String(raw.reason || "GHC reward").slice(0, 180),
+            sourceEvent: String(raw.sourceEvent || "reward").slice(0, 120),
+            referenceId: raw.referenceId == null ? undefined : String(raw.referenceId).slice(0, 160),
+            createdAt,
+          }].filter((row) => row.id.length > 0)
+        })
+        setServerRewardTransactions(rows)
+        setServerHistoryStatus("ready")
+      })
+      .catch(() => {
+        if (!cancelled) setServerHistoryStatus("unavailable")
+      })
+      .finally(() => window.clearTimeout(timeout))
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [userId, tick])
 
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
     let cancelled = false
+    setServerAchievements([])
     setAchievementsHydrating(true)
     void fetchServerAchievements()
       .then((r) => {
@@ -271,13 +409,16 @@ export function RewardsCentreScreen({
           setAchievementsHydrating(false)
           return
         }
-        const rows: UnlockedAchievementRow[] = (r.achievements || []).map((a) => ({
+        const rows: UnlockedAchievementRow[] = r.durable === true ? (r.achievements || []).map((a) => ({
           id: a.achievementId,
           title: a.achievementId.replace(/_/g, " "),
-          description: "Unlocked on this account",
+          description: "Durably unlocked on this account",
           unlockedAt: a.unlockedAt,
-        })) as UnlockedAchievementRow[]
+        })) as UnlockedAchievementRow[] : []
         setServerAchievements(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setServerAchievements([])
       })
       .finally(() => {
         if (!cancelled) setAchievementsHydrating(false)
@@ -285,7 +426,33 @@ export function RewardsCentreScreen({
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, achievementRefreshTick])
+
+  const verifyMission = useCallback(async (challengeId: string) => {
+    const code = missionCodeForChallenge(challengeId)
+    if (!code || verifyingMissionId) return
+    setVerifyingMissionId(challengeId)
+    setStatusMsg("Verifying milestone against GreenHaven records…")
+    try {
+      const result = await reportMissionProgress(code)
+      if (!result.ok) {
+        setStatusMsg(result.message || "Verification is temporarily unavailable. No reward was issued.")
+        return
+      }
+      if (result.verified && result.completed) {
+        setAchievementRefreshTick((value) => value + 1)
+        setStatusMsg(result.alreadyCompleted
+          ? "This achievement is already unlocked on your account. Mission completion does not issue GHC."
+          : "Achievement verified and saved to your account. Mission completion does not issue GHC under the current policy.")
+      } else {
+        setStatusMsg(result.message || "This milestone is not yet verified. Complete the action and try again.")
+      }
+    } catch {
+      setStatusMsg("Verification is temporarily unavailable. No reward was issued.")
+    } finally {
+      setVerifyingMissionId(null)
+    }
+  }, [verifyingMissionId])
 
   const recommended = useMemo(
     () =>
@@ -314,6 +481,30 @@ export function RewardsCentreScreen({
     return Array.from(map.values())
   }, [snapshot.pending])
 
+  const filteredLocalRewardRecords = useMemo(() => {
+    const query = historyQuery.trim().toLocaleLowerCase()
+    return snapshot.rewards.filter((row) => {
+      const status = String(row.validationStatus || "")
+      const matchesStatus = historyStatus === "all" ||
+        (historyStatus === "pending" && ["pending_validation", "eligible", "approved"].includes(status)) ||
+        (historyStatus === "posted" && status === "paid") ||
+        (historyStatus === "reversed" && status === "rejected") ||
+        (historyStatus === "expired" && status === "expired") ||
+        (historyStatus === "failed" && status === "blocked")
+      const searchable = `${row.reason || ""} ${row.sourceEvent || ""} ${row.ruleId || ""} ${row.referenceId || ""}`.toLocaleLowerCase()
+      return matchesStatus && (!query || searchable.includes(query))
+    }).sort((a, b) => b.createdAt - a.createdAt)
+  }, [snapshot.rewards, historyQuery, historyStatus])
+
+  const filteredServerRewardTransactions = useMemo(() => {
+    const rows = serverRewardTransactions || []
+    const query = historyQuery.trim().toLocaleLowerCase()
+    return rows
+      .filter((row) => historyStatus === "all" || row.status === historyStatus)
+      .filter((row) => !query || `${row.reason} ${row.sourceEvent} ${row.referenceId || ""}`.toLocaleLowerCase().includes(query))
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }, [serverRewardTransactions, historyQuery, historyStatus])
+
   const refresh = useCallback(() => {
     setTick((n) => n + 1)
     setStatusMsg("Refreshing rewards…")
@@ -331,6 +522,13 @@ export function RewardsCentreScreen({
       window.removeEventListener("ghc:wallet-refresh", onLive)
     }
   }, [refresh])
+
+  useSectionRefresh("rewards", async () => {
+    refresh()
+  }, {
+    minIntervalMs: 8_000,
+    events: ["ghc:wallet-refresh", "ghc:reward-claimed", "ghc:rewards-refresh"],
+  })
 
   useEffect(() => {
     const tabHandler = (e: Event) => {
@@ -365,7 +563,14 @@ export function RewardsCentreScreen({
   }, [showLearnMore])
 
 
-  const claimPendingReward = useCallback(
+  
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("ghc:section-refresh", { detail: { section: "rewards", reason: "opened" } }))
+    } catch { /* */ }
+  }, [])
+
+const claimPendingReward = useCallback(
     async (rewardId: string) => {
       if (claimingId) return
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -377,24 +582,26 @@ export function RewardsCentreScreen({
       try {
         let claimed = false
         try {
-          const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
-          try {
-            const { IdentityService } = await import("@/lib/identity/identity-service")
-            Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
-          } catch { /* */ }
-          const serverRes = await fetch("/api/economy/rewards/claim", {
-            method: "POST",
-            credentials: "include",
-            cache: "no-store",
-            headers,
-            // The hold ID is the stable server-side idempotency/ownership key.
-            // Do not mint a different client request ID on every retry.
-            body: JSON.stringify({ holdId: rewardId }),
-          })
-          const body = await serverRes.json().catch(() => ({}))
-          if (serverRes.ok && body?.ok) claimed = true
+          // Phase 2: authenticated claim via shared apiRequest (headers + timeout + safe errors).
+          const claimRes = await apiRequest<{ ok?: boolean; message?: string; error?: string; code?: string }>(
+            "/api/economy/rewards/claim",
+            {
+              method: "POST",
+              // The hold ID is the stable server-side idempotency/ownership key.
+              body: { holdId: rewardId },
+              timeoutMs: 25_000,
+            },
+          )
+          if (claimRes.ok && claimRes.data?.ok) claimed = true
           else {
-            ghc.addToast?.(body?.message || body?.error || body?.code || `Claim failed (${serverRes.status}). Your reward remains unchanged; retry later.`, "error")
+            ghc.addToast?.(
+              claimRes.error ||
+                claimRes.data?.message ||
+                claimRes.data?.error ||
+                claimRes.code ||
+                `Claim failed (${claimRes.status}). Your reward remains unchanged; retry later.`,
+              "error",
+            )
             return
           }
         } catch {
@@ -428,7 +635,7 @@ export function RewardsCentreScreen({
   )
 
   return (
-    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven Rewards Centre">
+    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("rewardsTitle")}>
 
       <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
@@ -440,7 +647,7 @@ export function RewardsCentreScreen({
           <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">Rewards</h1>
+          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">{msg("rewardsTitle")}</h1>
           <p className="text-[10px] leading-tight text-muted-foreground">Daily · missions · not pay-to-win</p>
         </div>
         {onOpenWallet && (
@@ -463,8 +670,13 @@ export function RewardsCentreScreen({
       </header>
 
       <div className="sr-only" role="status" aria-live="polite">
-        {statusMsg || (achievementsHydrating ? "Loading achievements" : "")}
+        {achievementsHydrating ? "Loading achievements" : ""}
       </div>
+      {statusMsg ? (
+        <div className="mx-3 mt-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-[11px] leading-relaxed text-foreground shadow-sm" role="status" aria-live="polite">
+          {statusMsg}
+        </div>
+      ) : null}
       {isOffline ? (
         <div
           className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
@@ -484,6 +696,41 @@ export function RewardsCentreScreen({
           onOpenWallet={onOpenWallet}
         />
 
+        <section className="mx-3 mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-labelledby="rewards-balance-summary-title">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p id="rewards-balance-summary-title" className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Rewards at a glance</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Amounts below come from the server-confirmed wallet snapshot. Pending and locked rewards are not spendable.</p>
+              <p className="mt-1 text-[9px] font-semibold" role="status" aria-live="polite">
+                {economyStatus === "ready" ? <span className="text-emerald-700 dark:text-emerald-300">● Server snapshot confirmed</span> : economyStatus === "refreshing" ? <span className="text-muted-foreground">Refreshing confirmed snapshot…</span> : economyStatus === "loading" ? <span className="text-muted-foreground">Loading secure snapshot…</span> : <span className="text-amber-700 dark:text-amber-300">Snapshot unavailable · retry refresh</span>}
+              </p>
+            </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" aria-hidden="true">
+              <Award size={17} />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="min-w-0 rounded-xl bg-emerald-50/80 px-2.5 py-2 dark:bg-emerald-950/30">
+              <p className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">Available</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.balance == null ? "—" : formatGhc(serverEconomy.balance)}</p>
+            </div>
+            <div className="min-w-0 rounded-xl bg-amber-50/80 px-2.5 py-2 dark:bg-amber-950/25">
+              <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-300">Pending</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.pending == null ? "—" : formatGhc(serverEconomy.pending)}</p>
+            </div>
+            <div className="min-w-0 rounded-xl bg-violet-50/80 px-2.5 py-2 dark:bg-violet-950/25">
+              <p className="text-[10px] font-semibold text-violet-800 dark:text-violet-300">Locked</p>
+              <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.locked == null ? "—" : formatGhc(serverEconomy.locked)}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+            <p className="text-[10px] text-muted-foreground">{snapshot.pending.length} reward record{snapshot.pending.length === 1 ? "" : "s"} awaiting review or maturity</p>
+            <button type="button" onClick={() => setTab("history")} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+              View reward history <ChevronRight size={13} aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
         <section className="mx-3 mt-3 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/70 px-3.5 py-3 dark:border-emerald-900 dark:bg-emerald-950/25" aria-label="Recommended next action">
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">Best next action</p>
           <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review pending rewards" : "Keep building quality participation"}</p>
@@ -499,14 +746,34 @@ export function RewardsCentreScreen({
         <SurfaceIntro
           kicker="Earn & claim"
           title="Claims stay in Rewards"
-          body="Daily GHC, registration bonus, cashback, and missions are claimed here. Wallet shows balances and History only."
+          body="Daily claims and eligible reward requests are managed here. Verified mission milestones unlock achievements; Wallet shows balances and transaction history."
           tone="emerald"
         />
         <RegistrationBonusCard compact />
-        {/* PI withdraw/claim lives on Wallet to avoid duplicate dashboards.
-            Compact cashback summary only; full ledger + A2U request on Wallet. */}
+        {/* Phase 4: PI withdraw + payout authorization live only on Wallet (no duplicate dashboards). */}
         <PiCashbackSummary />
-        <UnifiedEarningsDashboard compact />
+        <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm">
+          <p className="text-[12px] font-bold text-foreground">Pi withdrawals</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            Authorize payouts and withdraw available Pi from Wallet. Claims stay here; balances and History stay on Wallet.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ghc:open-settings-section", {
+                    detail: { section: "wallet", focus: "gh-pi-earnings-tools" },
+                  }),
+                )
+              } catch { /* */ }
+            }}
+            className="mt-2.5 inline-flex min-h-9 items-center justify-center rounded-full bg-violet-700 px-3.5 text-[11px] font-bold text-white transition hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2"
+            aria-label="Open Wallet to authorize and withdraw Pi"
+          >
+            Open Wallet · Withdraw Pi
+          </button>
+        </div>
 
         <div className="mx-3 mt-3">
           <EconomyProgramStatus />
@@ -592,7 +859,7 @@ export function RewardsCentreScreen({
         )}
 
         <p className="mx-3 mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Daily Claim rewards mature after 48 hours. Mission rewards are paused until the server can verify completion and prevent duplicate claims.{" "}
+          Daily Claim rewards mature after 48 hours. Verified mission milestones unlock durable achievements; mission completion does not issue GHC under the current economy policy.{" "}
           <button
             type="button"
             className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
@@ -612,9 +879,10 @@ export function RewardsCentreScreen({
         {showLearnMore && (
           <p className="mx-3 mt-1 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
             Rewards require server-verified, meaningful actions. Daily Claim rewards mature after
-            48 hours; pending funds cannot be spent or transferred. Mission rewards remain paused
-            until completion verification and one-time claim storage are available. Ledger
-            transactions should record event → rule → amount → status.
+            48 hours; pending funds cannot be spent or transferred. Mission milestones are verified
+            against durable GreenHaven records and unlock non-financial achievements. GHC activity
+            issuance remains disabled by the current policy. Ledger entries remain the authority
+            for credited value.
           </p>
         )}
 
@@ -626,7 +894,7 @@ export function RewardsCentreScreen({
             </p>
             <div className="space-y-2">
               {recommended.map((card) => (
-                <ChallengeCardView key={`rec-${card.challenge.id}`} card={card} compact />
+                <ChallengeCardView key={`rec-${card.challenge.id}`} card={card} compact onVerifyMission={verifyMission} verifyingMissionId={verifyingMissionId} />
               ))}
             </div>
           </div>
@@ -657,10 +925,10 @@ export function RewardsCentreScreen({
         >
           {(
             [
-              { id: "challenges" as const, label: "Missions" },
-              { id: "opportunities" as const, label: "Opportunities" },
-              { id: "history" as const, label: "History" },
-              { id: "achievements" as const, label: "Achievements" },
+              { id: "challenges" as const, label: msg("missions") },
+              { id: "opportunities" as const, label: msg("opportunities") },
+              { id: "history" as const, label: msg("history") },
+              { id: "achievements" as const, label: msg("achievements") },
             ] as const
           ).map((item) => (
             <button
@@ -735,15 +1003,15 @@ export function RewardsCentreScreen({
                 </li>
               </ul>
               <p className="mt-2 text-[10px] text-muted-foreground">
-                Credits are ledger-backed after validation — never minted only on the device.
+                Activity-based GHC issuance is currently disabled. These rules are informational and do not promise a credit.
               </p>
             </div>
 
               <p className="px-1 text-[11px] font-semibold text-muted-foreground">
-                Activity credit opportunities (configured rules)
+                Activity milestone reference (configured rules)
               </p>
               {snapshot.rules.length === 0 ? (
-                <Empty title="No active rules" body="Reward rules load from the economy domain." />
+                <Empty title="No active rules" body="No activity milestones are currently configured." />
               ) : (
                 snapshot.rules.map((rule) => (
                   <div
@@ -752,25 +1020,23 @@ export function RewardsCentreScreen({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
-                        <GhcCoinIcon size={18} className="mt-0.5" />
+                        <Award size={18} className="mt-0.5 text-emerald-700 dark:text-emerald-300" />
                         <div>
                           <p className="text-sm font-semibold text-foreground">
                             {rule.description || rule.id}
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {rule.category} · up to {rule.amount} GHC
-                            {rule.dailyLimit ? ` · max ${rule.dailyLimit}/day` : ""}
+                            {rule.category} · informational policy reference
                           </p>
                           {rule.requiresValidation && (
                             <p className="mt-1 text-[10px] font-medium text-amber-700">
-                              May require validation before credit
+                              Progress does not represent a GHC credit
                             </p>
                           )}
                         </div>
                       </div>
-                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        <GhcCoinIcon size={14} />
-                        +{rule.amount}
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        Reference
                       </span>
                     </div>
                   </div>
@@ -788,30 +1054,57 @@ export function RewardsCentreScreen({
                 className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
                 role="status"
               >
-                Mission GHC is fail-closed until the server can verify each action (post, join,
-                profile, connection) and claim it once. Completing a mission in the UI tracks
-                progress only — it does not mint GHC on the device. Daily claim remains the
-                primary server-backed reward path.
+                Milestones are verified against durable GreenHaven activity and unlock account-level
+                achievements. Mission completion does not issue GHC under the current economy policy.
+                Daily Claim remains the active server-backed GHC reward path.
               </div>
               {snapshot.challenges.map((card) => (
-                <ChallengeCardView key={card.challenge.id} card={card} />
+                <ChallengeCardView key={card.challenge.id} card={card} onVerifyMission={verifyMission} verifyingMissionId={verifyingMissionId} />
               ))}
             </>
           )}
 
           {tab === "history" && (
             <>
+              <div className="rounded-[1.25rem] border border-border/60 bg-card p-3 shadow-[var(--gh-card-shadow)]">
+                <label htmlFor="rewards-history-search" className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Search reward ledger</label>
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
+                  <Search size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <input id="rewards-history-search" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search reason, activity or reference" className="h-10 min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/70" />
+                  {historyQuery ? <button type="button" onClick={() => setHistoryQuery("")} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Clear search"><X size={14} /></button> : null}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filter reward transaction status">
+                  {(["all", "posted", "pending", "reversed", "expired", "failed"] as const).map((value) => (
+                    <button key={value} type="button" onClick={() => setHistoryStatus(value)} aria-pressed={historyStatus === value} className={`min-h-8 rounded-full px-3 text-[10px] font-bold capitalize transition ${historyStatus === value ? "bg-[var(--gh-green)] text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>{value === "all" ? "All" : value.replace(/_/g, " ")}</button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground" role="status" aria-live="polite">{serverHistoryStatus === "ready" ? `${filteredServerRewardTransactions.length} server ledger entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"} · newest first` : serverHistoryStatus === "loading" ? "Synchronizing account ledger…" : "Server ledger unavailable · showing local activity only where available"}</p>
+              </div>
+              {serverHistoryStatus === "ready" ? (
+                filteredServerRewardTransactions.length ? filteredServerRewardTransactions.map((row) => (
+                  <article key={row.id} className="rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${row.status === "posted" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : row.status === "pending" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : "bg-muted text-muted-foreground"}`}><GhcCoinIcon size={17} /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2"><p className="min-w-0 flex-1 text-[12px] font-bold text-foreground">{row.reason}</p><span className="shrink-0 text-[12px] font-black tabular-nums text-emerald-700 dark:text-emerald-300">+{formatGhc(row.amount)}</span></div>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{row.sourceEvent} · {formatWhen(row.createdAt)}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold capitalize ${row.status === "posted" ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" : row.status === "pending" ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200" : "bg-muted text-muted-foreground"}`}>{row.status}</span>{row.referenceId ? <span className="max-w-full truncate text-[9px] text-muted-foreground">Ref: {row.referenceId}</span> : null}</div>
+                      </div>
+                    </div>
+                  </article>
+                )) : <Empty title="No matching ledger entries" body="Try another search or status filter. Your server-confirmed GHC reward ledger is up to date." />
+              ) : null}
               <p className="mb-1 flex items-start gap-1.5 px-1 text-[11px] text-muted-foreground">
                 <Info size={12} className="mt-0.5 shrink-0" />
-                Each line teaches the economy: event → rule → amount → status
+                Server ledger entries are authoritative; local reward records are shown below as supplemental activity.
               </p>
-              {snapshot.rewards.length === 0 ? (
+              {filteredLocalRewardRecords.length === 0 ? (
                 <Empty
-                  title="No reward history"
-                  body="Complete your profile to unlock first activity credits. Each history line shows event → rule → amount → status."
+                  title="No additional local reward records"
+                  body="Your server ledger is shown above when available. New validated reward activity will appear here after it is synchronized."
                 />
               ) : (
-                snapshot.rewards.map((r) => {
+                filteredLocalRewardRecords.map((r) => {
                   // Canonical RewardValidationStatus only (no legacy "pending")
                   const status = r.validationStatus
                   const claimLabel =
@@ -936,9 +1229,13 @@ export function RewardsCentreScreen({
 function ChallengeCardView({
   card,
   compact,
+  onVerifyMission,
+  verifyingMissionId,
 }: {
   card: ChallengeCard
   compact?: boolean
+  onVerifyMission?: (challengeId: string) => void
+  verifyingMissionId?: string | null
 }) {
   const { challenge, status, percent, nextStep } = card
   const progress = card.progress
@@ -985,8 +1282,7 @@ function ChallengeCardView({
               <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
                 <span className="font-semibold">Progress</span>
                 <span className="font-semibold text-foreground">
-                  {targetLabel}
-                  {challenge.rewardAmount ? ` · +${challenge.rewardAmount} GHC` : ""}
+                  {targetLabel} · achievement milestone
                 </span>
               </div>
               <div
@@ -1021,45 +1317,19 @@ function ChallengeCardView({
                 <ChevronRight size={12} aria-hidden />
               </button>
             )}
-            {status === "pending_validation" && (
+            {(status === "pending_validation" || status === "completed") && missionCodeForChallenge(challenge.id) && onVerifyMission && (
               <button
                 type="button"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:open-settings-section", {
-                        detail: { section: "wallet" },
-                      })
-                    )
-                  } catch {
-                    /* */
-                  }
-                }}
-                className="mt-2.5 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-amber-50 px-3.5 py-1.5 text-[11px] font-bold text-amber-900 shadow-sm"
+                onClick={() => onVerifyMission(challenge.id)}
+                disabled={verifyingMissionId === challenge.id}
+                className="mt-2.5 inline-flex min-h-9 items-center gap-1 rounded-full border border-emerald-300/80 bg-emerald-50 px-3.5 py-1.5 text-[11px] font-bold text-emerald-900 shadow-sm disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
               >
-                View pending in Wallet
+                {verifyingMissionId === challenge.id ? "Verifying…" : "Verify achievement"}
                 <ChevronRight size={12} aria-hidden />
               </button>
             )}
-            {status === "completed" && (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("ghc:open-settings-section", {
-                        detail: { section: "wallet" },
-                      })
-                    )
-                  } catch {
-                    /* */
-                  }
-                }}
-                className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3.5 py-1.5 text-[11px] font-bold text-foreground"
-              >
-                Open Wallet
-                <ChevronRight size={12} aria-hidden />
-              </button>
+            {(status === "pending_validation" || status === "completed") && !missionCodeForChallenge(challenge.id) && (
+              <p className="mt-2 text-[10px] text-muted-foreground">This milestone does not currently have a server verification workflow.</p>
             )}
           </div>
         </div>
@@ -1069,12 +1339,7 @@ function ChallengeCardView({
           >
             {STATUS_LABEL[status]}
           </span>
-          {challenge.rewardAmount != null && Number(challenge.rewardAmount) > 0 && (
-            <p className="mt-1.5 inline-flex items-center justify-end gap-0.5 text-sm font-bold text-emerald-700 dark:text-emerald-400">
-              <GhcCoinIcon size={16} />
-              +{challenge.rewardAmount}
-            </p>
-          )}
+
         </div>
       </div>
     </div>

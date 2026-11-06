@@ -9,7 +9,7 @@
 
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { socialRpc } from "@/lib/server/social/rpc"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
@@ -36,9 +36,9 @@ export async function GET(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const readLimit = checkRateLimit(`msg-read:${auth.userId}`, 120, 60_000)
+    const readLimit = await checkDurableRateLimit(`msg-read:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
     if (!readLimit.ok) {
-      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(readLimit), retryAfterSec: readLimit.retryAfterSec }, { status: durableRateLimitStatus(readLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
     }
     const { conversationId } = await ctx.params
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
@@ -107,12 +107,9 @@ export async function POST(request: Request, ctx: Ctx) {
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
       return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
-    const rl = checkRateLimit(`msg-send:${auth.userId}`, 60, 60_000)
+    const rl = await checkDurableRateLimit(`msg-send:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
     if (!rl.ok) {
-      return NextResponse.json(
-        { ok: false, error: "RATE_LIMITED" },
-        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } }
-      )
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
     }
     const parsed = await readBoundedJson(request, 24 * 1024)
     if (!parsed.ok) {
@@ -232,9 +229,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const editLimit = checkRateLimit(`msg-edit:${auth.userId}`, 60, 60_000)
+    const editLimit = await checkDurableRateLimit(`msg-edit:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
     if (!editLimit.ok) {
-      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(editLimit.retryAfterSec) } })
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(editLimit), retryAfterSec: editLimit.retryAfterSec }, { status: durableRateLimitStatus(editLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(editLimit.retryAfterSec) } })
     }
     const { conversationId } = await ctx.params
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {
@@ -329,9 +326,9 @@ export async function DELETE(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const deleteLimit = checkRateLimit(`msg-delete:${auth.userId}`, 60, 60_000)
+    const deleteLimit = await checkDurableRateLimit(`msg-delete:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
     if (!deleteLimit.ok) {
-      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(deleteLimit.retryAfterSec) } })
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(deleteLimit), retryAfterSec: deleteLimit.retryAfterSec }, { status: durableRateLimitStatus(deleteLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(deleteLimit.retryAfterSec) } })
     }
     const { conversationId } = await ctx.params
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {

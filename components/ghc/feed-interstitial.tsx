@@ -108,35 +108,24 @@ export function FeedInterstitial({
 
   // people (default)
   return (
-    <section
-      className="mx-3 my-2 rounded-[1.25rem] border border-border/60 bg-card px-4 py-3.5 shadow-sm"
-      aria-label="People you may know"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700">
-          <Users size={18} />
+    <section className="mx-1 my-1 border-y border-border/50 px-2 py-3" aria-label="People you may know">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Users size={17} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-bold text-foreground">People you may know</p>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Connect with members who share your interests and location.
-          </p>
-          <button
-            type="button"
-            onClick={onFindPeople}
-            className="mt-2 min-h-9 rounded-full bg-emerald-600 px-3.5 py-1.5 text-[12px] font-bold text-white"
-          >
-            Find people
-          </button>
+          <p className="text-[12px] font-semibold text-foreground">People you may know</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Discover members with shared interests.</p>
         </div>
+        <button type="button" onClick={onFindPeople} className="min-h-9 shrink-0 rounded-full px-3 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">Discover</button>
       </div>
     </section>
   )
 }
 
-/** Insert an interstitial after every N posts (1-based index after post). */
+/** Keep discovery prompts occasional so the feed remains primarily about posts. */
 export function interstitialKindAt(indexAfterPost: number): FeedInterstitialKind | null {
-  if (indexAfterPost <= 0 || indexAfterPost % 8 !== 0) return null
-  const cycle: FeedInterstitialKind[] = ["people", "marketplace", "communities", "create"]
-  return cycle[Math.floor((indexAfterPost / 8 - 1) % cycle.length)]!
+  if (indexAfterPost <= 0 || indexAfterPost % 12 !== 0) return null
+  const cycle: FeedInterstitialKind[] = ["people", "communities", "marketplace", "create"]
+  return cycle[Math.floor((indexAfterPost / 12 - 1) % cycle.length)]!
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import {
-  getEntitlementAuthoritative,
   tryGetEntitlementAuthoritative,
   reconcileMembershipFromPaymentHistory,
 } from "@/lib/server/membership/entitlement-store"
@@ -12,7 +11,10 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json(
+      { ok: false, error: "AUTH_REQUIRED" },
+      { status: 401, headers: { "Cache-Control": "no-store, no-cache, must-revalidate", Pragma: "no-cache" } },
+    )
   }
   // Prefer non-throwing path so unavailable store → 503, not fake free.
   // getEntitlementAuthoritative remains the canonical authority helper.
@@ -51,8 +53,6 @@ export async function GET(request: Request) {
       recovered = reconciliation.recovered
     }
   }
-  // Reference canonical helper for static authority checks / future strict mode
-  void getEntitlementAuthoritative
   return NextResponse.json(
     { ok: true, entitlement: finalResult.entitlement, source: finalResult.source, recovered },
     {

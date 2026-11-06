@@ -38,12 +38,16 @@ export function WalletHeader({
         </div>
         <div className="min-w-0">
           <h1 className="truncate text-[15px] font-extrabold leading-tight tracking-tight text-foreground">
-            Wallet
+            Your wallet
           </h1>
           <p className="truncate text-[10px] leading-tight text-muted-foreground">
-            PI · GHC · separate ledgers
-            {lastSynced ? ` · ${formatWhen(lastSynced)}` : ""}
+            Pi and GHC balances stay separate
           </p>
+          {lastSynced ? (
+            <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground" aria-label={`Last wallet sync ${formatWhen(lastSynced)}`}>
+              Updated {formatWhen(lastSynced)}
+            </p>
+          ) : null}
         </div>
       </div>
       <button

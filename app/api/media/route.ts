@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { buildOwnedMediaPath, isSafeMediaBucket, MAX_MEDIA_BYTES, maxMediaBytesForMime } from "@/lib/server/media/path-policy.mjs"
@@ -66,9 +66,9 @@ export async function GET(request: Request) {
   if (!auth) {
     return jsonNoStore({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const rl = checkRateLimit(`media-resolve:${auth.userId}`, 120, 60_000)
+  const rl = await checkDurableRateLimit(`media-resolve:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonNoStore({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+    return jsonNoStore({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { "Retry-After": String(rl.retryAfterSec) } })
   }
   const url = new URL(request.url)
   const rawIds = (url.searchParams.get("ids") || "").split(",").map((s) => s.trim()).filter(Boolean)
@@ -90,9 +90,9 @@ export async function POST(request: Request) {
     return jsonNoStore({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const rl = checkRateLimit(`media-upload:${auth.userId}`, 30, 60_000)
+  const rl = await checkDurableRateLimit(`media-upload:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return jsonNoStore({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+    return jsonNoStore({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { "Retry-After": String(rl.retryAfterSec) } })
   }
 
   const env = readGhcServerEnv()

@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Discovery section components — premium, low-noise mini cards.
  * Tap opens full profile; no stacked Follow/Connect/Match on section tiles.
@@ -86,7 +87,7 @@ function MiniPersonCard({
       className={`overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br ${accent} text-left transition hover:shadow-md active:scale-[0.99]`}
     >
       <div className="relative aspect-[4/5] w-full bg-muted">
-        <img src={photo} alt="" className="h-full w-full object-cover" loading="lazy" />
+        <DurableImage src={photo} alt="" className="h-full w-full object-cover" loading="lazy" />
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-8">
           <p className="truncate text-[13px] font-bold text-white">{name}</p>
           <p className="truncate text-[10px] text-white/85">{location}</p>
@@ -179,38 +180,34 @@ export function SuggestedFriendsSection({
           const photo = safeCandidatePhoto(c)
           const location = safeCandidateLocation(c)
           return (
-            <button
+            <div
               key={c.id}
-              type="button"
-              onClick={() => onViewProfile(c)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-2.5 text-left transition hover:bg-muted/40"
+              className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-2.5 transition hover:border-primary/30 hover:bg-muted/30"
             >
-              <img src={photo} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-background" loading="lazy" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-bold text-foreground">{name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{location}</p>
-                {Array.isArray(c.interests) && c.interests[0] ? (
-                  <p className="truncate text-[10px] font-medium text-primary/80">{String(c.interests[0])}</p>
-                ) : null}
-              </div>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onFollow(c.id)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.stopPropagation()
-                    onFollow(c.id)
-                  }
-                }}
-                className="shrink-0 rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary"
+              <button
+                type="button"
+                onClick={() => onViewProfile(c)}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label={`View ${name}'s profile`}
+              >
+                <DurableImage src={photo} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-background" loading="lazy" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-bold text-foreground">{name}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{location}</span>
+                  {Array.isArray(c.interests) && c.interests[0] ? (
+                    <span className="block truncate text-[10px] font-medium text-primary/80">{String(c.interests[0])}</span>
+                  ) : null}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onFollow(c.id)}
+                className="min-h-10 shrink-0 rounded-full bg-primary/10 px-3.5 py-2 text-[11px] font-bold text-primary transition hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label={`Follow ${name}`}
               >
                 Follow
-              </span>
-            </button>
+              </button>
+            </div>
           )
         })}
       </div>

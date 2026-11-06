@@ -5,6 +5,7 @@
  */
 
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { sanitizeBusinessIdentityPayload, sanitizeProfessionalIdentityPayload } from "@/lib/profile/professional-identity"
 
 export type ServerProfileRecord = {
   ghUserId: string
@@ -89,6 +90,7 @@ function clipStr(v: unknown, max: number): string | null {
   return s.slice(0, max)
 }
 
+
 /** Strip financial / membership fields clients must not control. */
 export function sanitizeProfileInput(
   ghUserId: string,
@@ -119,10 +121,14 @@ export function sanitizeProfileInput(
     : existing?.onboarded ?? false
 
   // Never accept client balance / tier
-  const payloadIn =
-    input.profilePayload && typeof input.profilePayload === "object"
-      ? (input.profilePayload as Record<string, unknown>)
-      : {}
+  const payloadIn: Record<string, unknown> = input.profilePayload && typeof input.profilePayload === "object"
+    ? { ...(input.profilePayload as Record<string, unknown>) }
+    : {}
+  // Professional identity fields are persisted in the extensible profile payload, but
+  // direct typed profile patches are accepted as input and normalized here as well.
+  for (const key of ["profileMode", "professional", "business"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, key)) payloadIn[key] = input[key]
+  }
   const banned = new Set([
     "balance",
     "ghcBalance",
@@ -144,11 +150,22 @@ export function sanitizeProfileInput(
     "createdAt",
     "updatedAt",
   ])
-  const profilePayload: Record<string, unknown> = {
-    ...(existing?.profilePayload || {}),
+  const profilePayload: Record<string, unknown> = { ...(existing?.profilePayload || {}) }
+  // Remove any legacy client-forged verification flags from persisted presentation payloads.
+  if (Object.prototype.hasOwnProperty.call(profilePayload, "professional")) {
+    profilePayload.professional = sanitizeProfessionalIdentityPayload(profilePayload.professional)
+  }
+  if (Object.prototype.hasOwnProperty.call(profilePayload, "business")) {
+    profilePayload.business = sanitizeBusinessIdentityPayload(profilePayload.business)
   }
   for (const [k, v] of Object.entries(payloadIn)) {
     if (banned.has(k)) continue
+    if (k === "profileMode") {
+      if (v === "social" || v === "professional" || v === "business") profilePayload[k] = v
+      continue
+    }
+    if (k === "professional") { profilePayload[k] = sanitizeProfessionalIdentityPayload(v); continue }
+    if (k === "business") { profilePayload[k] = sanitizeBusinessIdentityPayload(v); continue }
     profilePayload[k] = v
   }
   let payloadJson = "{}"
@@ -394,10 +411,20 @@ export async function upsertServerProfile(
 export function serverProfileToClientPartial(
   rec: ServerProfileRecord
 ): Record<string, unknown> {
+  const safePayload: Record<string, unknown> = { ...rec.profilePayload }
+  if (Object.prototype.hasOwnProperty.call(safePayload, "professional")) {
+    safePayload.professional = sanitizeProfessionalIdentityPayload(safePayload.professional)
+  }
+  if (Object.prototype.hasOwnProperty.call(safePayload, "business")) {
+    safePayload.business = sanitizeBusinessIdentityPayload(safePayload.business)
+  }
+  if (safePayload.profileMode !== "social" && safePayload.profileMode !== "professional" && safePayload.profileMode !== "business") {
+    delete safePayload.profileMode
+  }
   return {
     // Extensible presentation fields come first; canonical server-owned fields below
     // intentionally win if an older payload contains colliding keys.
-    ...rec.profilePayload,
+    ...safePayload,
     id: rec.ghUserId,
     displayName: rec.displayName || "",
     username: rec.username,

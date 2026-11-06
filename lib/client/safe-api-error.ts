@@ -27,14 +27,40 @@ export function toClientSafeErrorMessage(raw: unknown, fallback = "Something wen
 function humanizeErrorCode(code: string): string | null {
   const map: Record<string, string> = {
     AUTH_REQUIRED: "Please sign in again.",
+    CURATION_INTELLIGENCE_UNAVAILABLE: "Curation is temporarily unavailable while GreenHaven verifies the review system. Please try again shortly.",
+    CURATION_REVIEW_REQUIRED: "Your account needs a little more review history before it can curate posts.",
     RATE_LIMITED: "Too many requests. Please wait a moment.",
     INVALID_AMOUNT_ATOMIC: "That amount is not valid.",
     PI_EARNINGS_PAYOUT_REQUESTS_DISABLED: "Withdrawals are not enabled on this deployment yet.",
     EARNINGS_LEDGER_UNAVAILABLE: "Earnings ledger is temporarily unavailable.",
     IDEMPOTENCY_KEY_REQUIRED: "Please retry the request.",
     REQUEST_TOO_LARGE: "Request is too large.",
+    // Marketplace commerce
+    CANNOT_BUY_OWN: "You can't buy your own listing.",
+    CANNOT_BUY_OWN_LISTING: "You can't buy your own listing.",
+    INSUFFICIENT_INVENTORY: "Not enough stock left for this order.",
+    LISTING_NOT_FOUND: "This listing is no longer available.",
+    LISTING_UNAVAILABLE: "This listing is no longer available.",
+    ORDER_ALREADY_PAID: "This order was already paid.",
+    PAYMENT_REQUIRED: "Payment is required to complete this order.",
+    INSUFFICIENT_BALANCE: "Not enough balance to complete this payment.",
+    // Social / graph
+    ALREADY_FOLLOWING: "You're already following this person.",
+    ALREADY_CONNECTED: "You're already connected.",
+    BLOCKED: "This action isn't available for this account.",
+    // Wallet / A2U
+    WALLET_AUTHORIZATION_REQUIRED: "Authorize Pi wallet payouts before withdrawing.",
+    PI_IDENTITY_REQUIRED: "Link your Pi identity before withdrawing.",
+    INSUFFICIENT_WITHDRAWABLE: "Not enough withdrawable Pi for this request.",
   }
   return map[code] || null
+}
+
+/** Public helper for marketplace and other surfaces that already have a code string. */
+export function humanizeClientErrorCode(code: string | null | undefined, fallback?: string): string {
+  const c = String(code || "").trim()
+  if (!c) return fallback || "Something went wrong. Please try again."
+  return humanizeErrorCode(c) || toClientSafeErrorMessage(c, fallback)
 }
 
 export function extractRequestId(res: Response | null | undefined, body?: Record<string, unknown> | null): string | undefined {

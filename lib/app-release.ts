@@ -1,4 +1,3 @@
-/** Keep in sync with package.json; the regression test enforces the match. */
-export const APP_RELEASE_VERSION = "0.271.3"
+export const APP_RELEASE_VERSION = "0.329.0"
 export const APP_RELEASE_SUMMARY =
-  "Centralized marketplace API record normalization into tested domain-boundary mappers for saved listings, seller/public listings, and durable orders, preserving server-authoritative lifecycle and payment fields."
+  "0.329.0: Phase 10 resilience and media efficiency increment — service-worker caching is restricted to explicitly allowlisted public static assets; navigations, authenticated pages, RSC payloads, API routes and media facades remain network-only. Feed and Story media prefetch now honors device/browser Data Saver and constrained networks, rechecks conditions before work, and applies strict bounds. Offline reconnect feedback cleans up its timer. Phase 9 membership session integrity guarantees remain retained and its acceptance gates remain open; no production migration or financial operation is authorized by this release."

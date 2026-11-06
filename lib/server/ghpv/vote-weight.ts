@@ -37,6 +37,8 @@ export type WeightedVoteResult = {
   riskScore?: number | null
 }
 
+const INTELLIGENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
 async function loadStoredIntelligence(
   userId: string
 ): Promise<{ curationPower: number; riskScore: number; eligible: boolean } | null> {
@@ -46,15 +48,18 @@ async function loadStoredIntelligence(
     const url =
       `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_reputation_intelligence` +
       `?user_id=eq.${encodeURIComponent(userId)}` +
-      `&select=curation_power,risk_score,curation_eligible&limit=1`
+      `&select=curation_power,risk_score,curation_eligible,calculated_at&limit=1`
     const res = await fetch(url, {
       method: "GET",
       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
-    const rows = (await res.json()) as Array<{ curation_power?: number; risk_score?: number; curation_eligible?: boolean }>
+    const rows = (await res.json()) as Array<{ curation_power?: number; risk_score?: number; curation_eligible?: boolean; calculated_at?: string }>
     if (!rows[0]) return null
+    const calculatedAt = Date.parse(String(rows[0].calculated_at || ""))
+    if (!Number.isFinite(calculatedAt) || calculatedAt > Date.now() + 60_000 || Date.now() - calculatedAt > INTELLIGENCE_MAX_AGE_MS) return null
     const cp = Number(rows[0].curation_power)
     const risk = Number(rows[0].risk_score)
     if (!Number.isFinite(cp) || !Number.isFinite(risk)) return null
@@ -82,6 +87,7 @@ async function loadStoredCalibration(
         Accept: "application/json",
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<{

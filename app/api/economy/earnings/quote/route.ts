@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   quoteWithdrawal,
@@ -22,8 +22,8 @@ function reply(body: unknown, status = 200) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const rate = checkRateLimit(`earnings-quote:${auth.userId}`, 30, 60_000)
-  if (!rate.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const rate = await checkDurableRateLimit(`earnings-quote:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rate.ok) return reply({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, durableRateLimitStatus(rate))
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {
@@ -46,12 +46,8 @@ export async function POST(request: Request) {
 
   const quote = await quoteWithdrawal({ userId: auth.userId, grossAtomic })
   if (!quote.ok) {
-    const status =
-      quote.error === "EARNINGS_LEDGER_UNAVAILABLE"
-        ? 503
-        : quote.error === "LINKED_PI_IDENTITY_REQUIRED" || quote.error === "WALLET_AUTHORIZATION_REQUIRED"
-          ? 409
-          : 409
+    const status = quote.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : 409
+    const safeInt = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : undefined)
     return reply({
       ok: false,
       error: quote.error,
@@ -59,8 +55,12 @@ export async function POST(request: Request) {
         quote.error === "LINKED_PI_IDENTITY_REQUIRED"
           ? "Sign in with Pi so your wallet is linked before withdrawing."
           : quote.error === "WALLET_AUTHORIZATION_REQUIRED"
-            ? "Authorize Pi wallet payouts in Identity settings before withdrawing."
+            ? "Authorize your Pi wallet in the withdrawal sheet before requesting a quote."
             : undefined,
+      // Safe, non-sensitive limits so the UI can show accurate balance/limit errors.
+      availableAtomic: safeInt(quote.availableAtomic),
+      minPayoutAtomic: safeInt(quote.minPayoutAtomic),
+      maxSinglePayoutAtomic: safeInt(quote.maxSinglePayoutAtomic),
     }, status)
   }
 

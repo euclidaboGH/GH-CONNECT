@@ -1,0 +1,34 @@
+GH-CONNECT 0.315.8 — PHASE 3 MARKETPLACE PREMIUM UPGRADE
+
+This is the current full-repository release baseline, not a patch overlay.
+The application root is the repository root (`app/`, `components/`, `lib/`,
+`supabase/`, and `package.json` are at the top level).
+
+PHASE 3 SCOPE
+- Marketplace product-type and delivery-mode discovery filters.
+- Currency-safe price sorting: GHC and PI are never numerically compared.
+- Premium listing-card information hierarchy, condition/availability cues,
+  keyboard focus and reduced-motion support.
+- Authenticated durable listing-report intake with fail-closed rate limiting
+  and an idempotent server-only SQL RPC.
+
+NEW MIGRATION
+  supabase/migrations/20261106150001_marketplace_listing_report_intake.sql
+
+CLASSIFICATION: REVIEW_REQUIRED. Do not apply automatically. Reconcile
+Testnet and Mainnet migration histories independently, validate the migration
+on disposable PostgreSQL, review service-role ACL/RLS behavior, and apply only
+after explicit operator approval. Do not use `supabase db push` as a bulk step.
+
+VERIFY (Node 24.15.0 required)
+  npm ci --legacy-peer-deps
+  node scripts/check-phase3-marketplace-premium.mjs
+  node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/test-phase3-marketplace-sort.mjs
+  npm run verify:static
+  npm run typecheck
+  npm run lint
+  npm run build
+
+No live database, payment, inventory, Pi, GHC, payout or Testnet operation is
+performed by source verification. Keep all existing payment and payout flags
+under their current operator-controlled settings.

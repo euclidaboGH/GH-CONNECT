@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableVideo } from "./durable-video"
 import { useEffect, useMemo, useState } from "react"
 import { X, MessageCircle, Share2, Clock3, LoaderCircle, Image as ImageIcon } from "lucide-react"
 import type { Post } from "@/lib/ghc-types"
@@ -30,6 +31,8 @@ export function PostDetailSheet({
   loadComments?: (postId: string) => Promise<unknown>
 }) {
   const [loadingComments, setLoadingComments] = useState(false)
+  const [commentsLoadError, setCommentsLoadError] = useState(false)
+  const [commentsRetryVersion, setCommentsRetryVersion] = useState(0)
   const [mediaIndex, setMediaIndex] = useState(0)
   const media = useMemo(() => (Array.isArray(post?.images) ? post.images.filter((url) => typeof url === "string" && url.trim() && !url.includes("placeholder")) : []), [post?.images])
   const comments = Array.isArray(post?.comments) ? post.comments : []
@@ -45,10 +48,23 @@ export function PostDetailSheet({
   useEffect(() => {
     if (!open || !post?.id || !loadComments) return
     let cancelled = false
+    setCommentsLoadError(false)
     setLoadingComments(true)
-    void loadComments(post.id).finally(() => { if (!cancelled) setLoadingComments(false) })
+    void Promise.resolve(loadComments(post.id))
+      .then((result) => {
+        if (cancelled) return
+        if (result && typeof result === "object" && "ok" in result && (result as { ok?: boolean }).ok === false) {
+          setCommentsLoadError(true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCommentsLoadError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingComments(false)
+      })
     return () => { cancelled = true }
-  }, [open, post?.id, loadComments])
+  }, [open, post?.id, loadComments, commentsRetryVersion])
 
   useEffect(() => {
     if (!open) return
@@ -80,7 +96,7 @@ export function PostDetailSheet({
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{post.authorName || "Member"}</p><p className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 size={12} />{timeAgo(post.createdAt)}{post.isEdited ? " · Edited" : ""}</p></div>
           </div>
           {post.content?.trim() ? <p className="whitespace-pre-wrap break-words px-4 pb-4 text-[15px] leading-7 text-foreground">{post.content}</p> : null}
-          {post.video ? <div className="bg-black"><video src={post.video} controls playsInline className="max-h-[65dvh] w-full object-contain" /></div> : null}
+          {post.video ? <div className="bg-black"><DurableVideo src={post.video} controls playsInline className="max-h-[65dvh] w-full object-contain" /></div> : null}
           {media.length > 0 ? <div className="relative bg-black">
             <button
               type="button"
@@ -121,7 +137,18 @@ export function PostDetailSheet({
           </div>
           <div className="px-4 pb-5 pt-4">
             <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-extrabold text-foreground">Recent comments</h3><span className="text-xs text-muted-foreground">{commentCount.toLocaleString()} total</span></div>
-            {loadingComments && comments.length === 0 ? <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><LoaderCircle size={17} className="animate-spin" />Loading comments…</div> : comments.length ? <div className="space-y-3">{comments.slice(-10).map((comment) => <div key={comment.id} className="flex gap-2.5"><LazyImage src={comment.authorPhoto || "/avatars/user.svg"} alt="" className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-muted object-cover" /><div className="min-w-0 flex-1 rounded-2xl bg-muted/55 px-3 py-2"><p className="text-xs font-bold text-foreground">{comment.authorName || "Member"}<span className="ml-2 font-normal text-muted-foreground">{timeAgo(comment.createdAt)}</span></p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground">{comment.text}</p>{comment.reactionCounts && Object.entries(comment.reactionCounts).some(([, count]) => count > 0) ? <p className="mt-1 text-[11px] text-muted-foreground">{Object.entries(comment.reactionCounts).filter(([, count]) => count > 0).map(([emoji, count]) => `${emoji} ${count}`).join(" · ")}</p> : null}</div></div>)}</div> : <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No comments yet. Start the conversation.</p>}
+            {loadingComments && comments.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground" role="status" aria-live="polite"><LoaderCircle size={17} className="animate-spin" />Loading comments…</div>
+            ) : commentsLoadError && comments.length === 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-900" role="status">
+                <p>Recent comments could not be loaded.</p>
+                <button type="button" className="mt-2 font-bold underline" onClick={() => setCommentsRetryVersion((version) => version + 1)}>Try again</button>
+              </div>
+            ) : comments.length ? (
+              <div className="space-y-3">{comments.slice(-10).map((comment) => <div key={comment.id} className="flex gap-2.5"><LazyImage src={comment.authorPhoto || "/avatars/user.svg"} alt="" className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-muted object-cover" /><div className="min-w-0 flex-1 rounded-2xl bg-muted/55 px-3 py-2"><p className="text-xs font-bold text-foreground">{comment.authorName || "Member"}<span className="ml-2 font-normal text-muted-foreground">{timeAgo(comment.createdAt)}</span></p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground">{comment.text}</p>{comment.reactionCounts && Object.entries(comment.reactionCounts).some(([, count]) => count > 0) ? <p className="mt-1 text-[11px] text-muted-foreground">{Object.entries(comment.reactionCounts).filter(([, count]) => count > 0).map(([emoji, count]) => `${emoji} ${count}`).join(" · ")}</p> : null}</div></div>)}</div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No comments yet. Start the conversation.</p>
+            )}
           </div>
         </div>
         <footer className="flex shrink-0 gap-2 border-t border-border/50 bg-card p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]">

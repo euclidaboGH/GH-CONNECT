@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { IdentityService } from "@/lib/identity/identity-service"
 
 import { useState, useEffect } from "react"
@@ -426,7 +427,7 @@ export function Onboarding() {
       {
         n: "03",
         title: "Earn",
-        desc: "Earn GHC through meaningful participation — daily rewards, missions, and quality activity.",
+        desc: "Build your GreenHaven profile through meaningful participation. Daily claims can earn GHC; mission milestones unlock achievements, not GHC.",
         icon: TrendingUp,
       },
       {
@@ -552,7 +553,7 @@ export function Onboarding() {
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-white ring-2 ring-emerald-400/30">
                     {formData.photos[0] ? (
-                      <img src={formData.photos[0]} alt="" className="h-full w-full object-cover" />
+                      <DurableImage src={formData.photos[0]} alt="" className="h-full w-full object-cover" />
                     ) : (
                       (formData.displayName || "?").slice(0, 1).toUpperCase()
                     )}

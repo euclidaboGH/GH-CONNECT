@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * ShareSheet V1.1 — tighter layout, recent chats, empty-state CTAs.
  * Still reference-only: never duplicates the original post.
@@ -118,43 +119,64 @@ export function ShareSheet({
         result = ShareService.shareToCommunities(shareContext, post.id, selectedIds, caption)
       } else {
         result = ShareService.copyPostLink(shareContext, post.id)
-        if (result.ok && result.link) {
-          const preview = String(post.content || "Shared from GreenHaven").slice(0, 160)
-          // Prefer Pi native share (openShareDialog / shareFile) → Web Share → clipboard
-          const imageUrl = post.images?.[0]
-          if (imageUrl && canShareFile()) {
-            const fileShare = await shareFile({
-              fileUrl: imageUrl,
-              title: "GreenHaven",
-              message: preview,
-              filename: "greenhaven-post.jpg",
-              mimeType: "image/jpeg",
-            })
-            if (!fileShare.ok && !fileShare.cancelled) {
-              await shareText({
-                title: "GreenHaven",
-                message: preview,
-                url: result.link,
-              })
-            }
-          } else {
-            await shareText({
-              title: "GreenHaven",
-              message: preview,
-              url: result.link,
-            })
-          }
-        }
       }
       if (!result.ok) {
         setError(result.error)
         return
       }
+
+      // Complete the user's external share action before recording it. A cancelled
+      // native/web share must not inflate durable engagement totals.
+      if (tab === "link" && result.link) {
+        const preview = String(post.content || "Shared from GreenHaven").slice(0, 160)
+        const imageUrl = post.images?.[0]
+        let externalResult: { ok: boolean; cancelled?: boolean } | null = null
+        if (imageUrl && canShareFile()) {
+          const fileShare = await shareFile({
+            fileUrl: imageUrl,
+            title: "GreenHaven",
+            message: preview,
+            filename: "greenhaven-post.jpg",
+            mimeType: "image/jpeg",
+          })
+          externalResult = fileShare
+          if (!fileShare.ok && !fileShare.cancelled) {
+            externalResult = await shareText({ title: "GreenHaven", message: preview, url: result.link })
+          }
+        } else {
+          externalResult = await shareText({ title: "GreenHaven", message: preview, url: result.link })
+        }
+        if (externalResult?.cancelled) return
+        if (!externalResult?.ok) {
+          setError("The share action could not be completed. Please try again.")
+          return
+        }
+      }
+
+      // A local share intent is not presented as complete until the server
+      // confirms the durable share edge and its notification/count side effects.
+      const { socialSharePost } = await import("@/lib/social/client")
+      const durableShare = await socialSharePost(post.id)
+      if (!durableShare.ok || durableShare.durable !== true) {
+        setError("GreenHaven could not confirm this share. Check the destination before retrying to avoid duplicates.")
+        return
+      }
+      try {
+        const { broadcastPostEngagement } = await import("@/lib/engagement/post-engagement")
+        broadcastPostEngagement({
+          postId: post.id,
+          kind: "share",
+          ...(typeof durableShare.shareCount === "number" ? { shareCount: durableShare.shareCount } : {}),
+        })
+      } catch { /* the durable share already succeeded */ }
+
       onComplete(result)
       onClose()
       setCaption("")
       setSelectedIds([])
       setQuery("")
+    } catch {
+      setError("Something interrupted the share. Please check the destination and try again.")
     } finally {
       setBusy(false)
     }
@@ -189,7 +211,7 @@ export function ShareSheet({
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sharing original post</p>
           <div className="mt-1.5 flex gap-2.5 rounded-xl border border-border/50 bg-muted/40 p-2">
             {post.images?.[0] ? (
-              <img src={post.images[0]} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
+              <DurableImage src={post.images[0]} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
             ) : (
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-[10px] font-bold text-emerald-700">
                 Post

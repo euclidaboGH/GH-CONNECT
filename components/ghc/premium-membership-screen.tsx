@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   ArrowLeft,
   Check,
@@ -263,25 +263,73 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const [confirmTier, setConfirmTier] = useState<Exclude<MembershipTierId, "free"> | null>(null)
   const [successStatus, setSuccessStatus] = useState<MembershipStatus | null>(null)
   const [expandedPlanBenefits, setExpandedPlanBenefits] = useState<Record<string, boolean>>({})
-  const [tick, setTick] = useState<number>(0)
+  const [membershipLifecycle, setMembershipLifecycle] = useState<Array<{
+    id?: string
+    eventType: "granted" | "renewed" | "tier_changed" | "expired" | "revoked" | "payment_linked"
+    tier: MembershipTierId
+    source: string
+    createdAt: string
+    expiresAt?: string
+    previousExpiresAt?: string
+  }>>([])
+  const [membershipLifecycleState, setMembershipLifecycleState] = useState<"loading" | "ready" | "unavailable">("loading")
+  const lifecycleRequestRef = useRef<AbortController | null>(null)
+  const lifecycleRequestSequenceRef = useRef(0)
   const [refreshing, setRefreshing] = useState(false)
   /** Authoritative status from /api/membership/status */
   const [serverStatus, setServerStatus] = useState<MembershipStatus | null>(null)
   const [serverStatusState, setServerStatusState] = useState<
     "loading" | "ready" | "unavailable"
   >("loading")
+  const membershipRequestRef = useRef<AbortController | null>(null)
+  const membershipRequestSequenceRef = useRef(0)
 
-  // Prefer server entitlement over local-only cache
+  // Prefer server entitlement over local-only cache. Lifecycle history is a
+  // separate read-only stream so a history outage never changes access status.
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const next = await refreshMembershipFromServer()
-      if (cancelled || !next) return
-    })()
-    return () => {
-      cancelled = true
+    void refreshMembershipFromServer()
+    void refreshMembershipLifecycle()
+    const onWalletAuthChanged = (event: Event) => {
+      const active = (event as CustomEvent<{ active?: boolean }>).detail?.active
+      // Never carry a previous account's paid entitlement across wallet/session changes.
+      membershipRequestSequenceRef.current += 1
+      membershipRequestRef.current?.abort()
+      membershipRequestRef.current = null
+      setServerStatus(null)
+      setServerStatusState("loading")
+      setSuccessStatus(null)
+      setRecoverHint(false)
+      lifecycleRequestSequenceRef.current += 1
+      lifecycleRequestRef.current?.abort()
+      lifecycleRequestRef.current = null
+      setMembershipLifecycle([])
+      setMembershipLifecycleState(active === false ? "unavailable" : "loading")
+      if (active !== false) {
+        void refreshMembershipFromServer()
+        void refreshMembershipLifecycle()
+      } else setServerStatusState("unavailable")
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only authoritative hydrate
+    const onSessionResume = () => {
+      if (document.visibilityState === "visible") {
+        void refreshMembershipFromServer()
+        void refreshMembershipLifecycle()
+      }
+    }
+    window.addEventListener("ghc:wallet-auth-changed", onWalletAuthChanged)
+    window.addEventListener("ghc:session-resume", onSessionResume)
+    document.addEventListener("visibilitychange", onSessionResume)
+    return () => {
+      membershipRequestSequenceRef.current += 1
+      membershipRequestRef.current?.abort()
+      membershipRequestRef.current = null
+      lifecycleRequestSequenceRef.current += 1
+      lifecycleRequestRef.current?.abort()
+      lifecycleRequestRef.current = null
+      window.removeEventListener("ghc:wallet-auth-changed", onWalletAuthChanged)
+      window.removeEventListener("ghc:session-resume", onSessionResume)
+      document.removeEventListener("visibilitychange", onSessionResume)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- authoritative hydrate and session-bound refresh
   }, [])
 
   const [faqOpen, setFaqOpen] = useState<string | null>(null)
@@ -290,15 +338,6 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [recoverHint, setRecoverHint] = useState(false)
   const [recoverBusy, setRecoverBusy] = useState(false)
-
-  const status = useMemo(() => {
-    void tick
-    try {
-      return getBoundDomainServices()?.membership?.getStatus?.() || null
-    } catch {
-      return null
-    }
-  }, [tick])
 
   // Server authority wins when present; never invent paid tier from local alone
   // Production membership display is fail-closed: only an authoritative server
@@ -310,27 +349,32 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const mapEntitlementToStatus = (
     e: Record<string, unknown>
   ): MembershipStatus => {
-    const rawTier = String(e.tier || "free").toLowerCase()
-    const tier: MembershipTierId =
-      rawTier === "vip" || rawTier === "vvip" ? rawTier : "free"
+    const userId = typeof e.userId === "string" ? e.userId.trim() : ""
+    const rawTier = typeof e.tier === "string" ? e.tier.toLowerCase() : ""
+    if (!userId || !["free", "vip", "vvip"].includes(rawTier)) {
+      throw new Error("MEMBERSHIP_STATUS_IDENTITY_OR_TIER_INVALID")
+    }
+    if (typeof e.active !== "boolean") {
+      throw new Error("MEMBERSHIP_STATUS_ACTIVE_INVALID")
+    }
+    const tier = rawTier as MembershipTierId
+    const expiresAt = e.expiresAt == null ? undefined : Number(e.expiresAt)
+    if (tier !== "free" && (e.active !== true || !Number.isFinite(expiresAt) || Number(expiresAt) <= Date.now())) {
+      throw new Error("MEMBERSHIP_STATUS_PAID_EXPIRY_INVALID")
+    }
     return {
-      userId: String(e.userId || e.user_id || "current-user"),
+      userId,
       tier,
-      active: e.active !== false,
-      expiresAt:
-        e.expiresAt != null && Number.isFinite(Number(e.expiresAt))
-          ? Number(e.expiresAt)
-          : undefined,
+      active: e.active,
+      expiresAt: expiresAt,
       billingPeriod:
         e.billingPeriod === "yearly" || e.billingPeriod === "monthly" || e.billingPeriod === "four_months" || e.billingPeriod === "eight_months"
           ? e.billingPeriod
           : undefined,
       source:
-        e.source === "ghc" || e.source === "pi" || e.source === "admin"
-          ? e.source === "pi"
-            ? "external"
-            : (e.source as MembershipStatus["source"])
-          : e.source === "external"
+        e.source === "ghc" || e.source === "admin"
+          ? (e.source as MembershipStatus["source"])
+          : e.source === "pi" || e.source === "external" || e.source === "verified_payment"
             ? "external"
             : "default",
       lastPurchaseTxId: e.purchaseRef ? String(e.purchaseRef) : undefined,
@@ -340,6 +384,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const refreshMembershipFromServer = async (
     _fallbackTier?: MembershipTierId
   ): Promise<MembershipStatus | null> => {
+    const requestSequence = ++membershipRequestSequenceRef.current
+    membershipRequestRef.current?.abort()
+    const controller = new AbortController()
+    membershipRequestRef.current = controller
     try {
       const headers: Record<string, string> = {}
       try {
@@ -348,25 +396,35 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       } catch {
         /* */
       }
-      const res = await fetch("/api/membership/status", {
-        headers,
-        cache: "no-store",
-        credentials: "include",
-      })
+      const timeout = window.setTimeout(() => controller.abort(), 8_000)
+      let res: Response
+      try {
+        res = await fetch("/api/membership/status", {
+          headers,
+          cache: "no-store",
+          credentials: "include",
+          signal: controller.signal,
+        })
+      } finally {
+        window.clearTimeout(timeout)
+      }
+      if (requestSequence !== membershipRequestSequenceRef.current || controller.signal.aborted) return null
       if (!res.ok) {
         setServerStatusState("unavailable")
+        setServerStatus(null)
         return null
       }
       const data = await res.json().catch(() => ({}))
-      if (!data?.ok || !data?.entitlement) {
+      if (requestSequence !== membershipRequestSequenceRef.current || controller.signal.aborted) return null
+      if (!data?.ok || !data?.entitlement || typeof data.entitlement !== "object") {
         setServerStatusState("unavailable")
+        setServerStatus(null)
         return null
       }
       const e = data.entitlement as Record<string, unknown>
       const mapped = mapEntitlementToStatus(e)
       const mem = getBoundDomainServices()?.membership as {
         activate?: (i: unknown) => Promise<unknown>
-        getStatus?: () => MembershipStatus | null
       } | null
       // Sync local domain cache from server authority (paid only — never invent VIP)
       if (mapped.tier === "vip" || mapped.tier === "vvip") {
@@ -381,13 +439,73 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               : undefined,
         })
       }
+      if (requestSequence !== membershipRequestSequenceRef.current || controller.signal.aborted) return null
       setServerStatus(mapped)
       setServerStatusState("ready")
-      setTick((x) => x + 1)
       return mapped
     } catch {
-      setServerStatusState("unavailable")
+      if (requestSequence === membershipRequestSequenceRef.current) {
+        setServerStatusState("unavailable")
+        setServerStatus(null)
+      }
       return null
+    } finally {
+      if (membershipRequestRef.current === controller) membershipRequestRef.current = null
+    }
+  }
+
+  const refreshMembershipLifecycle = async () => {
+    const requestSequence = ++lifecycleRequestSequenceRef.current
+    lifecycleRequestRef.current?.abort()
+    const controller = new AbortController()
+    lifecycleRequestRef.current = controller
+    try {
+      const headers: Record<string, string> = {}
+      try {
+        const { IdentityService } = await import("@/lib/identity/identity-service")
+        Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
+      } catch { /* cookie session remains supported */ }
+      const timeout = window.setTimeout(() => controller.abort(), 8_000)
+      let response: Response
+      try {
+        response = await fetch("/api/membership/lifecycle", {
+          headers,
+          cache: "no-store",
+          credentials: "include",
+          signal: controller.signal,
+        })
+      } finally {
+        window.clearTimeout(timeout)
+      }
+      if (requestSequence !== lifecycleRequestSequenceRef.current || controller.signal.aborted) return
+      if (!response.ok) throw new Error("MEMBERSHIP_LIFECYCLE_UNAVAILABLE")
+      const data = await response.json().catch(() => ({}))
+      if (requestSequence !== lifecycleRequestSequenceRef.current || controller.signal.aborted) return
+      if (!data?.ok || !Array.isArray(data.items)) throw new Error("MEMBERSHIP_LIFECYCLE_INVALID")
+      const allowedEvents = new Set(["granted", "renewed", "tier_changed", "expired", "revoked", "payment_linked"])
+      const allowedTiers = new Set(["free", "vip", "vvip"])
+      const items = data.items.flatMap((item: Record<string, unknown>) => {
+        if (!item || typeof item !== "object" || !allowedEvents.has(String(item.eventType)) || !allowedTiers.has(String(item.tier))) return []
+        if (typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt))) return []
+        return [{
+          id: typeof item.id === "string" ? item.id : undefined,
+          eventType: item.eventType as "granted" | "renewed" | "tier_changed" | "expired" | "revoked" | "payment_linked",
+          tier: item.tier as MembershipTierId,
+          source: typeof item.source === "string" ? item.source : "unknown",
+          createdAt: item.createdAt,
+          expiresAt: typeof item.expiresAt === "string" ? item.expiresAt : undefined,
+          previousExpiresAt: typeof item.previousExpiresAt === "string" ? item.previousExpiresAt : undefined,
+        }]
+      }).slice(0, 20)
+      setMembershipLifecycle(items)
+      setMembershipLifecycleState("ready")
+    } catch {
+      if (requestSequence === lifecycleRequestSequenceRef.current && !controller.signal.aborted) {
+        setMembershipLifecycle([])
+        setMembershipLifecycleState("unavailable")
+      }
+    } finally {
+      if (lifecycleRequestRef.current === controller) lifecycleRequestRef.current = null
     }
   }
 
@@ -439,7 +557,6 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       }
       setRecoverHint(false)
       await refreshMembershipFromServer()
-      setTick((x) => x + 1)
       if (data.recovered) {
         addToast("Membership recovered from your paid purchase", "success")
         emitMembershipActivated(String(data.entitlement?.tier || "vip"), "pi")
@@ -485,13 +602,12 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           await new Promise((r) => setTimeout(r, 800 + i * 400))
           next = await refreshMembershipFromServer(tier)
         }
-        if (next && (next.tier === "vip" || next.tier === "vvip")) {
+        if (next && next.active && next.tier === tier) {
           setSuccessStatus(next)
           addToast(`${MEMBERSHIP_PLANS[next.tier].label} is active`, "success")
           emitMembershipActivated(next.tier, "pi")
         } else {
-          setTick((x) => x + 1)
-          setRecoverHint(true)
+              setRecoverHint(true)
           addToast(
             "Payment received. Membership activation is finishing — tap Refresh or Recover purchase if Premium is not shown yet. You will not be charged again.",
             "info"
@@ -524,27 +640,20 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       const result = await mem.purchaseWithGhc(tier, period)
       if (result.ok) {
         setConfirmTier(null)
-        let next = await refreshMembershipFromServer(tier)
-        if (!next) {
-          try {
-            next = getBoundDomainServices()?.membership?.getStatus?.() || null
-          } catch {
-            next = null
-          }
-        }
-        if (next) setSuccessStatus(next)
-        setTick((x) => x + 1)
+        const next = await refreshMembershipFromServer(tier)
         const already = Boolean((result as { alreadyActive?: boolean }).alreadyActive)
-        addToast(
-          already
-            ? `${MEMBERSHIP_PLANS[tier].label} is already active`
-            : `${MEMBERSHIP_PLANS[tier].label} activated`,
-          "success"
-        )
-        if (!already && next && (next.tier === "vip" || next.tier === "vvip")) {
-          emitMembershipActivated(next.tier, "ghc")
-        } else if (!already) {
-          emitMembershipActivated(tier, "ghc")
+        if (next && next.active && next.tier === tier) {
+          if (!already) setSuccessStatus(next)
+          addToast(`${MEMBERSHIP_PLANS[tier].label} is active`, "success")
+          if (!already) emitMembershipActivated(tier, "ghc")
+        } else {
+          // A successful spend response is not a client-side entitlement grant.
+          // Never show activation success until the authoritative status read agrees.
+          setRecoverHint(true)
+          addToast(
+            "Payment was accepted, but membership activation is not yet confirmed. Refresh status or recover the purchase; do not pay again.",
+            "info",
+          )
         }
       } else {
         const err = result.error || "Purchase failed"
@@ -611,7 +720,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }, [confirmTier, successStatus])
 
   return (
-    <div className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div id="gh-membership-root" className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
         <button
           type="button"
@@ -702,22 +811,22 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span
               className={`inline-flex min-h-8 items-center rounded-full px-3 py-1 text-[12px] font-bold ${
-                refreshing
-                  ? "bg-muted text-muted-foreground"
-                  : status?.active
-                    ? "bg-emerald-600 text-white"
-                    : busy
-                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
-                      : "bg-muted text-foreground"
+                serverStatusState === "ready" && authoritativeStatus?.active && currentTier !== "free"
+                  ? "bg-emerald-600 text-white"
+                  : serverStatusState === "unavailable" || busy
+                    ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+                    : "bg-muted text-muted-foreground"
               }`}
             >
-              {refreshing
-                ? "Loading…"
-                : busy
-                  ? "Purchase in progress"
-                  : authoritativeStatus?.active
-                    ? `${MEMBERSHIP_PLANS[currentTier].label} active`
-                    : `${MEMBERSHIP_PLANS[currentTier].label}`}
+              {busy
+                ? "Purchase in progress"
+                : serverStatusState === "loading"
+                  ? "Checking membership…"
+                  : serverStatusState === "unavailable"
+                    ? "Status unavailable"
+                    : authoritativeStatus?.active && currentTier !== "free"
+                      ? `${MEMBERSHIP_PLANS[currentTier].label} active`
+                      : "Free membership"}
             </span>
             {authoritativeStatus?.source === "trial" || (authoritativeStatus as { lifecycle?: string } | null)?.lifecycle === "trial" ? (
               <span className="text-[11px] text-muted-foreground">
@@ -733,6 +842,54 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           </p>
         </div>
 
+        {membershipAuthorityReady && currentTier !== "free" && authoritativeStatus?.expiresAt ? (
+          <div className="mb-3 rounded-[1.25rem] border border-violet-200/70 bg-violet-50/80 px-3.5 py-3 dark:border-violet-900/70 dark:bg-violet-950/25">
+            <p className="text-[11px] font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">Prepaid membership</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              This plan does not auto-renew. Premium access ends at the confirmed expiry time. If a verified renewal completes within 72 hours after expiry, the paid term can continue from the previous expiry; premium features remain paused during any gap.
+            </p>
+          </div>
+        ) : null}
+        {membershipAuthorityReady && currentTier === "free" && authoritativeStatus?.expiresAt && authoritativeStatus.billingPeriod && Date.now() >= authoritativeStatus.expiresAt && Date.now() - authoritativeStatus.expiresAt <= 72 * 60 * 60 * 1000 ? (
+          <div className="mb-3 rounded-[1.25rem] border border-amber-300/70 bg-amber-50/90 px-3.5 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="text-[11px] font-black uppercase tracking-wide text-amber-900 dark:text-amber-100">Renewal continuity window</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-amber-950/80 dark:text-amber-100/80">
+              Your previous prepaid term has ended. Renew within the 72-hour continuity window to preserve the original term boundary. Premium access is paused until the new payment is verified; no grace access is being granted.
+            </p>
+          </div>
+        ) : null}
+
+        <section className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-labelledby="membership-activity-title">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p id="membership-activity-title" className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Membership activity</p>
+              <p className="mt-0.5 text-[12px] font-semibold text-foreground">Verified account history</p>
+            </div>
+            <button type="button" onClick={() => void refreshMembershipLifecycle()} className="min-h-9 rounded-full border border-border px-3 text-[10px] font-bold text-muted-foreground hover:bg-muted/60">Refresh</button>
+          </div>
+          {membershipLifecycleState === "loading" ? (
+            <p className="mt-3 text-[11px] text-muted-foreground">Loading verified membership activity…</p>
+          ) : membershipLifecycleState === "unavailable" ? (
+            <p className="mt-3 text-[11px] text-muted-foreground">Membership activity is temporarily unavailable. Your access status is checked separately.</p>
+          ) : membershipLifecycle.length === 0 ? (
+            <p className="mt-3 text-[11px] text-muted-foreground">No membership changes have been recorded yet.</p>
+          ) : (
+            <ol className="mt-3 space-y-2.5">
+              {membershipLifecycle.slice(0, 5).map((item, index) => (
+                <li key={item.id || `${item.eventType}-${item.createdAt}-${index}`} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-black text-foreground">{index + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11px] font-bold text-foreground">
+                      {item.eventType === "granted" ? "Membership activated" : item.eventType === "renewed" ? "Membership renewed" : item.eventType === "tier_changed" ? "Membership tier changed" : item.eventType === "expired" ? "Membership expired" : item.eventType === "revoked" ? "Membership access revoked" : "Payment linked to membership"}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground">{item.tier.toUpperCase()} · {new Date(item.createdAt).toLocaleString()}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
         {membershipAuthorityReady ? (
           <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Membership path</p>
@@ -742,7 +899,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         ) : null}
 
         {/* What you have now / next upgrades (Free-focused) */}
-        {currentTier === "free" && (
+        {membershipAuthorityReady && currentTier === "free" && (
           <div className="mb-3 rounded-[1.25rem] border border-emerald-100/90 bg-emerald-50/80 px-3.5 py-3.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30">
             <p className="text-sm font-bold text-foreground">What matters next</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -800,35 +957,35 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   />
                   {MEMBERSHIP_PLANS[currentTier].label}
                 </p>
-                {status?.expiresAt ? (
+                {authoritativeStatus?.expiresAt ? (
                   <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
-                    {status.source === "trial" || (status as { lifecycle?: string }).lifecycle === "trial"
-                      ? `Welcome trial · ends ${formatUntil(status.expiresAt)}`
-                      : `Membership expires ${formatUntil(status.expiresAt)}`}
+                    {authoritativeStatus.source === "trial" || (authoritativeStatus as { lifecycle?: string }).lifecycle === "trial"
+                      ? `Welcome trial · ends ${formatUntil(authoritativeStatus.expiresAt)}`
+                      : `Membership expires ${formatUntil(authoritativeStatus.expiresAt)}`}
                   </p>
                 ) : (
                   <p className="mt-1 text-[12px] text-muted-foreground">Standard access · upgrade anytime</p>
                 )}
-                {(status?.billingPeriod || (status as { source?: string } | null)?.source) && currentTier !== "free" ? (
+                {(authoritativeStatus?.billingPeriod || authoritativeStatus?.source) && currentTier !== "free" ? (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {status?.billingPeriod === "yearly"
+                    {authoritativeStatus?.billingPeriod === "yearly"
                       ? "12 paid months + 1 bonus month"
-                      : status?.billingPeriod === "eight_months"
+                      : authoritativeStatus?.billingPeriod === "eight_months"
                         ? "8 paid months + 1 bonus month"
-                        : status?.billingPeriod === "four_months"
+                        : authoritativeStatus?.billingPeriod === "four_months"
                           ? "4 paid months + 1 bonus month"
-                          : status?.billingPeriod === "monthly"
+                          : authoritativeStatus?.billingPeriod === "monthly"
                             ? "1 paid month + 1 bonus month"
                             : null}
-                    {status?.billingPeriod && (status as { source?: string }).source ? " · " : null}
-                    {(status as { source?: string } | null)?.source === "pi" ||
-                    (status as { source?: string } | null)?.source === "external"
+                    {authoritativeStatus?.billingPeriod && authoritativeStatus?.source ? " · " : null}
+                    {(authoritativeStatus as { source?: string } | null)?.source === "pi" ||
+                    (authoritativeStatus as { source?: string } | null)?.source === "external"
                       ? "Paid with π"
-                      : (status as { source?: string } | null)?.source === "ghc"
+                      : (authoritativeStatus as { source?: string } | null)?.source === "ghc"
                         ? "Paid with GHC"
-                        : (status as { source?: string } | null)?.source === "admin"
+                        : (authoritativeStatus as { source?: string } | null)?.source === "admin"
                           ? "Granted by admin"
-                          : (status as { source?: string } | null)?.source === "trial"
+                          : (authoritativeStatus as { source?: string } | null)?.source === "trial"
                             ? "Trial access"
                             : null}
                   </p>
@@ -950,11 +1107,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                     <th
                       key={t}
                       className={`px-2 py-2.5 text-center font-bold ${
-                        currentTier === t ? "text-emerald-700" : "text-foreground"
+                        membershipAuthorityReady && currentTier === t ? "text-emerald-700" : "text-foreground"
                       }`}
                     >
                       {MEMBERSHIP_PLANS[t].label}
-                      {currentTier === t ? (
+                      {membershipAuthorityReady && currentTier === t ? (
                         <span className="mt-0.5 block text-[9px] font-semibold uppercase">You</span>
                       ) : null}
                     </th>
@@ -986,7 +1143,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             </p>
             {TIER_ORDER.map((tier) => {
               const plan = MEMBERSHIP_PLANS[tier]
-              const isCurrent = currentTier === tier
+              const isCurrent = membershipAuthorityReady && currentTier === tier
               const price = tier === "free" ? 0 : getMembershipGhcPrice(tier, period).chargeGhc
               const pricing = tier === "free" ? null : getMembershipGhcPrice(tier, period)
               const accent =
@@ -1146,7 +1303,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   )}
                   {isCurrent && (
                     <p className="mt-3 text-center text-[11px] font-semibold text-emerald-700">
-                      {formatUntil(status?.expiresAt)}
+                      {formatUntil(authoritativeStatus?.expiresAt)}
                     </p>
                   )}
                 </article>
@@ -1179,6 +1336,16 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 id: "cancel",
                 q: "Can I stay on Free?",
                 a: "Yes. Free keeps core social access. You can review VIP/VVIP anytime without pressure.",
+              },
+              {
+                id: "renewal",
+                q: "Does membership renew automatically?",
+                a: "No. VIP and VVIP are prepaid one-time terms. There are no recurring charges; choose whether to purchase another term before or after expiry.",
+              },
+              {
+                id: "expiry",
+                q: "What happens when membership expires?",
+                a: "Premium access pauses at the confirmed expiry time. A verified renewal completed within 72 hours can preserve the original term boundary, but there is no premium access during the gap.",
               },
             ] as const
           ).map((item) => (

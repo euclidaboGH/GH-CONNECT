@@ -14,7 +14,7 @@ const checks = [
   ["feed distinguishes failed loading from a legitimate empty feed", /displayPosts\.length === 0 && feedError/.test(feed) && /Your feed couldn't load/.test(feed) && /not an empty feed/.test(feed)],
   ["feed error has a retry action and prevents retry while offline", /onClick=\{\(\) => void handleRefresh\(\)\}/.test(feed) && /disabled=\{isRefreshing \|\| isOffline\}/.test(feed)],
   ["existing feed content remains rendered when a refresh error occurs", /\{feedError \? <div/.test(feed) && /\) : displayPosts\.length === 0 && feedError/.test(feed)],
-  ["offline state is announced to assistive technology", /role="status"\>Offline — showing available feed data/.test(feed)],
+  ["offline state is announced to assistive technology", /role="status"\>\{t\("offlineFeed"\)\}/.test(feed)],
   ["media loading remains lazy and asynchronously decoded", /loading="lazy"/.test(media) && /decoding="async"/.test(media)],
   ["missing media has an accessible labelled fallback", /aria-label=\{alt \? `\$\{alt\} — media unavailable`/.test(media)],
   ["failed media exposes an accessible retry action", /aria-label=\{alt \? `Retry loading \$\{alt\}`/.test(media) && /setNonce\(\(n\) => n \+ 1\)/.test(media)],

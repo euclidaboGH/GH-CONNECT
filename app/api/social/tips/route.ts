@@ -14,6 +14,7 @@ import { createPaymentIntent, assertDurableWrite, loadPaymentIntent } from "@/li
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { buildCreatorTipIdempotencyKey } from "@/lib/server/creator/tip-idempotency"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -102,9 +103,20 @@ export async function POST(request: Request) {
 
   // One durable intent per tipper + recipient/content. PI binds a provider payment intent;
   // GHC uses the atomic, balance-funded ledger-transfer RPC below.
-  const idem = contentId
-    ? `tip:${auth.userId}:post:${contentId}:${currency}:amt:${amount.toFixed(currency === "GHC" ? 4 : 8)}`
-    : `tip:${auth.userId}:profile:${recipientId}:${currency}:amt:${amount.toFixed(currency === "GHC" ? 4 : 8)}`
+  // Idempotency belongs to one user action. A fresh client key permits a later
+  // intentional tip to the same creator for the same amount; retries reuse the key.
+  const idempotency = buildCreatorTipIdempotencyKey({
+    tipperId: auth.userId,
+    recipientId,
+    contentId: contentId || undefined,
+    currency,
+    amount,
+    clientKey: request.headers.get("Idempotency-Key") || body.idempotencyKey,
+  })
+  if (!idempotency.ok) {
+    return NextResponse.json({ ok: false, error: idempotency.error }, { status: 400 })
+  }
+  const idem = idempotency.key
 
   const result = await createTipIntent({
     tipperId: auth.userId,
@@ -131,6 +143,17 @@ export async function POST(request: Request) {
     const env = readGhcServerEnv()
     if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return NextResponse.json({ ok: false, error: "GHC_TIP_SETTLEMENT_UNAVAILABLE", retryable: true }, { status: 503 })
     try {
+      // The durable idempotency row may predate this request. Verify its full
+      // recipient/amount/asset binding before invoking any ledger settlement.
+      const lookup = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_intent_get_for_tipper`, {
+        method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
+        body: JSON.stringify({ p_tipper_id: auth.userId, p_tip_intent_id: result.intentId }), cache: "no-store",
+      })
+      const found = await lookup.json().catch(() => null) as { ok?: boolean; amount?: number; currency?: string; recipientId?: string } | null
+      if (!lookup.ok || found?.ok !== true) return NextResponse.json({ ok: false, error: "TIP_INTENT_LOOKUP_UNAVAILABLE", retryable: true }, { status: 503 })
+      if (Number(found.amount) !== amount || found.currency !== "GHC" || found.recipientId !== recipientId) {
+        return NextResponse.json({ ok: false, error: "TIP_INTENT_PAYLOAD_CONFLICT" }, { status: 409 })
+      }
       const settledResponse = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_settle_ghc_atomic`, {
         method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
         body: JSON.stringify({ p_tip_intent_id: result.intentId, p_tipper_id: auth.userId, p_amount: amount }), cache: "no-store",
@@ -168,9 +191,9 @@ export async function POST(request: Request) {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_tipper_id: auth.userId, p_tip_intent_id: result.intentId }), cache: "no-store",
     })
-    const found = await lookup.json().catch(() => null) as { ok?: boolean; amount?: number; currency?: string; paymentIntentId?: string | null; status?: string } | null
+    const found = await lookup.json().catch(() => null) as { ok?: boolean; amount?: number; currency?: string; recipientId?: string; paymentIntentId?: string | null; status?: string } | null
     if (!lookup.ok || found?.ok !== true) return NextResponse.json({ ok: false, error: "TIP_INTENT_LOOKUP_UNAVAILABLE", retryable: true }, { status: 503 })
-    if (Number(found.amount) !== amount || found.currency !== "PI") return NextResponse.json({ ok: false, error: "TIP_INTENT_AMOUNT_CONFLICT" }, { status: 409 })
+    if (Number(found.amount) !== amount || found.currency !== "PI" || found.recipientId !== recipientId) return NextResponse.json({ ok: false, error: "TIP_INTENT_PAYLOAD_CONFLICT" }, { status: 409 })
     if (found.paymentIntentId) {
       const existingPayment = await loadPaymentIntent(String(found.paymentIntentId))
       if (!existingPayment || existingPayment.userId !== auth.userId || existingPayment.purpose !== "creator_earning" || existingPayment.amount !== amount || existingPayment.metadata?.tipIntentId !== result.intentId) {

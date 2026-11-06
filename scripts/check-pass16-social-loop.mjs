@@ -8,8 +8,8 @@ const css = read("app/globals.css")
 const checks = [
   ["release 0.238.0", release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ["focused feed column", feed.includes("gh-premium-feed-list gh-feed-column") && css.includes("width: min(100%, 48rem)")],
-  ["mobile toolbar targets", feed.includes('h-11 w-11') && feed.includes('aria-label="Personalize feed"')],
-  ["quality hierarchy", post.includes("Quality signal") && post.includes("Vote on contribution quality")],
+  ["mobile toolbar targets", feed.includes('h-11 w-11') && feed.includes('aria-label={t("personalizeFeed")}')],
+  ["quality hierarchy", post.includes('aria-label="Quality votes"') && post.includes("Community curation") && post.includes("Your vote helps surface useful contributions")],
   ["response actions preserved", post.includes('aria-label="Comment"') && post.includes('aria-label="Share"') && post.includes('Unsave')],
   ["server curation preserved", post.includes("socialSetCuration") && post.includes("server confirmation")],
   ["accessible social cards", post.includes('role="article"') && post.includes("focus-visible")],

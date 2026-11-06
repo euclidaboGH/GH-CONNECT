@@ -9,7 +9,7 @@ const actions = read('features/wallet/wallet-actions.tsx')
 const screen = read('features/wallet/wallet-screen.tsx')
 const checks = [
   ['combined balance aria label', /Unified PI and GHC wallet balances/.test(balance)],
-  ['selectable PI and GHC rows', /role="option"/.test(balance) && /onSelectRail/.test(balance)],
+  ['accessible selectable PI and GHC rails', /role="group"/.test(balance) && /aria-pressed/.test(balance) && /onSelectRail/.test(balance)],
   ['PI withdrawable distinction', /withdrawable · fees and eligibility apply/.test(balance)],
   ['never summed copy', /PI and GHC are never added together/.test(balance)],
   ['actions accept assetRail', /assetRail\?: "ghc" \| "pi"/.test(actions) || /assetRail = "ghc"/.test(actions)],

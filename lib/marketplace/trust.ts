@@ -1,6 +1,7 @@
 /**
- * Phase C — Marketplace trust helpers (presentation + local report queue).
- * Reviews remain domain-gated to completed buyer orders.
+ * Marketplace trust presentation helpers. Durable listing reports are handled
+ * by the authenticated marketplace report API; reviews remain domain-gated
+ * to completed buyer orders.
  */
 
 export type DeliveryMode = "meetup" | "shipping" | "digital" | "service"
@@ -56,55 +57,3 @@ export type ListingReportReason =
   | "misleading"
   | "counterfeit"
   | "other"
-
-const REPORTS_KEY = "ghc_marketplace_listing_reports_v1"
-
-export type LocalListingReport = {
-  id: string
-  listingId: string
-  sellerId?: string
-  reason: ListingReportReason
-  note?: string
-  createdAt: number
-  status: "queued"
-}
-
-export function queueListingReport(input: {
-  listingId: string
-  sellerId?: string
-  reason: ListingReportReason
-  note?: string
-}): LocalListingReport | null {
-  if (typeof window === "undefined") return null
-  const listingId = String(input.listingId || "").trim()
-  if (!listingId) return null
-  const row: LocalListingReport = {
-    id: `rpt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-    listingId,
-    sellerId: input.sellerId,
-    reason: input.reason,
-    note: String(input.note || "").trim().slice(0, 500) || undefined,
-    createdAt: Date.now(),
-    status: "queued",
-  }
-  try {
-    const raw = window.localStorage.getItem(REPORTS_KEY)
-    const list: LocalListingReport[] = raw ? JSON.parse(raw) : []
-    const next = [row, ...(Array.isArray(list) ? list : [])].slice(0, 100)
-    window.localStorage.setItem(REPORTS_KEY, JSON.stringify(next))
-  } catch {
-    /* private mode */
-  }
-  return row
-}
-
-export function listQueuedListingReports(): LocalListingReport[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = window.localStorage.getItem(REPORTS_KEY)
-    const list = raw ? JSON.parse(raw) : []
-    return Array.isArray(list) ? list : []
-  } catch {
-    return []
-  }
-}

@@ -7,8 +7,8 @@ export const MATCH_CLARITY = {
   discoverIntroTitle: "Find people & opportunities",
   discoverIntroBody:
     "Like shows interest for matching. Connect sends a real request. Mutual interest is an opportunity — not an automatic chat.",
-  likeLabel: "Like",
-  likeHint: "Like for matching — mutual interest is an opportunity, not auto-connect",
+  likeLabel: "Interest",
+  likeHint: "Interest for matching only — not a connection request and not a post like",
   passLabel: "Pass",
   passHint: "Pass — not interested for matching",
   connectLabel: "Connect",

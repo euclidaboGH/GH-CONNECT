@@ -76,8 +76,8 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
     })
     const data = (await response.json().catch(() => ({}))) as {
       ok?: boolean
-      amount?: number
-      userAmount?: number
+      amount?: unknown
+      userAmount?: unknown
       alreadyClaimed?: boolean
       idempotent?: boolean
       pending?: boolean
@@ -99,9 +99,20 @@ export async function postDailyClaim(): Promise<DailyClaimClientResult> {
         error: data.message || data.error || "Daily claim failed. Your reward remains available to retry.",
       }
     }
+    const rawAmount = data.userAmount ?? data.amount
+    const parsedAmount = typeof rawAmount === "number"
+      ? rawAmount
+      : typeof rawAmount === "string" && rawAmount.trim() !== ""
+        ? Number(rawAmount)
+        : Number.NaN
+    // A successful claim can be confirmed without a displayable amount. Never
+    // replace a missing/malformed server amount with a client-side estimate.
+    const serverAmount = Number.isFinite(parsedAmount) && parsedAmount >= 0
+      ? parsedAmount
+      : undefined
     return {
       ok: true,
-      serverAmount: Number(data.userAmount ?? data.amount),
+      serverAmount,
       alreadyClaimed: Boolean(data.alreadyClaimed || data.idempotent),
       idempotent: Boolean(data.idempotent),
       pending: data.pending !== false,

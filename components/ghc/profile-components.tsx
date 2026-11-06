@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, type ReactNode } from "react"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { Camera,  Share2, MoreVertical, X, Edit2, Lock, HelpCircle, Eye, EyeOff, Heart, MessageCircle } from "lucide-react"
 import type { Post, PostEditMedia, Profile } from "@/lib/ghc-types"
 import { INTERESTS } from "@/lib/ghc-data"
@@ -617,6 +619,8 @@ export function EditProfileModal({
   onChangeCover?: () => void
   onChangePhoto?: () => void
 }) {
+  const regional = useRegionalContext()
+  const t = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [bio, setBio] = useState(profile.bio)
   const [profession, setProfession] = useState(profile.profession || "")
@@ -684,7 +688,7 @@ export function EditProfileModal({
       if (saved === false) return
       onClose()
     } catch {
-      setSaveError("Could not save your profile. Please try again.")
+      setSaveError(t("profileSaveError"))
     } finally {
       setIsSaving(false)
     }
@@ -701,7 +705,7 @@ export function EditProfileModal({
         }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground">Edit Profile</h2>
+          <h2 className="text-xl font-bold text-foreground">{t("editProfile")}</h2>
           <button
             type="button"
             onClick={() => { if (!isSaving) onClose() }}
@@ -742,35 +746,35 @@ export function EditProfileModal({
 
         {/* Name */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-foreground">Display Name</label>
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">{t("displayName")}</label>
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             className="w-full rounded-lg border border-border/70 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            placeholder="Your name"
+            placeholder={t("yourName")}
             maxLength={60}
           />
         </div>
 
         {/* Bio */}
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-foreground">Bio</label>
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">{t("bio")}</label>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             className="w-full resize-none rounded-lg border border-border/70 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             rows={3}
-            placeholder="Tell people about yourself..."
+            placeholder={t("tellAbout")}
             maxLength={500}
           />
         </div>
 
         {/* About details — systematic like Facebook */}
         <div className="space-y-3 rounded-[1.25rem] bg-muted/40 p-3.5 ring-1 ring-border/50">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">About details</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{t("aboutDetails")}</p>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Work / Profession</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">{t("profession")}</label>
             <input
               type="text"
               value={profession}
@@ -781,7 +785,7 @@ export function EditProfileModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Education</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">{t("education")}</label>
             <input
               type="text"
               value={education}

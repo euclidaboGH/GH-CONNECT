@@ -4,6 +4,7 @@
  */
 
 import type { Conversation, MatchEntry } from "./ghc-types"
+import { idListIncludes } from "@/lib/identity/identity-match"
 
 export interface SocialGraphSnapshot {
   blockedUsers: string[]
@@ -18,19 +19,19 @@ export interface SocialGraphSnapshot {
 }
 
 export function isFollowing(graph: SocialGraphSnapshot, userId: string): boolean {
-  return graph.followingIds.includes(userId)
+  return idListIncludes(graph.followingIds, userId)
 }
 
 export function isFollower(graph: SocialGraphSnapshot, userId: string): boolean {
-  return (graph.followersIds || []).includes(userId)
+  return idListIncludes(graph.followersIds, userId)
 }
 
 export function isFriend(graph: SocialGraphSnapshot, userId: string): boolean {
-  return graph.friendIds.includes(userId)
+  return idListIncludes(graph.friendIds, userId)
 }
 
 export function isBlocked(graph: SocialGraphSnapshot, userId: string): boolean {
-  return graph.blockedUsers.includes(userId)
+  return idListIncludes(graph.blockedUsers, userId)
 }
 
 export function isMuted(graph: SocialGraphSnapshot, userId: string): boolean {
@@ -42,7 +43,7 @@ export function isRestricted(graph: SocialGraphSnapshot, userId: string): boolea
 }
 
 export function isMatched(graph: SocialGraphSnapshot, userId: string): boolean {
-  return graph.matchIds.includes(userId)
+  return idListIncludes(graph.matchIds, userId)
 }
 
 /**

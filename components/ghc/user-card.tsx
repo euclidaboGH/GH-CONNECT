@@ -14,6 +14,7 @@ import type { Candidate } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
 import { resolveAvatarUrl } from "@/lib/avatar"
 import { RelationshipActions } from "./relationship-actions"
+import type { ProfileRelationshipState } from "@/lib/domains/profile-domain"
 
 export function calculateMatchScore(
   candidate: Candidate,
@@ -68,6 +69,7 @@ export type UserCardProps = {
   /** Outgoing interest, not yet a Match */
   interestSent?: boolean
   isMatched?: boolean
+  relationshipState?: ProfileRelationshipState
   canMessage?: boolean
   mutualConnections?: number
   mutualInterestNames?: string[]
@@ -94,6 +96,7 @@ function UserCardInner({
   isFollowing = false,
   interestSent = false,
   isMatched = false,
+  relationshipState,
   canMessage = false,
   mutualConnections = 0,
   mutualInterestNames = [],
@@ -311,13 +314,32 @@ function UserCardInner({
 
         {/* Actions: primary + heart + more */}
         <div className="mt-auto flex items-center gap-2 border-t border-border/50 pt-3">
-          <button
-            type="button"
-            onClick={onViewProfile}
-            className="min-h-11 flex-1 rounded-2xl bg-primary px-4 text-[13px] font-bold text-primary-foreground transition active:scale-[0.98]"
-          >
-            View profile
-          </button>
+          {onFollow ? (
+            <button
+              type="button"
+              onClick={() => onFollow()}
+              className="min-h-11 flex-1 rounded-2xl bg-primary px-4 text-[13px] font-bold text-primary-foreground transition active:scale-[0.98]"
+            >
+              {isFollowing ? "Following" : "Follow"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onViewProfile}
+              className="min-h-11 flex-1 rounded-2xl bg-primary px-4 text-[13px] font-bold text-primary-foreground transition active:scale-[0.98]"
+            >
+              View profile
+            </button>
+          )}
+          {onFollow ? (
+            <button
+              type="button"
+              onClick={onViewProfile}
+              className="min-h-11 shrink-0 rounded-2xl border border-border bg-card px-3 text-[12px] font-semibold text-foreground transition hover:bg-muted active:scale-[0.98]"
+            >
+              Profile
+            </button>
+          ) : null}
           {onPass ? (
             <button
               type="button"
@@ -374,6 +396,7 @@ function UserCardInner({
                 userName={safeName}
                 userPhoto={safePhoto}
                 compact
+                relationshipState={relationshipState}
                 className="!flex-col items-stretch gap-1.5"
               />
             </div>

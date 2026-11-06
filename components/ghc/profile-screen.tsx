@@ -4,8 +4,11 @@
  * Profile — owner identity and owner posts, with non-essential account tools grouped
  * inside a collapsed Dashboard. Profile post actions reuse the canonical feed card.
  */
-import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react"
+import { useMemo, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
+import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCProfile, useGHCMessaging, useGHCFeed } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { ProfileMyCommunities } from "./profile-my-communities"
 import { ProfileEcosystemHub } from "./profile-ecosystem-hub"
 import { ProfileMoreNav } from "./profile-more-nav"
@@ -52,6 +55,8 @@ import ProfileStorySection from "./profile-story-section"
 import { ComposerPromptBar } from "./composer-prompt-bar"
 import { UnifiedActivityCenter } from "./unified-activity-center"
 import { ProfileIdentityOverview } from "./profile-identity-overview"
+import { ProfileAchievementShowcase, ProfileProfessionalShowcase } from "./profile-professional-showcase"
+import { MediaLightbox } from "./media-lightbox"
 
 type PhotoTarget = "photo" | "cover" | null
 
@@ -88,6 +93,8 @@ export function ProfileScreen({
   onSettings: () => void
   onOpenWallet?: () => void
 }) {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const ghc = useGHCProfile() as {
     profile?: Profile
     friends?: unknown[]
@@ -114,6 +121,7 @@ export function ProfileScreen({
   const [timelineLoadingMore, setTimelineLoadingMore] = useState(false)
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineRetry, setTimelineRetry] = useState(0)
+  const timelineLoadMoreAbortRef = useRef<AbortController | null>(null)
   const fallbackPosts = useMemo(
     () => (Array.isArray(feed.posts) ? feed.posts.filter((post) => isOwnProfilePost(post.authorId, post.authorName, meId, p)) : []),
     [feed.posts, meId, p],
@@ -121,6 +129,13 @@ export function ProfileScreen({
   const posts = timelinePosts ?? fallbackPosts
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [authoritativeFollowCounts, setAuthoritativeFollowCounts] = useState<{ followers: number; following: number } | null>(null)
+
+  const [profileSoftTick, setProfileSoftTick] = useState(0)
+  useSectionRefresh("profile", () => {
+    setProfileSoftTick((n) => n + 1)
+  }, { minIntervalMs: 8_000 })
+
+
 
   useEffect(() => {
     if (!meId) return
@@ -178,22 +193,37 @@ export function ProfileScreen({
       }
     })()
     return () => controller.abort()
-  }, [meId, timelineRetry])
+  }, [meId, timelineRetry, profileSoftTick])
+
+  // A profile/account transition invalidates pagination work from the previous identity.
+  useEffect(() => {
+    timelineLoadMoreAbortRef.current?.abort()
+    timelineLoadMoreAbortRef.current = null
+    setTimelineLoadingMore(false)
+    return () => {
+      timelineLoadMoreAbortRef.current?.abort()
+      timelineLoadMoreAbortRef.current = null
+    }
+  }, [meId])
 
   const loadMoreTimeline = useCallback(async () => {
     if (!meId || !timelineCursor || !timelineHasMore || timelineLoadingMore) return
     setTimelineLoadingMore(true)
     setTimelineError(null)
+    const controller = new AbortController()
+    timelineLoadMoreAbortRef.current?.abort()
+    timelineLoadMoreAbortRef.current = controller
     try {
       const params = new URLSearchParams({ limit: "30", kind: "all", before: String(timelineCursor.before), beforeId: timelineCursor.beforeId })
       const response = await fetch(`/api/social/profile/${encodeURIComponent(meId)}/posts?${params.toString()}`, {
-        credentials: "include", cache: "no-store",
+        credentials: "include", cache: "no-store", signal: controller.signal,
       })
       const data = await response.json().catch(() => ({})) as {
         ok?: boolean; posts?: Array<Record<string, unknown>>; hasMore?: boolean;
         nextBefore?: number | null; nextBeforeId?: string | null; error?: string; message?: string
       }
       if (!response.ok || !data.ok) throw new Error(data.message || data.error || `More posts unavailable (${response.status})`)
+      if (controller.signal.aborted || IdentityService.getCurrentUserId() !== meId) return
       const mapped = (Array.isArray(data.posts) ? data.posts : []).map((row): Post => {
         const likes = Math.max(0, Number(row.likes) || 0)
         const commentCount = Math.max(0, Number(row.commentCount) || 0)
@@ -226,9 +256,10 @@ export function ProfileScreen({
       setTimelineCursor(typeof data.nextBefore === "number" && typeof data.nextBeforeId === "string"
         ? { before: data.nextBefore, beforeId: data.nextBeforeId } : null)
     } catch (error) {
-      setTimelineError(error instanceof Error ? error.message : "More posts could not be loaded")
+      if (!controller.signal.aborted) setTimelineError(error instanceof Error ? error.message : "More posts could not be loaded")
     } finally {
-      setTimelineLoadingMore(false)
+      if (timelineLoadMoreAbortRef.current === controller) timelineLoadMoreAbortRef.current = null
+      if (!controller.signal.aborted) setTimelineLoadingMore(false)
     }
   }, [meId, timelineCursor, timelineHasMore, timelineLoadingMore])
 
@@ -339,6 +370,7 @@ export function ProfileScreen({
 
   const [editOpen, setEditOpen] = useState(false)
   const [photoSheet, setPhotoSheet] = useState<PhotoTarget>(null)
+  const [mediaPreview, setMediaPreview] = useState<{ url: string; caption: string } | null>(null)
   const [membershipTierLabel, setMembershipTierLabel] = useState<string | null>(null)
 
   useEffect(() => {
@@ -406,8 +438,8 @@ export function ProfileScreen({
   }, [name])
 
   const handle = useMemo(() => {
-    if (p.username?.trim()) return `@${p.username.trim().replace(/^@/, "")}`
-    const base = name
+    if (p.username?.trim()) return `@${p.username.trim().replace(/^@/, "").toLowerCase()}`
+    const base = (name || "member")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ".")
       .replace(/^\.+|\.+$/g, "")
@@ -446,6 +478,7 @@ export function ProfileScreen({
   const extraPhotos = useMemo(() => photos.slice(1, 6), [photos])
 
   const openEdit = useCallback(() => setEditOpen(true), [])
+  const closeMediaPreview = useCallback(() => setMediaPreview(null), [])
 
   const handleSave = useCallback(
     async (updates: Partial<Profile>): Promise<boolean> => {
@@ -635,16 +668,16 @@ export function ProfileScreen({
   }
 
   return (
-    <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label="Your GreenHaven profile">
+    <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("profileTitle")}>
       <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] backdrop-blur-md">
-        <h1 className="text-[15px] font-bold tracking-tight text-foreground">Profile</h1>
+        <h1 className="text-[15px] font-bold tracking-tight text-foreground">{msg("profileTitle")}</h1>
         <div className="flex items-center gap-1">
           <PremiumSurfaceActions />
           <button
             type="button"
             onClick={() => onOpenWallet?.()}
             className="flex h-11 w-11 items-center justify-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300"
-            aria-label="Wallet"
+            aria-label={msg("wallet")}
           >
             <Wallet size={18} />
           </button>
@@ -674,31 +707,23 @@ export function ProfileScreen({
         className="gh-scroll-root gh-scroll-stable min-h-0 w-full flex-1 overflow-y-auto overscroll-contain"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {/* COVER — full width, tap to change */}
-        <button
-          type="button"
-          onClick={() => setPhotoSheet("cover")}
-          className="gh-world-profile-cover relative block h-28 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-36"
-          aria-label="Change cover photo"
-        >
+        {/* Cover image opens a viewer; editing is a separate, explicit action. */}
+        <div className="gh-world-profile-cover relative h-28 w-full overflow-hidden bg-gradient-to-br from-[var(--gh-balance-from)] via-[var(--gh-green)] to-[var(--gh-balance-to)] sm:h-36">
           {cover ? (
-            <LazyImage src={cover} alt={`${name} cover`} className="absolute inset-0 h-full w-full object-cover" />
+            <button type="button" onClick={() => setMediaPreview({ url: cover, caption: `${name} · Cover photo` })} className="absolute inset-0 block h-full w-full cursor-zoom-in" aria-label="View cover photo full screen">
+              <LazyImage src={cover} alt={`${name} cover`} className="absolute inset-0 h-full w-full object-cover" />
+            </button>
           ) : null}
-          <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-            <Camera size={12} aria-hidden />
-            Cover
-          </span>
-        </button>
+          <button type="button" onClick={() => setPhotoSheet("cover")} className="absolute bottom-2.5 right-2.5 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-black/70" aria-label="Change cover photo">
+            <Camera size={14} aria-hidden /> {cover ? "Edit cover" : "Add cover"}
+          </button>
+        </div>
 
         {/* AVATAR row — overlaps cover; content is full width below */}
         <div className="gh-world-profile-identity gh-premium-profile-identity relative z-[1] w-full px-4">
           <div className="-mt-10 flex items-end justify-between">
-            <button
-              type="button"
-              onClick={() => setPhotoSheet("photo")}
-              className="relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label="Change profile photo"
-            >
+            <div className="relative shrink-0">
+              <button type="button" onClick={() => photo ? setMediaPreview({ url: photo, caption: `${name} · Profile photo` }) : setPhotoSheet("photo")} className="relative block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={photo ? "View profile photo full screen" : "Add profile photo"}>
               {photo ? (
                 <LazyImage
                   src={photo}
@@ -713,10 +738,9 @@ export function ProfileScreen({
                   {initials}
                 </div>
               )}
-              <span className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-[var(--gh-green)] text-white shadow-md">
-                <Camera size={14} />
-              </span>
-            </button>
+              </button>
+              <button type="button" onClick={() => setPhotoSheet("photo")} className="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-[var(--gh-green)] text-white shadow-md" aria-label="Change profile photo"><Camera size={14} /></button>
+            </div>
 
             <div className="mb-1 flex gap-2">
               <button
@@ -860,6 +884,8 @@ export function ProfileScreen({
               </section>
             ) : null}
             <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
+            <ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave={async (patch) => { await ghc.updateProfile?.(patch) }} />
+            <ProfileAchievementShowcase />
             <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
@@ -907,7 +933,7 @@ export function ProfileScreen({
         {profileSectionTab === "about" ? (
           <section id="gh-profile-about" className="mt-3 w-full space-y-3 px-4 scroll-mt-14" aria-label="About">
             <div className="rounded-[1.25rem] border border-border/60 bg-card p-4 shadow-sm">
-              <h3 className="text-[13px] font-bold text-foreground">About</h3>
+              <h3 className="text-[13px] font-bold text-foreground">{msg("about")}</h3>
               {p.bio ? <p className="mt-2 text-[13px] leading-relaxed text-foreground/90">{p.bio}</p> : (
                 <button type="button" onClick={openEdit} className="mt-2 text-left text-[13px] text-muted-foreground underline-offset-2 hover:underline">Add a short bio</button>
               )}
@@ -1014,7 +1040,7 @@ export function ProfileScreen({
         {profileSectionTab === "media" ? (
           <section id="gh-profile-media" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Media">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-[13px] font-bold text-foreground">Media</h3>
+              <h3 className="text-[13px] font-bold text-foreground">{msg("media")}</h3>
               <button type="button" onClick={() => setLibraryOpen(true)} className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Content library</button>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -1041,7 +1067,21 @@ export function ProfileScreen({
               }).slice(0, 18)}
             </div>
             {posts.every((post) => !(Array.isArray((post as any).images) && (post as any).images.length) && !(post as any).video) ? (
-              <p className="mt-3 text-center text-[12px] text-muted-foreground">Photos and videos from your posts appear here.</p>
+              <div className="mt-3 rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-center">
+                <p className="text-[12px] font-semibold text-foreground">No media yet</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Photos and videos from your posts appear here.</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent("ghc:focus-composer", { detail: { source: "profile-media-empty" } }))
+                    } catch { /* */ }
+                  }}
+                >
+                  Post a photo or video
+                </button>
+              </div>
             ) : null}
             <section className="mt-4" aria-label="Moments">
               <ProfileStorySection scope="profile" />
@@ -1073,7 +1113,7 @@ export function ProfileScreen({
         <section id="gh-profile-posts" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your posts timeline">
           <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
             <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
-              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">Posts</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
+              <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">{msg("posts")}</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
               <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
             </div>
             {timelineLoading && timelinePosts === null ? (
@@ -1084,7 +1124,20 @@ export function ProfileScreen({
             ) : posts.length === 0 ? (
               <div className="m-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-7 text-center">
                 <p className="text-[13px] font-semibold text-foreground">Your timeline starts here</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Use the composer above to share a thought, photo, video or update.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Share a thought, photo, video or update — it appears here and on the home feed.</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-[12px] font-bold text-white shadow-sm"
+                  onClick={() => {
+                    try {
+                      const el = document.getElementById("gh-profile-composer") || document.querySelector("[data-composer-root]")
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                      window.dispatchEvent(new CustomEvent("ghc:focus-composer", { detail: { source: "profile-empty" } }))
+                    } catch { /* */ }
+                  }}
+                >
+                  Create a post
+                </button>
               </div>
             ) : (
               <ul className="space-y-3 p-3" role="list" aria-label="Your posts timeline">
@@ -1141,20 +1194,20 @@ export function ProfileScreen({
       </div>
 
       {dashboardPageOpen ? (
-      <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Dashboard">
+      <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label={msg("dashboard")}>
           <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <button type="button" onClick={() => setDashboardPageOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close dashboard"><X size={20} /></button>
-            <div className="min-w-0"><h2 className="text-base font-bold">Dashboard</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
+            <div className="min-w-0"><h2 className="text-base font-bold">{msg("dashboard")}</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8">
             <ProfileEcosystemHub preferredGreenHavenId={serverGreenHavenId} userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
             <div className="mt-4"><UnifiedActivityCenter limit={40} /></div>
             <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Your communities">
-              <h3 className="mb-2 text-sm font-bold">Your communities</h3>
+              <h3 className="mb-2 text-sm font-bold">{msg("yourCommunities")}</h3>
               <ProfileMyCommunities conversations={messaging?.conversations} viewerId={meId} />
             </section>
             <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Account setup checklist">
-              <h3 className="mb-2 text-sm font-bold">Account setup</h3>
+              <h3 className="mb-2 text-sm font-bold">{msg("accountSetup")}</h3>
               <SetupChecklist onNavigate={(tab) => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: tab })) }} />
             </section>
             <div className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
@@ -1187,6 +1240,13 @@ export function ProfileScreen({
         coverPhoto={cover}
         profilePhotoHistory={p.profilePhotoHistory || []}
         coverPhotoHistory={p.coverPhotoHistory || []}
+      />
+
+      <MediaLightbox
+        open={Boolean(mediaPreview)}
+        url={mediaPreview?.url || null}
+        caption={mediaPreview?.caption}
+        onClose={closeMediaPreview}
       />
 
       {/* Photo / cover action sheet — Facebook-style */}

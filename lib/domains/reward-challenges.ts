@@ -544,8 +544,8 @@ function nextStepFor(
   status: ChallengeStatus,
   percent: number
 ): string {
-  if (status === "completed") return "Credited — open Wallet for ledger"
-  if (status === "pending_validation") return "Ready to validate — held until review (~24h)"
+  if (status === "completed") return "Progress target met — verify achievement against your account"
+  if (status === "pending_validation") return "Progress target met — verify against GreenHaven records"
   if (status === "expired") return "Challenge window ended"
   if (status === "in_progress") {
     if (c.id === "challenge_profile_complete") {

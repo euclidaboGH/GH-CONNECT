@@ -1,9 +1,9 @@
 "use client"
 
 import { promptDialog } from "@/lib/ui/global-interactions"
-import { useState, useEffect, useRef, useCallback, lazy, Suspense, type ReactNode } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense, type ReactNode } from "react"
 import { useGHC } from "@/contexts/ghc-context"
-import { LANGUAGES, SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
+import { SUPPORT_CONTACTS, LEGAL } from "@/lib/ghc-data"
 import { compressForTheme } from "@/lib/media/compress-image"
 import {
   ChevronLeft,
@@ -29,9 +29,13 @@ import {
   Lock,
   Users,
   ArrowLeft,
+  Gauge,
+  Smartphone,
+  Wifi,
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
 import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
@@ -43,11 +47,15 @@ import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-ca
 import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
 import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
 import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
+import { AccountDataControls } from "@/components/ghc/account-data-controls"
 import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
 import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { getPrivacyHealth } from "@/lib/privacy-health"
 import { matchSettingsSearch } from "@/lib/settings-search"
+import { getDevicePerformanceProfile, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
+import { getLocaleOptions, normalizeLanguagePreference, translate } from "@/lib/i18n"
+import { getShellMessage, getShellTranslationStatus } from "@/lib/i18n/shell"
 
 const PremiumWalletScreen = lazy(() =>
   import("../../features/wallet/wallet-screen").then((m) => ({
@@ -93,6 +101,7 @@ export type SettingsSection =
   | "preferences"
   | "notifications"
   | "appearance"
+  | "performance"
   | "help"
   | "legal"
   | "about"
@@ -101,6 +110,79 @@ export type SettingsSection =
   | "wallet"
   | "membership"
   | "rewards"
+  | "pi-payout-auth"
+
+function PerformanceSettingsScreen({ onBack }: { onBack: () => void }) {
+  const [profile, setProfile] = useState<ReturnType<typeof getDevicePerformanceProfile> | null>(null)
+  const [reducedData, setReducedData] = useState(false)
+  const [refreshedAt, setRefreshedAt] = useState<number | null>(null)
+
+  const refresh = useCallback(() => {
+    setProfile(getDevicePerformanceProfile())
+    setReducedData(preferReducedData())
+    setRefreshedAt(Date.now())
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const toggleReducedData = useCallback((enabled: boolean) => {
+    setPreferReducedData(enabled)
+    setReducedData(enabled || Boolean(profile?.saveData))
+  }, [profile?.saveData])
+
+  const deviceMemory = typeof navigator !== "undefined"
+    ? Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) || null
+    : null
+  const status = !profile ? "Checking device" : profile.lowPower ? "Efficiency mode recommended" : "Device ready"
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-2">
+        <button type="button" onClick={onBack} className="hover:opacity-60" aria-label="Back"><ChevronLeft size={24} /></button>
+        <h2 className="text-[14px] font-bold tracking-tight">Performance & data</h2>
+      </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
+        <section className="rounded-3xl border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Gauge size={22} /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-bold">{status}</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">GreenHaven adapts non-critical loading to the capabilities reported by this browser. These are device signals, not a synthetic speed score.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Processor</p><p className="mt-1 text-[15px] font-bold">{profile ? `${profile.hardwareConcurrency} logical cores` : "Checking"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Memory</p><p className="mt-1 text-[15px] font-bold">{deviceMemory ? `~${deviceMemory} GB` : "Not reported"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Connection</p><p className="mt-1 text-[15px] font-bold">{profile?.effectiveType ?? "Not reported"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Motion</p><p className="mt-1 text-[15px] font-bold">{profile?.reducedMotion ? "Reduced" : "Standard"}</p></div>
+          </div>
+          <button type="button" onClick={refresh} className="mt-4 min-h-11 w-full rounded-full border border-border px-4 py-2.5 text-[13px] font-semibold transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Refresh device diagnostics</button>
+          {refreshedAt ? <p className="mt-2 text-center text-[10px] text-muted-foreground">Updated {new Date(refreshedAt).toLocaleTimeString()}</p> : null}
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+          <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600"><Wifi size={20} /></span><div><p className="text-[14px] font-bold">Reduce data usage</p><p className="text-[11px] text-muted-foreground">This device only</p></div></div>
+          <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-2xl bg-muted/40 px-3 py-2">
+            <span className="min-w-0"><span className="block text-[13px] font-semibold">Prefer reduced data</span><span className="mt-0.5 block text-[11px] text-muted-foreground">Skip optional prefetching and favor lighter media where supported.</span></span>
+            <input type="checkbox" checked={reducedData} onChange={(event) => toggleReducedData(event.target.checked)} disabled={Boolean(profile?.saveData || profile?.effectiveType === "2g" || profile?.effectiveType === "slow-2g")} className="h-5 w-5 shrink-0 accent-primary" aria-label="Prefer reduced data" />
+          </label>
+          {profile?.saveData || profile?.effectiveType === "2g" || profile?.effectiveType === "slow-2g" ? <p className="mt-2 text-[11px] text-muted-foreground">Your browser or network is already requesting reduced data, so this preference is locked on.</p> : null}
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground"><Smartphone size={14} /> Preference is stored locally on this device and does not change your account settings.</div>
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-card p-4">
+          <p className="text-[13px] font-bold">What GreenHaven optimizes</p>
+          <ul className="mt-3 space-y-2 text-[12px] leading-relaxed text-muted-foreground">
+            <li>• Defers non-critical work until the browser is idle.</li>
+            <li>• Avoids optional prefetching on constrained connections and low-power devices.</li>
+            <li>• Supports reduced-motion preferences and lazy media loading.</li>
+            <li>• Keeps account, privacy, payment and entitlement decisions server-authoritative.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  )
+}
 
 export function SettingsScreen({
   onBack,
@@ -113,6 +195,9 @@ export function SettingsScreen({
   const { settings, updateSettings, logout, blockedUsers, unblockUser, candidates } = useGHC()
   const sessionLock = useSessionLock()
   const regional = useRegionalContext()
+  const msg = (key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale)
+  const localeOptions = useMemo(() => getLocaleOptions(), [])
+  const selectedLocale = normalizeLanguagePreference(settings.language)
   const [navStack, setNavStack] = useState<SettingsSection[]>(() =>
     initialSection && initialSection !== "main" ? ["main", initialSection] : ["main"],
   )
@@ -159,7 +244,8 @@ export function SettingsScreen({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const next = (e as CustomEvent<{ section?: string }>).detail?.section
+      const detail = (e as CustomEvent<{ section?: string; focus?: string }>).detail
+      const next = detail?.section
       if (
         next === "wallet" ||
         next === "rewards" ||
@@ -168,8 +254,15 @@ export function SettingsScreen({
         next === "privacy" ||
         next === "notifications" ||
         next === "appearance" ||
+        next === "performance" ||
         next === "device-lock"
       ) {
+        // Phase 5: optional focus target for Wallet Pi tools (withdrawal journey)
+        if (next === "wallet" && detail?.focus) {
+          try {
+            sessionStorage.setItem("ghc.wallet.focus", String(detail.focus))
+          } catch { /* */ }
+        }
         goToSection(
           next as
             | "wallet"
@@ -179,6 +272,7 @@ export function SettingsScreen({
             | "privacy"
             | "notifications"
             | "appearance"
+            | "performance"
             | "device-lock",
         )
       }
@@ -303,6 +397,7 @@ export function SettingsScreen({
 
   const handleSelect = async (key: string, value: string | string[] | number | boolean | null) => {
     await updateSettings({ ...settings, [key]: value })
+    if (key === "language" && typeof value === "string") regional.setPreferredLocale(value)
   }
 
   const setThemeMode = async (mode: ThemeMode) => {
@@ -588,6 +683,10 @@ export function SettingsScreen({
     )
   }
 
+  if (section === "performance") {
+    return <PerformanceSettingsScreen onBack={goBackOneLevel} />
+  }
+
   if (section === "privacy") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
@@ -764,6 +863,8 @@ export function SettingsScreen({
             </div>
           </div>
 
+          <AccountDataControls />
+
           {/* Blocked users */}
           <div className="pt-2">
             <p className="mb-2 text-[15px] font-semibold">Blocked users</p>
@@ -783,7 +884,20 @@ export function SettingsScreen({
                       <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{name}</span>
                       <button
                         type="button"
-                        onClick={() => void unblockUser?.(id)}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              await unblockUser?.(id)
+                              try {
+                                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "User unblocked", type: "success" } }))
+                              } catch { /* */ }
+                            } catch {
+                              try {
+                                window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Could not unblock", type: "error" } }))
+                              } catch { /* */ }
+                            }
+                          })()
+                        }}
                         className="min-h-10 rounded-full border border-border px-3 text-[12px] font-bold text-foreground"
                       >
                         Unblock
@@ -819,18 +933,19 @@ export function SettingsScreen({
           <section className="rounded-[1.25rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Language</p>
             <select
-              value={settings.language || "English"}
+              value={selectedLocale}
               onChange={(e) => void handleSelect("language", e.target.value)}
               className="w-full min-h-11 rounded-xl border border-border bg-background px-3 text-sm font-semibold"
               aria-label="App language"
             >
-              {LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
+              {localeOptions.map((option) => (
+                <option key={option.localeTag} value={option.localeTag}>
+                  {option.nativeName || option.name} — {option.name}{option.translationAvailable ? "" : option.partialTranslationAvailable ? " (partially translated)" : " (not translated yet)"}
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-[11px] text-muted-foreground">Applies to menus and system labels. Chat content stays as written.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{regional.uiTranslationAvailable ? "English interface resources are active." : getShellTranslationStatus(regional.locale) === "partial" ? getShellMessage("languagePartial", regional.locale) : translate("language.translationPending")}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{getShellMessage("contentUnchanged", regional.locale)}</p>
           </section>
 
           {/* Device date, time & optional live location */}
@@ -1235,16 +1350,18 @@ export function SettingsScreen({
           <div>
             <p className="text-[13px] font-bold text-muted-foreground mb-2">Language</p>
             <select
-              value={settings.language}
-              onChange={(e) => handleSelect("language", e.target.value)}
+              value={selectedLocale}
+              onChange={(e) => void handleSelect("language", e.target.value)}
               className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm text-foreground"
+              aria-label="App language"
             >
-              {LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
+              {localeOptions.map((option) => (
+                <option key={option.localeTag} value={option.localeTag}>
+                  {option.nativeName || option.name} — {option.name}{option.translationAvailable ? "" : option.partialTranslationAvailable ? " (partially translated)" : " (not translated yet)"}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-[11px] text-muted-foreground">{regional.uiTranslationAvailable ? "English interface resources are active." : getShellTranslationStatus(regional.locale) === "partial" ? getShellMessage("languagePartial", regional.locale) : translate("language.translationPending")}</p>
           </div>
         </div>
       </div>
@@ -1273,7 +1390,7 @@ export function SettingsScreen({
         },
         {
           title: "Rewards Centre",
-          subtitle: "Missions & claimable GHC",
+          subtitle: "Missions & daily claims",
           icon: <Gift size={20} strokeWidth={1.75} />,
           action: () => goToSection("rewards"),
           keywords: "rewards challenges earn pending claim",
@@ -1323,6 +1440,13 @@ export function SettingsScreen({
     {
       heading: "Preferences",
       items: [
+        {
+          title: "Performance & data",
+          subtitle: "Device readiness, connection and data saver",
+          icon: <Gauge size={20} strokeWidth={1.75} />,
+          action: () => goToSection("performance"),
+          keywords: "performance speed data saver network device low data battery loading",
+        },
         {
           title: "Notifications",
           subtitle: "Matches, messages, rewards, membership",
@@ -1392,7 +1516,7 @@ export function SettingsScreen({
   const settingsResultCount = filteredGroups.reduce((count, group) => count + group.items.length, 0)
 
   return (
-    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label="GreenHaven settings">
+    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label={msg("settingsTitle")}>
       <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"
@@ -1402,7 +1526,7 @@ export function SettingsScreen({
         >
           <ChevronLeft size={24} strokeWidth={2} />
         </button>
-        <h2 className="text-[18px] font-bold tracking-tight text-foreground">Settings</h2>
+        <h2 className="text-[18px] font-bold tracking-tight text-foreground">{msg("settingsTitle")}</h2>
       </div>
 
       <div className="shrink-0 border-b border-border/50 px-4 py-2.5">
@@ -1412,9 +1536,9 @@ export function SettingsScreen({
             type="search"
             value={settingsQuery}
             onChange={(e) => setSettingsQuery(e.target.value)}
-            placeholder="Search wallet, privacy, messages, language…"
+            placeholder={msg("searchSettings")}
             className="min-h-11 w-full rounded-2xl border border-border/70 bg-muted/40 py-2.5 pl-10 pr-11 text-[15px] outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20"
-            aria-label="Search settings"
+            aria-label={msg("searchSettings")}
             aria-describedby="settings-search-hint"
           />
           {settingsQuery ? (

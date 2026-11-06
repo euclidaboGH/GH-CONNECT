@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { ensureMediaBucket } from "@/lib/server/media/ensure-bucket"
 import { buildOwnedMediaPath, isSafeMediaBucket, maxMediaBytesForMime } from "@/lib/server/media/path-policy.mjs"
@@ -31,11 +31,11 @@ export async function POST(request: Request) {
   if (!auth) {
     return jsonNoStore({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const rl = checkRateLimit(`media-intent:${auth.userId}`, 30, 60_000)
+  const rl = await checkDurableRateLimit(`media-intent:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
     return jsonNoStore(
-      { ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec },
-      { status: 429 }
+      { ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec },
+      { status: durableRateLimitStatus(rl), headers: { "Retry-After": String(rl.retryAfterSec) } }
     )
   }
 

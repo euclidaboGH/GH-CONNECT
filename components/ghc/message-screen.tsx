@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, memo } from "react"
 import { useGHCMessaging, useGHC } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
 import { useDomainEvents } from "@/lib/realtime/use-domain-events"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -55,16 +57,45 @@ function isCommunityConversation(c: Conversation): boolean {
 }
 
 export function MessageScreen() {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const messaging = useGHCMessaging()
   const { conversations: rawConversations, sendMessage, sendMediaMessage,
     loadConversationMessages, markConversationRead } = messaging
-  const { deleteMessage, replyToMessage, matches, friends } = useGHC()
+  const {
+    deleteMessage,
+    replyToMessage,
+    matches,
+    friends,
+    candidates,
+    following,
+  } = useGHC() as unknown as {
+    deleteMessage?: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
+    replyToMessage?: (conversationId: string, replyToMessageId: string, text: string) => Promise<boolean>
+    matches?: unknown[]
+    friends?: unknown[]
+    candidates?: unknown[]
+    following?: Array<Record<string, unknown> | string>
+  }
   const ghc = {
-    pinConversation: messaging.pinConversation,
-    archiveConversation: messaging.archiveConversation,
-    muteConversation: messaging.muteConversation,
+    pinConversation: async (id: string) => {
+      await messaging.pinConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation pinned", type: "success" } })) } catch { /* */ }
+    },
+    archiveConversation: async (id: string) => {
+      await messaging.archiveConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation archived", type: "success" } })) } catch { /* */ }
+    },
+    muteConversation: async (id: string) => {
+      await messaging.muteConversation?.(id)
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation muted", type: "success" } })) } catch { /* */ }
+    },
     matches: Array.isArray(matches) ? matches : [],
     friends: Array.isArray(friends) ? friends : [],
+    candidates: Array.isArray(candidates) ? candidates : [],
+    following: Array.isArray(following) ? following : [],
+    refreshConversations: (messaging as { refreshConversations?: () => Promise<unknown> }).refreshConversations,
+    loadConversations: (messaging as { loadConversations?: () => Promise<unknown> }).loadConversations,
   }
 
   const conversations = useMemo(
@@ -76,6 +107,7 @@ export function MessageScreen() {
   /** Debounced query for filtering — keeps typing responsive on long inboxes */
   const [queryDebounced, setQueryDebounced] = useState("")
   const [filter, setFilter] = useState<InboxFilter>("all")
+  const [inboxRefreshing, setInboxRefreshing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const [draftConversationId, setDraftConversationId] = useState<string | null>(null)
@@ -144,11 +176,20 @@ export function MessageScreen() {
   }, [selectedId, loadConversationMessages, markConversationRead])
 
   useSectionRefresh("messages", async () => {
-    if (!selectedId || document.visibilityState === "hidden") return
-    await loadConversationMessages?.(selectedId)
+    if (document.visibilityState === "hidden") return
+    // Refresh open thread and keep inbox list current (names, unread, order)
+    try {
+      await ghc.refreshConversations?.()
+    } catch { /* optional on context */ }
+    try {
+      await (ghc as { loadConversations?: () => Promise<unknown> }).loadConversations?.()
+    } catch { /* */ }
+    if (selectedId) {
+      await loadConversationMessages?.(selectedId)
+    }
   }, {
     minIntervalMs: 5_000,
-    events: ["ghc:new-message", "ghc:messaging-reconcile"],
+    events: ["ghc:new-message", "ghc:messaging-reconcile", "ghc:messages-refresh"],
   })
 
   useEffect(() => {
@@ -337,7 +378,61 @@ export function MessageScreen() {
 
   const list = useMemo(() => {
     const q = queryDebounced.trim().toLowerCase()
-    let rows = conversations.filter((c) => c && !c.isArchived)
+    // Build a peer lookup from session graph so inbox rows never show blank names/photos
+    // when the conversation payload omitted display fields.
+    const peerIndex = new Map<string, { name?: string; photo?: string }>()
+    const indexPeer = (id: unknown, name?: unknown, photo?: unknown) => {
+      const key = String(id || "").trim()
+      if (!key) return
+      const prev = peerIndex.get(key) || {}
+      const n = typeof name === "string" && name.trim() ? name.trim() : prev.name
+      const ph = typeof photo === "string" && photo.trim() ? photo.trim() : prev.photo
+      peerIndex.set(key, { name: n, photo: ph })
+    }
+    try {
+      for (const c of (ghc.candidates || []) as Array<Record<string, unknown>>) {
+        indexPeer(c.id || c.userId, c.displayName || c.name, c.avatarUrl || c.photo || c.profilePhoto)
+      }
+      for (const f of (ghc.friends || []) as Array<Record<string, unknown> | string>) {
+        if (typeof f === "string") continue
+        indexPeer(f.id || f.userId, f.displayName || f.name, f.avatarUrl || f.photo || f.profilePhoto)
+      }
+      for (const m of (ghc.matches || []) as Array<Record<string, unknown> | string>) {
+        if (typeof m === "string") continue
+        indexPeer(m.id || m.userId, m.displayName || m.name, m.avatarUrl || m.photo || m.profilePhoto)
+      }
+      // Phase 4: include following graph for DM name/photo enrichment.
+      for (const f of (ghc.following || []) as Array<Record<string, unknown> | string>) {
+        if (typeof f === "string") {
+          indexPeer(f)
+          continue
+        }
+        indexPeer(f.id || f.userId, f.displayName || f.name, f.avatarUrl || f.photo || f.profilePhoto)
+      }
+    } catch {
+      /* best-effort enrichment */
+    }
+
+    let rows = conversations.filter((c) => c && !c.isArchived).map((c) => {
+      if (isCommunityConversation(c)) return c
+      const peerId = String(c.participantId || (c as { otherUserId?: string }).otherUserId || "").trim()
+      if (!peerId) return c
+      const hit = peerIndex.get(peerId)
+      if (!hit) return c
+      const needsName =
+        !c.participantName ||
+        c.participantName === "User" ||
+        c.participantName === "Unknown" ||
+        c.participantName === peerId ||
+        /^user[_-]/i.test(c.participantName)
+      const needsPhoto = !c.participantPhoto && !c.groupPhoto
+      if (!needsName && !needsPhoto) return c
+      return {
+        ...c,
+        participantName: needsName && hit.name ? hit.name : c.participantName,
+        participantPhoto: needsPhoto && hit.photo ? hit.photo : c.participantPhoto,
+      }
+    })
     if (filter === "unread") {
       rows = rows.filter((c) => Boolean(c.unread) || (c.unreadCount || 0) > 0)
     } else if (filter === "requests") {
@@ -359,7 +454,7 @@ export function MessageScreen() {
       if (pin !== 0) return pin
       return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
     })
-  }, [conversations, queryDebounced, filter])
+  }, [conversations, queryDebounced, filter, ghc.candidates, ghc.friends, ghc.matches, ghc.following])
 
   const selected = useMemo(() => {
     if (!selectedId) return null
@@ -491,7 +586,7 @@ export function MessageScreen() {
     } catch {
       /* */
     }
-  }, [stopTyping, rawConversations])
+  }, [stopTyping, rawConversations, selectedId])
 
   const closeThread = useCallback(() => {
     stopTyping()
@@ -521,7 +616,7 @@ export function MessageScreen() {
     setReplyPreview(null)
     try {
       const accepted = replyingTo
-        ? await replyToMessage(selectedId, replyingTo, text)
+        ? await replyToMessage?.(selectedId, replyingTo, text)
         : await sendMessage?.(selectedId, text)
       if (accepted === false || accepted === undefined) {
         setDraft(text)
@@ -647,7 +742,7 @@ export function MessageScreen() {
             className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
             role="status"
           >
-            You are offline. Messages will queue and send automatically when you reconnect.
+            You are offline. Reconnect before sending new messages. Your unsent draft stays in the composer.
           </div>
         ) : null}
 
@@ -701,7 +796,7 @@ export function MessageScreen() {
                   }
                 }}
                 onDelete={(id, forEveryone) => {
-                  void deleteMessage(selectedId!, id, Boolean(forEveryone))
+                  void deleteMessage?.(selectedId!, id, Boolean(forEveryone))
                 }}
                 onRetry={
                   msg.status === "failed"
@@ -844,35 +939,59 @@ export function MessageScreen() {
   }
 
   const filters: { id: InboxFilter; label: string; count?: number }[] = [
-    { id: "all", label: "All" },
-    { id: "dms", label: "DMs" },
-    { id: "unread", label: "Unread", count: unreadCount },
-    { id: "requests", label: "Requests", count: requestCount },
-    { id: "communities", label: "Communities" },
+    { id: "all", label: msg("all") },
+    { id: "dms", label: msg("directMessages") },
+    { id: "unread", label: msg("unread"), count: unreadCount },
+    { id: "requests", label: msg("requests"), count: requestCount },
+    { id: "communities", label: msg("communities") },
   ]
 
 
   return (
-    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Messages inbox">
+    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("messagesTitle")}>
       <div className="px-3 pt-2" role="status">
         {isOffline ? (
           <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            Offline — existing conversations remain available where cached. Reconnect before sending new messages or attachments.
+            {msg("offlineNotice")}
           </p>
         ) : null}
       </div>
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-[17px] font-bold tracking-tight text-foreground">Messages</h1>
+            <h1 className="text-[17px] font-bold tracking-tight text-foreground">{msg("messagesTitle")}</h1>
             <p className="text-[11px] text-muted-foreground">
-              People, requests and community conversations in one place
+              {msg("messagesSubtitle")}
             </p>
           </div>
           {unreadCount > 0 ? (
-            <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums shadow-sm">
-              {unreadCount} new
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[var(--gh-green)] px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums shadow-sm">
+                {unreadCount} new
+              </span>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
+                onClick={() => {
+                  try {
+                    const list = Array.isArray(conversations) ? conversations : []
+                    for (const c of list) {
+                      const id = c?.id
+                      if (!id) continue
+                      const unread = Boolean(c.unread) || Number(c.unreadCount || 0) > 0
+                      if (unread && typeof markConversationRead === "function") {
+                        void markConversationRead(id)
+                      }
+                    }
+                    setStatusMsg?.("Inbox marked read")
+                    window.setTimeout(() => setStatusMsg?.(null), 1600)
+                  } catch { /* */ }
+                }}
+                aria-label={msg("markAllRead")}
+              >
+                {msg("markAllRead")}
+              </button>
+            </div>
           ) : null}
         </div>
         <div className="mt-2.5">
@@ -941,7 +1060,35 @@ export function MessageScreen() {
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2"
         style={{ WebkitOverflowScrolling: "touch" }}
+        onTouchStart={(e) => {
+          const el = e.currentTarget
+          if (el.scrollTop <= 0) (el as HTMLElement & { _pullY?: number })._pullY = e.touches[0]?.clientY
+        }}
+        onTouchEnd={(e) => {
+          const el = e.currentTarget as HTMLElement & { _pullY?: number }
+          const start = el._pullY
+          el._pullY = undefined
+          if (start == null || el.scrollTop > 0 || inboxRefreshing) return
+          const dy = (e.changedTouches[0]?.clientY || 0) - start
+          if (dy < 72) return
+          setInboxRefreshing(true)
+          void (async () => {
+            try {
+              await ghc.refreshConversations?.()
+            } catch { /* */ }
+            try {
+              await (ghc as { loadConversations?: () => Promise<unknown> }).loadConversations?.()
+            } catch { /* */ }
+            try {
+              window.dispatchEvent(new CustomEvent("ghc:messages-refresh", { detail: { reason: "pull" } }))
+            } catch { /* */ }
+            setInboxRefreshing(false)
+          })()
+        }}
       >
+        {inboxRefreshing ? (
+          <p className="px-3 py-1.5 text-center text-[11px] font-medium text-muted-foreground">Refreshing inbox…</p>
+        ) : null}
         {list.length === 0 ? (
           filter === "unread" ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

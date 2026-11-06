@@ -40,10 +40,15 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     return { ...local, categories: empty.categories, ledgerBalance: null, escrowLocked: 0, reconciliation: empty.reconciliation }
   })
   const requestSequence = useRef(0)
+  const activeRequest = useRef<AbortController | null>(null)
   const refresh = useCallback(() => {
     const sequence = ++requestSequence.current
+    activeRequest.current?.abort()
+    const controller = new AbortController()
+    activeRequest.current = controller
+    const timeout = window.setTimeout(() => controller.abort(), 10_000)
     const local = readWalletSnapshot()
-    void fetchWalletV2().then((wallet) => {
+    void fetchWalletV2({ signal: controller.signal }).then((wallet) => {
       if (sequence !== requestSequence.current) return
       setSnapshot({
         status: "ready",
@@ -77,6 +82,9 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
           reconciliation: emptyWalletV2().reconciliation,
         }
       })
+    }).finally(() => {
+      window.clearTimeout(timeout)
+      if (sequence === requestSequence.current) activeRequest.current = null
     })
   }, [])
 
@@ -116,6 +124,9 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     }
     const id = setInterval(refresh, 30000)
     return () => {
+      requestSequence.current += 1
+      activeRequest.current?.abort()
+      activeRequest.current = null
       unsubs.forEach((u) => u())
       clearInterval(id)
       try {

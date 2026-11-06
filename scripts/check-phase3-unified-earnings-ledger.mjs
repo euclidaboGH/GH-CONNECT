@@ -4,6 +4,7 @@ import { join } from 'node:path'
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
 const mig = read('supabase/migrations/20261029010006_gh_unified_earnings_ledger.sql')
+const hardening = read('supabase/migrations/20261105170001_phase3_earnings_ledger_integrity_hardening.sql')
 const store = read('lib/server/earnings/unified-ledger.ts')
 const api = read('app/api/economy/earnings/route.ts')
 const claim = read('app/api/economy/rewards/pi-cashback/claim/route.ts')
@@ -25,6 +26,11 @@ test('Server module uses atomic scale 1e7', /PI_ATOMIC_SCALE = 10_000_000/.test(
 test('Authenticated earnings statement API exists', /resolveAuthenticatedUser/.test(api) && /getEarningsStatement/.test(api))
 test('Cashback claim posts credit, reserves, and settles on success', /postEarningsCredit/.test(claim) && /reserveEarningsForPayout/.test(claim) && /settleEarningsPayout/.test(claim))
 test('API never accepts client-supplied balances to write', !/request\.json\(\)/.test(api))
+test('Ledger events are append-only (UPDATE/DELETE rejected)', /gh_earnings_ledger_append_only/.test(hardening) && /BEFORE UPDATE OR DELETE/.test(hardening) && /GH_EARNINGS_LEDGER_APPEND_ONLY/.test(hardening))
+test('Credit idempotency binds amount, kind, status and source', /IDEMPOTENCY_PAYLOAD_CONFLICT/.test(hardening) && /v_existing\.amount_atomic <> p_amount_atomic/.test(hardening) && /v_existing\.source_kind <> v_kind/.test(hardening))
+test('Reserve, settle and release are serialized and payload-bound', (hardening.match(/pg_advisory_xact_lock\(hashtextextended\('gh_earnings:'/g) || []).length >= 3 && /v_existing\.payout_request_id IS DISTINCT FROM v_pay/.test(hardening))
+test('Cashback A2U fails closed when ledger credit or reservation fails', /const ledgerCredit = await postEarningsCredit/.test(claim) && /if \(!ledgerCredit\.ok\)/.test(claim) && /if \(!ledgerReservation\.ok\)/.test(claim) && /EARNINGS_LEDGER_CREDIT_REQUIRED/.test(claim) && /EARNINGS_LEDGER_RESERVATION_REQUIRED/.test(claim))
+test('Paid cashback retry repairs ledger settlement before returning', /alreadyPaid/.test(claim) && /cashback_a2u_settled_recovered/.test(claim))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 3 unified earnings ledger: ${checks.length - failed}/${checks.length} passed`)

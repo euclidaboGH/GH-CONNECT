@@ -88,6 +88,8 @@ export function listLocalities(
 export function buildStructuredLocation(input: {
   countryId: string
   admin1Id?: string
+  /** User-entered region when no verified admin1 catalog exists. */
+  admin1Name?: string
   admin2Id?: string
   localityId?: string
   localityName?: string
@@ -111,7 +113,7 @@ export function buildStructuredLocation(input: {
     countryId: country.id,
     countryName: country.name,
     admin1Id: admin1?.id,
-    admin1Name: admin1?.name,
+    admin1Name: admin1?.name || input.admin1Name?.trim() || undefined,
     admin2Id: admin2?.id,
     admin2Name: admin2?.name,
     localityId,

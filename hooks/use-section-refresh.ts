@@ -29,7 +29,14 @@ export function useSectionRefresh(
           /* */
         }
       },
-      { ...opts, section },
+      {
+        section,
+        minIntervalMs: opts?.minIntervalMs,
+        onFocus: opts?.onFocus,
+        onVisible: opts?.onVisible,
+        onOnline: opts?.onOnline,
+        events: opts?.events,
+      },
     )
-  }, [section, enabled, opts?.minIntervalMs, opts?.onFocus, opts?.onVisible, opts?.onOnline])
+  }, [section, enabled, opts?.minIntervalMs, opts?.onFocus, opts?.onVisible, opts?.onOnline, opts?.events])
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Connection Request Inbox — Incoming / Outgoing.
  * Uses unified adapter; session graph until durable migration applied.
@@ -63,7 +64,7 @@ function RequestCard({
           aria-label={`View ${displayName}`}
         >
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+            <DurableImage src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center">
               <User size={18} className="text-muted-foreground" />

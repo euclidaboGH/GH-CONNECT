@@ -70,6 +70,7 @@ export function LocationPicker({
   const emit = (partial: {
     countryId?: string
     admin1Id?: string
+    admin1Name?: string
     admin2Id?: string
     localityId?: string
     localityName?: string
@@ -83,9 +84,10 @@ export function LocationPicker({
     const loc = buildStructuredLocation({
       countryId: cid,
       admin1Id: partial.admin1Id !== undefined ? partial.admin1Id || undefined : admin1Id || undefined,
+      admin1Name: partial.admin1Name !== undefined ? partial.admin1Name : value?.admin1Name,
       admin2Id: partial.admin2Id !== undefined ? partial.admin2Id || undefined : admin2Id || undefined,
       localityId: partial.localityId !== undefined ? partial.localityId || undefined : localityId || undefined,
-      localityName: partial.localityName,
+      localityName: partial.localityName !== undefined ? partial.localityName : value?.localityName,
       sublocalityName: partial.sublocalityName ?? area,
     })
     onChange(loc)
@@ -126,7 +128,7 @@ export function LocationPicker({
           onChange={(e) => {
             const id = e.target.value
             if (!id) onChange(null)
-            else emit({ countryId: id, admin1Id: "", admin2Id: "", localityId: "" })
+            else emit({ countryId: id, admin1Id: "", admin1Name: "", admin2Id: "", localityId: "", localityName: "" })
           }}
         >
           <option value="">Select country</option>
@@ -142,29 +144,42 @@ export function LocationPicker({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className={labelCls} htmlFor={`${idPrefix}-admin1`}>
-              {country.labels.admin1} *
+              {country.labels.admin1}{admin1List.length ? " *" : " (optional)"}
             </label>
-            <select
-              id={`${idPrefix}-admin1`}
-              className={field}
-              value={admin1Id}
-              disabled={!countryId}
-              onChange={(e) =>
-                emit({
-                  countryId,
-                  admin1Id: e.target.value,
-                  admin2Id: "",
-                  localityId: "",
-                })
-              }
-            >
-              <option value="">Select</option>
-              {admin1List.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            {admin1List.length ? (
+              <select
+                id={`${idPrefix}-admin1`}
+                className={field}
+                value={admin1Id}
+                disabled={!countryId}
+                onChange={(e) =>
+                  emit({
+                    countryId,
+                    admin1Id: e.target.value,
+                    admin1Name: "",
+                    admin2Id: "",
+                    localityId: "",
+                    localityName: "",
+                  })
+                }
+              >
+                <option value="">Select</option>
+                {admin1List.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={`${idPrefix}-admin1`}
+                className={field}
+                value={value?.admin1Name || ""}
+                placeholder={`Enter ${country.labels.admin1.toLowerCase()} (optional)`}
+                onChange={(e) => emit({ countryId, admin1Id: "", admin1Name: e.target.value, admin2Id: "", localityId: "", localityName: "" })}
+                aria-label={country.labels.admin1}
+              />
+            )}
           </div>
 
           {admin2List.length > 0 && (
@@ -203,8 +218,20 @@ export function LocationPicker({
           <div className={admin2List.length > 0 ? "sm:col-span-2" : ""}>
             <label className={labelCls} htmlFor={`${idPrefix}-locality`}>
               {country.labels.locality}
-              {requireLocality ? " *" : ""}
+              {requireLocality ? " *" : " (optional)"}
             </label>
+            {!admin1List.length ? (
+              <input
+                id={`${idPrefix}-locality`}
+                className={field}
+                value={value?.localityName || ""}
+                placeholder={`Enter ${country.labels.locality.toLowerCase()}`}
+                onChange={(e) => emit({ countryId, admin1Name: value?.admin1Name || "", localityId: "", localityName: e.target.value })}
+                aria-label={country.labels.locality}
+                required={requireLocality}
+              />
+            ) : (
+            <>
             <select
               id={`${idPrefix}-locality`}
               className={field}
@@ -257,6 +284,8 @@ export function LocationPicker({
                 }}
                 aria-label="Custom city or town"
               />
+            )}
+            </>
             )}
           </div>
 

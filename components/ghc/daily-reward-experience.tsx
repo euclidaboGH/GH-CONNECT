@@ -116,7 +116,6 @@ export function DailyRewardFeedCard({
   const tier = resolveTier()
   const [tick, setTick] = useState<number>(0)
   const [claiming, setClaiming] = useState(false)
-  const [justClaimedFlash, setJustClaimedFlash] = useState(false)
   const claimInFlightRef = useRef(false)
   const { status: serverStatus, revision: statusRevision, refresh: refreshServerStatus } = useDailyClaimStatus(userId)
   const [countdownLabel, setCountdownLabel] = useState(() => formatCountdown(msUntilNextLagosMidnight()))
@@ -168,14 +167,11 @@ export function DailyRewardFeedCard({
       if (!server.ok) {
         ghc.addToast?.(server.error || "Claim failed — your reward is still available to retry", "error")
         void refreshServerStatus()
-        setJustClaimedFlash(true)
-      window.setTimeout(() => setJustClaimedFlash(false), 4000)
-      setTick((t) => t + 1)
         return
       }
       // Only advance local streak/XP after a newly completed server claim.
       // An idempotent repeat marks the day locally but must not award XP twice.
-      const res = server.alreadyClaimed
+      const res: ReturnType<typeof claimDailyStreak> = server.alreadyClaimed
         ? (markDailyClaimedForUi(userId), {
             ok: true,
             ghc: 0,
@@ -184,7 +180,9 @@ export function DailyRewardFeedCard({
             cycleDay: server.cycleDay ?? daily.displayCycleDay,
           })
         : claimDailyStreak(userId, tier)
-      const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
+      // Only the server may state the credited amount. Local streak values are
+      // progression hints, not a financial amount to display as awarded.
+      const amt = server.serverAmount
       const day = server.cycleDay ?? res.cycleDay ?? daily.displayCycleDay
       const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield used" : ""
@@ -204,8 +202,10 @@ export function DailyRewardFeedCard({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
-          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? "Daily reward was already claimed. Wallet status is being refreshed."
+          : amt != null
+            ? `${amt} GHC claim confirmed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`
+            : `Daily claim confirmed by the server · Day ${day}/7. The credited amount will appear after the Wallet refresh.`,
         "success"
       )
       setTick((t) => t + 1)
@@ -214,7 +214,7 @@ export function DailyRewardFeedCard({
           new CustomEvent("ghc:daily-reward-claimed", {
             detail: {
               ...res,
-              ghc: amt,
+              ghc: amt ?? null,
               cycleDay: day,
               server: true,
               serverAmount: server.serverAmount,
@@ -239,7 +239,7 @@ export function DailyRewardFeedCard({
       claimInFlightRef.current = false
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.todayGhc, daily.displayCycleDay, daily.streakDays, userId, tier, ghc, refreshServerStatus])
+  }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.displayCycleDay, daily.streakDays, userId, tier, ghc, refreshServerStatus])
 
   // After claim: compact status pill only (no long rectangular prototype card).
   if (!daily.canClaimToday) {
@@ -253,7 +253,7 @@ export function DailyRewardFeedCard({
           <Gift size={16} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">{justClaimedFlash ? "Claimed — pending 48h" : "GHC daily claimed"}</p>
+          <p className="text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">GHC daily claimed</p>
           <p className="text-[10px] tabular-nums text-emerald-900/70 dark:text-emerald-200/70">
             Next in <span className="font-semibold">{countdownLabel}</span>
           </p>
@@ -403,7 +403,7 @@ export function DailyRewardSheet({
         void refreshServerStatus()
         return
       }
-      const res = server.alreadyClaimed
+      const res: ReturnType<typeof claimDailyStreak> = server.alreadyClaimed
         ? (markDailyClaimedForUi(userId), {
             ok: true,
             ghc: 0,
@@ -412,7 +412,8 @@ export function DailyRewardSheet({
             cycleDay: server.cycleDay ?? daily.displayCycleDay,
           })
         : claimDailyStreak(userId, tier)
-      const amt = server.serverAmount ?? res.ghc ?? daily.todayGhc
+      // Financial amount is server-reported only; never substitute local preview.
+      const amt = server.serverAmount
       const day = server.cycleDay ?? res.cycleDay
       const redemptionNote = server.redeemableAt && Number.isFinite(Date.parse(server.redeemableAt)) ? ` · redeemable ${new Date(server.redeemableAt).toLocaleString()}` : ""
       const shieldNote = res.usedShield ? " · Streak Shield protected your streak" : ""
@@ -431,8 +432,10 @@ export function DailyRewardSheet({
       }
       ghc.addToast?.(
         server.alreadyClaimed
-          ? `Already claimed · ${amt} GHC pending${redemptionNote}`
-          : `${amt} GHC claimed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`,
+          ? "Daily reward was already claimed. Wallet status is being refreshed."
+          : amt != null
+            ? `${amt} GHC claim confirmed and pending for 48 hours${redemptionNote} · Day ${day}/7 · +${res.xp || 0} XP${shieldNote}`
+            : `Daily claim confirmed by the server · Day ${day}/7. The credited amount will appear after the Wallet refresh.`,
         "success"
       )
       try {
@@ -440,7 +443,7 @@ export function DailyRewardSheet({
           new CustomEvent("ghc:daily-reward-claimed", {
             detail: {
               ...res,
-              ghc: amt,
+              ghc: amt ?? null,
               server: true,
               serverAmount: server.serverAmount,
               pending: server.pending !== false,
@@ -458,7 +461,7 @@ export function DailyRewardSheet({
       claimInFlightRef.current = false
       setClaiming(false)
     }
-  }, [claiming, daily.canClaimToday, daily.todayGhc, daily.displayCycleDay, daily.rewardDayKey, daily.streakDays, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
+  }, [claiming, daily.canClaimToday, daily.displayCycleDay, daily.rewardDayKey, daily.streakDays, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
 
   const handleDismiss = useCallback(() => {
     markDailyRewardDismissed(userId)

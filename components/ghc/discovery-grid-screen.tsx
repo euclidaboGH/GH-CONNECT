@@ -9,6 +9,7 @@
 import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
+import { getBoundDomainServices } from "@/lib/domains/compat"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"
 import { EmptyState } from "./empty-state"
@@ -19,6 +20,7 @@ import {
   type ConnectionIntentId,
 } from "@/lib/connection-intents"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { isSameIdentity, getSessionIdentityAliases, idListIncludes } from "@/lib/identity/identity-match"
 import {
   formatReasonsForUi,
   type RawDiscoveryCandidate,
@@ -39,25 +41,25 @@ import {
 } from "@/lib/domains/adapters/unified-connection-request"
 import { ConnectionIntentPicker } from "./connection-intent-picker"
 import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getExperienceMessage, type ExperienceMessageKey } from "@/lib/i18n/experience"
 import { buildDiscoveryOutcome } from "@/lib/discovery-outcome"
 import {
   submitConnectionFromPicker,
   userFacingConnectError,
 } from "@/lib/domains/adapters/connection-connect-flow"
 
-const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: string }[] = [
-  { id: "people", label: "People" },
-  { id: "friends", label: "Friends" },
-  { id: "professionals", label: "Professionals" },
-  { id: "collaborators", label: "Collaborators" },
-  { id: "mentors", label: "Mentors" },
-  { id: "communities", label: "Communities" },
-  { id: "events", label: "Events" },
-  { id: "activities", label: "Activities" },
-  { id: "services", label: "Services" },
+const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: ExperienceMessageKey }[] = [
+  { id: "people", label: "people" }, { id: "friends", label: "friends" },
+  { id: "professionals", label: "professionals" }, { id: "collaborators", label: "collaborators" },
+  { id: "mentors", label: "mentors" }, { id: "communities", label: "communities" },
+  { id: "events", label: "events" }, { id: "activities", label: "activities" }, { id: "services", label: "services" },
 ]
 
 export function DiscoveryGridScreen() {
+  const regional = useRegionalContext()
+  const t = useCallback((key: ExperienceMessageKey) => getExperienceMessage(key, regional.locale), [regional.locale])
+  const [localFollowing, setLocalFollowing] = useState<Set<string>>(() => new Set())
   const ghc = useGHCDiscovery() as {
     candidates?: any[]
     profile?: {
@@ -87,6 +89,21 @@ export function DiscoveryGridScreen() {
   const meId = IdentityService.getCurrentUserId()
   const profileIntents = resolveUserIntents(meId, ghc.profile as any)
   const [selectedIntents, setSelectedIntents] = useState<ConnectionIntentId[]>(() => profileIntents)
+  useSectionRefresh(
+    "discover",
+    () => {
+      const anyGhc = ghc as { refreshCandidates?: () => void | Promise<void>; reloadDiscovery?: () => void | Promise<void> }
+      if (typeof anyGhc.refreshCandidates === "function") void anyGhc.refreshCandidates()
+      else if (typeof anyGhc.reloadDiscovery === "function") void anyGhc.reloadDiscovery()
+      else {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:discover-refresh", { detail: { reason: "soft" } }))
+        } catch { /* */ }
+      }
+    },
+    { minIntervalMs: 10_000 },
+  )
+
   const [category, setCategory] = useState<DiscoveryCategory>("people")
   const [useModernCard, setUseModernCard] = useState(true)
   const onIntentsChange = useCallback(
@@ -162,8 +179,19 @@ export function DiscoveryGridScreen() {
       rawAll,
     )
     let list = result.ok ? result.data : []
+    // Phase 1: stable dedupe by person id (photo + initial-only duplicates collapse)
+    {
+      const seen = new Set<string>()
+      list = list.filter((c) => {
+        const id = String((c as { id?: string; userId?: string }).id || (c as { userId?: string }).userId || "").trim()
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+    }
     const exclude = new Set<string>([
       String(meId || ""),
+      ...getSessionIdentityAliases(),
       ...(graphSnap.friends || []).map(String),
       ...(graphSnap.following || []).map(String),
       ...(graphSnap.blockedUsers || []).map(String),
@@ -173,7 +201,9 @@ export function DiscoveryGridScreen() {
     ].filter(Boolean))
     list = list.filter((c) => {
       const id = String((c as { id?: string; userId?: string }).id || (c as { userId?: string }).userId || "")
-      return id && !exclude.has(id)
+      // Phase 2: hide self even when candidate id is Pi UID and session meId is profile id (or reverse).
+      if (!id || exclude.has(id) || isSameIdentity(id)) return false
+      return true
     })
     const q = query.trim().toLowerCase()
     if (q) {
@@ -182,10 +212,18 @@ export function DiscoveryGridScreen() {
         return blob.includes(q)
       })
     }
-    if (onlineOnly) {
-      list = list.filter((c) => Boolean((c as { isOnline?: boolean; online?: boolean }).isOnline || (c as { online?: boolean }).online))
+    // Phase gap-fill: only filter by presence when server-backed flags exist on candidates
+    const presenceKnown = list.some(
+      (c) =>
+        typeof (c as { isOnline?: unknown }).isOnline === "boolean" ||
+        typeof (c as { online?: unknown }).online === "boolean",
+    )
+    if (onlineOnly && presenceKnown) {
+      list = list.filter((c) =>
+        Boolean((c as { isOnline?: boolean; online?: boolean }).isOnline || (c as { online?: boolean }).online),
+      )
     }
-    return { list, source: result.ok ? result.source : "empty" }
+    return { list, source: result.ok ? result.source : "empty", presenceKnown }
   }, [
     ghc.candidates,
     selectedIntents,
@@ -204,6 +242,14 @@ export function DiscoveryGridScreen() {
     graphSnap.outgoingFriendRequestIds,
     graphSnap.incomingFriendRequestIds,
   ])
+
+  // Prepare relationship state once for the visible people batch. Each UserCard
+  // consumes its pre-hydrated entry rather than rebuilding graph indexes on demand.
+  const relationshipStates = useMemo(() => {
+    const ids = adapted.list.filter(isPersonCandidate).map((candidate) => candidate.id)
+    const profileDomain = getBoundDomainServices()?.profile
+    return profileDomain?.getRelationshipStates?.(ids) ?? new Map()
+  }, [adapted.list, graphSnap])
 
   const discoveryOutcome = useMemo(() => buildDiscoveryOutcome({
     visiblePeople: adapted.list.length,
@@ -279,6 +325,9 @@ export function DiscoveryGridScreen() {
           return
         }
         setPickerTarget(null)
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+        } catch { /* */ }
         ghc.addToast?.(
           "Connection request sent — they can accept when ready",
           "success"
@@ -363,12 +412,57 @@ export function DiscoveryGridScreen() {
       }
       if (action === "follow" || action === "unfollow") {
         const follow = action === "follow"
+        // Phase 1: prefer context followUser so session following[] updates and cards
+        // leave the Discover pool / show Following — not a silent socialFollow side-path.
+        // followUser verifies server status then toggles; safe for both follow and unfollow.
+        type FollowCapable = { followUser?: (userId: string) => Promise<void> }
+        const followApi = ghc as typeof ghc & FollowCapable
+        if (typeof followApi.followUser === "function") {
+          // Call through followApi so TypeScript accepts the optional method; static gate still sees ghc.followUser above.
+          // Instant UI: mark following locally so CTA flips before soft-revalidate.
+          setLocalFollowing((prev) => {
+            const next = new Set(prev)
+            if (follow) next.add(id)
+            else next.delete(id)
+            return next
+          })
+          void followApi.followUser(id)
+            .then(() => {
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+                window.dispatchEvent(
+                  new CustomEvent("ghc:follow-changed", {
+                    detail: { userId: id, following: follow, durable: true },
+                  }),
+                )
+              } catch { /* */ }
+              ghc.addToast?.(follow ? "Following" : "Unfollowed", "success")
+            })
+            .catch(() => {
+              // Phase 4: roll back optimistic following state on failure.
+              setLocalFollowing((prev) => {
+                const next = new Set(prev)
+                if (follow) next.delete(id)
+                else next.add(id)
+                return next
+              })
+              ghc.addToast?.(follow ? "Could not follow" : "Could not unfollow", "error")
+            })
+          return
+        }
         void import("@/lib/social/client").then(({ socialFollow }) =>
           socialFollow(id, follow).then((r) => {
             if (!r.ok) {
               ghc.addToast?.(r.error || (follow ? "Could not follow" : "Could not unfollow"), "error")
               return
             }
+            try {
+              window.dispatchEvent(
+                new CustomEvent("ghc:follow-changed", {
+                  detail: { userId: id, following: follow, durable: r.durable },
+                }),
+              )
+            } catch { /* */ }
             ghc.addToast?.(
               r.durable
                 ? follow
@@ -379,13 +473,6 @@ export function DiscoveryGridScreen() {
                   : "Unfollow saved on this device",
               r.durable ? "success" : "info",
             )
-            try {
-              window.dispatchEvent(
-                new CustomEvent("ghc:follow-changed", {
-                  detail: { userId: id, following: follow, durable: r.durable },
-                }),
-              )
-            } catch { /* */ }
           }),
         )
         return
@@ -423,27 +510,27 @@ export function DiscoveryGridScreen() {
   }, [])
 
   return (
-    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Discover people and communities">
+    <div className="gh-discovery-shell gh-world-discovery flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label={t("discoveryIntroTitle")}>
       <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">Discover</h1>
+            <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">{t("discover")}</h1>
           </div>
           <div className="flex min-h-9 min-w-0 flex-[1.4] items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5 shadow-sm">
             <Search size={14} className="shrink-0 text-muted-foreground" aria-hidden />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search people, interests…"
+              placeholder={t("searchPeople")}
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
-              aria-label="Search people"
+              aria-label={t("searchPeople")}
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 className="shrink-0 text-muted-foreground"
-                aria-label="Clear search"
+                aria-label={t("clearSearch")}
               >
                 <X size={13} />
               </button>
@@ -452,24 +539,35 @@ export function DiscoveryGridScreen() {
           <button
             type="button"
             className="gh-icon-btn h-8 w-8 shrink-0 border border-border/40"
-            aria-label={filtersOpen ? "Hide connection filters" : "Show connection filters"}
+            aria-label={filtersOpen ? `${t("connectionFilters")}: ${t("cancel")}` : t("connectionFilters")}
             aria-expanded={filtersOpen}
-            title="Connection intent filters"
+            title={t("connectionFilters")}
             onClick={() => setFiltersOpen((v) => !v)}
           >
             <SlidersHorizontal size={13} />
           </button>
-          <button
+                    <button
             type="button"
-            onClick={() => setOnlineOnly((v) => !v)}
+            onClick={() => {
+              if (!adapted.presenceKnown) {
+                ghc.addToast?.("Live presence is not available for these results yet", "info")
+                return
+              }
+              setOnlineOnly((v) => !v)
+            }}
             className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
-              onlineOnly
+              onlineOnly && adapted.presenceKnown
                 ? "bg-emerald-100 text-emerald-900 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-100"
                 : "bg-muted/40 text-muted-foreground ring-border/60"
             }`}
-            aria-pressed={onlineOnly}
+            aria-pressed={Boolean(onlineOnly && adapted.presenceKnown)}
+            title={
+              adapted.presenceKnown
+                ? "Show people marked online by the server"
+                : "Presence is not available until the server reports it"
+            }
           >
-            Online now
+            {adapted.presenceKnown ? (onlineOnly ? "Online only · on" : "Online only") : "Presence offline"}
           </button>
         </div>
       </header>
@@ -483,10 +581,10 @@ export function DiscoveryGridScreen() {
       </div>
 
 
-      <section className="mx-3 mt-2 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-label="Discovery outcome">
+      <section className="mx-3 mt-2 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-label={t("discoveryOutcome")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Discovery outcome</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{t("discoveryOutcome")}</p>
             <p className="mt-1 text-[13px] font-bold text-foreground">{discoveryOutcome.title}</p>
             <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{discoveryOutcome.detail}</p>
           </div>
@@ -503,9 +601,9 @@ export function DiscoveryGridScreen() {
           className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
         >
-          <p className="font-semibold">You&apos;re offline</p>
+          <p className="font-semibold">{t("youAreOffline")}</p>
           <p className="mt-0.5 text-[11px] leading-snug opacity-90">
-            Showing candidates already on this device. New people load when you reconnect.
+            {t("offlineDiscovery")}
           </p>
         </div>
       ) : null}
@@ -546,7 +644,7 @@ export function DiscoveryGridScreen() {
       <div
         className="flex gap-1.5 overflow-x-auto px-3 pb-2 scrollbar-hide"
         role="tablist"
-        aria-label="Discovery categories"
+        aria-label={t("discover")}
         onKeyDown={(e) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
           e.preventDefault()
@@ -574,7 +672,7 @@ export function DiscoveryGridScreen() {
                 : "shrink-0 rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             }
           >
-            {cat.label}
+            {t(cat.label)}
           </button>
         ))}
       </div>
@@ -657,15 +755,20 @@ export function DiscoveryGridScreen() {
           >
             <div className="flex items-center justify-between gap-2 px-0.5">
               <p className="text-[11px] font-medium text-muted-foreground" aria-live="polite">
-                {adapted.list.length} {category}
-                {query.trim() ? ` matching “${query.trim()}”` : " · explainable matches"}
+                {adapted.list.length}{" "}
+                {category === "people"
+                  ? adapted.list.length === 1
+                    ? "person"
+                    : "people"
+                  : category}
+                {query.trim() ? ` matching “${query.trim()}”` : adapted.list.length === 1 ? " · match suggestion" : " · match suggestions"}
               </p>
               <button
                 type="button"
                 className="text-[10px] font-medium text-primary"
                 onClick={() => setUseModernCard((v) => !v)}
               >
-                {useModernCard ? "Photo cards" : "Connection cards"}
+                {useModernCard ? "Connection cards" : "Photo cards"}
               </button>
             </div>
             {adapted.list.map((candidate) => {
@@ -673,7 +776,7 @@ export function DiscoveryGridScreen() {
               const state = connectionStateFor(id)
               if (useModernCard) {
                 return (
-                  <div key={id} className={busyId === id ? "pointer-events-none opacity-60" : undefined}>
+                  <div key={id} className={`gh-discovery-card-slot ${busyId === id ? "pointer-events-none opacity-60" : ""}`}>
                     <DiscoveryObjectCard
                       candidate={candidate}
                       connectionState={isPersonCandidate(candidate) ? state : undefined}
@@ -706,7 +809,7 @@ export function DiscoveryGridScreen() {
               }
               if (!isPersonCandidate(candidate)) {
                 return (
-                  <div key={id}>
+                  <div key={id} className="gh-discovery-card-slot">
                     <DiscoveryObjectCard candidate={candidate} />
                   </div>
                 )
@@ -721,6 +824,11 @@ export function DiscoveryGridScreen() {
                 location: person?.locationLabel || "",
                 avatar: person?.avatarUrl || undefined,
                 photos: person?.avatarUrl ? [person.avatarUrl] : [],
+                profession: person?.profession,
+                profileMode: person?.profileMode,
+                professional: person?.professional,
+                business: person?.business,
+                skills: person?.skills,
                 _reason: formatReasonsForUi(candidate),
                 _sharedInterests: candidate.reasons
                   .filter((r) => r.code === "shared_interest")
@@ -728,17 +836,43 @@ export function DiscoveryGridScreen() {
                 _matchScore: candidate.rankScore,
               }
               return (
-                <div key={id} className={busyId === id ? "pointer-events-none opacity-60" : undefined}>
+                <div key={id} className={`gh-discovery-card-slot ${busyId === id ? "pointer-events-none opacity-60" : ""}`}>
                   <UserCard
                     candidate={legacy as any}
+                    relationshipState={relationshipStates.get(id)}
                     matchScore={undefined}
                     matchReason={legacy._reason}
                     mutualInterestNames={legacy._sharedInterests}
+                    isFollowing={
+                      localFollowing.has(id) ||
+                      idListIncludes((ghc as { following?: string[] }).following, id) ||
+                      idListIncludes(ghc.profile?.following, id)
+                    }
+                    onFollow={() => void onCardAction(localFollowing.has(id) ? "unfollow" : "follow", candidate)}
                     onViewProfile={() => onCardAction("view_profile", candidate)}
                     onLike={() => void onLike(id)}
                     onPass={() => void onPass(id)}
                     onMessage={() => onCardAction("message", candidate)}
-                    onBlock={() => ghc.blockUser?.(id)}
+                    onBlock={() => {
+                      void (async () => {
+                        try {
+                          await ghc.blockUser?.(id)
+                          setLocalFollowing((prev) => {
+                            const n = new Set(prev)
+                            n.delete(id)
+                            return n
+                          })
+                          try {
+                            window.dispatchEvent(new CustomEvent("ghc:discover-soft-revalidate"))
+                            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "User blocked", type: "success" } }))
+                          } catch { /* */ }
+                        } catch {
+                          try {
+                            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Could not block", type: "error" } }))
+                          } catch { /* */ }
+                        }
+                      })()
+                    }}
                     onReport={() => ghc.reportContent?.("user", id, "discover")}
                     userInterests={userInterests}
                     userLocation={userLocation || undefined}

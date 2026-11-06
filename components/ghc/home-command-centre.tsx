@@ -1,5 +1,6 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 /**
  * Home top — greeting + daily reward + command-centre foundation sections.
  * Creating content is handled by the bottom navigation Create (+) button.
@@ -14,6 +15,8 @@ import { listInvitationsForViewer } from "@/lib/domains/adapters/community-invit
 import { buildHomeCommunityPulse } from "@/lib/domains/adapters/home-community-pulse"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getExperienceMessage } from "@/lib/i18n/experience"
 import { CommunityInviteCard } from "@/components/ghc/community-invite-card"
 import {
   createIdentitySeam,
@@ -36,18 +39,15 @@ import { buildHomeCrossFeatureSignals } from "@/lib/home-cross-feature"
 import { useWalletRead } from "@/contexts/domains/wallet-read-provider"
 import { useDailyClaimStatus } from "@/components/ghc/use-daily-claim-status"
 
-function timeGreeting(now = new Date()): string {
+function timeGreeting(now = new Date(), locale = "en-US"): string {
   const h = now.getHours()
-  if (h < 5) return "Good night"
-  if (h < 12) return "Good morning"
-  if (h < 17) return "Good afternoon"
-  if (h < 21) return "Good evening"
-  return "Good night"
+  const key = h < 5 || h >= 21 ? "homeNight" : h < 12 ? "homeMorning" : h < 17 ? "homeAfternoon" : "homeEvening"
+  return getExperienceMessage(key, locale)
 }
 
-function firstName(displayName?: string | null): string {
+function firstName(displayName?: string | null, fallback = "there"): string {
   const n = (displayName || "").trim()
-  if (!n) return "there"
+  if (!n) return fallback
   return n.split(/\s+/)[0]
 }
 
@@ -102,6 +102,7 @@ export function HomeCommandCentre({
   onOpenCommunities?: () => void
   onOpenRewards?: () => void
 }) {
+  const regional = useRegionalContext()
   const ghcSession = useGHC() as any
   const meId = IdentityService.getCurrentUserId()
   const conversations = (ghcSession.conversations || []) as any[]
@@ -147,8 +148,8 @@ export function HomeCommandCentre({
   const messaging = useGHCMessaging() as { conversations?: unknown[]; inbox?: unknown[] }
   const feedCtx = useGHCFeed() as { posts?: unknown[] }
 
-  const greet = useMemo(() => timeGreeting(), [])
-  const name = firstName(profile?.displayName)
+  const greet = useMemo(() => timeGreeting(new Date(), regional.locale), [regional.locale])
+  const name = firstName(profile?.displayName, getExperienceMessage("there", regional.locale))
   const avatar = profile?.photos?.[0] || profile?.avatar
 
   const identity = useMemo(() => createIdentitySeam(() => profile || null), [profile])
@@ -278,7 +279,7 @@ export function HomeCommandCentre({
       <header className="flex items-center gap-2.5 px-0.5 pb-0.5">
         <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-emerald-100 ring-2 ring-background shadow-sm dark:bg-emerald-950">
           {avatar ? (
-            <img src={avatar} alt="" className="h-full w-full object-cover" />
+            <DurableImage src={avatar} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-[11px] font-bold text-emerald-800 dark:text-emerald-200">
               {name.slice(0, 1).toUpperCase()}
@@ -493,7 +494,7 @@ export function HomeCommandCentre({
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-[11px] font-bold text-foreground">
                     {c.coverImage ? (
-                      <img src={c.coverImage} alt="" className="h-full w-full object-cover" />
+                      <DurableImage src={c.coverImage} alt="" className="h-full w-full object-cover" />
                     ) : (
                       (c.name || "C").slice(0, 1)
                     )}

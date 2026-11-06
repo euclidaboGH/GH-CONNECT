@@ -131,6 +131,9 @@ export function ReferralShareCard({
     if (state.status !== "ready" || !shareUrl) return
     try {
       await navigator.clipboard.writeText(shareUrl)
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Invite link copied", type: "success" } }))
+      } catch { /* */ }
       setCopied("link")
       window.setTimeout(() => setCopied(null), 2000)
     } catch {
@@ -142,6 +145,9 @@ export function ReferralShareCard({
     if (state.status !== "ready") return
     try {
       await navigator.clipboard.writeText(state.code)
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Invite code copied", type: "success" } }))
+      } catch { /* */ }
       setCopied("code")
       window.setTimeout(() => setCopied(null), 2000)
     } catch {

@@ -12,12 +12,12 @@ const membership = read('components/ghc/premium-membership-screen.tsx')
 const rewards = read('components/ghc/rewards-centre-screen.tsx')
 const css = read('app/globals.css')
 const checks = [
-  ['feed remains an accessible named region', feed.includes('aria-label="GreenHaven community feed"')],
+  ['feed remains an accessible named region', feed.includes('aria-label={t("feed")}')],
   ['feed has a constrained premium content column', feed.includes('gh-premium-feed-list') && css.includes('.gh-premium-feed-list {')],
   ['profile keeps real counts and adds a styled metrics surface', profile.includes('gh-premium-profile-stats') && css.includes('.gh-premium-profile-stats button')],
   ['wallet metrics retain authoritative balance fields', wallet.includes('gh-premium-wallet-metrics') && wallet.includes('balance={balance}')],
   ['membership presentation does not replace server entitlement status', membership.includes('gh-premium-membership-content') && membership.includes('membershipAuthorityReady')],
-  ['Rewards Centre is a named accessible region', rewards.includes('aria-label="GreenHaven Rewards Centre"')],
+  ['Rewards Centre is a named accessible region', (rewards.includes('aria-label="GreenHaven Rewards Centre"') || rewards.includes('aria-label={msg("rewardsTitle")}'))],
   ['dark theme styling is included for the premium surfaces', css.includes('.dark :is(.gh-world-feed, .gh-world-rewards, .gh-world-wallet, .gh-world-membership, .gh-world-profile)')],
   ['reduced-motion preference remains supported', css.includes('@media (prefers-reduced-motion: reduce)') && css.includes('.gh-premium-feed-toolbar')],
   ['focus and touch-safe behavior remains covered by shared app rules', css.includes('--gh-focus-outline') && css.includes('touch-action: manipulation')],

@@ -1,6 +1,10 @@
 "use client"
 
+import { DurableImage } from "./durable-image"
 import { isPiOnlyCommerceClient } from "@/lib/client/pi-only-commerce"
+import { useRegionalContext } from "@/contexts/regional-context"
+import { getProductMessage } from "@/lib/i18n/product"
+import { getWorkflowMessage } from "@/lib/i18n/workflows"
 
 import { formatPrice, listedWhen, relatedSearchTokens, relatedListingsFor, suggestedCommunitiesFor } from "@/lib/marketplace/discovery-presentation"
 import { mapMarketplaceListingRecord, mapMarketplaceOrderRecord, mapSavedMarketplaceListingRecord } from "@/lib/marketplace/record-mappers"
@@ -40,6 +44,7 @@ import {
 import { getMarketplaceDomain } from "@/lib/domains/compat"
 import {
   MARKETPLACE_CATEGORIES,
+  type ListingKind,
   type MarketplaceListing,
   type MarketplaceOrder,
 } from "@/lib/domains/marketplace-domain"
@@ -60,7 +65,6 @@ import {
   formatDeliveryLine,
   formatRating,
   parseDeliveryMode,
-  queueListingReport,
   type DeliveryMode,
   type ListingReportReason,
 } from "@/lib/marketplace/trust"
@@ -74,6 +78,7 @@ import { LazyImage } from "./lazy-image"
 import { downloadMedia } from "@/lib/media/download-media"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { isOwnedByCurrentUser } from "@/lib/identity/identity-match"
 import { startUserToAppPayment } from "@/lib/pi-u2a-payment"
 import { uploadDurableMedia } from "@/lib/media/upload-client"
 import { toRelativeMediaFacadeUrl } from "@/lib/media/resolve-display-url"
@@ -82,9 +87,12 @@ import {
   clearMarketplaceCart,
   getMarketplaceCart,
   removeMarketplaceCartItem,
+  removeMarketplaceCartItemsByIds,
+  removeMarketplaceCartItemsBySeller,
   updateMarketplaceCartQuantity,
   type MarketplaceCartItem,
 } from "@/lib/marketplace/cart"
+import { humanizeClientErrorCode, toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 import {
   formatListingFeeCta,
   quoteListingCreateFee,
@@ -115,7 +123,10 @@ function ListingCard({
   listing: MarketplaceListing
   onOpen: (id: string) => void
 }) {
-  const chip = statusChip(listing.status)
+  const effectiveStatus = listing.kind === "product" && listing.status === "active" && listing.availability <= 0
+    ? "sold_out"
+    : listing.status
+  const chip = statusChip(effectiveStatus)
   const media = listing.media?.[0]
   // Refresh is owned by MarketplaceScreen (single soft-refresh gate) — not per card.
 
@@ -123,7 +134,7 @@ function ListingCard({
     <button
       type="button"
       onClick={() => onOpen(listing.id)}
-      className="gh-card-interactive flex w-full flex-col overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-left shadow-[var(--gh-card-shadow)] transition hover:border-emerald-200/80 hover:shadow-[var(--gh-card-shadow-lg)] active:scale-[0.99] dark:hover:border-emerald-900"
+      className="gh-card-interactive group flex w-full flex-col overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-left shadow-[var(--gh-card-shadow)] transition duration-200 hover:-translate-y-0.5 hover:border-emerald-300/80 hover:shadow-[var(--gh-card-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.99] motion-reduce:transform-none dark:hover:border-emerald-900"
       aria-label={`${listing.title}, ${formatPrice(listing)}`}
     >
       <div className="relative aspect-[4/3] w-full bg-muted/50">
@@ -131,7 +142,7 @@ function ListingCard({
           <LazyImage
             src={media}
             alt={listing.title}
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.035] motion-reduce:transform-none"
           />
         ) : (
           <div className="flex h-full min-w-0 max-w-full w-full items-center justify-center">
@@ -146,12 +157,12 @@ function ListingCard({
           {chip.label}
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-3">
-        <p className="text-[15px] font-bold tracking-tight text-foreground">
-          {formatPrice(listing)}
-        </p>
-        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-muted-foreground">
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <p className="line-clamp-2 min-h-[2.5rem] text-[13px] font-semibold leading-snug text-foreground">
           {listing.title}
+        </p>
+        <p className="text-[15px] font-extrabold tracking-tight text-foreground">
+          {formatPrice(listing)}
         </p>
         {listing.shippingInfo || listing.location ? (
           <p className="line-clamp-1 text-[10px] font-medium text-muted-foreground">
@@ -165,9 +176,19 @@ function ListingCard({
           </p>
         ) : null}
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
             {kindLabel(listing.kind)}
           </span>
+          {listing.kind === "product" && listing.condition !== "not_applicable" ? (
+            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {listing.condition.replace(/_/g, " ")}
+            </span>
+          ) : null}
+          {listing.availability > 0 && listing.availability <= 3 ? (
+            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+              {listing.availability} left
+            </span>
+          ) : null}
           {listing.category ? (
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
               {listing.category}
@@ -190,7 +211,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
   const requiredRail: "ghc" | "pi" = listingCur === "PI" ? "pi" : "ghc"
   const [payRail, setPayRail] = useState<"ghc" | "pi">(requiredRail)
   const viewerId = IdentityService.getCurrentUserId() || ""
-  const isOwn = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
+  const isOwn = isOwnedByCurrentUser(listing.sellerId)
 
   const runCheckout = async () => {
     if (busy || isOwn) return
@@ -208,11 +229,7 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
       })
       if (!created.ok || !created.order) {
         const errCode = !created.ok ? String(created.error || "") : ""
-        setErr(
-          errCode === "CANNOT_BUY_OWN"
-            ? "Cannot buy your own listing"
-            : errCode || "Could not create order",
-        )
+        setErr(humanizeClientErrorCode(errCode, "Could not create order"))
         return
       }
       const orderId = String((created.order as { id?: string }).id || "")
@@ -356,15 +373,18 @@ function ListingDetail({
   onRemoveListing?: (listing: MarketplaceListing) => void
   onAddToCart?: (listing: MarketplaceListing) => void
 }) {
-  const chip = statusChip(listing.status)
+  const effectiveStatus = listing.kind === "product" && listing.status === "active" && listing.availability <= 0
+    ? "sold_out"
+    : listing.status
+  const chip = statusChip(effectiveStatus)
   const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
   const [mediaIndex, setMediaIndex] = useState(0)
   const [saved, setSaved] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const media = mediaItems[mediaIndex] || mediaItems[0]
-  const canBuy = listing.status === "active"
+  const canBuy = listing.status === "active" && (listing.kind !== "product" || listing.availability > 0)
   const viewerId = IdentityService.getCurrentUserId() || ""
-  const isOwner = Boolean(viewerId && listing.sellerId && viewerId === listing.sellerId)
+  const isOwner = isOwnedByCurrentUser(listing.sellerId)
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
   const relatedItems = useMemo(() => relatedListingsFor(listing, 6), [listing])
   const communitySuggestions = useMemo(() => suggestedCommunitiesFor(listing, 5), [listing])
@@ -388,6 +408,7 @@ function ListingDetail({
   const [reportOpen, setReportOpen] = useState(false)
   const [reportReason, setReportReason] = useState<ListingReportReason>("misleading")
   const [reportNote, setReportNote] = useState("")
+  const [reportBusy, setReportBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -472,7 +493,7 @@ function ListingDetail({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y] overscroll-contain">
         <SurfaceIntro
           kicker="Commerce"
           title="Buy & sell with confidence"
@@ -761,34 +782,58 @@ function ListingDetail({
                 value={reportNote}
                 onChange={(e) => setReportNote(e.target.value)}
                 placeholder="Optional details"
+                maxLength={500}
                 rows={2}
                 className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[12px]"
               />
               <button
                 type="button"
+                disabled={reportBusy}
                 onClick={() => {
-                  const row = queueListingReport({
-                    listingId: listing.id,
-                    sellerId: listing.sellerId,
-                    reason: reportReason,
-                    note: reportNote,
-                  })
-                  setReportOpen(false)
-                  setReportNote("")
-                  window.dispatchEvent(
-                    new CustomEvent("ghc:toast", {
-                      detail: {
-                        message: row
-                          ? "Report queued for review. Thanks for helping keep the market safe."
-                          : "Could not queue report",
-                        type: row ? "success" : "error",
-                      },
-                    }),
-                  )
+                  if (reportBusy) return
+                  void (async () => {
+                    setReportBusy(true)
+                    try {
+                      const response = await fetch(`/api/marketplace/listings/${encodeURIComponent(listing.id)}/report`, {
+                        method: "POST",
+                        credentials: "include",
+                        cache: "no-store",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ reason: reportReason, note: reportNote.trim() }),
+                      })
+                      const result = await response.json().catch(() => ({}))
+                      if (!response.ok || result?.ok !== true || result?.durable !== true) {
+                        const code = String(result?.error || "MARKETPLACE_REPORTS_UNAVAILABLE")
+                        throw new Error(code === "CANNOT_REPORT_OWN_LISTING"
+                          ? "You cannot report your own listing."
+                          : code === "LISTING_NOT_FOUND"
+                            ? "This listing is no longer available."
+                            : code === "RATE_LIMITED"
+                              ? "Too many reports. Please try again later."
+                              : "Report service is temporarily unavailable. Your report was not submitted.")
+                      }
+                      setReportOpen(false)
+                      setReportNote("")
+                      window.dispatchEvent(new CustomEvent("ghc:toast", {
+                        detail: {
+                          message: result.duplicate
+                            ? "Your earlier report is already recorded."
+                            : "Your report was recorded for marketplace safety review.",
+                          type: "success",
+                        },
+                      }))
+                    } catch (error) {
+                      window.dispatchEvent(new CustomEvent("ghc:toast", {
+                        detail: { message: error instanceof Error ? error.message : "Report could not be submitted.", type: "error" },
+                      }))
+                    } finally {
+                      setReportBusy(false)
+                    }
+                  })()
                 }}
-                className="w-full rounded-full bg-amber-700 py-2 text-[12px] font-bold text-white"
+                className="w-full rounded-full bg-amber-700 py-2 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Submit report
+                {reportBusy ? "Submitting report…" : "Submit report"}
               </button>
             </div>
           ) : null}
@@ -844,7 +889,7 @@ function ListingDetail({
                 <li key={c.id} className="flex items-center gap-3">
                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted">
                     {c.photo ? (
-                      <img src={c.photo} alt="" className="h-full w-full object-cover" />
+                      <DurableImage src={c.photo} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-muted-foreground">
                         {(c.name || "?").slice(0, 2).toUpperCase()}
@@ -1009,11 +1054,14 @@ function SellListingForm({
     }
   }
 
+  const regional = useRegionalContext()
+  const wt = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
+
   return (
     <div className="mx-auto max-w-lg space-y-3">
       <div>
         <h2 className="text-[17px] font-bold text-foreground">
-          {mode === "edit" ? "Edit listing" : "Sell on Marketplace"}
+          {mode === "edit" ? wt("editListing") : wt("sellMarketplace")}
         </h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
           {mode === "edit"
@@ -1023,7 +1071,7 @@ function SellListingForm({
       </div>
 
       <div>
-        <span className="text-[12px] font-bold text-muted-foreground">Photos</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("photos")}</span>
         <div className="mt-1 flex flex-wrap gap-2">
           {mediaUrls.map((src) => (
             <div key={src} className="relative h-20 w-20 overflow-hidden rounded-xl border border-border/60">
@@ -1070,7 +1118,7 @@ function SellListingForm({
         />
       </label>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Price</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("price")}</span>
         <input
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -1147,7 +1195,7 @@ function SellListingForm({
         />
       </div>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">Description</span>
+        <span className="text-[12px] font-bold text-muted-foreground">{wt("description")}</span>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
@@ -1203,7 +1251,7 @@ function SellListingForm({
           onClick={onSubmit}
           className="min-h-11 flex-1 rounded-full bg-[var(--gh-green)] px-3 text-sm font-bold text-white disabled:opacity-50"
         >
-          {busy ? (mode === "edit" ? "Saving…" : "Publishing…") : cta}
+          {busy ? (mode === "edit" ? wt("saving") : wt("posting")) : cta}
         </button>
       </div>
     </div>
@@ -1236,45 +1284,111 @@ function CartPanel({
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [checkoutProgress, setCheckoutProgress] = useState<string | null>(null)
+  // Retain per-line keys across retries so a lost response cannot create a
+  // second reservation for the same cart line. Clear only after checkout completes.
+  const checkoutKeysRef = useRef(new Map<string, string>())
 
+  // Phase 2: match sellerId against all session identity aliases (Pi UID + canonical id).
+  // Read live IdentityService inside the memo so login/hydration updates apply.
+  const ownItems = useMemo(
+    () => items.filter((i) => isOwnedByCurrentUser(i.sellerId)),
+    [items],
+  )
+  const purchasableItems = useMemo(
+    () => items.filter((i) => !isOwnedByCurrentUser(i.sellerId)),
+    [items],
+  )
   const totals = useMemo(() => {
+    // Phase 2: estimated total excludes own listings (not checkout-eligible)
     const map = new Map<string, number>()
-    for (const item of items) {
+    for (const item of purchasableItems) {
       const currency = (item.currency || "GHC").toUpperCase()
       map.set(currency, (map.get(currency) || 0) + Math.max(0, Number(item.price) || 0) * item.quantity)
     }
     return map
-  }, [items])
+  }, [purchasableItems])
 
   const checkout = async () => {
     if (busy || !items.length) return
+    if (ownItems.length && !purchasableItems.length) {
+      setError("You can't buy your own listing. Remove it from the cart to continue.")
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
+    setCheckoutProgress(null)
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const hardTimeout = typeof window !== "undefined"
+      ? window.setTimeout(() => {
+          try { controller?.abort() } catch { /* */ }
+        }, 90_000)
+      : null
+    const created: Array<{ id: string; item: MarketplaceCartItem }> = []
+    const paidGhcIds: string[] = []
     try {
       const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import("@/lib/social/client")
-      const created: Array<{ id: string; item: MarketplaceCartItem }> = []
-      for (const item of items) {
+      // Phase 3: reserve every purchasable line with stable idempotency; never invent payment success.
+      const total = purchasableItems.length
+      for (let i = 0; i < purchasableItems.length; i++) {
+        if (controller?.signal?.aborted) throw new Error("Checkout timed out")
+        const item = purchasableItems[i]
+        setCheckoutProgress(`Reserving ${i + 1} of ${total}: ${item.title}`)
+        const lineKey = `${item.listingId}:${item.quantity}:${item.sellerId}`
+        let idempotencyKey = checkoutKeysRef.current.get(lineKey)
+        if (!idempotencyKey) {
+          const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+          idempotencyKey = `cart_${nonce}`
+          checkoutKeysRef.current.set(lineKey, idempotencyKey)
+        }
         const result = await socialCreateMarketplaceOrder({
           listingId: item.listingId,
           quantity: item.quantity,
-          idempotencyKey: `cart_${item.listingId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          idempotencyKey,
         })
-        if (!result.ok || !result.order) throw new Error(result.error || `Could not reserve ${item.title}`)
+        if (!result.ok || !result.order) {
+          const code = String(result.error || "")
+          throw new Error(humanizeClientErrorCode(code, `Could not reserve ${item.title}`))
+        }
         const id = String((result.order as { id?: string }).id || "")
         if (!id) throw new Error(`Order created without an id for ${item.title}`)
         created.push({ id, item })
       }
 
-      const piOrder = created.find(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
-      const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
-      for (const { id } of ghcOrders) {
-        const paid = await socialPayMarketplaceOrder(id, "ghc")
-        if (!paid.ok) throw new Error(paid.message || paid.error || "GHC payment failed — check available balance")
+      if (!created.length) {
+        setError("You can't buy your own listing. Remove it from the cart to continue.")
+        return
       }
 
-      clearMarketplaceCart()
-      if (piOrder) {
+      const piOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
+      const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
+      for (let i = 0; i < ghcOrders.length; i++) {
+        if (controller?.signal?.aborted) throw new Error("Checkout timed out")
+        const { id, item } = ghcOrders[i]
+        setCheckoutProgress(`Paying GHC ${i + 1} of ${ghcOrders.length}: ${item.title}`)
+        const paid = await socialPayMarketplaceOrder(id, "ghc")
+        if (!paid.ok) {
+          throw new Error(
+            humanizeClientErrorCode(paid.error, paid.message || "GHC payment failed — check available balance"),
+          )
+        }
+        paidGhcIds.push(id)
+      }
+
+      // Remove only successfully reserved lines. Preserve own listings and any
+      // unrelated cart edits made while the asynchronous checkout was running.
+      const completedLineIds = created.map(({ item }) => item.listingId)
+      removeMarketplaceCartItemsByIds(completedLineIds)
+      for (const { item } of created) {
+        checkoutKeysRef.current.delete(`${item.listingId}:${item.quantity}:${item.sellerId}`)
+      }
+
+      if (piOrders.length === 1) {
+        const piOrder = piOrders[0]
+        setCheckoutProgress("Opening Pi payment…")
         openPayForListing(
           {
             listingId: piOrder.item.listingId,
@@ -1284,18 +1398,49 @@ function CartPanel({
           },
           "pi",
         )
-        setMessage("Your GHC items were paid. Complete the Pi payment for the remaining item; other orders remain protected in Orders.")
+        setMessage(
+          ghcOrders.length
+            ? "GHC items paid. Complete Pi payment for the remaining item — orders stay protected under Orders."
+            : "Complete Pi payment to finish this order. Status stays visible under Orders.",
+        )
+      } else if (piOrders.length > 1) {
+        // Phase 3: do not drop secondary Pi lines — open first, point user at Orders for the rest.
+        const first = piOrders[0]
+        openPayForListing(
+          {
+            listingId: first.item.listingId,
+            sellerId: first.item.sellerId,
+            title: first.item.title,
+            orderId: first.id,
+          },
+          "pi",
+        )
+        setMessage(
+          `Pi payment started for “${first.item.title}”. ${piOrders.length - 1} more Pi order(s) are reserved under Orders — complete each payment there. GHC lines already paid stay settled.`,
+        )
       } else {
-        setMessage("Cart checkout completed. Your orders are now protected and available under Orders.")
+        setMessage("Cart checkout completed. Your orders are protected under Orders.")
       }
       emitMarketplaceEconomyRefresh("marketplace-cart-checkout")
       window.dispatchEvent(new CustomEvent("ghc:marketplace-order-changed"))
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cart checkout failed")
+      const aborted = controller?.signal?.aborted
+      const reservedNote =
+        created.length > 0
+          ? ` ${created.length} order(s) may already be reserved${paidGhcIds.length ? ` (${paidGhcIds.length} GHC paid)` : ""}. Open Orders before retrying — cart line keys were kept for unpaid lines.`
+          : ""
+      setError(
+        aborted
+          ? `Checkout timed out.${reservedNote}`
+          : `${toClientSafeErrorMessage(e, "Cart checkout failed")}${reservedNote}`,
+      )
     } finally {
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
+      setCheckoutProgress(null)
       setBusy(false)
     }
   }
+
 
   if (!items.length) {
     return (
@@ -1325,8 +1470,26 @@ function CartPanel({
             <h2 className="mt-1 text-xl font-bold">Ready to checkout</h2>
             <p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"} · quantities and inventory are rechecked at checkout</p>
           </div>
-          <button type="button" onClick={onClear} className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground">Clear</button>
+          <button type="button" onClick={onClear} disabled={busy} className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground disabled:opacity-50">Clear</button>
         </div>
+        {ownItems.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+            <p>
+              {ownItems.length === 1
+                ? "One item is your own listing and can't be purchased."
+                : `${ownItems.length} items are your own listings and can't be purchased.`}
+            </p>
+            <button
+              type="button"
+              className="mt-2 rounded-full border border-amber-400/70 bg-white px-3 py-1 text-[11px] font-bold text-amber-950 dark:bg-amber-900/40 dark:text-amber-50"
+              onClick={() => {
+                for (const own of ownItems) onRemove(own.listingId)
+              }}
+            >
+              Remove my listings from cart
+            </button>
+          </div>
+        ) : null}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Items</p><p className="mt-1 text-sm font-bold">{items.reduce((n, i) => n + i.quantity, 0)}</p></div>
           <div className="rounded-xl bg-muted/60 p-3"><p className="text-[10px] text-muted-foreground">Sellers</p><p className="mt-1 text-sm font-bold">{new Set(items.map((i) => i.sellerId)).size}</p></div>
@@ -1338,21 +1501,31 @@ function CartPanel({
         {items.map((item) => {
           const lineTotal = (Number(item.price) || 0) * item.quantity
           const currency = (item.currency || "GHC").toUpperCase()
+          const isOwn = isOwnedByCurrentUser(item.sellerId)
           return (
-            <article key={item.listingId} className="flex gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+            <article key={item.listingId} className={`flex gap-3 rounded-2xl border p-3 shadow-sm ${isOwn ? "border-amber-300/70 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20" : "border-border/60 bg-card"}`}>
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted/60">
                 {item.media ? <LazyImage src={item.media} alt={item.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Package size={22} className="text-muted-foreground" /></div>}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">Seller · {item.sellerId.slice(0, 8)}</p></div>
-                  <button type="button" onClick={() => onRemove(item.listingId)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label={`Remove ${item.title}`}><X size={15} /></button>
+                  <div className="min-w-0">
+                    <h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {isOwn
+                        ? "Your listing · can't be purchased"
+                        : item.sellerName
+                          ? `Seller · ${item.sellerName}`
+                          : "Seller details unavailable"}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => onRemove(item.listingId)} disabled={busy} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40" aria-label={`Remove ${item.title}`}><X size={15} /></button>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="inline-flex items-center rounded-full border border-border/70 bg-background">
-                    <button type="button" onClick={() => onChange(item.listingId, item.quantity - 1)} disabled={item.quantity <= 1} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Decrease quantity"><Minus size={13} /></button>
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity - 1)} disabled={busy || item.quantity <= 1} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Decrease quantity"><Minus size={13} /></button>
                     <span className="min-w-7 text-center text-xs font-bold">{item.quantity}</span>
-                    <button type="button" onClick={() => onChange(item.listingId, item.quantity + 1)} className="flex h-8 w-8 items-center justify-center" aria-label="Increase quantity"><Plus size={13} /></button>
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity + 1)} disabled={busy || (Boolean(item.availability) && item.quantity >= Number(item.availability))} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Increase quantity"><Plus size={13} /></button>
                   </div>
                   <p className="text-sm font-extrabold">{currency === "GHC" ? "₲ " : ""}{lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : currency === "PI" ? " π" : ` ${currency}`}</p>
                 </div>
@@ -1378,12 +1551,30 @@ function CartPanel({
 
       <div className="rounded-[1.4rem] border border-border/60 bg-card p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Estimated total</p><div className="text-right">{Array.from(totals.entries()).map(([currency, amount]) => <p key={currency} className="text-base font-extrabold">{currency === "GHC" ? "₲ " : ""}{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : ` ${currency === "PI" ? "π" : currency}`}</p>)}</div></div>
-        <p className="mt-1 text-[11px] text-muted-foreground">Shipping, service terms and final server-authoritative totals may vary by order.</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Estimate only — final totals, inventory and fees are confirmed by the server at checkout. Own listings are excluded.
+        </p>
+        {checkoutProgress ? (
+          <p className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-900 dark:text-emerald-100" role="status" aria-live="polite">
+            {checkoutProgress}
+          </p>
+        ) : null}
         {message ? <p className="mt-3 rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200">{message}</p> : null}
         {error ? <p className="mt-3 rounded-xl bg-red-500/10 p-3 text-xs font-semibold text-red-700 dark:text-red-300">{error}</p> : null}
-        <button type="button" disabled={busy} onClick={() => void checkout()} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white shadow-md shadow-emerald-700/20 transition active:scale-[0.99] disabled:opacity-60">
+        <button
+          type="button"
+          disabled={busy || purchasableItems.length === 0}
+          aria-busy={busy || undefined}
+          aria-disabled={busy || purchasableItems.length === 0}
+          onClick={() => void checkout()}
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--gh-green)] px-5 text-sm font-bold text-white shadow-md shadow-emerald-700/20 transition active:scale-[0.99] disabled:opacity-60 motion-safe:active:scale-[0.99]"
+        >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
-          {busy ? "Securing your orders…" : "Checkout securely"}
+          {busy
+            ? "Securing your orders…"
+            : purchasableItems.length === 0
+              ? "Remove your own listings to checkout"
+              : "Checkout securely"}
         </button>
       </div>
     </div>
@@ -1403,9 +1594,11 @@ function SellerCommandCenter({
   onNewListing: () => void
   onOpenOrders: () => void
 }) {
-  const viewerId = IdentityService.getCurrentUserId() || ""
-  const sellerOrders = useMemo(() => orders.filter((order) => order.sellerId === viewerId), [orders, viewerId])
-  const activeListings = listings.filter((listing) => listing.status === "active").length
+  const sellerOrders = useMemo(() => orders.filter((order) => isOwnedByCurrentUser(order.sellerId)), [orders])
+  const isSoldOut = (listing: MarketplaceListing) => listing.status === "sold_out" || (listing.kind === "product" && listing.availability <= 0)
+  const activeListings = listings.filter((listing) => listing.status === "active" && !isSoldOut(listing)).length
+  const pausedListings = listings.filter((listing) => listing.status === "paused").length
+  const soldOutListings = listings.filter(isSoldOut).length
   const openOrders = sellerOrders.filter((order) => !["completed", "cancelled", "refunded"].includes(String(order.status))).length
   const completedOrders = sellerOrders.filter((order) => String(order.status) === "completed").length
   const needsAttention = sellerOrders.filter((order) => ["created", "paid", "confirmed"].includes(String(order.status))).length
@@ -1421,11 +1614,13 @@ function SellerCommandCenter({
           </div>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><BarChart3 size={18} /></span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Active listings</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : activeListings}</p></div>
-          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Open orders</p><p className="mt-1 text-lg font-extrabold">{openOrders}</p></div>
-          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Needs attention</p><p className="mt-1 text-lg font-extrabold">{needsAttention}</p></div>
-          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Completed</p><p className="mt-1 text-lg font-extrabold">{completedOrders}</p></div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-live="polite">
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Active</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : activeListings}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Paused</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : pausedListings}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Sold out</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : soldOutListings}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Open orders</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : openOrders}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Needs attention</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : needsAttention}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Completed</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : completedOrders}</p></div>
         </div>
       </div>
       <div className="grid gap-2 p-3 sm:grid-cols-2">
@@ -1458,7 +1653,7 @@ function MarketplaceOutcomeCenter({
 }) {
   const viewerId = IdentityService.getCurrentUserId() || ""
   const buyerOrders = orders.filter((order) => order.buyerId === viewerId)
-  const sellerOrders = orders.filter((order) => order.sellerId === viewerId)
+  const sellerOrders = orders.filter((order) => isOwnedByCurrentUser(order.sellerId))
   const terminal = new Set(["completed", "cancelled", "refunded"])
   const activeBuyerOrders = buyerOrders.filter((order) => !terminal.has(String(order.status)))
   const sellerAttention = sellerOrders.filter((order) => ["created", "paid", "confirmed"].includes(String(order.status)))
@@ -1534,11 +1729,16 @@ export function MarketplaceScreen({
   onBack: () => void
   initialListingId?: string | null
 }) {
+  const regional = useRegionalContext()
+  const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string | null>(null)
+  const [kindFilter, setKindFilter] = useState<ListingKind | "all">("all")
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryMode | "all">("all")
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
   const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">("browse")
   const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
+  const [mineStatusFilter, setMineStatusFilter] = useState<"all" | "active" | "paused" | "sold_out" | "draft">("all")
   const [mineLoading, setMineLoading] = useState(false)
   const [showCategories, setShowCategories] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
@@ -1593,11 +1793,29 @@ export function MarketplaceScreen({
     syncCart()
     const handler = () => syncCart()
     window.addEventListener("ghc:marketplace-cart-changed", handler)
-    return () => window.removeEventListener("ghc:marketplace-cart-changed", handler)
+    // Keep multiple tabs/devices in the same browser profile coherent.
+    window.addEventListener("storage", handler)
+    return () => {
+      window.removeEventListener("ghc:marketplace-cart-changed", handler)
+      window.removeEventListener("storage", handler)
+    }
   }, [syncCart])
 
   const addToCart = useCallback((listing: MarketplaceListing) => {
-    if (listing.status !== "active") return
+    if (listing.status !== "active" || (listing.kind === "product" && listing.availability <= 0)) {
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This listing is currently unavailable", type: "info" } })) } catch { /* */ }
+      return
+    }
+    if (isOwnedByCurrentUser(listing.sellerId)) {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "You can't add your own listing to the cart", type: "info" } }))
+      } catch { /* */ }
+      return
+    }
+    const sellerLabel =
+      (listing as { sellerName?: string }).sellerName ||
+      (listing as { sellerDisplayName?: string }).sellerDisplayName ||
+      undefined
     addMarketplaceCartItem({
       listingId: listing.id,
       quantity: 1,
@@ -1605,11 +1823,15 @@ export function MarketplaceScreen({
       price: listing.price,
       currency: listing.currency,
       sellerId: listing.sellerId,
+      sellerName: sellerLabel,
       media: listing.media?.[0],
       availability: listing.availability,
     })
     setBucket("cart")
     try {
+      const next = getMarketplaceCart()
+      const count = next.reduce((n, i) => n + (Number(i.quantity) || 0), 0)
+      window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count } }))
       window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Added to cart", type: "success" } }))
     } catch { /* */ }
   }, [])
@@ -1686,8 +1908,21 @@ export function MarketplaceScreen({
   const loadDurableOrders = useCallback(async () => {
     const requestId = ++ordersRequestRef.current
     setOrdersLoading(true)
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const hardTimeout =
+      typeof window !== "undefined"
+        ? window.setTimeout(() => {
+            try {
+              controller?.abort()
+            } catch { /* */ }
+          }, 15_000)
+        : null
     try {
-      const res = await fetch("/api/marketplace/orders", { cache: "no-store", credentials: "include" })
+      const res = await fetch("/api/marketplace/orders", {
+        cache: "no-store",
+        credentials: "include",
+        signal: controller?.signal,
+      })
       const data = await res.json().catch(() => ({}))
       if (requestId !== ordersRequestRef.current) return
       // An authoritative empty array clears orders; transport/API failures do not.
@@ -1699,6 +1934,7 @@ export function MarketplaceScreen({
     } catch {
       // Retain last known durable orders; never turn a network failure into an empty order history.
     } finally {
+      if (hardTimeout != null) window.clearTimeout(hardTimeout)
       if (requestId === ordersRequestRef.current) setOrdersLoading(false)
     }
   }, [])
@@ -1815,10 +2051,27 @@ export function MarketplaceScreen({
     const raw = domain.listListings({
       status: "active",
       category: category || undefined,
+      kind: kindFilter === "all" ? undefined : kindFilter,
       query: query.trim() || undefined,
     }) || []
-    return sortMarketplaceListings(raw, browseSort)
-  }, [domain, category, query, tick, browseSort])
+    const deliveryFiltered = deliveryFilter === "all"
+      ? raw
+      : raw.filter((listing) => parseDeliveryMode(listing.shippingInfo) === deliveryFilter)
+    return sortMarketplaceListings(deliveryFiltered, browseSort)
+  }, [domain, category, kindFilter, deliveryFilter, query, tick, browseSort])
+
+  const filteredMineListings = useMemo(() => {
+    if (mineStatusFilter === "all") return mineListings
+    if (mineStatusFilter === "sold_out") {
+      return mineListings.filter((listing) => listing.status === "sold_out" || (listing.kind === "product" && listing.availability <= 0))
+    }
+    if (mineStatusFilter === "active") {
+      return mineListings.filter((listing) => listing.status === "active" && !(listing.kind === "product" && listing.availability <= 0))
+    }
+    return mineListings.filter((listing) => listing.status === mineStatusFilter)
+  }, [mineListings, mineStatusFilter])
+
+  const hasBrowseFilters = Boolean(query.trim() || category || kindFilter !== "all" || deliveryFilter !== "all")
 
     const orders = useMemo(() => {
     void tick
@@ -1831,7 +2084,7 @@ export function MarketplaceScreen({
     if (orderRoleFilter === "buying") {
       list = list.filter((o) => o.buyerId === viewerId)
     } else if (orderRoleFilter === "selling") {
-      list = list.filter((o) => o.sellerId === viewerId)
+      list = list.filter((o) => isOwnedByCurrentUser(o.sellerId))
     }
     return [...list].sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
   }, [domain, tick, durableOrders, orderRoleFilter])
@@ -1840,7 +2093,7 @@ export function MarketplaceScreen({
     if (durableOrders.length) return durableOrders
     if (!domain?.getOrders) return [] as MarketplaceOrder[]
     try { return domain.getOrders?.() || [] } catch { return [] as MarketplaceOrder[] }
-  }, [domain, tick, durableOrders])
+  }, [domain, durableOrders])
 
   const [remoteSelected, setRemoteSelected] = useState<MarketplaceListing | null>(null)
 
@@ -2042,7 +2295,7 @@ export function MarketplaceScreen({
   }
 
   return (
-    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GreenHaven marketplace">
+    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
       <header className="flex shrink-0 flex-col gap-2 border-b border-border/50 px-2.5 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
@@ -2054,9 +2307,9 @@ export function MarketplaceScreen({
             <ArrowLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-bold">Marketplace</h1>
+            <h1 className="truncate text-sm font-bold">{msg("marketplaceTitle")}</h1>
             <p className="truncate text-[11px] text-muted-foreground">
-              Buy &amp; sell with π or GHC
+              {msg("buySellSubtitle")}
             </p>
           </div>
           <span className="gh-icon-tile flex h-10 w-10 items-center justify-center rounded-2xl" aria-hidden>
@@ -2067,12 +2320,12 @@ export function MarketplaceScreen({
         {/* FB-style action chips */}
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 scrollbar-none" role="toolbar" aria-label="Marketplace tools">
           {[
-            { id: "cart" as const, label: `Cart${cartItems.length ? ` · ${cartItems.length}` : ""}`, icon: ShoppingCart },
-            { id: "browse" as const, label: "Browse", icon: Store },
-            { id: "sell" as const, label: "Sell", icon: Plus },
-            { id: "mine" as const, label: "Seller Centre", icon: BarChart3 },
-            { id: "orders" as const, label: "Orders", icon: Package },
-            { id: "saved" as const, label: "Saved", icon: Bookmark },
+            { id: "cart" as const, label: `${msg("cart")}${cartItems.length ? ` · ${cartItems.length}` : ""}`, icon: ShoppingCart },
+            { id: "browse" as const, label: msg("browse"), icon: Store },
+            { id: "sell" as const, label: msg("sell"), icon: Plus },
+            { id: "mine" as const, label: msg("sellerCentre"), icon: BarChart3 },
+            { id: "orders" as const, label: msg("orders"), icon: Package },
+            { id: "saved" as const, label: msg("saved"), icon: Bookmark },
           ].map((chip) => (
             <button
               key={chip.id}
@@ -2104,7 +2357,7 @@ export function MarketplaceScreen({
             }`}
           >
             <Tag size={14} aria-hidden />
-            Categories
+            {msg("categories")}
           </button>
           <button
             type="button"
@@ -2116,7 +2369,7 @@ export function MarketplaceScreen({
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-[12px] font-bold text-foreground hover:bg-muted/80"
           >
             <Search size={14} aria-hidden />
-            Search
+            {msg("searchListings")}
           </button>
         </div>
 
@@ -2143,7 +2396,7 @@ export function MarketplaceScreen({
                 onChange={(e) => setQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
-                placeholder="Search listings…"
+                placeholder={msg("searchListings")}
                 className={`gh-standard-search h-11 w-full border border-border/70 pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 ${
                   searchFocused ? "ring-2 ring-primary/20" : ""
                 }`}
@@ -2189,6 +2442,36 @@ export function MarketplaceScreen({
                 ))}
               </div>
             ) : null}
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Refine marketplace listings">
+              <label className="flex min-h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-muted-foreground">
+                <span>Type</span>
+                <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as ListingKind | "all")} className="max-w-[9rem] bg-transparent text-[11px] font-bold text-foreground outline-none">
+                  <option value="all">All types</option>
+                  <option value="product">Products</option>
+                  <option value="service">Services</option>
+                  <option value="opportunity">Opportunities</option>
+                </select>
+              </label>
+              <label className="flex min-h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-muted-foreground">
+                <span>Delivery</span>
+                <select value={deliveryFilter} onChange={(event) => setDeliveryFilter(event.target.value as DeliveryMode | "all")} className="max-w-[9rem] bg-transparent text-[11px] font-bold text-foreground outline-none">
+                  <option value="all">Any method</option>
+                  <option value="meetup">Local meetup</option>
+                  <option value="shipping">Shipping</option>
+                  <option value="digital">Digital</option>
+                  <option value="service">Service / remote</option>
+                </select>
+              </label>
+              {category || kindFilter !== "all" || deliveryFilter !== "all" || query ? (
+                <button
+                  type="button"
+                  onClick={() => { setCategory(null); setKindFilter("all"); setDeliveryFilter("all"); setQuery("") }}
+                  className="min-h-9 rounded-xl px-2.5 text-[11px] font-bold text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
+                >
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
           </>
         ) : null}
       </header>
@@ -2211,9 +2494,27 @@ export function MarketplaceScreen({
         {bucket === "cart" ? (
           <CartPanel
             items={cartItems}
-            onChange={(id, quantity) => setCartItems(updateMarketplaceCartQuantity(id, quantity))}
-            onRemove={(id) => setCartItems(removeMarketplaceCartItem(id))}
-            onClear={() => { clearMarketplaceCart(); setCartItems([]) }}
+            onChange={(id, quantity) => {
+              const next = updateMarketplaceCartQuantity(id, quantity)
+              setCartItems(next)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: next.reduce((n, i) => n + (i.quantity || 0), 0) } }))
+              } catch { /* */ }
+            }}
+            onRemove={(id) => {
+              const next = removeMarketplaceCartItem(id)
+              setCartItems(next)
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: next.reduce((n, i) => n + (Number(i.quantity) || 0), 0) } }))
+              } catch { /* */ }
+            }}
+            onClear={() => {
+              clearMarketplaceCart()
+              setCartItems([])
+              try {
+                window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: 0 } }))
+              } catch { /* */ }
+            }}
             onContinueShopping={() => setBucket("browse")}
           />
         ) : null}
@@ -2247,14 +2548,31 @@ export function MarketplaceScreen({
                   New
                 </button>
               </div>
+              {mineListings.length > 0 ? (
+                <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter your listings">
+                  {([
+                    ["all", "All", mineListings.length],
+                    ["active", "Active", mineListings.filter((listing) => listing.status === "active" && !(listing.kind === "product" && listing.availability <= 0)).length],
+                    ["paused", "Paused", mineListings.filter((listing) => listing.status === "paused").length],
+                    ["sold_out", "Sold out", mineListings.filter((listing) => listing.status === "sold_out" || (listing.kind === "product" && listing.availability <= 0)).length],
+                    ["draft", "Drafts", mineListings.filter((listing) => listing.status === "draft").length],
+                  ] as const).map(([id, label, count]) => (
+                    <button key={id} type="button" aria-pressed={mineStatusFilter === id} onClick={() => setMineStatusFilter(id)} className={`min-h-9 rounded-full px-3 text-[11px] font-bold transition ${mineStatusFilter === id ? "bg-[var(--gh-green)] text-white" : "border border-border/70 bg-card text-muted-foreground hover:text-foreground"}`}>
+                      {label} <span className="ml-1 opacity-80">{count}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {mineLoading ? (
                 <LoadingState title="Loading your listings" description="Checking your current storefront from the latest available data." />
-              ) : mineListings.length ? (
+              ) : filteredMineListings.length ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {mineListings.map((listing) => (
+                  {filteredMineListings.map((listing) => (
                     <ListingCard key={listing.id} listing={listing} onOpen={(id) => setSelectedId(id)} />
                   ))}
                 </div>
+              ) : mineListings.length > 0 ? (
+                <EmptyState title={`No ${mineStatusFilter.replace("_", " ")} listings`} description="Choose another listing status or clear this filter." action={{ label: "Show all listings", onClick: () => setMineStatusFilter("all") }} />
               ) : (
                 <EmptyState
                   title="No listings yet"
@@ -2658,12 +2976,29 @@ export function MarketplaceScreen({
           {ordersLoading && orders.length === 0 ? (
             <LoadingState title="Loading orders" description="Checking the latest durable order status." />
           ) : orders.length === 0 ? (
-            <EmptyState variant="transactions" title="No orders yet" description="Purchases and sales appear here from the durable Marketplace order authority." icon={Package} />
+            <EmptyState
+              variant="transactions"
+              title={
+                orderRoleFilter === "buying"
+                  ? "No purchases yet"
+                  : orderRoleFilter === "selling"
+                    ? "No sales yet"
+                    : "No orders yet"
+              }
+              description={
+                orderRoleFilter === "buying"
+                  ? "When you checkout, buyer orders appear here with live status."
+                  : orderRoleFilter === "selling"
+                    ? "When someone buys your listing, seller orders appear here to fulfill."
+                    : "Purchases and sales appear here from the durable Marketplace order authority."
+              }
+              icon={Package}
+            />
           ) : (
             <ul className="space-y-2.5">
               {orders.map((o) => {
                 const viewerId = IdentityService.getCurrentUserId() || ""
-                const isSeller = viewerId === o.sellerId
+                const isSeller = isOwnedByCurrentUser(o.sellerId)
                 const status = String(o.status || "created")
                 const busy = Boolean(orderBusy)
                 const stepIdx = orderLifecycleIndex({
@@ -2867,10 +3202,10 @@ export function MarketplaceScreen({
           <div className="flex flex-col items-center px-2 pt-6">
             <EmptyState
               variant="search"
-              title={query || category ? "No matching listings" : "No listings yet"}
+              title={hasBrowseFilters ? "No matching listings" : "No listings yet"}
               description={
-                query || category
-                  ? "Try another search or category. Only real listings from sellers appear here."
+                hasBrowseFilters
+                  ? "Try changing your search, category, listing type or delivery method. Only real seller listings appear here."
                   : "Seller listings will appear here when they are published and available."
               }
               icon={ShoppingBag}
@@ -2888,7 +3223,7 @@ export function MarketplaceScreen({
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-[15px] font-bold text-foreground">Discover on GreenHaven</h2>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground" role="status" aria-live="polite">
                   {listings.length} listing{listings.length === 1 ? "" : "s"}
                   {category ? ` · ${category}` : ""}
                   {query.trim() ? ` · “${query.trim()}”` : ""}
@@ -2903,8 +3238,8 @@ export function MarketplaceScreen({
                   className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-foreground"
                 >
                   <option value="newest">Newest</option>
-                  <option value="price_asc">Price · low to high</option>
-                  <option value="price_desc">Price · high to low</option>
+                  <option value="price_asc">Price · low to high (by currency)</option>
+                  <option value="price_desc">Price · high to low (by currency)</option>
                 </select>
                 <button type="button" onClick={refresh} className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
                   Refresh

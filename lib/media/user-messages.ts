@@ -29,6 +29,16 @@ export function mediaUserMessage(code: string | undefined, fallback?: string): s
       return "Photo storage is not ready on the server yet. Photos can stay on this device for now — ask the operator to set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GH_MEDIA_BUCKET."
     case "NETWORK":
       return "Connection issue while uploading. Check your network and retry."
+    case "INVALID_MEDIA_URL":
+      return "That photo or video isn't ready to share yet. Wait for the upload to finish, then try again."
+    case "INVALID_MEDIA_TYPE":
+      return "Stories support photos and videos only."
+    case "EMPTY_STORY":
+      return "Add a photo, video, or a short caption before sharing."
+    case "STORY_TOO_LONG":
+      return "That caption is too long. Shorten it and try again."
+    case "STORY_LIST_UNAVAILABLE":
+      return "Stories are temporarily unavailable. Please try again shortly."
     case "OPTIMIZE_FAILED":
       return "We couldn't optimize this file. Please try another file."
     case "INLINE_TOO_LARGE":
