@@ -976,9 +976,9 @@ function EnhancedPostCardInner({
       <div
         className="px-2 pb-2.5 pt-1 sm:px-3"
         role="toolbar"
-        aria-label="Post engagement and curation actions"
+        aria-label="Community curation and engagement"
       >
-        <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide" role="group" aria-label="Post engagement and curation actions">
+        <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide" role="group" aria-label="Community curation and engagement">
           <div className="flex min-w-0 shrink-0 items-center gap-1" role="group" aria-label="Quality votes">
             <label
               className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
