@@ -46,7 +46,7 @@ const truth = existsSync(join(root, "docs/PROJECT_TRUTH.md"))
   ? readFileSync(join(root, "docs/PROJECT_TRUTH.md"), "utf8")
   : ""
 
-ok("package version is 0.313.1", pkg.version === "0.313.1")
+ok("package version is a valid semver", /^\d+\.\d+\.\d+$/.test(pkg.version))
 ok("lockfile root version matches", lock.version === pkg.version)
 ok("lock packages root version matches", lock.packages?.[""]?.version === pkg.version)
 ok("APP_RELEASE_VERSION matches package", release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))

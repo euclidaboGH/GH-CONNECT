@@ -20,6 +20,7 @@ const excluded = new Set([
   "verify-production-release.mjs", // this orchestrator
   "check-node-runtime.mjs", // run separately under the required Node 24 runtime
   "verify-database-backup-artifact.mjs", // operator utility; requires an explicit dump artifact argument
+  "check-phase10-performance-budget.mjs", // post-build gate (npm postbuild); needs .next output, contract-checked by check-phase10-performance-contract.mjs
 ])
 const discovered = readdirSync(scriptsDir)
   .filter((name) => /^(check|verify)-.*\.mjs$/.test(name) && !excluded.has(name) && existsSync(join(scriptsDir, name)))
