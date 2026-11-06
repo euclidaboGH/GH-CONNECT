@@ -232,3 +232,8 @@ The Phase 10 patch release corrects stale source regression assertions and keeps
 ## Current source baseline — 0.330.2 (2026-11-06)
 
 0.330.2 repairs Phase 26 CI cache handling. TypeScript incremental metadata is written under the ignored `.cache/` directory; the wallet-ledger gate checks nested cache files for Git ignore and untracked status rather than requiring the working tree to have no generated cache. The previous root-level `tsconfig.tsbuildinfo` path remains rejected. This is a source/CI reliability improvement only. No migration, Pi payment, GHC ledger, payout, entitlement or production authority changed. Production remains NOT APPROVED until supported-runtime, database, Testnet, browser/device and operator gates pass.
+
+
+## Current source baseline — 0.330.15 (2026-11-06)
+
+0.330.15 is a build-fix and dependency-hygiene release. It re-synchronizes the release-readiness record with package, lockfile, in-app release, README and project truth so the Phase 24 release-review gate passes in the `prebuild` chain, and it records npm install warnings for follow-up. No migration, Pi payment, GHC ledger, payout, entitlement or production authority changed. Supported-runtime (Node.js 24.15.x) install/typecheck/lint/build, disposable PostgreSQL, Pi Testnet, browser/device and operator acceptance remain required. Production remains NOT APPROVED.
