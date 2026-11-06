@@ -1,6 +1,6 @@
-# GH-CONNECT Phase 5 — Global Production Readiness (0.330.6)
+# GH-CONNECT Phase 5 — Global Production Readiness (0.330.7)
 
-**Release:** 0.330.6  
+**Release:** 0.330.7  
 **Baseline:** 0.330.5 Phase 4 Financial Infrastructure  
 **Canonical migrations:** 189 (no new migrations in this package)  
 **Date:** 2026-11-06
@@ -57,11 +57,11 @@ Honest classification:
 
 - `vercel.json` sets CSP (Pi domains), HSTS, nosniff, Referrer-Policy, Permissions-Policy.
 
-## Implemented in 0.330.6
+## Implemented in 0.330.7
 
 | Change | Purpose |
 |--------|---------|
-| `package.json` / `VERIFIED_MANIFEST.txt` → 0.330.6 | Release consistency |
+| `package.json` / `VERIFIED_MANIFEST.txt` → 0.330.7 | Release consistency |
 | `scripts/check-phase5-production-readiness.mjs` | Static gate for wallet spine, account APIs, media routes, migrations, features |
 | `.github/workflows/ci.yml` | CI: npm ci → Phase 5 gate → typecheck → lint → build |
 | This document + deployment guide | Operator clarity |
@@ -74,8 +74,8 @@ Honest classification:
 - `scripts/check-phase5-production-readiness.mjs` (new)
 - `.github/workflows/ci.yml` (new)
 - `docs/GH-CONNECT-PHASE-5-PRODUCTION-READINESS.md` (new)
-- `docs/releases/DEPLOYMENT-GUIDE-0.330.6.md` (new)
-- `docs/releases/RELEASE-MANIFEST-0.330.6.md` (new)
+- `docs/releases/DEPLOYMENT-GUIDE-0.330.7.md` (new)
+- `docs/releases/RELEASE-MANIFEST-0.330.7.md` (new)
 
 No database migrations added. No RLS policy changes in this package.
 
@@ -137,3 +137,7 @@ Redeploy previous artifact:
 - `GH-CONNECT-0.330.5-PHASE4-FINANCIAL-INFRASTRUCTURE.zip`  
   sha256 `178642ff116225286493481dd49da98a33f45eb0c4b8a33168be3dbb4b196ccf`
 
+
+## Build fix 0.330.7
+
+Restored prebuild marker comment `Initialise once per open transition` in `pi-withdraw-sheet.tsx` so `check-phase2-visual-cohesion.mjs` passes. Form stability guards (wasOpenRef / amountTouchedRef) unchanged.

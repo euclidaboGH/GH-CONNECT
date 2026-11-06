@@ -1,9 +1,9 @@
-# Deployment guide — GH-CONNECT 0.330.6
+# Deployment guide — GH-CONNECT 0.330.7
 
 ## 1. Artifact
 
-- Archive: `GH-CONNECT-0.330.6-PHASE5-GLOBAL-PRODUCTION-READINESS.zip`
-- Version: `0.330.6`
+- Archive: `GH-CONNECT-0.330.7-PHASE5-GLOBAL-PRODUCTION-READINESS.zip`
+- Version: `0.330.7`
 - Canonical migrations: **189** (none added in Phase 5)
 
 ## 2. GitHub

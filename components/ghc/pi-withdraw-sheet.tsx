@@ -149,6 +149,8 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
       wasOpenRef.current = false
       return
     }
+    // Initialise once per open transition. Balance and linked-identity hydration must
+    // never reset an amount/PIN while the user is completing the withdrawal.
     // Re-entry while already open (parent re-render / remount with open still true): keep form.
     if (wasOpenRef.current) return
     wasOpenRef.current = true

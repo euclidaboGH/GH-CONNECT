@@ -1,20 +1,20 @@
-# Release manifest — 0.330.6
+# Release manifest — 0.330.7
 
 | Field | Value |
 |-------|--------|
 | Product | GreenHaven / GH-CONNECT |
-| Version | 0.330.6 |
+| Version | 0.330.7 |
 | Codename | Phase 5 Global Production Readiness |
 | Baseline | 0.330.5 Phase 4 Financial Infrastructure |
 | Migrations | 189 (unchanged) |
-| Package file | GH-CONNECT-0.330.6-PHASE5-GLOBAL-PRODUCTION-READINESS.zip |
+| Package file | GH-CONNECT-0.330.7-PHASE5-GLOBAL-PRODUCTION-READINESS.zip |
 
 ## Major changes
 
 1. Production-readiness static gate script.
 2. GitHub Actions CI workflow (static + build).
 3. Phase 5 documentation and deployment guide.
-4. Version and VERIFIED_MANIFEST sync to 0.330.6.
+4. Version and VERIFIED_MANIFEST sync to 0.330.7.
 5. Phase 4 withdrawal UX stability retained.
 
 ## Checksums
