@@ -12,7 +12,7 @@ import { PendingQueueChip } from "./pending-queue-chip"
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false)
   const [justOnline, setJustOnline] = useState(false)
-  const onlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onlineTimer = useRef<number | null>(null)
 
   useEffect(() => {
     const sync = () => {

@@ -66,7 +66,8 @@ export function createProfileRelationshipIndexCache(
   readSources: () => ProfileRelationshipSources,
 ): () => ProfileRelationshipIndex {
   const previous: Partial<Required<ProfileRelationshipSources>> = {}
-  const sets: Partial<ProfileRelationshipIndex> = {}
+  type Mutable<T> = { -readonly [K in keyof T]: T[K] }
+  const sets: Partial<Mutable<ProfileRelationshipIndex>> = {}
 
   return () => {
     const current = readSources()
