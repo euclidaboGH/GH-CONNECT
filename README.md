@@ -1,9 +1,12 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.330.1`
+**Current source version:** `0.330.2`
 - Phase 23 (0.309.0): migration audit hardening separates reservation expiry cleanup from locked order snapshot reads. Application reads explicitly run cleanup and fail closed; transition RPC snapshots no longer sweep unrelated rows while holding an order lock. Added whole-migration SECURITY DEFINER search_path audit. No financial settlement behavior is added.
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
+
+### 0.330.2 — Phase 26 cache-safe CI and release hygiene
+Moves TypeScript incremental build metadata into the ignored `.cache/` directory. The Phase 26 wallet-ledger gate now checks all nested TypeScript build-info files and verifies that generated caches are Git-ignored and untracked, so a normal cache created during CI cannot cause a false release failure. The root-level legacy cache path remains prohibited. Wallet request bounds, latest-request-wins cancellation, confirmed-ledger labeling and Pi/GHC separation are preserved. No database migration, financial authority or production approval change.
 
 ### 0.330.1 — CI regression-contract repair
 Repairs stale source checks without weakening runtime behavior: the dual-asset wallet contract now verifies the implemented dedicated PI Withdraw action, the Stories contract validates the actual emerald own-story tile/avatar ring, and the legacy Phase 5 release-readiness check compares the manifest dynamically with the current package version instead of pinning 0.312.0. Retains the safe `.env.example` template and fail-closed payment defaults. No application, database, Pi, GHC, payment or entitlement authority changes.

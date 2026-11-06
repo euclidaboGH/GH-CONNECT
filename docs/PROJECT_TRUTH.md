@@ -1,7 +1,11 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.330.1`
+**Current source version:** `0.330.2`
 **Current status:** **NOT APPROVED** for production release.
+
+## 0.330.2 — Phase 26 cache-safe CI and release hygiene
+
+TypeScript incremental metadata now writes to `.cache/tsconfig.tsbuildinfo`, and `.cache/` is ignored alongside all `*.tsbuildinfo` files. The Phase 26 wallet-ledger resilience check recursively discovers build-info artifacts and, in a Git checkout, confirms each is ignored and not tracked. It rejects the legacy root `tsconfig.tsbuildinfo` path and fails closed if a cache is present outside a Git-verifiable workspace. This prevents CI from failing merely because a correctly ignored incremental cache was generated before the gate. Existing wallet timeout/cancellation and Pi/GHC separation contracts remain unchanged. No migration, ledger, payment, entitlement or production authority changed. Production remains NOT APPROVED pending all external acceptance gates.
 
 ## 0.330.1 — Phase 10 CI regression-contract repair
 
@@ -9,7 +13,7 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.330.1`.
+- Package and lockfile version: `0.330.2`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
 - Canonical Supabase migrations: **189** SQL files.
 - Duplicate migration numeric prefixes: **0**.

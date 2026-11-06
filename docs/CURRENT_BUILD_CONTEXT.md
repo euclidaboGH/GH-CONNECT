@@ -4,14 +4,21 @@
 
 ## CURRENT BUILD CONTEXT
 
-- Current source release: **0.330.1**.
-- Current baseline: the complete repository root in release 0.323.0 as upgraded through 0.330.0; this latest complete project tree supersedes older archives, worklogs, mock-ups and copied third-party screens.
+- Current source release: **0.330.2**.
+- Current baseline: the complete repository root in release 0.323.0 as upgraded through 0.330.2; this latest complete project tree supersedes older archives, worklogs, mock-ups and copied third-party screens.
 - Product: GreenHaven ecosystem and GH Connect social platform. Keep the existing product identity, routes, data contracts and security boundaries unless a reviewed implementation explicitly changes them.
 - Visual direction: premium, modern, calm and accessible; deep emerald / teal / navy with restrained gold accents; light-mode-first. Screenshots are design references, not sources of banking features, balances, licenses, logos or provider capabilities.
 - Wallet: GHC and Pi are separate assets and separate ledgers. Never add them together, convert one into the other for display, fabricate balances, or treat local cache as financial authority. Server-confirmed balances must be clearly distinguished from stale, pending, locked and unavailable data.
 - Financial authority: server-side APIs, database RPCs and existing ledger/settlement authorities. Never add client-side minting, transfers, payout execution, refunds, escrow release, treasury movement or payment completion.
 - Security: preserve session identity, ownership, step-up, idempotency, rate limits, RLS, service-role boundaries and fail-closed behavior.
 - Database: do not apply migrations from source review alone. Reconcile target history, classify, inspect dependencies and obtain approval before applying held migrations.
+
+## PHASE 26 CACHE-SAFE CI RELEASE (0.330.2)
+
+- TypeScript incremental build metadata is directed to `.cache/tsconfig.tsbuildinfo`; `.cache/` and `*.tsbuildinfo` are ignored.
+- The Phase 26 release gate recursively checks TypeScript build-info artifacts and verifies Git ignore plus untracked status. A harmless cache created during CI no longer fails the gate; tracked or non-ignored cache artifacts still fail.
+- The wallet request lifecycle, server-confirmed balance semantics, and separate Pi/GHC asset rails are unchanged.
+- No migration, database operation, payment, payout, entitlement or production approval is authorized by this source increment.
 
 ## PHASE 8 REWARDS SOURCE COMPLETION (0.323.0)
 
@@ -38,8 +45,8 @@
 - Phase 5 (0.316.0): Discovery ranking now prepares normalized relationship/interest indexes once per batch, uses a consistent recency clock, suppresses duplicate identities, and provides accessible independent profile/follow controls. No migration or financial authority change; runtime/build acceptance remains open.
 - Phase 6 (0.319.0): Profile and Identity now derive reusable relationship indexes from canonical social arrays, invalidate each derived set independently on immutable array replacement, and batch-hydrate unique profile IDs from one snapshot; Discovery people cards consume the prepared batch results. Block-first safety and private financial-data boundaries remain unchanged. No migration or financial authority change.
 - Phase 4 (0.315.9): Cart/Checkout cache integrity, cross-tab synchronization, checkout interaction locking and selective cleanup of successfully reserved lines. See `docs/PHASE-4-CART-CHECKOUT-PREMIUM-UPGRADE-0.315.9.md`. No migration or financial-authority change.
-- Product source phases 1–8 are implemented. Phase 7 Wallet and Phase 8 Rewards source closures are recorded in the approved roadmap; their external acceptance gates remain open. Phase 9 Membership source implementation is complete in 0.327.0; its external acceptance gates remain open. Phase 10 Settings/platform performance is active in 0.330.0, now includes device capability diagnostics, device-local reduced-data controls, bounded/deduplicated async memoization, privacy-safe static caching, adaptive media prefetch, Settings code splitting, signed-media URL preservation, async pagination locking and legacy WebView fallbacks. External acceptance remains open.
-- Current roadmap position: Phase 7 Wallet source implementation closed (external acceptance pending); Phase 8 Rewards source implementation closed in 0.323.0 (migration/Testnet and runtime acceptance pending); Phase 9 Membership source implementation is complete (external acceptance pending); Phase 10 Settings/platform performance is active in 0.330.0, now includes device capability diagnostics, device-local reduced-data controls, bounded/deduplicated async memoization, privacy-safe static caching, adaptive media prefetch, Settings code splitting, signed-media URL preservation, async pagination locking and legacy WebView fallbacks. External acceptance remains open. Track source delivery separately from Testnet/Mainnet and browser/device acceptance.
+- Product source phases 1–8 are implemented. Phase 7 Wallet and Phase 8 Rewards source closures are recorded in the approved roadmap; their external acceptance gates remain open. Phase 9 Membership source implementation is complete in 0.327.0; its external acceptance gates remain open. Phase 10 Settings/platform performance is active in 0.330.2, now includes device capability diagnostics, device-local reduced-data controls, bounded/deduplicated async memoization, privacy-safe static caching, adaptive media prefetch, Settings code splitting, signed-media URL preservation, async pagination locking and legacy WebView fallbacks. External acceptance remains open.
+- Current roadmap position: Phase 7 Wallet source implementation closed (external acceptance pending); Phase 8 Rewards source implementation closed in 0.323.0 (migration/Testnet and runtime acceptance pending); Phase 9 Membership source implementation is complete (external acceptance pending); Phase 10 Settings/platform performance is active in 0.330.2, now includes device capability diagnostics, device-local reduced-data controls, bounded/deduplicated async memoization, privacy-safe static caching, adaptive media prefetch, Settings code splitting, signed-media URL preservation, async pagination locking and legacy WebView fallbacks. External acceptance remains open. Track source delivery separately from Testnet/Mainnet and browser/device acceptance.
 
 ## DOCUMENT PRECEDENCE
 

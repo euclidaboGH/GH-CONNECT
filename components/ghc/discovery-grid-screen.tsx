@@ -249,7 +249,7 @@ export function DiscoveryGridScreen() {
     const ids = adapted.list.filter(isPersonCandidate).map((candidate) => candidate.id)
     const profileDomain = getBoundDomainServices()?.profile
     return profileDomain?.getRelationshipStates?.(ids) ?? new Map()
-  }, [adapted.list, graphSnap])
+  }, [adapted.list])
 
   const discoveryOutcome = useMemo(() => buildDiscoveryOutcome({
     visiblePeople: adapted.list.length,

@@ -5,11 +5,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.330.1` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.330.2` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.330.1)
+## Current audit status (v0.330.2)
 
 - Phase 7 Wallet source implementation is closed in 0.320.0; dedicated Wallet entry contract: 14/14. External Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. This remains a read-only snapshot; consent, quote, withdrawal execution, GHC ledger and provider authorities are unchanged.
 - Phase 8 Rewards source implementation is closed in 0.323.0. It includes bounded account-scoped snapshots, authenticated GHC ledger history/search/filtering, server-authoritative daily claims and seven durable server-verified idempotent non-financial mission achievement unlocks. Dedicated Phase 8 contracts pass 18/18, 20/20, 15/15 and 24/24. Mission GHC issuance remains disabled; the new additive migration is REVIEW_REQUIRED and unapplied. Node 24, Testnet, browser/device and operator acceptance remain production blockers.
@@ -243,3 +243,8 @@ Phase 10 adds lazy-loaded Settings subsections, preserves signed media URLs with
 ## 0.330.1 current-increment note
 
 The 0.330.1 patch corrects stale CI regression contracts so the PI Withdraw action, emerald own-story treatment, package/lockfile/manifest version and Phase 10 active roadmap marker are checked against the current source. The 0.330.0 navigation/media changes and 0.329.0 privacy-safe service-worker policy remain in the baseline. These checks are source evidence only. Node 24.15.0 dependency install, TypeScript, ESLint, production build, disposable database, Pi Testnet and browser/device/operator acceptance remain outstanding; production remains NOT APPROVED.
+
+
+## 0.330.2 cache-safe CI increment
+
+The 0.330.2 source increment directs TypeScript build metadata to `.cache/`, verifies that generated build-info files are ignored and untracked, and rejects the legacy root cache path. This corrects the Phase 26 CI false failure when a legitimate incremental cache is present. It does not represent runtime, financial, database or production acceptance. Node 24.15.x typecheck, lint, production build, disposable database, Pi Testnet, browser/device and operator acceptance remain required; production remains NOT APPROVED.

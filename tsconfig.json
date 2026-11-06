@@ -28,7 +28,8 @@
       ]
     },
     "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
   },
   "include": [
     "next-env.d.ts",

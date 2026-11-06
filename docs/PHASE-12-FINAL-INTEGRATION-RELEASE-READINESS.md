@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.330.1` (2026-11-06)
+Release: `0.330.2` (2026-11-06)
 
 The 0.312.0 source baseline includes Phase 20 payout controls, Phase 21 private-surface durable abuse controls, Phase 22 atomic marketplace order transitions, Phase 23 migration/lock-scope hardening, Phase 24 migration-classification/operator-guide synchronization, and Phase 26 wallet ledger resilience/premium wallet presentation. The canonical inventory contains 189 migrations: 117 REQUIRED candidates, 69 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL, and 2 PROPOSAL. All classifications remain source-review states; no migration is claimed applied. Runtime/build and operator acceptance remain pending.
 
@@ -227,3 +227,8 @@ Phase 10 navigation/media reliability adds lazy-loaded Settings subsections, sig
 ### 0.330.1 CI regression-contract patch
 
 The Phase 10 patch release corrects stale source regression assertions and keeps package, lockfile, app release, project truth and migration manifest synchronized. The CI contract changes do not alter runtime payment or entitlement behavior. Release remains NOT APPROVED for production: supported-runtime install/build, disposable PostgreSQL, Pi Testnet, browser/device and operator acceptance are still required.
+
+
+## Current source baseline — 0.330.2 (2026-11-06)
+
+0.330.2 repairs Phase 26 CI cache handling. TypeScript incremental metadata is written under the ignored `.cache/` directory; the wallet-ledger gate checks nested cache files for Git ignore and untracked status rather than requiring the working tree to have no generated cache. The previous root-level `tsconfig.tsbuildinfo` path remains rejected. This is a source/CI reliability improvement only. No migration, Pi payment, GHC ledger, payout, entitlement or production authority changed. Production remains NOT APPROVED until supported-runtime, database, Testnet, browser/device and operator gates pass.

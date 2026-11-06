@@ -71,7 +71,7 @@ export function ProfileIdentityOverview({ onCounts }: { onCounts?: (counts: { fo
       void refresh()
     })
     return () => { unsubscribe(); requestRef.current?.abort(); requestRef.current = null }
-  }, [refresh])
+  }, [refresh, onCounts])
   useEffect(() => {
     const sync = () => { void refresh() }
     window.addEventListener("ghc:social-mutation", sync)

@@ -1,6 +1,6 @@
 # GreenHaven — Source of Truth & Prompt Execution Rules
 
-**Current source version:** `0.330.1`
+**Current source version:** `0.330.2`
 **Status:** source-audited; NOT APPROVED as a production release until the explicit runtime, database, provider and operator gates are completed.
 
 ## Authority order
@@ -29,10 +29,10 @@ For implementation prompts:
 
 ## Current release facts
 
-- Current source release: `0.330.1`.
+- Current source release: `0.330.2`.
 - Canonical build prompt context: `docs/CURRENT_BUILD_CONTEXT.md`.
 
-- Package version: `0.330.1`.
+- Package version: `0.330.2`.
 - Global i18n: `lib/i18n/index.ts`; locale preferences are device-persisted, formatting uses Intl, RTL is locale/script-driven, and English is the only approved UI translation bundle at this release.
 - Node requirement: `^24.15.0`; `.nvmrc` is `24.15.0`.
 - 0.295.0 includes partial Hausa, Igbo, Yoruba and Nigerian Pidgin preview translations across navigation, messaging inbox chrome, community discovery, marketplace navigation/search, settings discovery, feed filters/personalisation, discovery categories/offline states and home greetings. It does not claim full application translation or native-speaker approval.
