@@ -1,7 +1,12 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.330.2`
+**Current source version:** `0.330.10`
 **Current status:** **NOT APPROVED** for production release.
+
+## 0.330.9 — Build-gate continuity (curation language + version truth)
+
+Source continues the Phase 4–5 wallet withdrawal form stability work and synchronizes release metadata so prebuild gates (Phase 9 membership, Phase 16 post interactions, Pass 43 domain bridges) accept the active package version. Post engagement toolbar uses concise **Community curation** product language. No new database migration, ledger mutation, or Mainnet A2U enablement. Production remains NOT APPROVED pending external acceptance gates.
+
 
 ## 0.330.2 — Phase 26 cache-safe CI and release hygiene
 
@@ -13,7 +18,7 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.330.2`.
+- Package and lockfile version: `0.330.10`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
 - Canonical Supabase migrations: **189** SQL files.
 - Duplicate migration numeric prefixes: **0**.
