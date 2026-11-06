@@ -357,6 +357,20 @@ export function ProfileScreen({
   const [dashboardPageOpen, setDashboardPageOpen] = useState(false)
 
   useEffect(() => {
+    if (!dashboardPageOpen || typeof document === "undefined") return
+    const previousOverflow = document.body.style.overflow
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDashboardPageOpen(false)
+    }
+    document.body.style.overflow = "hidden"
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [dashboardPageOpen])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setIsOffline(!navigator.onLine)
     sync()
@@ -847,61 +861,8 @@ export function ProfileScreen({
               </div>
             ) : null}
 
-            <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card p-3 shadow-[var(--gh-card-shadow)]" aria-label="Your next moves">
-              <div className="mb-2.5 flex items-start justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-1.5 text-[12px] font-bold text-foreground"><Sparkles size={14} aria-hidden /> Turn your profile into results</p>
-                  <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">Use your identity to build relationships, participate in communities and reach relevant opportunities across GreenHaven.</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-emerald-600/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Action hub</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Discover", icon: Compass, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" })) },
-                  { label: "Messages", icon: MessagesSquare, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" })) },
-                  { label: "Communities", icon: UsersRound, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" })) },
-                  { label: "Marketplace", icon: ShoppingBag, run: () => window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { source: "profile-next-moves" } })) },
-                  { label: "Rewards", icon: Gift, run: () => window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) },
-                  { label: "Wallet", icon: Wallet, run: () => onOpenWallet?.() },
-                ].map(({ label, icon: Icon, run }) => (
-                  <button key={label} type="button" onClick={run} className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/50 bg-background/70 px-2 py-2.5 text-center transition hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300"><Icon size={16} aria-hidden /></span>
-                    <span className="text-[10px] font-bold text-foreground">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {/* Professional identity, achievements and account tools live in Personal Dashboard. */}
 
-            {(interests.length > 0 || intents.length > 0) ? (
-              <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3 py-3" aria-label="Discovery signals">
-                <p className="text-[11px] font-bold text-foreground">Discovery signals</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">These signals help GreenHaven connect your profile with more relevant people, communities and opportunities.</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {[...interests.slice(0, 5), ...intents.slice(0, 3)].map((item, index) => (
-                    <span key={`${item}-${index}`} className="rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-[10px] font-semibold text-foreground">{item}</span>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
-            <ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave={async (patch) => { await ghc.updateProfile?.(patch) }} />
-            <ProfileAchievementShowcase />
-            <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
-            {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
-              <button
-                type="button"
-                onClick={openEdit}
-                className="mt-2 w-full rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-emerald-50/50 px-3.5 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20"
-              >
-                <p className="text-[12px] font-bold text-foreground">
-                  Profile {profileCompletion.percentage}% complete
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Add {profileCompletion.missing.slice(0, 2).join(" · ")}
-                  {profileCompletion.missing.length > 2 ? "…" : ""} to improve discovery.
-                </p>
-              </button>
-            ) : null}
           </div>
         </div>
 
@@ -1197,10 +1158,73 @@ export function ProfileScreen({
       <div className="fixed inset-0 z-[90] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label={msg("dashboard")}>
           <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <button type="button" onClick={() => setDashboardPageOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Close dashboard"><X size={20} /></button>
-            <div className="min-w-0"><h2 className="text-base font-bold">{msg("dashboard")}</h2><p className="text-xs text-muted-foreground">Your GreenHaven tools and account activity</p></div>
+            <div className="min-w-0"><h2 className="text-base font-bold">{msg("dashboard")}</h2><p className="text-xs text-muted-foreground">Your private control centre for identity, progress and account tools</p></div>
           </header>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4" style={{ WebkitOverflowScrolling: "touch" }}>
             <ProfileEcosystemHub preferredGreenHavenId={serverGreenHavenId} userId={meId} displayName={name} onOpenWallet={() => { setDashboardPageOpen(false); onOpenWallet?.() }} onShareProfile={() => { setDashboardPageOpen(false); void shareProfile() }} onOpenMembership={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "membership" } })) }} onOpenRewards={() => { setDashboardPageOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) }} />
+            <section className="mt-5" aria-labelledby="gh-dashboard-growth-title">
+              <div className="mb-3">
+                <h3 id="gh-dashboard-growth-title" className="text-sm font-bold tracking-tight">Identity & growth</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Professional identity, verified reputation and achievements are managed here, separately from your social timeline.</p>
+              </div>
+              <div className="space-y-3">
+            <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card p-3 shadow-[var(--gh-card-shadow)]" aria-label="Your next moves">
+              <div className="mb-2.5 flex items-start justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-[12px] font-bold text-foreground"><Sparkles size={14} aria-hidden /> Turn your profile into results</p>
+                  <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">Use your identity to build relationships, participate in communities and reach relevant opportunities across GreenHaven.</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-emerald-600/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Action hub</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Discover", icon: Compass, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "discover" })) },
+                  { label: "Messages", icon: MessagesSquare, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" })) },
+                  { label: "Communities", icon: UsersRound, run: () => window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "communities" })) },
+                  { label: "Marketplace", icon: ShoppingBag, run: () => window.dispatchEvent(new CustomEvent("ghc:open-marketplace", { detail: { source: "profile-next-moves" } })) },
+                  { label: "Rewards", icon: Gift, run: () => window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: "rewards" } })) },
+                  { label: "Wallet", icon: Wallet, run: () => onOpenWallet?.() },
+                ].map(({ label, icon: Icon, run }) => (
+                  <button key={label} type="button" onClick={run} className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/50 bg-background/70 px-2 py-2.5 text-center transition hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300"><Icon size={16} aria-hidden /></span>
+                    <span className="text-[10px] font-bold text-foreground">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {(interests.length > 0 || intents.length > 0) ? (
+              <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3 py-3" aria-label="Discovery signals">
+                <p className="text-[11px] font-bold text-foreground">Discovery signals</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">These signals help GreenHaven connect your profile with more relevant people, communities and opportunities.</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {[...interests.slice(0, 5), ...intents.slice(0, 3)].map((item, index) => (
+                    <span key={`${item}-${index}`} className="rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-[10px] font-semibold text-foreground">{item}</span>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
+            <ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave={async (patch) => { await ghc.updateProfile?.(patch) }} />
+            <ProfileAchievementShowcase />
+            <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
+            {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
+              <button
+                type="button"
+                onClick={openEdit}
+                className="mt-2 w-full rounded-[1.25rem] border border-dashed border-emerald-200/80 bg-emerald-50/50 px-3.5 py-2.5 text-left transition hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+              >
+                <p className="text-[12px] font-bold text-foreground">
+                  Profile {profileCompletion.percentage}% complete
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Add {profileCompletion.missing.slice(0, 2).join(" · ")}
+                  {profileCompletion.missing.length > 2 ? "…" : ""} to improve discovery.
+                </p>
+              </button>
+            ) : null}
+              </div>
+            </section>
             <div className="mt-4"><UnifiedActivityCenter limit={40} /></div>
             <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Your communities">
               <h3 className="mb-2 text-sm font-bold">{msg("yourCommunities")}</h3>

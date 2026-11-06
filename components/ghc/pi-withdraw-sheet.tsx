@@ -111,6 +111,13 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   const [pinBusy, setPinBusy] = useState(false)
 
   const maxPi = typeof availablePi === "number" && Number.isFinite(availablePi) ? Math.max(0, availablePi) : 0
+  const latestMaxPiRef = useRef(maxPi)
+  latestMaxPiRef.current = maxPi
+  const loadAuthRef = useRef<(() => Promise<boolean>) | null>(null)
+  /** Only reset form state on closed→open; parent remounts or balance hydration must not wipe amount/PIN. */
+  const wasOpenRef = useRef(false)
+  const sessionIdRef = useRef(0)
+  const amountTouchedRef = useRef(false)
 
   const loadAuth = useCallback(async (): Promise<boolean> => {
     setAuthLoading(true)
@@ -128,13 +135,25 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
       }
       setAuth({ authorizationActive: false, mappedUsername: linkedUsername || null, hasMapping: false })
       return false
+    } catch {
+      setAuth({ authorizationActive: false, mappedUsername: linkedUsername || null, hasMapping: false })
+      return false
     } finally {
       setAuthLoading(false)
     }
   }, [linkedUsername])
+  loadAuthRef.current = loadAuth
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    // Re-entry while already open (parent re-render / remount with open still true): keep form.
+    if (wasOpenRef.current) return
+    wasOpenRef.current = true
+    sessionIdRef.current += 1
+    amountTouchedRef.current = false
     setMsg(null)
     setQuote(null)
     setConsentChecked(false)
@@ -144,8 +163,11 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     setPinInput("")
     setPinConfirm("")
     quoteSeq.current += 1
-    setAmountStr(maxPi > 0 ? String(Number(maxPi.toFixed(7))) : "")
-    void loadAuth()
+    intentRef.current = null
+    const openingBalance = latestMaxPiRef.current
+    setAmountStr(openingBalance > 0 ? String(Number(openingBalance.toFixed(7))) : "")
+    void loadAuthRef.current?.()
+    const sessionAtOpen = sessionIdRef.current
     ;(async () => {
       try {
         const res = await fetch("/api/identity/withdrawal-pin", {
@@ -153,19 +175,30 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           cache: "no-store",
           headers: { Accept: "application/json" },
         })
+        if (sessionAtOpen !== sessionIdRef.current) return
         const body = (await res.json().catch(() => null)) as { configured?: boolean } | null
         if (res.ok) setPinConfigured(body?.configured === true)
         else setPinConfigured(false)
       } catch {
-        setPinConfigured(false)
+        if (sessionAtOpen === sessionIdRef.current) setPinConfigured(false)
       }
     })()
-  }, [open, maxPi, loadAuth])
+  }, [open])
+
+  // When balance hydrates after open and user has not typed yet, seed Available once.
+  useEffect(() => {
+    if (!open || amountTouchedRef.current) return
+    if (maxPi > 0 && (!amountStr || amountStr === "0" || amountStr === "0.00")) {
+      setAmountStr(String(Number(maxPi.toFixed(7))))
+    }
+  }, [open, maxPi, amountStr])
 
   const amountPi = useMemo(() => {
     const n = Number(amountStr)
     if (!Number.isFinite(n) || n <= 0) return 0
-    return Math.min(n, maxPi || n)
+    // Do not clamp typed amount to a still-hydrating maxPi (0) — that zeros the field while typing.
+    if (maxPi > 0) return Math.min(n, maxPi)
+    return n
   }, [amountStr, maxPi])
 
   const feePreview = useMemo(() => {
@@ -456,9 +489,24 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
       aria-modal="true"
       aria-label="Withdraw Pi"
       data-pi-withdraw-sheet
+      data-phase4-withdraw-stable="1"
+      onClick={(e) => {
+        // Only backdrop closes; never close when interacting with the sheet (keyboard, inputs).
+        if (e.target === e.currentTarget) onClose()
+      }}
     >
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[1] flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-card shadow-2xl sm:rounded-3xl">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        aria-label="Close"
+        onClick={onClose}
+        tabIndex={-1}
+      />
+      <div
+        className="relative z-[1] flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-card shadow-2xl sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white">
@@ -494,12 +542,24 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               </button>
             </div>
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              min={0}
-              step="any"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={amountStr}
-              onChange={(e) => setAmountStr(e.target.value)}
+              onChange={(e) => {
+                amountTouchedRef.current = true
+                // Allow only digits and one decimal point — avoid mobile form quirks from type=number.
+                const raw = e.target.value.replace(/[^\d.]/g, "")
+                const parts = raw.split(".")
+                const cleaned =
+                  parts.length <= 1 ? raw : `${parts[0]}.${parts.slice(1).join("").slice(0, 7)}`
+                setAmountStr(cleaned)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.preventDefault()
+              }}
               className="mt-1.5 w-full rounded-2xl border border-border/70 bg-background px-4 py-3 text-lg font-bold tabular-nums text-foreground outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
               placeholder="0.00"
               aria-label="Withdrawal amount in Pi"

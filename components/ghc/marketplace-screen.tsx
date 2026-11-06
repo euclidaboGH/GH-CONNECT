@@ -2296,12 +2296,12 @@ export function MarketplaceScreen({
 
   return (
     <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
-      <header className="flex shrink-0 flex-col gap-2 border-b border-border/50 px-2.5 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
+      <header className="flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-2.5 pb-1.5 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onBack}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Back"
           >
             <ArrowLeft size={18} />
@@ -2312,7 +2312,7 @@ export function MarketplaceScreen({
               {msg("buySellSubtitle")}
             </p>
           </div>
-          <span className="gh-icon-tile flex h-10 w-10 items-center justify-center rounded-2xl" aria-hidden>
+          <span className="gh-icon-tile flex h-8 w-8 items-center justify-center rounded-xl" aria-hidden>
             <ShoppingBag size={18} />
           </span>
         </div>
@@ -2334,7 +2334,7 @@ export function MarketplaceScreen({
                 setBucket(chip.id)
                 if (chip.id === "browse") setShowCategories(true)
               }}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
                 bucket === chip.id
                   ? "bg-[var(--gh-green)] text-white shadow-sm"
                   : "bg-muted text-foreground hover:bg-muted/80"
@@ -2350,7 +2350,7 @@ export function MarketplaceScreen({
               setBucket("browse")
               setShowCategories((v) => !v)
             }}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
               showCategories && bucket === "browse"
                 ? "bg-card text-foreground ring-1 ring-border shadow-sm"
                 : "bg-muted text-foreground hover:bg-muted/80"
@@ -2366,7 +2366,7 @@ export function MarketplaceScreen({
               setSearchFocused(true)
               requestAnimationFrame(() => searchRef.current?.focus())
             }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-[12px] font-bold text-foreground hover:bg-muted/80"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[11px] font-bold text-foreground hover:bg-muted/80"
           >
             <Search size={14} aria-hidden />
             {msg("searchListings")}
@@ -2374,12 +2374,6 @@ export function MarketplaceScreen({
         </div>
 
         
-        <SurfaceIntro
-          kicker="Commerce"
-          title="Browse, sell, and track orders"
-          body="Orders and listing fees settle on this flow. Wallet keeps PI/GHC balances and History."
-          tone="emerald"
-        />
 {bucket === "browse" ? (
           <>
             <label className="relative block w-full">

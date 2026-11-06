@@ -703,7 +703,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             One-time Pi payout consent and fee preview happen when you tap Withdraw — not as separate buttons here.
           </p>
         ) : null}
-        {/* Single primary control: opens PiWithdrawSheet (consent + amount + PIN + submit). */}
+        {/* Single primary control — hide when compact (wallet rail already owns the CTA). */}
+        {!compact ? (
         <button
           type="button"
           onClick={() => {
@@ -719,6 +720,11 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         >
           Withdraw
         </button>
+        ) : (
+          <p className="text-center text-[11px] text-muted-foreground" data-compact-withdraw-hint>
+            Use <span className="font-semibold text-foreground">Withdraw</span> on the Pi rail above — one path for amount, consent, PIN and submit.
+          </p>
+        )}
         <p className="text-center text-[10px] text-muted-foreground">
           3% fee is calculated in the withdraw sheet. Manage payout consent in Settings if you need to revoke.
         </p>

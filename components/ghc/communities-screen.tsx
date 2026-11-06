@@ -1214,7 +1214,7 @@ export function CommunitiesScreen() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={msg("searchCommunity")}
                 aria-label={msg("searchCommunity")}
-                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                className="h-8 w-full rounded-lg border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
                 <button
@@ -1229,7 +1229,7 @@ export function CommunitiesScreen() {
             </div>
 
             <div
-              className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+              className="mt-1 flex gap-1 rounded-xl border border-border/50 bg-muted/50 p-0.5"
               role="tablist"
               aria-label="Community directory"
             >
@@ -1238,7 +1238,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "my"}
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -1252,7 +1252,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "discover"}
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"

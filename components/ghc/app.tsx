@@ -220,6 +220,7 @@ Toast.displayName = "Toast"
 /** Canonical primary shell navigation — secondary social surfaces remain reachable from Home/Profile. */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
+  { id: "discover", icon: Compass, label: "Discover" },
   { id: "messages", icon: MessagesSquare, label: "Messages" },
   { id: "communities", icon: Users, label: "Communities" },
   { id: "cart", icon: ShoppingCart, label: "Cart" },
@@ -1341,7 +1342,7 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon }) => {
-            const localizedLabel = getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
+            const localizedLabel = id === "discover" ? "Discover" : getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
             const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button
