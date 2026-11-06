@@ -1,3 +1,3 @@
-export const APP_RELEASE_VERSION = "0.330.4"
+export const APP_RELEASE_VERSION = "0.330.8"
 export const APP_RELEASE_SUMMARY =
-  "0.330.4: Phase 3 social-first profile and Personal Dashboard architecture. Moves professional identity, discovery signals, identity overview, achievements, pioneer identity and profile completion into the private account dashboard; keeps the profile focused on social identity, relationships and durable timeline; adds accessible dashboard dismissal, background scroll locking and safe-area-aware scrolling. Preserves canonical identity hydration, reputation authority, wallet and GHC boundaries. No database migration or production operation."
+  "0.330.8: Phase 4–5 carry-forward — Pi withdraw form open-transition stability, package/lock/app-release version sync, Phase 9 membership release gates green, production readiness gate + CI. No new financial migrations. Preserves membership session integrity (abortable refresh, sequence fencing, no cross-account stale entitlement). Testnet-only A2U settlement remains operator-owned."

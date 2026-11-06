@@ -238,9 +238,12 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
 
-    // Hydrate a read-only snapshot for the sheet. Do NOT clear existing values on every
-    // effect re-run — forcing availablePi→null mid-entry wiped the form and contributed
-    // to navigation instability. Quote + withdrawal APIs remain authoritative.
+    // Never carry a previous sheet's withdrawable snapshot into a new session.
+    // This endpoint is read-only; the quote and withdrawal APIs remain authoritative.
+    // Sheet form state is independently guarded (wasOpenRef / amountTouchedRef).
+    setPiWithdrawAvailable(null)
+    setPiWithdrawUser(null)
+
     ;(async () => {
       try {
         const res = await fetch("/api/economy/earnings/withdrawable", {
