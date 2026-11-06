@@ -36,14 +36,21 @@ export function useIntersectionObserver(ref: RefObject<HTMLElement | null>) {
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
+    const target = ref.current
+    if (!target) return
+    // Older Android System WebViews and embedded Pi Browser versions may not
+    // expose IntersectionObserver. Prefer loading over leaving content hidden.
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true)
+      return
+    }
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
+      if (entry?.isIntersecting) {
         setIsVisible(true)
         observer.unobserve(entry.target)
       }
-    })
-
-    if (ref.current) observer.observe(ref.current)
+    }, { rootMargin: "160px 0px" })
+    observer.observe(target)
     return () => observer.disconnect()
   }, [ref])
 

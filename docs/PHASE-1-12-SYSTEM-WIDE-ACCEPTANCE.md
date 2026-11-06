@@ -5,11 +5,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.329.0` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.330.1` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.329.0)
+## Current audit status (v0.330.1)
 
 - Phase 7 Wallet source implementation is closed in 0.320.0; dedicated Wallet entry contract: 14/14. External Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. This remains a read-only snapshot; consent, quote, withdrawal execution, GHC ledger and provider authorities are unchanged.
 - Phase 8 Rewards source implementation is closed in 0.323.0. It includes bounded account-scoped snapshots, authenticated GHC ledger history/search/filtering, server-authoritative daily claims and seven durable server-verified idempotent non-financial mission achievement unlocks. Dedicated Phase 8 contracts pass 18/18, 20/20, 15/15 and 24/24. Mission GHC issuance remains disabled; the new additive migration is REVIEW_REQUIRED and unapplied. Node 24, Testnet, browser/device and operator acceptance remain production blockers.
@@ -233,3 +233,13 @@ Phase 9 Membership now requires exact durable Pi provider, PI currency, membersh
 ## 0.329.0 current-increment note
 
 Phase 10 tightens the service worker to cache only explicitly allowlisted public static assets. Navigations, authenticated documents, Next.js RSC responses, all API routes and private media remain network-only. Feed and Story speculative media prefetch now respects Data Saver, constrained connections and the local reduced-data preference, rechecks before work and applies strict caps. The reconnect banner cleans up its timer. Phase 10 focused checks pass 14/14 settings/performance, 17/17 resilience and 11/11 service-worker policy tests. This remains source-only; Node 24.15.0 typecheck/lint/build, browser/device and operational acceptance remain outstanding.
+
+
+## 0.330.0 current-increment note
+
+Phase 10 adds lazy-loaded Settings subsections, preserves signed media URLs without arbitrary query mutation, holds pagination locks through asynchronous page loads and falls back to visible content on WebViews without IntersectionObserver. Focused Phase 10 navigation/media checks pass 9/9 and runtime assertions pass 7/7; the 0.329.0 service-worker policy and resilience checks remain passing. Node 24.15.x dependency-backed typecheck/lint/build and Android/Pi Browser device acceptance remain pending. Production remains NOT APPROVED.
+
+
+## 0.330.1 current-increment note
+
+The 0.330.1 patch corrects stale CI regression contracts so the PI Withdraw action, emerald own-story treatment, package/lockfile/manifest version and Phase 10 active roadmap marker are checked against the current source. The 0.330.0 navigation/media changes and 0.329.0 privacy-safe service-worker policy remain in the baseline. These checks are source evidence only. Node 24.15.0 dependency install, TypeScript, ESLint, production build, disposable database, Pi Testnet and browser/device/operator acceptance remain outstanding; production remains NOT APPROVED.

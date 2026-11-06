@@ -35,8 +35,8 @@ const checks = [
   ['Authenticated lifecycle API never returns financial amounts', lifecycleRoute.includes('auth.userId') && !lifecycleRoute.includes('amount:') && !lifecycleRoute.includes('row.amount') && lifecycleRoute.includes('no-store')],
   ['Expiry sweep is operator-gated and bounded', expiryRoute.includes('assertOperatorKey') && expiryRoute.includes('rawLimit > 2_000') && expiryRoute.includes('ghc_membership_expire_due')],
   ['Migration is classified for operator review, not auto-application', read('scripts/generate-migration-inventory.mjs').includes('20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql')],
-  ['Release and package metadata are synchronized', pkg.version === '0.329.0' && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes('APP_RELEASE_VERSION = "0.329.0"')],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes('| 10 | Settings and platform performance | Active: 0.329.0')],
+  ['Release and package metadata are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
+  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

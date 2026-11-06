@@ -1,15 +1,15 @@
 # GreenHaven — Project Truth
 
-**Current source version:** `0.329.0`
+**Current source version:** `0.330.1`
 **Current status:** **NOT APPROVED** for production release.
 
-## 0.329.0 — Phase 10 Settings and platform performance increment
+## 0.330.1 — Phase 10 CI regression-contract repair
 
-Settings exposes device capability diagnostics and a device-local reduced-data preference. Shared async memoization uses bounded LRU eviction, TTL expiry and in-flight request deduplication. Service-worker caching is now restricted to an explicit public-static allowlist; navigation documents, authenticated pages, RSC payloads, all API routes and private media remain network-only. Feed and Story media prefetch respects local/browser Data Saver and constrained network signals, rechecks before execution and enforces strict limits. Reconnect feedback timer cleanup is covered. This is a source-level UX/performance increment only; no database migration, Pi payment, GHC ledger, entitlement, or production authority is changed. Phase 9 Membership acceptance remains open, and the release remains NOT APPROVED until supported-runtime, database, Testnet, browser/device and operator gates pass.
+The release retains the 0.330.0 Settings/media/navigation work and corrects stale regression contracts: PI wallet action validation matches the implemented dedicated Withdraw action, Stories own-story ring validation matches the actual emerald treatment, and the legacy Phase 5 release-readiness check dynamically validates the current package/manifest versions rather than hardcoding 0.312.0. Generic image URL mutation is removed to preserve signed storage/CDN URLs and private media facade identifiers. Infinite-scroll locks now span asynchronous page loads, preventing duplicate pagination requests; older embedded WebViews without IntersectionObserver receive visible content. The 0.329.0 public-static service-worker policy and reduced-data prefetch controls remain in force. This is a source-level UX/performance increment only; no database migration, Pi payment, GHC ledger, entitlement, or production authority is changed. Phase 9 Membership acceptance remains open, and the release remains NOT APPROVED until supported-runtime, database, Testnet, browser/device and operator gates pass.
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.329.0`.
+- Package and lockfile version: `0.330.1`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`.
 - Canonical Supabase migrations: **189** SQL files.
 - Duplicate migration numeric prefixes: **0**.
@@ -255,6 +255,14 @@ Server-authoritative membership tier checks now protect catalog features before 
 
 Strict Pi intent discrimination now protects activation, payment completion, fulfillment, recovery and payment-history reconciliation. Exact provider/currency/purpose/non-empty provider payment ID/completed state are required. Production Pi grants use the row-locked idempotent RPC with post-write confirmation; payment/fulfillment returns retryable pending status if entitlement is not confirmed. The generic GHC ledger-spend route also blocks premium boost/tool purposes until durable effects exist. The follow-up SQL renewal guard is REVIEW_REQUIRED and unapplied. Phase 9 source implementation is complete; external acceptance remains pending and no production approval is implied.
 
+
+
+## 0.330.1 — Phase 10 navigation and media reliability
+- Settings security/compliance/Pi capability/passkey/account-data panels are lazy-loaded with section-specific accessible fallbacks.
+- Generic image URL mutation is removed so signed storage/CDN URLs and private media facade identifiers are preserved exactly.
+- Infinite-scroll locks span the asynchronous page load; older WebViews without IntersectionObserver show content rather than leaving it deferred indefinitely.
+- Focused navigation/media source gate: 9/9; runtime media/pagination tests: 7/7.
+- No migration, Pi transaction, GHC debit, entitlement issuance or financial-authority change. Node 24.15.x build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
 ## 0.329.0 — Phase 10 resilience and media efficiency
 - Service worker caches only explicitly allowlisted public static assets; navigations, API, media facades and personalized responses are network-only.

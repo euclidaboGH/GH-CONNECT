@@ -1,9 +1,15 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.329.0`
+**Current source version:** `0.330.1`
 - Phase 23 (0.309.0): migration audit hardening separates reservation expiry cleanup from locked order snapshot reads. Application reads explicitly run cleanup and fail closed; transition RPC snapshots no longer sweep unrelated rows while holding an order lock. Added whole-migration SECURITY DEFINER search_path audit. No financial settlement behavior is added.
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
+
+### 0.330.1 — CI regression-contract repair
+Repairs stale source checks without weakening runtime behavior: the dual-asset wallet contract now verifies the implemented dedicated PI Withdraw action, the Stories contract validates the actual emerald own-story tile/avatar ring, and the legacy Phase 5 release-readiness check compares the manifest dynamically with the current package version instead of pinning 0.312.0. Retains the safe `.env.example` template and fail-closed payment defaults. No application, database, Pi, GHC, payment or entitlement authority changes.
+
+### 0.330.0 — Phase 10 navigation and media reliability
+Reduces the initial Settings route payload by lazy-loading security, compliance, Pi capability, passkey and account-data subsections. Removes generic image URL query mutation so signed storage/CDN URLs and private media facade identifiers remain byte-for-byte intact. Infinite-scroll request locking now lasts until the asynchronous page load settles, preventing duplicate pagination requests. Older embedded WebViews without IntersectionObserver receive visible content instead of hidden/unloaded sections. Adds runtime and source regression gates; no financial authority or migration behavior changes. Browser/device and supported-runtime acceptance remain open.
 
 ### 0.329.0 — Phase 10 privacy-safe caching and adaptive media loading
 Restricts service-worker storage to an explicit allowlist of public static assets. Navigation documents, authenticated pages, Next.js RSC responses, all API routes and private media are network-only; the previous broad same-origin cache path and cached-homepage fallback are removed. Feed and Story media prefetch now respects device-local reduced-data preference, browser Data Saver and constrained network signals, rechecks eligibility immediately before work, and caps speculative media work. Reconnect feedback clears its timer on unmount. Added executable service-worker policy tests and 15 source resilience checks. Phase 9 acceptance remains open; no migration or financial operation is authorized.

@@ -39,17 +39,19 @@ import { getProductMessage } from "@/lib/i18n/product"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
-import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
-import { AccountSecuritySignals } from "@/components/ghc/account-security-signals"
-import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
-import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
-import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
-import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
-import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
-import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
-import { AccountDataControls } from "@/components/ghc/account-data-controls"
-import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
-import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+// Settings subsections are separate chunks so the initial Settings route does
+// not download security, compliance, Pi capability and passkey panels eagerly.
+const ActiveSessionsPanel = lazy(() => import("@/components/ghc/active-sessions-panel").then((m) => ({ default: m.ActiveSessionsPanel })))
+const AccountSecuritySignals = lazy(() => import("@/components/ghc/account-security-signals").then((m) => ({ default: m.AccountSecuritySignals })))
+const PiPayoutAuthorizationCard = lazy(() => import("@/components/ghc/pi-payout-authorization-card").then((m) => ({ default: m.PiPayoutAuthorizationCard })))
+const PiPlatformCapabilitiesCard = lazy(() => import("@/components/ghc/pi-platform-capabilities-card").then((m) => ({ default: m.PiPlatformCapabilitiesCard })))
+const PiListingReadinessCard = lazy(() => import("@/components/ghc/pi-listing-readiness-card").then((m) => ({ default: m.PiListingReadinessCard })))
+const CompliancePostureCard = lazy(() => import("@/components/ghc/compliance-posture-card").then((m) => ({ default: m.CompliancePostureCard })))
+const ClaimReadinessCard = lazy(() => import("@/components/ghc/claim-readiness-card").then((m) => ({ default: m.ClaimReadinessCard })))
+const PasskeysPanel = lazy(() => import("@/components/ghc/passkeys-panel").then((m) => ({ default: m.PasskeysPanel })))
+const AccountDataControls = lazy(() => import("@/components/ghc/account-data-controls").then((m) => ({ default: m.AccountDataControls })))
+const FoundationStatusCard = lazy(() => import("@/components/ghc/foundation-status-card").then((m) => ({ default: m.FoundationStatusCard })))
+const PiStakingStatusNote = lazy(() => import("@/components/ghc/pi-supporter-badge").then((m) => ({ default: m.PiStakingStatusNote })))
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { getPrivacyHealth } from "@/lib/privacy-health"
 import { matchSettingsSearch } from "@/lib/settings-search"
@@ -446,7 +448,7 @@ export function SettingsScreen({
           <h2 className="text-[16px] font-bold">Pi payout authorization</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
-          <PiPayoutAuthorizationCard />
+          <Suspense fallback={<SectionFallback label="Pi payout authorization" />}><PiPayoutAuthorizationCard /></Suspense>
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
             GreenHaven never moves Pi without this consent. Authorization is stored server-side and checked on every withdrawal request. Revoking blocks future payouts only.
           </p>
@@ -489,10 +491,10 @@ export function SettingsScreen({
           <p className="text-[12px] text-muted-foreground">Version {APP_RELEASE_VERSION}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
-          <FoundationStatusCard />
+          <Suspense fallback={<SectionFallback label="Platform status" />}><FoundationStatusCard /></Suspense>
           <div className="rounded-xl border border-border bg-muted/30 p-3">
             <p className="text-[12px] font-bold text-foreground">Pi Directory staking</p>
-            <PiStakingStatusNote className="mt-1" />
+            <Suspense fallback={<span className="text-xs text-muted-foreground">Loading Pi status…</span>}><PiStakingStatusNote className="mt-1" /></Suspense>
           </div>
           <div className="space-y-4 text-[15px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.about}</div>
         </div>
@@ -669,15 +671,15 @@ export function SettingsScreen({
           </p>
 
           {/* Phase 5: server sessions (separate from local App Lock) */}
-          <ActiveSessionsPanel />
-          <div className="mt-3"><AccountSecuritySignals /></div>
-          <div className="mt-3"><PiPlatformCapabilitiesCard /></div>
-          <div className="mt-3"><PiListingReadinessCard /></div>
-          <div className="mt-3"><CompliancePostureCard /></div>
-          <div className="mt-3"><ClaimReadinessCard /></div>
+          <Suspense fallback={<SectionFallback label="Active sessions" />}><ActiveSessionsPanel /></Suspense>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Security signals" />}><AccountSecuritySignals /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Pi capabilities" />}><PiPlatformCapabilitiesCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Pi listing readiness" />}><PiListingReadinessCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Compliance posture" />}><CompliancePostureCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Claim readiness" />}><ClaimReadinessCard /></Suspense></div>
 
           {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
-          <PasskeysPanel />
+          <Suspense fallback={<SectionFallback label="Passkeys" />}><PasskeysPanel /></Suspense>
         </div>
       </div>
     )
@@ -863,7 +865,7 @@ export function SettingsScreen({
             </div>
           </div>
 
-          <AccountDataControls />
+          <Suspense fallback={<SectionFallback label="Account data controls" />}><AccountDataControls /></Suspense>
 
           {/* Blocked users */}
           <div className="pt-2">

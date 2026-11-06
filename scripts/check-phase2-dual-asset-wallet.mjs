@@ -13,7 +13,7 @@ const checks = [
   ['PI withdrawable distinction', /withdrawable · fees and eligibility apply/.test(balance)],
   ['never summed copy', /PI and GHC are never added together/.test(balance)],
   ['actions accept assetRail', /assetRail\?: "ghc" \| "pi"/.test(actions) || /assetRail = "ghc"/.test(actions)],
-  ['PI action label Withdraw', /isPi \? "Withdraw" : "Send"/.test(actions)],
+  ['PI rail exposes a dedicated Withdraw action', /id: "withdraw",[\s\S]*?label: "Withdraw"/.test(actions) && /onClick: onSend/.test(actions)],
   ['screen passes assetRail to actions', /assetRail=\{assetRail\}/.test(screen)],
   ['PI tools expanded when PI selected', /assetRail === "pi"/.test(screen) && /UnifiedEarningsDashboard/.test(screen)],
   ['PI tools collapsed when GHC selected', /PI earnings & cashback/.test(screen)],

@@ -29,8 +29,8 @@ const checks = [
   ['Server catalog continues to determine membership charges', activate.includes('getMembershipGhcPrice(tier, paidMonths).chargeGhc') && activate.includes('getMembershipPiPrice(tier, paidMonths).chargePi')],
   ['Pi activation requires a durable completed/fulfilled intent and exact product id', activate.includes('intent.status !== "COMPLETED" && intent.status !== "FULFILLED"') && activate.includes('productId !== expected')],
   ['Membership UI status hydration has a bounded abort timeout', screen.includes('window.setTimeout(() => controller.abort(), 8_000)') && screen.includes('signal: controller.signal')],
-  ['Release metadata and lockfile are synchronized', pkg.version === '0.329.0' && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes('APP_RELEASE_VERSION = "0.329.0"')],
-  ['Phase 9 source is complete while acceptance remains open and Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes('| 10 | Settings and platform performance | Active: 0.329.0')],
+  ['Release metadata and lockfile are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
+  ['Phase 9 source is complete while acceptance remains open and Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

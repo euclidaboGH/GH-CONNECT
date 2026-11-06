@@ -13,7 +13,7 @@ const ok = (label, cond) => {
 const t = fs.readFileSync(path.join(root, "components/ghc/profile-story-section.tsx"), "utf8")
 ok("circular ring rail gradient unviewed", t.includes("from-pink-500 via-amber-400 to-emerald-500"))
 ok("seen stories muted ring", t.includes("bg-muted-foreground/25"))
-ok("own story emerald ring", t.includes("from-emerald-500 via-teal-400 to-emerald-600"))
+ok("own story emerald ring", t.includes("from-emerald-400 via-teal-300 to-emerald-600") && t.includes("border-emerald-500/70 bg-muted ring-2 ring-emerald-500/25"))
 ok("Create CTA remains available through the single owned-story tile", t.includes("Create story") && t.includes("openCreator()"))
 ok("openStory starts the first unseen story in each creator sequence", t.includes("openStory(ownStories.find((story) => !isStorySeen(story)) || ownStories[0])") && t.includes("openStory(firstUnseen || group[0])"))
 ok("empty state be first", t.includes("Be first"))

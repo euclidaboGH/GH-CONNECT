@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.329.0` (2026-11-06)
+Release: `0.330.1` (2026-11-06)
 
 The 0.312.0 source baseline includes Phase 20 payout controls, Phase 21 private-surface durable abuse controls, Phase 22 atomic marketplace order transitions, Phase 23 migration/lock-scope hardening, Phase 24 migration-classification/operator-guide synchronization, and Phase 26 wallet ledger resilience/premium wallet presentation. The canonical inventory contains 189 migrations: 117 REQUIRED candidates, 69 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL, and 2 PROPOSAL. All classifications remain source-review states; no migration is claimed applied. Runtime/build and operator acceptance remain pending.
 
@@ -216,3 +216,12 @@ Completed-payment membership activation, fulfillment, recovery and payment-histo
 ## 0.329.0 Phase 10 privacy-safe caching and media efficiency
 
 Service-worker caching now uses an explicit public-static allowlist. Navigation documents, authenticated pages, Next.js RSC payloads, all API routes and private media are network-only; install-time precache also validates response cache headers. Feed and Story media prefetch follows reduced-data/Data Saver and constrained-network signals, rechecks at execution time and is strictly bounded. Focused Phase 10 checks pass 14/14 settings/performance, 17/17 resilience and 11/11 executable service-worker policy assertions. This is source-level verification only. Supported Node 24.15.0 typecheck/lint/build, browser/device testing, disposable PostgreSQL, Pi Testnet and explicit operator acceptance remain required. Production remains NOT APPROVED.
+
+## Current source baseline — 0.330.1 (2026-11-06)
+
+Phase 10 navigation/media reliability adds lazy-loaded Settings subsections, signed media URL preservation, async pagination locking and an IntersectionObserver fallback for embedded WebViews. Focused Phase 10 checks pass 9/9 source assertions and 7/7 runtime assertions. The supported Node 24.15.x dependency-backed build and real-device acceptance remain required. This source baseline does not change the production status: NOT APPROVED.
+
+
+### 0.330.1 CI regression-contract patch
+
+The Phase 10 patch release corrects stale source regression assertions and keeps package, lockfile, app release, project truth and migration manifest synchronized. The CI contract changes do not alter runtime payment or entitlement behavior. Release remains NOT APPROVED for production: supported-runtime install/build, disposable PostgreSQL, Pi Testnet, browser/device and operator acceptance are still required.

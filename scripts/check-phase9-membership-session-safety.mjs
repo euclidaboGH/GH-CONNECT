@@ -20,9 +20,9 @@ const checks = [
   ['Paid status requires active=true and a future finite expiry', screen.includes('e.active !== true') && screen.includes('Number(expiresAt) <= Date.now()')],
   ['Timeouts and failed reads clear stale paid status', screen.includes('setServerStatusState("unavailable")') && screen.includes('setServerStatus(null)')],
   ['Membership store remains no-store on authoritative status endpoint', read('app/api/membership/status/route.ts').includes('Cache-Control') && read('app/api/membership/status/route.ts').includes('no-store')],
-  ['Package and lockfile versions are synchronized', pkg.version === '0.329.0' && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version],
-  ['Release metadata retains session-integrity guarantees in the current increment', release.includes('APP_RELEASE_VERSION = "0.329.0"') && release.includes('session integrity')],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes('| 10 | Settings and platform performance | Active: 0.329.0')],
+  ['Package and lockfile versions are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version],
+  ['Release metadata retains session-integrity guarantees in the current increment', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && release.includes('session integrity')],
+  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

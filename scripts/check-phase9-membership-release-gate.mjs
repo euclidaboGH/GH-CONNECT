@@ -13,7 +13,7 @@ const strictPiPhase = read('docs/PHASE-9-MEMBERSHIP-PI-INTENT-SECURITY-0.327.0.m
 const renewalMigration = '20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql'
 const strictPiMigration = '20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql'
 const checks = [
-  ['package and lockfile are 0.329.0 and synchronized', pkg.version === '0.329.0' && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version],
+  ['package and lockfile versions are synchronized with the active release', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version],
   ['Node 24.15.0 remains the supported build runtime', pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0'],
   ['Phase 9 contracts are registered in prebuild', pkg.scripts.prebuild.includes('check-phase9-membership-release-gate.mjs') && pkg.scripts.prebuild.includes('check-phase9-membership-experience.mjs') && pkg.scripts.prebuild.includes('check-phase9-pi-intent-security.mjs') && pkg.scripts.prebuild.includes('test-phase9-pi-intent-contract.mjs')],
   ['Phase 9 contracts are registered in static verification', pkg.scripts['verify:static'].includes('check-phase9-membership-release-gate.mjs') && pkg.scripts['verify:static'].includes('check-phase9-membership-experience.mjs') && pkg.scripts['verify:static'].includes('check-phase9-pi-intent-security.mjs') && pkg.scripts['verify:static'].includes('test-phase9-pi-intent-contract.mjs')],
@@ -28,7 +28,7 @@ const checks = [
   ['GHC and Pi remain separate payment rails', /GHC and Pi remain separate rails and ledgers/i.test(worklog) && /GHC and Pi pricing\/settlement authorities remain separate/i.test(truth)],
   ['72-hour grace is continuity-only and does not grant access', /not\*\* preserve premium access/i.test(phase) && /no grace access/i.test(phase)],
   ['Production acceptance remains explicitly pending', /not production approval/i.test(phase) && /production approval remains pending/i.test(truth)],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes('| 10 | Settings and platform performance | Active: 0.329.0')],
+  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

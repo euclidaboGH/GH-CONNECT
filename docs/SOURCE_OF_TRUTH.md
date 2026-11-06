@@ -1,6 +1,6 @@
 # GreenHaven — Source of Truth & Prompt Execution Rules
 
-**Current source version:** `0.329.0`
+**Current source version:** `0.330.1`
 **Status:** source-audited; NOT APPROVED as a production release until the explicit runtime, database, provider and operator gates are completed.
 
 ## Authority order
@@ -29,10 +29,10 @@ For implementation prompts:
 
 ## Current release facts
 
-- Current source release: `0.329.0`.
+- Current source release: `0.330.1`.
 - Canonical build prompt context: `docs/CURRENT_BUILD_CONTEXT.md`.
 
-- Package version: `0.329.0`.
+- Package version: `0.330.1`.
 - Global i18n: `lib/i18n/index.ts`; locale preferences are device-persisted, formatting uses Intl, RTL is locale/script-driven, and English is the only approved UI translation bundle at this release.
 - Node requirement: `^24.15.0`; `.nvmrc` is `24.15.0`.
 - 0.295.0 includes partial Hausa, Igbo, Yoruba and Nigerian Pidgin preview translations across navigation, messaging inbox chrome, community discovery, marketplace navigation/search, settings discovery, feed filters/personalisation, discovery categories/offline states and home greetings. It does not claim full application translation or native-speaker approval.
@@ -133,11 +133,11 @@ Order snapshot reads no longer perform global reservation cleanup inside row-loc
 
 Use `docs/PHASE-9-MEMBERSHIP-PI-INTENT-SECURITY-0.327.0.md` as the current Membership payment-rail change record. All completed-payment membership grant/recovery paths require exact Pi provider, PI currency, membership purpose, non-empty provider payment ID and completed/fulfilled status. Production Pi grants use the row-locked idempotent renewal RPC with authoritative post-write confirmation; pending entitlements return retryable 503 responses. Both utility-spend routes fail closed for boost/tool effects until durable activation exists. The follow-up SQL migration remains REVIEW_REQUIRED and unapplied.
 
-## Phase 10 current increment (0.329.0)
+## Phase 10 current increment (0.330.1)
 
-Use `docs/UPGRADE-WORKLOG-0.329.0.md` for the Settings and platform-performance source change. The Performance & data settings screen reports browser-provided capability hints and exposes a device-local reduced-data preference. Service-worker caching is restricted to public static assets; navigation, API and private media remain network-only. Feed and Story media prefetch follows reduced-data signals and strict bounds. It does not change account state or payment/entitlement authority. Phase 9 Membership source implementation is complete; external acceptance remains open.
+Use `docs/PHASE-10-NAVIGATION-MEDIA-RELIABILITY-0.330.1.md` for the current increment. Settings security, compliance, Pi capability, passkey and account-data subsections are lazy-loaded. Generic image URL mutation is removed to preserve signed storage/CDN URLs and private media facade identifiers; pagination locks span the complete asynchronous load; older embedded WebViews without IntersectionObserver receive visible content. The 0.329.0 public-static service-worker policy and reduced-data prefetch controls remain in force. No financial authority or migration behavior changes. Phase 9 Membership source implementation is complete; external acceptance remains open.
 
 
-## Phase 10 current increment (0.329.0)
+## Phase 10 current increment (0.330.1)
 
 Service-worker caching is restricted to explicitly allowlisted public static assets. Navigations, authenticated documents, Next.js RSC responses, all API paths and private media remain network-only. Feed and Story speculative media loading now observes device/browser reduced-data signals, rechecks before execution and enforces small limits. Offline reconnect feedback timer cleanup is covered. Executable policy tests and static resilience checks are wired into prebuild and static verification. Phase 9 Membership remains source-complete but awaits external acceptance.

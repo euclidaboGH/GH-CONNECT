@@ -77,47 +77,37 @@ export const mediaUrlCache = createLruCache<string>(100)
  */
 export function optimizedImageUrl(
   url: string | null | undefined,
-  width = 480
+  _width = 480
 ): string {
   if (!url) return "/placeholder.svg?height=320&width=320"
-  if (url.startsWith("data:") || url.startsWith("blob:")) return url
-  if (url.includes("dicebear.com") || url.includes("placeholder")) return url
-  try {
-    const u = new URL(
-      url,
-      typeof window !== "undefined" ? window.location.origin : "https://local"
-    )
-    if (!u.searchParams.has("w")) u.searchParams.set("w", String(width))
-    return u.toString()
-  } catch {
-    return url
-  }
+  // Preserve provider-issued URLs byte-for-byte. Adding a generic `w` query
+  // parameter can invalidate Supabase signatures, CDN signatures, or opaque
+  // media-facade identifiers. Real resizing belongs at a trusted image
+  // transformation endpoint that signs the complete transformation request.
+  return url
 }
 
 /** Debounced scroll handler factory (feed infinite load) */
 export function createScrollLoadMore(options: {
   thresholdPx?: number
-  onLoadMore: () => void
+  onLoadMore: () => void | Promise<unknown>
   isLoading?: () => boolean
   hasMore?: () => boolean
 }) {
-  const threshold = options.thresholdPx ?? 400
+  const threshold = Math.max(0, options.thresholdPx ?? 400)
   let locked = false
   return function onScroll(event: { currentTarget: HTMLElement }) {
-    if (locked) return
-    if (options.isLoading?.() || options.hasMore?.() === false) return
+    if (locked || options.isLoading?.() || options.hasMore?.() === false) return
     const el = event.currentTarget
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (remaining < threshold) {
-      locked = true
-      try {
-        options.onLoadMore()
-      } finally {
-        requestAnimationFrame(() => {
-          locked = false
-        })
-      }
-    }
+    if (remaining >= threshold) return
+    locked = true
+    // Keep the lock for the full async load. Releasing it on the next animation
+    // frame allowed rapid scroll events to enqueue duplicate page requests.
+    void Promise.resolve()
+      .then(() => options.onLoadMore())
+      .catch(() => undefined)
+      .finally(() => { locked = false })
   }
 }
 
