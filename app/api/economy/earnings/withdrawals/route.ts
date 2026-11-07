@@ -23,6 +23,21 @@ export async function POST(request: Request) {
   if (process.env.PI_EARNINGS_PAYOUT_REQUESTS_ENABLED !== "true" || process.env.PI_NETWORK !== "testnet") {
     return reply({ ok: false, error: "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED" }, 503)
   }
+  // Never reserve (lock) a user's available PI unless the Testnet executor that can
+  // settle or release that reservation is also enabled. Otherwise the requested
+  // amount is stranded in "reserved" and the user's genuinely earned balance
+  // (registration bonus, rewards, cashback) cannot be used.
+  if (
+    process.env.PI_EARNINGS_PAYOUT_EXECUTION_ENABLED !== "true" ||
+    process.env.PI_A2U_ENABLED !== "true" ||
+    process.env.PI_A2U_TESTNET_ONLY !== "true"
+  ) {
+    return reply({
+      ok: false,
+      error: "PI_EARNINGS_PAYOUT_EXECUTION_DISABLED",
+      message: "Withdrawals are not being processed yet. Your balance is untouched and stays available.",
+    }, 503)
+  }
   const parsed = await readBoundedJson(request, 8 * 1024)
   if (!parsed.ok) return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsed.value as { amountAtomic?: unknown; idempotencyKey?: unknown }

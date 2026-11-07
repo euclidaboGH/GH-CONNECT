@@ -14,6 +14,13 @@ import { Loader2, ShieldCheck, X, Wallet } from "lucide-react"
 import { apiRequest } from "@/lib/client/api-request"
 import { userFacingError } from "@/lib/ux/user-facing-errors"
 import { fetchWalletAuthorizationStatus, requestPiWalletConsent } from "@/lib/client/pi-wallet-consent"
+import {
+  atomicToPiString,
+  floorPiToAtomic,
+  formatPiAmount,
+  parsePiInput,
+  piInputMessage,
+} from "@/lib/wallet/pi-amount"
 
 type LimitHints = { availableAtomic?: number; minPayoutAtomic?: number; maxSinglePayoutAtomic?: number }
 
@@ -47,6 +54,9 @@ function humanizeApiError(code?: string | null, message?: string | null, hints?:
   if (c === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
     return "Withdrawal requests are not enabled on this deployment yet."
   }
+  if (c === "PI_EARNINGS_PAYOUT_EXECUTION_DISABLED") {
+    return "Withdrawals are not being processed yet. Your balance is untouched and stays available."
+  }
   if (c === "AMOUNT_REQUIRED" || c === "AMOUNT_TOO_SMALL") {
     return "Enter a valid Pi amount to withdraw."
   }
@@ -67,10 +77,10 @@ type AuthSnap = {
   hasMapping: boolean
 }
 
-const PI_SCALE = 10_000_000
+const PI_SCALE = 10_000_000 // must equal PI_ATOMIC_SCALE in lib/wallet/pi-amount.ts
 
 function floorToAtomic(pi: number): number {
-  return Math.floor(pi * PI_SCALE + 1e-12)
+  return floorPiToAtomic(pi)
 }
 
 function atomicToPi(atomic: number): number {
@@ -78,8 +88,7 @@ function atomicToPi(atomic: number): number {
 }
 
 function formatPi(n: number): string {
-  if (!Number.isFinite(n)) return "—"
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })
+  return formatPiAmount(n)
 }
 
 export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, onCompleted }: Props) {
@@ -169,8 +178,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     setPinStatusError(null)
     quoteSeq.current += 1
     intentRef.current = null
-    const openingBalance = latestMaxPiRef.current
-    setAmountStr(openingBalance > 0 ? String(Number(openingBalance.toFixed(7))) : "")
+    // Start empty: pre-filling the whole balance led users to reserve everything by accident.
+    // "Max" below remains one tap for anyone who wants to withdraw the full amount.
+    setAmountStr("")
     void loadAuthRef.current?.()
     const sessionAtOpen = sessionIdRef.current
     ;(async () => {
@@ -200,21 +210,17 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     })()
   }, [open])
 
-  // When balance hydrates after open and user has not typed yet, seed Available once.
-  useEffect(() => {
-    if (!open || amountTouchedRef.current) return
-    if (maxPi > 0 && (!amountStr || amountStr === "0" || amountStr === "0.00")) {
-      setAmountStr(String(Number(maxPi.toFixed(7))))
-    }
-  }, [open, maxPi, amountStr])
-
+  const parsedAmount = useMemo(() => parsePiInput(amountStr), [amountStr])
+  const amountError = amountStr.trim() && !parsedAmount.ok ? piInputMessage(parsedAmount.code) : null
   const amountPi = useMemo(() => {
-    const n = Number(amountStr)
-    if (!Number.isFinite(n) || n <= 0) return 0
+    if (!parsedAmount.ok) return 0
+    const n = parsedAmount.atomic / PI_SCALE
     // Do not clamp typed amount to a still-hydrating maxPi (0) — that zeros the field while typing.
     if (maxPi > 0) return Math.min(n, maxPi)
     return n
-  }, [amountStr, maxPi])
+  }, [parsedAmount, maxPi])
+
+  const overBalance = parsedAmount.ok && maxPi > 0 && parsedAmount.atomic > floorToAtomic(maxPi)
 
   const feePreview = useMemo(() => {
     if (amountPi <= 0) return null
@@ -553,9 +559,13 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               <button
                 type="button"
                 className="font-semibold text-violet-700 dark:text-violet-300"
-                onClick={() => setAmountStr(maxPi > 0 ? String(Number(maxPi.toFixed(7))) : "")}
+                onClick={() => {
+                  amountTouchedRef.current = true
+                  setAmountStr(maxPi > 0 ? atomicToPiString(floorToAtomic(maxPi)) : "")
+                }}
+                aria-label={`Use maximum available ${formatPi(maxPi)} Pi`}
               >
-                Available {formatPi(maxPi)} π
+                Max · {formatPi(maxPi)} π
               </button>
             </div>
             <input
@@ -580,7 +590,13 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               className="mt-1.5 w-full rounded-2xl border border-border/70 bg-background px-4 py-3 text-lg font-bold tabular-nums text-foreground outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
               placeholder="0.00"
               aria-label="Withdrawal amount in Pi"
+              aria-invalid={amountError || overBalance ? true : undefined}
             />
+            {amountError || overBalance ? (
+              <p className="mt-1.5 text-[11px] text-red-600 dark:text-red-400" role="alert">
+                {amountError ?? `You can withdraw up to ${formatPi(maxPi)} π. The amount will be capped.`}
+              </p>
+            ) : null}
           </div>
 
           {(feePreview || quote) && (

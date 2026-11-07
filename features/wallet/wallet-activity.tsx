@@ -41,7 +41,8 @@ export function TxRow({ tx, onOpen }: { tx: GhcTransaction; onOpen?: () => void 
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-3 border-b border-border/50 bg-card px-3.5 py-3.5 text-left transition last:border-b-0 hover:bg-muted/30 active:bg-muted/40"
+      aria-label={`${title}, ${positive ? "received" : "sent"} ${formatGhc(Math.abs(tx.amount))} GHC, ${statusLabel(tx.status || (tx.kind === "pending" ? "pending" : "posted")).text}`}
+      className="flex w-full min-h-11 items-center gap-3 border-b border-border/50 bg-card px-3.5 py-3.5 text-left transition last:border-b-0 hover:bg-muted/30 active:bg-muted/40"
     >
       <div
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${

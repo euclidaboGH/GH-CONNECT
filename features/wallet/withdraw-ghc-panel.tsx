@@ -6,6 +6,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { IdentityService } from "@/lib/identity/identity-service"
+import {
+  floorGhc,
+  ghcInputMessage,
+  ghcToPiPreview,
+  looksLikePiWalletAddress,
+  parseGhcInput,
+  withdrawalStatusLabel,
+} from "@/lib/wallet/ghc-amount"
 
 function newWithdrawalIdempotencyKey(): string {
   try {
@@ -93,22 +101,30 @@ export function WithdrawGhcPanel() {
   }, [load])
 
   const rate = quote?.ghcPerPi ?? 100
-  const amountNum = Number(ghcAmount)
-  const piPreview =
-    Number.isFinite(amountNum) && amountNum > 0 ? Math.round((amountNum / rate) * 1e8) / 1e8 : 0
+  const parsed = parseGhcInput(ghcAmount)
+  const amountNum = parsed.ok ? parsed.amount : 0
+  const piPreview = ghcToPiPreview(amountNum, rate)
+  const maxGhc = quote ? floorGhc(quote.withdrawableGhc) : 0
+  const amountError = ghcAmount.trim() && !parsed.ok ? ghcInputMessage(parsed.code) : null
+  const overWithdrawable = parsed.ok && quote ? amountNum > maxGhc : false
+  const minPi = quote?.minPi ?? 100
 
   const submit = async () => {
     if (!quote?.eligible) return
-    if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setError("Enter a valid GHC amount")
+    if (!parsed.ok) {
+      setError(ghcInputMessage(parsed.code))
       return
     }
     if (amountNum < quote.minGhc) {
-      setError(`Minimum is ${quote.minGhc} GHC (100 π equivalent at ${rate} GHC/π)`)
+      setError(`Minimum is ${quote.minGhc} GHC (${minPi} π equivalent at ${rate} GHC/π)`)
       return
     }
-    if (!wallet.trim() || wallet.trim().length < 8) {
-      setError("Enter a valid Pi wallet address")
+    if (amountNum > maxGhc) {
+      setError(`You can withdraw up to ${maxGhc.toFixed(2)} GHC. Locked GHC is not withdrawable.`)
+      return
+    }
+    if (!looksLikePiWalletAddress(wallet)) {
+      setError("That does not look like a Pi wallet address (56 characters starting with G). Check it before continuing.")
       return
     }
     if (!confirmWallet) {
@@ -170,9 +186,10 @@ export function WithdrawGhcPanel() {
         <button
           type="button"
           onClick={() => void load()}
-          className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+          disabled={loading}
+          className="min-h-9 text-[11px] font-medium text-emerald-700 disabled:opacity-50 dark:text-emerald-300"
         >
-          Refresh
+          {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
@@ -193,7 +210,7 @@ export function WithdrawGhcPanel() {
             <p className="font-semibold tabular-nums">{quote.lockedGhc.toFixed(2)} GHC</p>
           </div>
           <div className="rounded-xl bg-muted/40 px-2.5 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Min (100 π)</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Min ({minPi} π)</p>
             <p className="font-semibold tabular-nums">{quote.minGhc.toFixed(0)} GHC</p>
           </div>
         </div>
@@ -201,25 +218,43 @@ export function WithdrawGhcPanel() {
 
       {quote && !quote.eligible ? (
         <p className="text-[12px] text-amber-800 dark:text-amber-200/90 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-2">
-          Withdrawal unlocks at {quote.minGhc} GHC minimum (100 π equivalent at {rate} GHC/π).
+          Withdrawal unlocks at {quote.minGhc} GHC minimum ({minPi} π equivalent at {rate} GHC/π).
         </p>
       ) : null}
 
       {quote?.eligible ? (
         <div className="space-y-2 border-t border-border/40 pt-2">
           <label className="block text-[11px] font-medium text-muted-foreground">
-            GHC amount
+            <span className="flex items-center justify-between">
+              GHC amount
+              <button
+                type="button"
+                onClick={() => setGhcAmount(maxGhc > 0 ? String(maxGhc) : "")}
+                className="min-h-9 font-semibold text-emerald-700 dark:text-emerald-300"
+                aria-label={`Use maximum withdrawable ${maxGhc.toFixed(2)} GHC`}
+              >
+                Max · {maxGhc.toFixed(2)}
+              </button>
+            </span>
             <input
-              type="number"
-              min={quote.minGhc}
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              spellCheck={false}
               value={ghcAmount}
-              onChange={(e) => setGhcAmount(e.target.value)}
+              onChange={(e) => setGhcAmount(e.target.value.replace(/[^\d.,]/g, ""))}
+              aria-invalid={amountError || overWithdrawable ? true : undefined}
               className="mt-1 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+              placeholder="0.00"
             />
           </label>
+          {amountError || overWithdrawable ? (
+            <p className="text-[11px] text-red-600 dark:text-red-400" role="alert">
+              {amountError ?? `Only ${maxGhc.toFixed(2)} GHC is withdrawable. Locked GHC stays in your wallet.`}
+            </p>
+          ) : null}
           <p className="text-[11px] text-muted-foreground">
-            You would receive ≈ <span className="font-semibold text-foreground">{piPreview} π</span>{" "}
+            You would receive ≈ <span className="font-semibold text-foreground">{piPreview.toFixed(7).replace(/0+$/, "").replace(/\.$/, "")} π</span>{" "}
             at frozen rate {rate} GHC/π
           </p>
           <label className="block text-[11px] font-medium text-muted-foreground">
@@ -247,7 +282,7 @@ export function WithdrawGhcPanel() {
           </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !parsed.ok || overWithdrawable}
             onClick={() => void submit()}
             className="w-full min-h-11 rounded-xl bg-emerald-600 text-sm font-semibold text-white disabled:opacity-50"
           >
@@ -282,7 +317,7 @@ export function WithdrawGhcPanel() {
                   <span className="font-medium tabular-nums">
                     {Number(w.ghcAmount).toFixed(2)} GHC → {Number(w.piAmount).toFixed(4)} π
                   </span>
-                  <span className="text-[10px] uppercase text-muted-foreground">{w.status}</span>
+                  <span className="text-[10px] uppercase text-muted-foreground">{withdrawalStatusLabel(w.status)}</span>
                 </div>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   @{maskWallet(w.piWalletAddress)} · rate {Number(w.ghcPerPi)} GHC/π

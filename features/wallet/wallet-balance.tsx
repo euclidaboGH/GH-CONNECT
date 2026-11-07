@@ -10,6 +10,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
+import { formatPiAmount } from "@/lib/wallet/pi-amount"
 
 export type WalletAssetRail = "pi" | "ghc"
 
@@ -57,6 +58,7 @@ export function WalletBalanceCard({
   } | null>(null)
   const [piLoading, setPiLoading] = useState(true)
   const [piFailed, setPiFailed] = useState(false)
+  const lastPiFetchRef = useRef(0)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
   )
@@ -97,6 +99,7 @@ export function WalletBalanceCard({
       )
       if (!response.ok || !data || data.ok !== true || !validAmounts || typeof data.eligible !== "boolean") {
         if (requestId === piRequestIdRef.current) {
+          // Fail closed: never show an unconfirmed balance.
           setPiSnapshot(null)
           setPiFailed(true)
         }
@@ -119,6 +122,7 @@ export function WalletBalanceCard({
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
         })
         setPiFailed(false)
+        lastPiFetchRef.current = Date.now()
       }
     } catch {
       if (requestId === piRequestIdRef.current) {
@@ -140,7 +144,14 @@ export function WalletBalanceCard({
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-synced", onRefresh)
-    const onOnline = () => setWalletOnline(true)
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastPiFetchRef.current > 30_000) void refreshPi()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    const onOnline = () => {
+      setWalletOnline(true)
+      void refreshPi()
+    }
     const onOffline = () => setWalletOnline(false)
     window.addEventListener("online", onOnline)
     window.addEventListener("offline", onOffline)
@@ -151,6 +162,7 @@ export function WalletBalanceCard({
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
       window.removeEventListener("ghc:wallet-synced", onRefresh)
+      document.removeEventListener("visibilitychange", onVisible)
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
     }
@@ -159,7 +171,7 @@ export function WalletBalanceCard({
   const mask = (n: number) => (balanceVisible ? formatGhc(n) : "••••")
   const maskPi = (n: number) =>
     balanceVisible
-      ? `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} π`
+      ? `${formatPiAmount(n)} π`
       : "••••"
   const synced =
     lastSynced && Number.isFinite(lastSynced)
@@ -221,7 +233,7 @@ export function WalletBalanceCard({
             {piSelected ? (piLoading ? "Checking" : piFailed ? "Unavailable" : "Pi rail") : "GHC rail"}
           </span>
         </div>
-        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite">
+        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite" aria-label={balanceVisible ? undefined : "Balance hidden"}>
           {piSelected
             ? piSnapshot
               ? maskPi(piSnapshot.available)
@@ -370,13 +382,21 @@ export function WalletBalanceCard({
                 {piSnapshot ? maskPi(piSnapshot.pending) : "—"}
               </strong>
             </span>
+            {piSnapshot && piSnapshot.reserved > 0 ? (
+              <span>
+                Reserved <strong className="text-foreground">{maskPi(piSnapshot.reserved)}</strong> is held for
+                withdrawal requests in progress
+              </span>
+            ) : null}
             <span>withdrawable · fees and eligibility apply</span>
+            <span>3% withdrawal fee</span>
             <button
               type="button"
               onClick={() => void refreshPi()}
               disabled={piLoading}
               className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Refresh PI balance"
+              aria-busy={piLoading}
             >
               {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
             </button>
