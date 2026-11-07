@@ -77,47 +77,37 @@ export const mediaUrlCache = createLruCache<string>(100)
  */
 export function optimizedImageUrl(
   url: string | null | undefined,
-  width = 480
+  _width = 480
 ): string {
   if (!url) return "/placeholder.svg?height=320&width=320"
-  if (url.startsWith("data:") || url.startsWith("blob:")) return url
-  if (url.includes("dicebear.com") || url.includes("placeholder")) return url
-  try {
-    const u = new URL(
-      url,
-      typeof window !== "undefined" ? window.location.origin : "https://local"
-    )
-    if (!u.searchParams.has("w")) u.searchParams.set("w", String(width))
-    return u.toString()
-  } catch {
-    return url
-  }
+  // Preserve provider-issued URLs byte-for-byte. Adding a generic `w` query
+  // parameter can invalidate Supabase signatures, CDN signatures, or opaque
+  // media-facade identifiers. Real resizing belongs at a trusted image
+  // transformation endpoint that signs the complete transformation request.
+  return url
 }
 
 /** Debounced scroll handler factory (feed infinite load) */
 export function createScrollLoadMore(options: {
   thresholdPx?: number
-  onLoadMore: () => void
+  onLoadMore: () => void | Promise<unknown>
   isLoading?: () => boolean
   hasMore?: () => boolean
 }) {
-  const threshold = options.thresholdPx ?? 400
+  const threshold = Math.max(0, options.thresholdPx ?? 400)
   let locked = false
   return function onScroll(event: { currentTarget: HTMLElement }) {
-    if (locked) return
-    if (options.isLoading?.() || options.hasMore?.() === false) return
+    if (locked || options.isLoading?.() || options.hasMore?.() === false) return
     const el = event.currentTarget
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (remaining < threshold) {
-      locked = true
-      try {
-        options.onLoadMore()
-      } finally {
-        requestAnimationFrame(() => {
-          locked = false
-        })
-      }
-    }
+    if (remaining >= threshold) return
+    locked = true
+    // Keep the lock for the full async load. Releasing it on the next animation
+    // frame allowed rapid scroll events to enqueue duplicate page requests.
+    void Promise.resolve()
+      .then(() => options.onLoadMore())
+      .catch(() => undefined)
+      .finally(() => { locked = false })
   }
 }
 
@@ -193,7 +183,7 @@ export function getDevicePerformanceProfile(): DevicePerformanceProfile {
 /** Only prefetch non-critical data on a visible, adequately connected device. */
 export function shouldPrefetchNonCritical(): boolean {
   const profile = getDevicePerformanceProfile()
-  return !profile.lowPower && typeof document !== "undefined" && document.visibilityState === "visible" && navigator.onLine
+  return !profile.lowPower && !preferReducedData() && typeof document !== "undefined" && document.visibilityState === "visible" && navigator.onLine
 }
 
 /** Defer non-critical work until the browser has idle time. */
@@ -218,13 +208,28 @@ export function shouldLoadVideo(isNearViewport: boolean, saveData?: boolean): bo
   return isNearViewport
 }
 
+const REDUCED_DATA_STORAGE_KEY = "ghc:prefer-reduced-data:v1"
+
+/** System Data Saver / constrained network always wins over the local preference. */
 export function preferReducedData(): boolean {
-  if (typeof navigator === "undefined") return false
-  const conn = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } })
-    .connection
-  if (conn?.saveData) return true
-  if (conn?.effectiveType === "2g" || conn?.effectiveType === "slow-2g") return true
-  return false
+  const profile = getDevicePerformanceProfile()
+  if (profile.saveData || profile.effectiveType === "2g" || profile.effectiveType === "slow-2g") return true
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(REDUCED_DATA_STORAGE_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+/** Persist only a device-local loading preference; never changes account or payment state. */
+export function setPreferReducedData(enabled: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return
+    if (enabled) localStorage.setItem(REDUCED_DATA_STORAGE_KEY, "1")
+    else localStorage.removeItem(REDUCED_DATA_STORAGE_KEY)
+  } catch {
+    // Storage may be unavailable in private browsing or restricted WebViews.
+  }
 }
 
 
@@ -242,12 +247,17 @@ export function scheduleIdle(fn: () => void, timeoutMs = 1200): void {
 /** Prefetch a list of media facade URLs into the signed-url cache (best-effort). */
 export function prefetchMediaFacades(urls: string[], limit = 4): void {
   if (typeof window === "undefined" || !Array.isArray(urls) || urls.length === 0) return
-  scheduleIdle(() => {
+  // Do not warm signed URLs when the user, browser, or network has requested
+  // reduced data. Re-check at execution time because connectivity can change
+  // between scheduling and the idle callback.
+  if (!shouldPrefetchNonCritical()) return
+  scheduleNonCriticalWork(() => {
+    if (!shouldPrefetchNonCritical()) return
     void import("@/lib/media/resolve-display-url")
       .then(({ resolveDisplayMediaUrl, isMediaFacadeUrl }) => {
-        const slice = urls.filter((u) => typeof u === "string" && isMediaFacadeUrl(u)).slice(0, limit)
+        const slice = Array.from(new Set(urls.filter((u) => typeof u === "string" && isMediaFacadeUrl(u)))).slice(0, Math.max(0, Math.min(4, limit)))
         return Promise.allSettled(slice.map((u) => resolveDisplayMediaUrl(u)))
       })
       .catch(() => undefined)
-  }, 800)
+  }, 1200)
 }

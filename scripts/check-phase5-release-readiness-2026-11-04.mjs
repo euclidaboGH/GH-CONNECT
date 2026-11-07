@@ -46,7 +46,7 @@ ok("payout requests fail-closed", /PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=0/.test(e
 ok("payout execution fail-closed", /PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=0/.test(env))
 ok("withdrawals health route exists", existsSync(join(root, "app/api/health/withdrawals/route.ts")))
 ok("phase 5 readiness doc", existsSync(join(root, "docs/PHASE-5-RELEASE-READINESS-2026-11-04.md")))
-ok("operator testnet checklist 0.312", existsSync(join(root, "docs/OPERATOR_TESTNET_RELEASE_CHECKLIST_0.312.md")))
+ok("legacy operator Testnet checklist retained", existsSync(join(root, "docs/OPERATOR_TESTNET_RELEASE_CHECKLIST_0.312.md")))
 
 const mkt = existsSync(join(root, "components/ghc/marketplace-screen.tsx"))
   ? readFileSync(join(root, "components/ghc/marketplace-screen.tsx"), "utf8")
@@ -54,11 +54,11 @@ const mkt = existsSync(join(root, "components/ghc/marketplace-screen.tsx"))
 ok("cart checkout aria-busy", mkt.includes("aria-busy={busy"))
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-ok("package version 0.312.0", pkg.version === "0.312.0")
+ok("package version is valid semantic version", /^\d+\.\d+\.\d+$/.test(pkg.version))
 const man = existsSync(join(root, "VERIFIED_MANIFEST.txt"))
   ? readFileSync(join(root, "VERIFIED_MANIFEST.txt"), "utf8")
   : ""
-ok("manifest project_version 0.312.0", /project_version=0\.312\.0/.test(man))
+ok("manifest project_version matches package", man.includes(`project_version=${pkg.version}`))
 
 console.log(`\nPhase 5 release readiness: ${pass}/${pass + fail} passed`)
 process.exit(fail ? 1 : 0)

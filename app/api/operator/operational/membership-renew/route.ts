@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
 import { assertOperatorKey } from "@/lib/server/marketplace/operational-rpc"
-import {
-  durationForBillingPeriod,
-  renewMembershipFromVerifiedIntent,
-} from "@/lib/server/membership/renewal-workflow"
+import { renewMembershipFromVerifiedIntent } from "@/lib/server/membership/renewal-workflow"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -29,15 +26,11 @@ export async function POST(request: Request) {
 
   const paymentIntentId = String(body.paymentIntentId || "").trim()
   const userId = String(body.userId || "").trim()
-  const period = String(body.billingPeriod || "monthly")
   if (!paymentIntentId || !userId) {
     return reply({ ok: false, error: "PAYMENT_INTENT_AND_USER_REQUIRED" }, 400)
   }
 
-  const result = await renewMembershipFromVerifiedIntent({
-    paymentIntentId,
-    userId,
-    durationInterval: String(body.durationInterval || durationForBillingPeriod(period)),
-  })
-  return reply({ ...result, ok: result.ok !== false }, result.ok === false ? 409 : 200)
+  const result = await renewMembershipFromVerifiedIntent({ paymentIntentId, userId })
+  if (result.ok !== true) return reply({ ...result, ok: false }, 409)
+  return reply({ ...result, ok: true }, 200)
 }

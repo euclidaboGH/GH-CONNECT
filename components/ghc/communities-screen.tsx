@@ -554,8 +554,9 @@ export function CommunitiesScreen() {
   useEffect(() => {
     const onRefresh = (e: Event) => {
       const id = String((e as CustomEvent).detail?.communityId || "").trim()
+      const detail = (e as CustomEvent<{ communityId?: string; skipHubRemount?: boolean }>).detail
       if (id && id !== selectedCommunityId) return
-      setHubKey((k) => k + 1)
+      if (!detail?.skipHubRemount) setHubKey((k) => k + 1)
       setDirectoryLoading(true)
       // The directory loader is intentionally mounted once; this event only
       // forces the selected hub to re-read its durable parent snapshot.
@@ -861,20 +862,20 @@ export function CommunitiesScreen() {
     communityId: string,
     body: string,
     kind?: "text" | "question" | "resource"
-  ) => {
+  ): Promise<boolean> => {
     if (createBoardPost) {
       const ok = await createBoardPost(communityId, body, kind)
       if (ok) {
         setHubKey((k) => k + 1)
-        return
+        return true
       }
       if (!allowLocalBoardFallback()) {
         addToast("Could not post to the board. Please try again.", "error")
-        return
+        return false
       }
     } else if (!allowLocalBoardFallback()) {
       addToast("Board posting is unavailable right now.", "error")
-      return
+      return false
     }
     // Studio/demo only — Class D local board cache (not production authority)
     const post = {
@@ -895,6 +896,7 @@ export function CommunitiesScreen() {
     }))
     addToast("Posted to board (studio cache)", "success")
     setHubKey((k) => k + 1)
+    return true
   }
 
   if (selected) {
@@ -1167,7 +1169,7 @@ export function CommunitiesScreen() {
               // Canonical shell navigation — Home tab (no reload / no history hack)
               if (!navigateTo("home")) setTab?.("home")
             }}
-            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted active:scale-95"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
             aria-label="Back to Home"
           >
             <ArrowLeft size={18} strokeWidth={2.25} aria-hidden />
@@ -1191,7 +1193,7 @@ export function CommunitiesScreen() {
             <button
               type="button"
               onClick={openCreateCommunity}
-              className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-[var(--gh-green)] px-2.5 text-[12px] font-bold text-white shadow-sm"
               aria-label={msg("create") + " " + msg("communityTitle")}
             >
               <Plus size={16} strokeWidth={2.5} />
@@ -1212,7 +1214,7 @@ export function CommunitiesScreen() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={msg("searchCommunity")}
                 aria-label={msg("searchCommunity")}
-                className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                className="h-8 w-full rounded-lg border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
                 <button
@@ -1227,7 +1229,7 @@ export function CommunitiesScreen() {
             </div>
 
             <div
-              className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+              className="mt-1 flex gap-1 rounded-xl border border-border/50 bg-muted/50 p-0.5"
               role="tablist"
               aria-label="Community directory"
             >
@@ -1236,7 +1238,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "my"}
                 onClick={() => setDirectory("my")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -1250,7 +1252,7 @@ export function CommunitiesScreen() {
                 role="tab"
                 aria-selected={directory === "discover"}
                 onClick={() => setDirectory("discover")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"

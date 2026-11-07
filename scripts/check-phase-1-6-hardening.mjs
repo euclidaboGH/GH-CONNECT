@@ -16,7 +16,7 @@ test('Mod decline uses onDeclineRequest or onRejectRequest', /onDeclineRequest \
 test('Inline order review form (no window.prompt)', /reviewDraftOrderId/.test(market) && /Submit review/.test(market) && !/window\.prompt\("Review/.test(market))
 test('Order next-action hints', /orderNextActionHint/.test(life) && /nextHint/.test(market))
 test('Human order status labels', /Awaiting payment/.test(life) && /Completed/.test(life))
-test('Claim success flash state', /justClaimedFlash/.test(claim))
+test('Failed daily claims cannot display a claimed-success flash', !/justClaimedFlash|setJustClaimedFlash/.test(claim) && /if \(!server\.ok\)/.test(claim))
 test('Lifecycle + trust modules still present', existsSync(join(root, 'lib/marketplace/order-lifecycle.ts')) && existsSync(join(root, 'lib/marketplace/trust.ts')))
 
 const failed = checks.filter((x) => !x).length

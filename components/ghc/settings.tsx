@@ -29,6 +29,9 @@ import {
   Lock,
   Users,
   ArrowLeft,
+  Gauge,
+  Smartphone,
+  Wifi,
 } from "lucide-react"
 import { useSessionLock } from "@/contexts/session-lock-context"
 import { useRegionalContext } from "@/contexts/regional-context"
@@ -36,20 +39,23 @@ import { getProductMessage } from "@/lib/i18n/product"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
-import { ActiveSessionsPanel } from "@/components/ghc/active-sessions-panel"
-import { AccountSecuritySignals } from "@/components/ghc/account-security-signals"
-import { PiPayoutAuthorizationCard } from "@/components/ghc/pi-payout-authorization-card"
-import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
-import { PiListingReadinessCard } from "@/components/ghc/pi-listing-readiness-card"
-import { CompliancePostureCard } from "@/components/ghc/compliance-posture-card"
-import { ClaimReadinessCard } from "@/components/ghc/claim-readiness-card"
-import { PasskeysPanel } from "@/components/ghc/passkeys-panel"
-import { AccountDataControls } from "@/components/ghc/account-data-controls"
-import { FoundationStatusCard } from "@/components/ghc/foundation-status-card"
-import { PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
+// Settings subsections are separate chunks so the initial Settings route does
+// not download security, compliance, Pi capability and passkey panels eagerly.
+const ActiveSessionsPanel = lazy(() => import("@/components/ghc/active-sessions-panel").then((m) => ({ default: m.ActiveSessionsPanel })))
+const AccountSecuritySignals = lazy(() => import("@/components/ghc/account-security-signals").then((m) => ({ default: m.AccountSecuritySignals })))
+const PiPayoutAuthorizationCard = lazy(() => import("@/components/ghc/pi-payout-authorization-card").then((m) => ({ default: m.PiPayoutAuthorizationCard })))
+const PiPlatformCapabilitiesCard = lazy(() => import("@/components/ghc/pi-platform-capabilities-card").then((m) => ({ default: m.PiPlatformCapabilitiesCard })))
+const PiListingReadinessCard = lazy(() => import("@/components/ghc/pi-listing-readiness-card").then((m) => ({ default: m.PiListingReadinessCard })))
+const CompliancePostureCard = lazy(() => import("@/components/ghc/compliance-posture-card").then((m) => ({ default: m.CompliancePostureCard })))
+const ClaimReadinessCard = lazy(() => import("@/components/ghc/claim-readiness-card").then((m) => ({ default: m.ClaimReadinessCard })))
+const PasskeysPanel = lazy(() => import("@/components/ghc/passkeys-panel").then((m) => ({ default: m.PasskeysPanel })))
+const AccountDataControls = lazy(() => import("@/components/ghc/account-data-controls").then((m) => ({ default: m.AccountDataControls })))
+const FoundationStatusCard = lazy(() => import("@/components/ghc/foundation-status-card").then((m) => ({ default: m.FoundationStatusCard })))
+const PiStakingStatusNote = lazy(() => import("@/components/ghc/pi-supporter-badge").then((m) => ({ default: m.PiStakingStatusNote })))
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { getPrivacyHealth } from "@/lib/privacy-health"
 import { matchSettingsSearch } from "@/lib/settings-search"
+import { getDevicePerformanceProfile, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
 import { getLocaleOptions, normalizeLanguagePreference, translate } from "@/lib/i18n"
 import { getShellMessage, getShellTranslationStatus } from "@/lib/i18n/shell"
 
@@ -97,6 +103,7 @@ export type SettingsSection =
   | "preferences"
   | "notifications"
   | "appearance"
+  | "performance"
   | "help"
   | "legal"
   | "about"
@@ -106,6 +113,78 @@ export type SettingsSection =
   | "membership"
   | "rewards"
   | "pi-payout-auth"
+
+function PerformanceSettingsScreen({ onBack }: { onBack: () => void }) {
+  const [profile, setProfile] = useState<ReturnType<typeof getDevicePerformanceProfile> | null>(null)
+  const [reducedData, setReducedData] = useState(false)
+  const [refreshedAt, setRefreshedAt] = useState<number | null>(null)
+
+  const refresh = useCallback(() => {
+    setProfile(getDevicePerformanceProfile())
+    setReducedData(preferReducedData())
+    setRefreshedAt(Date.now())
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const toggleReducedData = useCallback((enabled: boolean) => {
+    setPreferReducedData(enabled)
+    setReducedData(enabled || Boolean(profile?.saveData))
+  }, [profile?.saveData])
+
+  const deviceMemory = typeof navigator !== "undefined"
+    ? Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) || null
+    : null
+  const status = !profile ? "Checking device" : profile.lowPower ? "Efficiency mode recommended" : "Device ready"
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-2">
+        <button type="button" onClick={onBack} className="hover:opacity-60" aria-label="Back"><ChevronLeft size={24} /></button>
+        <h2 className="text-[14px] font-bold tracking-tight">Performance & data</h2>
+      </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
+        <section className="rounded-3xl border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Gauge size={22} /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-bold">{status}</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">GreenHaven adapts non-critical loading to the capabilities reported by this browser. These are device signals, not a synthetic speed score.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Processor</p><p className="mt-1 text-[15px] font-bold">{profile ? `${profile.hardwareConcurrency} logical cores` : "Checking"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Memory</p><p className="mt-1 text-[15px] font-bold">{deviceMemory ? `~${deviceMemory} GB` : "Not reported"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Connection</p><p className="mt-1 text-[15px] font-bold">{profile?.effectiveType ?? "Not reported"}</p></div>
+            <div className="rounded-2xl bg-muted/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Motion</p><p className="mt-1 text-[15px] font-bold">{profile?.reducedMotion ? "Reduced" : "Standard"}</p></div>
+          </div>
+          <button type="button" onClick={refresh} className="mt-4 min-h-11 w-full rounded-full border border-border px-4 py-2.5 text-[13px] font-semibold transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Refresh device diagnostics</button>
+          {refreshedAt ? <p className="mt-2 text-center text-[10px] text-muted-foreground">Updated {new Date(refreshedAt).toLocaleTimeString()}</p> : null}
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+          <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600"><Wifi size={20} /></span><div><p className="text-[14px] font-bold">Reduce data usage</p><p className="text-[11px] text-muted-foreground">This device only</p></div></div>
+          <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-2xl bg-muted/40 px-3 py-2">
+            <span className="min-w-0"><span className="block text-[13px] font-semibold">Prefer reduced data</span><span className="mt-0.5 block text-[11px] text-muted-foreground">Skip optional prefetching and favor lighter media where supported.</span></span>
+            <input type="checkbox" checked={reducedData} onChange={(event) => toggleReducedData(event.target.checked)} disabled={Boolean(profile?.saveData || profile?.effectiveType === "2g" || profile?.effectiveType === "slow-2g")} className="h-5 w-5 shrink-0 accent-primary" aria-label="Prefer reduced data" />
+          </label>
+          {profile?.saveData || profile?.effectiveType === "2g" || profile?.effectiveType === "slow-2g" ? <p className="mt-2 text-[11px] text-muted-foreground">Your browser or network is already requesting reduced data, so this preference is locked on.</p> : null}
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground"><Smartphone size={14} /> Preference is stored locally on this device and does not change your account settings.</div>
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-card p-4">
+          <p className="text-[13px] font-bold">What GreenHaven optimizes</p>
+          <ul className="mt-3 space-y-2 text-[12px] leading-relaxed text-muted-foreground">
+            <li>• Defers non-critical work until the browser is idle.</li>
+            <li>• Avoids optional prefetching on constrained connections and low-power devices.</li>
+            <li>• Supports reduced-motion preferences and lazy media loading.</li>
+            <li>• Keeps account, privacy, payment and entitlement decisions server-authoritative.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  )
+}
 
 export function SettingsScreen({
   onBack,
@@ -177,6 +256,7 @@ export function SettingsScreen({
         next === "privacy" ||
         next === "notifications" ||
         next === "appearance" ||
+        next === "performance" ||
         next === "device-lock"
       ) {
         // Phase 5: optional focus target for Wallet Pi tools (withdrawal journey)
@@ -194,6 +274,7 @@ export function SettingsScreen({
             | "privacy"
             | "notifications"
             | "appearance"
+            | "performance"
             | "device-lock",
         )
       }
@@ -367,7 +448,7 @@ export function SettingsScreen({
           <h2 className="text-[16px] font-bold">Pi payout authorization</h2>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[var(--gh-screen-bottom-inset)]">
-          <PiPayoutAuthorizationCard />
+          <Suspense fallback={<SectionFallback label="Pi payout authorization" />}><PiPayoutAuthorizationCard /></Suspense>
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
             GreenHaven never moves Pi without this consent. Authorization is stored server-side and checked on every withdrawal request. Revoking blocks future payouts only.
           </p>
@@ -410,10 +491,10 @@ export function SettingsScreen({
           <p className="text-[12px] text-muted-foreground">Version {APP_RELEASE_VERSION}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-[var(--gh-screen-bottom-inset)] space-y-4">
-          <FoundationStatusCard />
+          <Suspense fallback={<SectionFallback label="Platform status" />}><FoundationStatusCard /></Suspense>
           <div className="rounded-xl border border-border bg-muted/30 p-3">
             <p className="text-[12px] font-bold text-foreground">Pi Directory staking</p>
-            <PiStakingStatusNote className="mt-1" />
+            <Suspense fallback={<span className="text-xs text-muted-foreground">Loading Pi status…</span>}><PiStakingStatusNote className="mt-1" /></Suspense>
           </div>
           <div className="space-y-4 text-[15px] leading-relaxed whitespace-pre-wrap text-foreground">{LEGAL.about}</div>
         </div>
@@ -590,18 +671,22 @@ export function SettingsScreen({
           </p>
 
           {/* Phase 5: server sessions (separate from local App Lock) */}
-          <ActiveSessionsPanel />
-          <div className="mt-3"><AccountSecuritySignals /></div>
-          <div className="mt-3"><PiPlatformCapabilitiesCard /></div>
-          <div className="mt-3"><PiListingReadinessCard /></div>
-          <div className="mt-3"><CompliancePostureCard /></div>
-          <div className="mt-3"><ClaimReadinessCard /></div>
+          <Suspense fallback={<SectionFallback label="Active sessions" />}><ActiveSessionsPanel /></Suspense>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Security signals" />}><AccountSecuritySignals /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Pi capabilities" />}><PiPlatformCapabilitiesCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Pi listing readiness" />}><PiListingReadinessCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Compliance posture" />}><CompliancePostureCard /></Suspense></div>
+          <div className="mt-3"><Suspense fallback={<SectionFallback label="Claim readiness" />}><ClaimReadinessCard /></Suspense></div>
 
           {/* Phase 7: optional passkeys — does not replace Pi or App Lock */}
-          <PasskeysPanel />
+          <Suspense fallback={<SectionFallback label="Passkeys" />}><PasskeysPanel /></Suspense>
         </div>
       </div>
     )
+  }
+
+  if (section === "performance") {
+    return <PerformanceSettingsScreen onBack={goBackOneLevel} />
   }
 
   if (section === "privacy") {
@@ -780,7 +865,7 @@ export function SettingsScreen({
             </div>
           </div>
 
-          <AccountDataControls />
+          <Suspense fallback={<SectionFallback label="Account data controls" />}><AccountDataControls /></Suspense>
 
           {/* Blocked users */}
           <div className="pt-2">
@@ -1307,7 +1392,7 @@ export function SettingsScreen({
         },
         {
           title: "Rewards Centre",
-          subtitle: "Missions & claimable GHC",
+          subtitle: "Missions & daily claims",
           icon: <Gift size={20} strokeWidth={1.75} />,
           action: () => goToSection("rewards"),
           keywords: "rewards challenges earn pending claim",
@@ -1357,6 +1442,13 @@ export function SettingsScreen({
     {
       heading: "Preferences",
       items: [
+        {
+          title: "Performance & data",
+          subtitle: "Device readiness, connection and data saver",
+          icon: <Gauge size={20} strokeWidth={1.75} />,
+          action: () => goToSection("performance"),
+          keywords: "performance speed data saver network device low data battery loading",
+        },
         {
           title: "Notifications",
           subtitle: "Matches, messages, rewards, membership",

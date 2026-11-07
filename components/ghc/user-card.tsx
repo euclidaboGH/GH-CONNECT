@@ -14,6 +14,7 @@ import type { Candidate } from "@/lib/ghc-types"
 import { LazyImage } from "./lazy-image"
 import { resolveAvatarUrl } from "@/lib/avatar"
 import { RelationshipActions } from "./relationship-actions"
+import type { ProfileRelationshipState } from "@/lib/domains/profile-domain"
 
 export function calculateMatchScore(
   candidate: Candidate,
@@ -68,6 +69,7 @@ export type UserCardProps = {
   /** Outgoing interest, not yet a Match */
   interestSent?: boolean
   isMatched?: boolean
+  relationshipState?: ProfileRelationshipState
   canMessage?: boolean
   mutualConnections?: number
   mutualInterestNames?: string[]
@@ -94,6 +96,7 @@ function UserCardInner({
   isFollowing = false,
   interestSent = false,
   isMatched = false,
+  relationshipState,
   canMessage = false,
   mutualConnections = 0,
   mutualInterestNames = [],
@@ -393,6 +396,7 @@ function UserCardInner({
                 userName={safeName}
                 userPhoto={safePhoto}
                 compact
+                relationshipState={relationshipState}
                 className="!flex-col items-stretch gap-1.5"
               />
             </div>

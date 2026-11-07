@@ -10,7 +10,7 @@ import { UserPlus, UserCheck, Heart, Link2, MessageCircle, Loader2 } from "lucid
 import { useGHC } from "@/contexts/ghc-context"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { performProfileRelationshipAction } from "@/lib/domains/profile-domain"
-import type { ProfileRelationshipAction } from "@/lib/domains/profile-domain"
+import type { ProfileRelationshipAction, ProfileRelationshipState } from "@/lib/domains/profile-domain"
 import {
   acceptUnifiedConnectionRequest,
   declineUnifiedConnectionRequest,
@@ -30,6 +30,8 @@ type Props = {
   /** Compact for grid cards */
   compact?: boolean
   className?: string
+  /** Optional pre-hydrated state from a parent list batch. */
+  relationshipState?: ProfileRelationshipState
 }
 
 export function RelationshipActions({
@@ -38,6 +40,7 @@ export function RelationshipActions({
   userPhoto,
   compact = false,
   className = "",
+  relationshipState,
 }: Props) {
   const { following, friends, matches, blockedUsers, addToast, followUser, swipe, startConversation } = useGHC()
   const [busy, setBusy] = useState<string | null>(null)
@@ -45,6 +48,7 @@ export function RelationshipActions({
   const [connectError, setConnectError] = useState<string | null>(null)
 
   const state = useMemo(() => {
+    if (relationshipState) return relationshipState
     const services = getBoundDomainServices()
     if (services?.profile?.getRelationshipState) {
       return services.profile.getRelationshipState(userId)
@@ -79,7 +83,7 @@ export function RelationshipActions({
             ? "Following"
             : "Not connected",
     }
-  }, [userId, following, friends, matches, blockedUsers])
+  }, [userId, following, friends, matches, blockedUsers, relationshipState])
 
   const run = useCallback(
     async (action: ProfileRelationshipAction) => {

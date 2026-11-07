@@ -339,77 +339,15 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
 
 
 
-  const onAuthorizeWallet = useCallback(async (): Promise<boolean> => {
-    if (authorizingWallet) return false
-    setAuthorizingWallet(true)
-    setPayoutMsg(null)
+  /**
+   * Wallet consent is collected only in the withdrawal sheet (explicit checkbox + genuine Pi
+   * authentication). The dashboard never records authorization on its own.
+   */
+  const openWithdrawSheet = useCallback(() => {
     try {
-      const res = await fetch("/api/identity/wallet-authorization", {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        cache: "no-store",
-      })
-      const body = (await res.json().catch(() => null)) as {
-        ok?: boolean
-        error?: string
-        message?: string
-        status?: string
-      } | null
-      if (!res.ok || !body?.ok) {
-        const code = body?.error || "UNKNOWN_ERROR"
-        const friendly = humanizeApiError(code, body?.message)
-        setPayoutMsg(`${friendly} (HTTP ${res.status}: ${code}). No withdrawal request was created.`)
-        if (body?.error === "IDENTITY_MAPPING_REQUIRED" || body?.error === "WALLET_AUTHORIZATION_REQUIRED") setWalletAuthActive(false)
-        return false
-      }
-
-      // POST success alone is not enough for the UI to unlock the next step.
-      // Confirm active consent and UID match using a fresh, no-store server read.
-      const verifyRes = await fetch("/api/identity/wallet-authorization", {
-        credentials: "include",
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      })
-      const verifyBody = (await verifyRes.json().catch(() => null)) as {
-        ok?: boolean
-        authorizationActive?: boolean
-        uidMatchesAuthorization?: boolean
-        error?: string
-      } | null
-      if (!verifyRes.ok || verifyBody?.ok !== true || verifyBody.authorizationActive !== true || verifyBody.uidMatchesAuthorization !== true) {
-        setWalletAuthActive(false)
-        const code = verifyBody?.error || "AUTHORIZATION_NOT_CONFIRMED"
-        setPayoutMsg(`Consent was submitted but active wallet authorization could not be confirmed (HTTP ${verifyRes.status}: ${code}). Withdrawals remain blocked.`)
-        await refresh()
-        return false
-      }
-
-      setPayoutMsg(body.message || "Authorization recorded and verified.")
-      try {
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "wallet-auth-granted" } }))
-        window.dispatchEvent(
-          new CustomEvent("ghc:toast", {
-            detail: { message: "Pi payouts authorized for your linked wallet", type: "success" },
-          }),
-        )
-        window.dispatchEvent(new CustomEvent("ghc:wallet-auth-changed", { detail: { active: true } }))
-        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
-      } catch { /* */ }
-      setWalletAuthActive(true)
-      await refresh()
-      setPayoutMsg("Pi wallet authorization verified. Continuing with the withdrawal quote.")
-      return true
-    } catch {
-      setPayoutMsg("Network error while authorizing Pi payouts. No transfer was started.")
-      return false
-    } finally {
-      setAuthorizingWallet(false)
-    }
-  }, [authorizingWallet, refresh])
-
+      window.dispatchEvent(new CustomEvent("ghc:open-pi-withdraw"))
+    } catch { /* */ }
+  }, [])
 
   const onRevokeWalletAuth = async () => {
     if (authorizingWallet) return
@@ -594,17 +532,17 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   }, [snap])
 
   const runWithdraw = useCallback(async () => {
-    // Phase 4: single primary control — authorize when needed, then quote, then request.
+    // Authorization is confirmed BEFORE any quote or payout request. When it is missing,
+    // hand off to the withdrawal sheet, which runs genuine Pi consent and then quotes.
     if (walletAuthActive !== true) {
-      const granted = await onAuthorizeWallet()
-      if (!granted) return
-      // Continue in the same gesture once server confirms authorization.
+      openWithdrawSheet()
+      return
     }
     if (!quoteDetail) {
       await onPreviewFee()
     }
     await onRequestPayout()
-  }, [walletAuthActive, onAuthorizeWallet, quoteDetail, onPreviewFee, onRequestPayout])
+  }, [walletAuthActive, openWithdrawSheet, quoteDetail, onPreviewFee, onRequestPayout])
 
 
   useEffect(() => {
@@ -617,12 +555,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         void refresh()
         setPayoutMsg("Eligibility and linked Pi status are shown above. Withdraw stays on this card.")
       } else if (action === "linked") {
-        void onAuthorizeWallet()
+        openWithdrawSheet()
       }
     }
     window.addEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
     return () => window.removeEventListener("ghc:wallet-pi-focus", onFocus as EventListener)
-  }, [runWithdraw, refresh, onAuthorizeWallet])
+  }, [runWithdraw, refresh, openWithdrawSheet])
 
   if (loading && !snap) {
     return (
@@ -765,7 +703,8 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
             One-time Pi payout consent and fee preview happen when you tap Withdraw — not as separate buttons here.
           </p>
         ) : null}
-        {/* Single primary control: opens PiWithdrawSheet (consent + amount + PIN + submit). */}
+        {/* Single primary control — hide when compact (wallet rail already owns the CTA). */}
+        {!compact ? (
         <button
           type="button"
           onClick={() => {
@@ -781,6 +720,11 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         >
           Withdraw
         </button>
+        ) : (
+          <p className="text-center text-[11px] text-muted-foreground" data-compact-withdraw-hint>
+            Use <span className="font-semibold text-foreground">Withdraw</span> on the Pi rail above — one path for amount, consent, PIN and submit.
+          </p>
+        )}
         <p className="text-center text-[10px] text-muted-foreground">
           3% fee is calculated in the withdraw sheet. Manage payout consent in Settings if you need to revoke.
         </p>

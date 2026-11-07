@@ -31,9 +31,9 @@ test('Seller A2U create asserts authorization for seller_id not caller alone', /
 test('Identity me reports walletAuthorization snapshot', /walletAuthorization/.test(me) && /getWalletAuthorization/.test(me))
 test('Link events audit consent grant and revoke', /consent_granted/.test(migration) && /consent_revoked/.test(migration))
 test('RPC failures produce sanitized server diagnostics', /RPC request failed/.test(store) && /httpStatus/.test(store) && /errorName/.test(store) && !/console\.error\([^\n]*supabaseServiceRoleKey/.test(store))
-test('Authorization UI exposes safe HTTP status and error code', /HTTP \${res.status}: \${code/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && /HTTP \${res.status}: \${code/.test(payoutUi))
+test('Authorization UI uses genuine Pi consent helper and never shows raw HTTP/error strings', /requestPiWalletConsent/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(payoutUi))
 test('Payout request requires active wallet authorization before reservation', /assertPayoutWalletAuthorization/.test(payoutRequest) && /WALLET_AUTHORIZATION_REQUIRED/.test(payoutRequest))
-test('Wallet UI confirms active consent and matching UID from fresh server read', /verifyBody\.authorizationActive !== true/.test(payoutUi) && /verifyBody\.uidMatchesAuthorization !== true/.test(payoutUi))
+test('Consent helper confirms active consent and matching UID from a fresh server read', /authorizationActive: body\.authorizationActive === true && uidMatches/.test(read('lib/client/pi-wallet-consent.ts')) && /verified\.status\.uidMatchesAuthorization/.test(read('lib/client/pi-wallet-consent.ts')))
 test('Withdrawal retries reuse an idempotency key until the request is confirmed', /payoutIdempotencyRef = useRef/.test(payoutUi) && /pendingIntent\.amountAtomic !== amountAtomic/.test(payoutUi) && /payoutIdempotencyRef\.current = null/.test(payoutUi))
 
 
@@ -44,7 +44,7 @@ test('Grant API independently verifies persisted authorization and mapped UID', 
 test('Grant API exposes only sanitized diagnostic code and upstream status', /diagnosticCode/.test(api) && /upstreamStatus/.test(api) && !/rawBody|serviceRoleKey/.test(api))
 test('Authorization store fails closed unless active authorization matches mapped UID', /authorizationActive: value\.authorizationActive === true && uidMatches/.test(store) && /uidMatchesAuthorization: uidMatches/.test(store))
 test('Withdrawable API exposes UID match and derives active from match', /uidMatchesAuthorization: walletAuth\.uidMatchesAuthorization === true/.test(withdrawable) && /authorizationActive: walletAuth\.authorizationActive === true && walletAuth\.uidMatchesAuthorization === true/.test(withdrawable))
-test('Authorization card independently verifies consent before showing active', /verifyBody\.uidMatchesAuthorization === true/.test(authCard) && /snap\?\.uidMatchesAuthorization === true/.test(authCard))
+test('Authorization card shows active only from server status with UID match', /requestPiWalletConsent/.test(authCard) && /snap\?\.uidMatchesAuthorization === true/.test(authCard))
 test('Dashboard never unlocks from authorizationActive without UID match', /wa\.uidMatchesAuthorization === true/.test(payoutUi) && /aJson\.uidMatchesAuthorization === true/.test(payoutUi))
 
 const failed = checks.filter((x) => !x).length

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 const compat = new FlatCompat({ baseDirectory: projectRoot })
 
-export default [
+const eslintConfig = [
   ...compat.extends("next/core-web-vitals"),
   {
     ignores: [
@@ -32,3 +32,5 @@ export default [
     },
   },
 ]
+
+export default eslintConfig

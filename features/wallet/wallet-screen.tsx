@@ -235,12 +235,22 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (!piWithdrawOpen) return
     let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8_000)
+
+    // Never carry a previous sheet's withdrawable snapshot into a new session.
+    // This endpoint is read-only; the quote and withdrawal APIs remain authoritative.
+    // Sheet form state is independently guarded (wasOpenRef / amountTouchedRef).
+    setPiWithdrawAvailable(null)
+    setPiWithdrawUser(null)
+
     ;(async () => {
       try {
         const res = await fetch("/api/economy/earnings/withdrawable", {
           credentials: "include",
           cache: "no-store",
           headers: { Accept: "application/json" },
+          signal: controller.signal,
         })
         const body = (await res.json().catch(() => null)) as {
           ok?: boolean
@@ -249,23 +259,31 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           linkedPiUsername?: string | null
           walletAuthorization?: { mappedUsername?: string | null }
         } | null
-        if (cancelled || !res.ok || !body) return
+        if (cancelled || controller.signal.aborted || !res.ok || body?.ok !== true) return
         const avail =
-          typeof body.withdrawable === "number"
+          typeof body.withdrawable === "number" && Number.isFinite(body.withdrawable) && body.withdrawable >= 0
             ? body.withdrawable
-            : typeof body.available === "number"
+            : typeof body.available === "number" && Number.isFinite(body.available) && body.available >= 0
               ? body.available
               : null
-        if (typeof avail === "number") setPiWithdrawAvailable(avail)
+        if (avail !== null) setPiWithdrawAvailable(avail)
         const un =
-          body.linkedPiUsername ||
-          body.walletAuthorization?.mappedUsername ||
-          null
+          typeof body.linkedPiUsername === "string" && body.linkedPiUsername.trim()
+            ? body.linkedPiUsername.trim()
+            : typeof body.walletAuthorization?.mappedUsername === "string" && body.walletAuthorization.mappedUsername.trim()
+              ? body.walletAuthorization.mappedUsername.trim()
+              : null
         if (un) setPiWithdrawUser(un)
-      } catch { /* */ }
+      } catch {
+        // An unavailable snapshot stays unknown; quote/withdrawal remain server-gated.
+      } finally {
+        window.clearTimeout(timeout)
+      }
     })()
     return () => {
       cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
     }
   }, [piWithdrawOpen])
 

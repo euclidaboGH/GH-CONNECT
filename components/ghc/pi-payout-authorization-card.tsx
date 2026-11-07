@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { ShieldCheck, Loader2 } from "lucide-react"
 import { confirmDialog } from "@/lib/ui/global-interactions"
+import { requestPiWalletConsent } from "@/lib/client/pi-wallet-consent"
 
 type AuthSnap = {
   authorizationActive?: boolean
@@ -28,6 +29,7 @@ export function PiPayoutAuthorizationCard({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [consent, setConsent] = useState(false)
   const [snap, setSnap] = useState<AuthSnap | null>(null)
 
   const refresh = useCallback(async () => {
@@ -67,59 +69,23 @@ export function PiPayoutAuthorizationCard({
 
   const grant = async () => {
     if (busy) return
+    if (!consent) {
+      setMsg("Tick the consent box to authorize your Pi wallet.")
+      return
+    }
     setBusy(true)
     setMsg(null)
     try {
-      const res = await fetch("/api/identity/wallet-authorization", {
-        method: "POST",
-        credentials: "include",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: "{}",
-        cache: "no-store",
-      })
-      const body = (await res.json().catch(() => null)) as {
-        ok?: boolean
-        error?: string
-        message?: string
-        status?: string
-      } | null
-      if (!res.ok || !body?.ok) {
-        const code = body?.error || ""
-        const detail = `HTTP ${res.status}: ${code || "UNKNOWN_ERROR"}`
-        if (code === "IDENTITY_MAPPING_REQUIRED") {
-          setMsg(`Sign in with Pi so GreenHaven can verify your identity before authorizing payouts. (${detail})`)
-        } else if (code === "WALLET_AUTHORIZATION_UNAVAILABLE") {
-          setMsg(`Payout authorization is temporarily unavailable. Withdrawals remain blocked. (${detail})`)
-        } else {
-          setMsg(`Authorization failed (${detail}). Please share this message with support.`)
-        }
-        return
-      }
-      // Independently verify the committed consent against the currently mapped UID.
-      const verifyRes = await fetch("/api/identity/wallet-authorization", {
-        credentials: "include",
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      })
-      const verifyBody = (await verifyRes.json().catch(() => null)) as (AuthSnap & { ok?: boolean }) | null
-      const verified = verifyRes.ok &&
-        verifyBody?.ok === true &&
-        verifyBody.authorizationActive === true &&
-        verifyBody.uidMatchesAuthorization === true
-      if (!verified) {
-        setMsg(`Consent was submitted but could not be independently verified (HTTP ${verifyRes.status}: ${verifyBody?.error || "AUTHORIZATION_NOT_CONFIRMED"}). Withdrawals remain blocked.`)
+      // Genuine Pi consent: Pi.authenticate → server verification → DB write → independent read-back.
+      const result = await requestPiWalletConsent()
+      if (!result.ok) {
+        setMsg(result.message)
         await refresh()
         return
       }
+      setConsent(false)
       setMsg("Pi payouts authorized and verified for your currently linked Pi identity.")
-      try {
-        window.dispatchEvent(new CustomEvent("ghc:wallet-auth-changed", { detail: { active: true } }))
-        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
-      } catch { /* */ }
       await refresh()
-    } catch {
-      setMsg("Network error while authorizing. Please try again.")
     } finally {
       setBusy(false)
     }
@@ -220,9 +186,21 @@ export function PiPayoutAuthorizationCard({
           <p className="text-[12px] font-semibold text-amber-950 dark:text-amber-100">
             Authorization required before any Pi withdrawal.
           </p>
+          <label className="mt-2 flex items-start gap-2 text-[12px] text-amber-950 dark:text-amber-100">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-amber-400"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+            />
+            <span>
+              I authorize GreenHaven to send eligible Pi earnings to my linked Pi wallet
+              {snap?.mappedUsername ? ` (@${snap.mappedUsername})` : ""}. A 3% fee applies per withdrawal.
+            </span>
+          </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !consent}
             onClick={() => void grant()}
             className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[13px] font-bold text-white shadow-sm hover:bg-violet-800 disabled:opacity-50"
           >

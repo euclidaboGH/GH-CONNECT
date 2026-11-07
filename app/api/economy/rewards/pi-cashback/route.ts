@@ -80,12 +80,20 @@ export async function GET(request: Request) {
       if (!payoutStatusResponse.ok || !payoutStatus?.ok || !Array.isArray(payoutStatus.items)) {
         return NextResponse.json({ ok: false, featureAvailable: false, error: "CASHBACK_PAYOUT_STATUS_UNAVAILABLE" }, { status: 503, headers: noStore })
       }
+      if (typeof payoutStatus.reservedAtomic !== "string" || !/^\d{1,38}$/.test(payoutStatus.reservedAtomic) ||
+          typeof payoutStatus.reviewAtomic !== "string" || !/^\d{1,38}$/.test(payoutStatus.reviewAtomic)) {
+        return NextResponse.json({ ok: false, featureAvailable: false, error: "CASHBACK_PAYOUT_TOTALS_INVALID" }, { status: 503, headers: noStore })
+      }
       payouts = payoutStatus.items
-      reservedAtomic = typeof payoutStatus.reservedAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reservedAtomic) ? BigInt(payoutStatus.reservedAtomic) : BigInt(0)
-      payoutReviewAtomic = typeof payoutStatus.reviewAtomic === "string" && /^\d{1,38}$/.test(payoutStatus.reviewAtomic) ? BigInt(payoutStatus.reviewAtomic) : BigInt(0)
+      reservedAtomic = BigInt(payoutStatus.reservedAtomic)
+      payoutReviewAtomic = BigInt(payoutStatus.reviewAtomic)
     }
 
-    const calculatedText = typeof payload.calculatedAtomic === "string" && /^\d{1,38}$/.test(payload.calculatedAtomic) ? payload.calculatedAtomic : "0"
+    if (typeof payload.calculatedAtomic !== "string" || !/^\d{1,38}$/.test(payload.calculatedAtomic) ||
+        typeof payload.needsReviewAtomic !== "string" || !/^\d{1,38}$/.test(payload.needsReviewAtomic)) {
+      return NextResponse.json({ ok: false, featureAvailable: false, error: "CASHBACK_STATEMENT_TOTALS_INVALID" }, { status: 503, headers: noStore })
+    }
+    const calculatedText = payload.calculatedAtomic
     const calculatedAtomic = BigInt(calculatedText) > reservedAtomic ? (BigInt(calculatedText) - reservedAtomic).toString() : "0"
     const withdrawalEnabled = withdrawalConfigured
     const payoutsByEntitlement = new Map(payouts.map((p) => [String(p.entitlement_id || ""), p]))
@@ -101,7 +109,7 @@ export async function GET(request: Request) {
       atomicUnitsPerPi: 10_000_000,
       calculatedAtomic,
       needsReviewAtomic: (() => {
-        const base = typeof payload.needsReviewAtomic === "string" && /^\d{1,38}$/.test(payload.needsReviewAtomic) ? BigInt(payload.needsReviewAtomic) : BigInt(0)
+        const base = BigInt(payload.needsReviewAtomic!)
         return (base + payoutReviewAtomic).toString()
       })(),
       withdrawalEnabled,

@@ -1,13 +1,20 @@
 /**
  * Phase 2 — explicit Pi wallet authorization for A2U payouts.
  * GET: status for authenticated user
- * POST: grant consent (uses server mapping only; never trusts body recipient)
+ * POST: grant consent. Requires explicit consent + a fresh Pi accessToken verified
+ *       server-side against the durable identity mapping. Never trusts a body UID,
+ *       a body user id, or any client "authorized" flag.
  * DELETE: revoke active consent
  */
 import { NextResponse } from "next/server"
-import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { resolveAuthenticatedUser, verifyPiAccessToken } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { getByGhUserId } from "@/lib/server/identity/pi-identity-store"
+import { getByGhUserId, getByPiAppUid } from "@/lib/server/identity/pi-identity-store"
+import {
+  verifyWalletConsentProof,
+  WALLET_CONSENT_MESSAGES,
+  walletConsentFailureStatus,
+} from "@/lib/server/identity/wallet-consent"
 import {
   getWalletAuthorization,
   grantWalletAuthorization,
@@ -41,15 +48,34 @@ export async function POST(request: Request) {
   const limit = checkRateLimit(`wallet-auth-grant:${auth.userId}`, 10, 60_000)
   if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
 
-  // Recipient comes only from durable verified mapping — never from the client body.
-  const mapping = await getByGhUserId(auth.userId)
-  if (!mapping?.piAppUid) {
+  const parsedBody = await readBoundedJson(request, 8 * 1024)
+  if (!parsedBody.ok) {
+    return reply(
+      { ok: false, error: parsedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_JSON" },
+      parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400,
+    )
+  }
+
+  // Fresh Pi proof + explicit consent. The recipient UID is derived ONLY from the
+  // Pi-verified identity that must equal the durable mapping of the session user.
+  const proof = await verifyWalletConsentProof(
+    {
+      ghUserId: auth.userId,
+      accessToken: parsedBody.value.accessToken,
+      consent: parsedBody.value.consent,
+    },
+    { verifyPiAccessToken, getByGhUserId, getByPiAppUid },
+  )
+  if (!proof.ok) {
+    console.info("[wallet-authorization] consent rejected", { reason: proof.error })
     return reply({
       ok: false,
-      error: "IDENTITY_MAPPING_REQUIRED",
-      message: "Sign in with Pi so GreenHaven can verify your app identity before authorizing payouts.",
-    }, 409)
+      error: proof.error,
+      message: WALLET_CONSENT_MESSAGES[proof.error],
+      retryable: proof.error !== "IDENTITY_MISMATCH" && proof.error !== "IDENTITY_MAPPING_REQUIRED",
+    }, walletConsentFailureStatus(proof.error))
   }
+  const mapping = { piAppUid: proof.piAppUid }
 
   const granted = await grantWalletAuthorization({
     ghUserId: auth.userId,
@@ -60,7 +86,8 @@ export async function POST(request: Request) {
     const status = granted.error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : 409
     return reply({
       ok: false,
-      error: granted.error || "GRANT_FAILED",
+      error: granted.error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? "WALLET_AUTHORIZATION_UNAVAILABLE" : "AUTHORIZATION_SAVE_FAILED",
+      message: "Wallet authorization could not be saved. Please retry Pi authentication.",
       ...(granted.diagnosticCode ? { diagnosticCode: granted.diagnosticCode } : {}),
       ...(typeof granted.httpStatus === "number" ? { upstreamStatus: granted.httpStatus } : {}),
     }, status)

@@ -31,6 +31,7 @@ import { buildProfileConnectionContext } from "@/lib/domains/adapters/profile-co
 import { resolveUserIntents } from "@/lib/connection-intents"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { ProfileContentLibrary } from "./profile-content-library"
+import { ProfileProfessionalShowcase } from "./profile-professional-showcase"
 
 export function ProfilePreviewPage({
   candidate,
@@ -352,6 +353,11 @@ export function ProfilePreviewPage({
             </span>
           )}
         </div>
+        {(candidate.profileMode === "professional" || candidate.profileMode === "business" || candidate.professional || candidate.business || candidate.profession) ? (
+          <div className="mb-3">
+            <ProfileProfessionalShowcase profile={candidate} readOnly />
+          </div>
+        ) : null}
         {publicPosts.length > 0 && (
           <div>
             <h2 className="text-sm font-bold text-foreground">Public posts</h2>

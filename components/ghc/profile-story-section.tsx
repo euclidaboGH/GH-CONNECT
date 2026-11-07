@@ -5,7 +5,7 @@ import { DurableVideo } from "./durable-video"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Download,
   ArrowLeft, ArrowRight, Camera, Check, Clock3, Eye, ImagePlus, LoaderCircle,
-  Palette, Plus, Send, ShieldCheck, Sparkles, Type, Video, X,
+  Palette, Pause, Play, Plus, Send, ShieldCheck, Sparkles, Type, Video, X,
 } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { socialListStoryViewers, socialViewStory, socialToggleStoryReaction } from "@/lib/social/client"
@@ -33,7 +33,7 @@ const STORY_BACKGROUNDS = [
 ]
 
 const STORY_AUDIENCES: Array<{ id: StoryAudience; title: string; detail: string }> = [
-  { id: "everyone", title: "Everyone", detail: "Anyone who can discover your profile" },
+  { id: "everyone", title: "Everyone", detail: "All members, except accounts you block" },
   { id: "followers", title: "Followers", detail: "People who follow you" },
   { id: "friends", title: "Friends", detail: "Your mutual connections" },
   { id: "private", title: "Only me", detail: "Keep this moment private" },
@@ -63,9 +63,10 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     return story.ownerId === "current-user" || Boolean(profile.id && story.ownerId === profile.id)
   }, [profile.id])
 
-  const ownStory = stories
-    .filter((story) => isOwnStory(story) && (story.expiresAt == null || story.expiresAt > Date.now()))
-    .sort((a, b) => b.createdAt - a.createdAt)[0]
+  const ownStories = stories
+    .filter((story) => isOwnStory(story) && !["archived", "draft", "expired"].includes(String(story.status || "")) && (story.expiresAt == null || story.expiresAt > Date.now()))
+    .sort((a, b) => a.createdAt - b.createdAt)
+  const ownStory = ownStories[ownStories.length - 1]
 
   const profileAvatar =
     (Array.isArray(profile?.photos) && profile.photos.find((u: string) => typeof u === "string" && u && !u.startsWith("blob:"))) ||
@@ -83,7 +84,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
   const otherStories = scope === "feed" ? stories
     .filter((story) => {
-      if (!story.ownerId || isOwnStory(story) || (story.expiresAt != null && story.expiresAt <= Date.now())) return false
+      if (!story.ownerId || isOwnStory(story) || ["archived", "draft", "expired"].includes(String(story.status || "")) || (story.expiresAt != null && story.expiresAt <= Date.now())) return false
       if (story.audience === "private" || story.audience === "matches-only") return false
       if (story.audience === "friends") return friendSet.has(String(story.ownerId))
       if (story.audience === "followers") return followingSet.has(String(story.ownerId)) || friendSet.has(String(story.ownerId))
@@ -91,7 +92,16 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     })
     .sort((a, b) => b.createdAt - a.createdAt) : []
 
-  const queue = [ownStory, ...otherStories].filter((item): item is StoryItem => Boolean(item))
+  // One tray card per creator; each creator's stories play in chronological order.
+  const otherStoryGroups = Array.from(otherStories.reduce((groups, story) => {
+    const key = String(story.ownerId || story.id)
+    const group = groups.get(key) || []
+    group.push(story)
+    groups.set(key, group)
+    return groups
+  }, new Map<string, StoryItem[]>()).values()).map((group) => group.sort((a, b) => a.createdAt - b.createdAt))
+    .sort((a, b) => (b[b.length - 1]?.createdAt || 0) - (a[a.length - 1]?.createdAt || 0))
+  const queue = [...ownStories, ...otherStoryGroups.flat()]
 
   const storyPrefetchKey = queue.map((q) => q?.id || "").join("|")
   useEffect(() => {
@@ -119,6 +129,9 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const [viewing, setViewing] = useState<StoryItem | null>(null)
   const [seenStoryIds, setSeenStoryIds] = useState<string[]>([])
   const [highlights, setHighlights] = useState<string[]>([])
+  const [viewerPaused, setViewerPaused] = useState(false)
+  const seenStorageKey = `ghc-story-seen:${profile.id || "current-user"}`
+  const isStorySeen = useCallback((story: StoryItem) => story.viewerHasViewed === true || seenStoryIds.includes(story.id), [seenStoryIds])
   const [replyText, setReplyText] = useState("")
   const [replying, setReplying] = useState(false)
   const [viewerUsers, setViewerUsers] = useState<StoryViewerRecord[]>([])
@@ -133,21 +146,29 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const touchStartX = useRef<number | null>(null)
 
   useEffect(() => {
+    setSeenStoryIds([])
+    setHighlights([])
     try {
-      const raw = window.localStorage.getItem("ghc-story-seen")
-      if (raw) setSeenStoryIds(JSON.parse(raw))
-      const savedHighlights = window.localStorage.getItem("ghc-story-highlights")
-      if (savedHighlights) setHighlights(JSON.parse(savedHighlights))
+      const raw = window.localStorage.getItem(seenStorageKey)
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw)
+        if (Array.isArray(parsed)) setSeenStoryIds(parsed.filter((value): value is string => typeof value === "string").slice(-200))
+      }
+      const savedHighlights = window.localStorage.getItem(`ghc-story-highlights:${profile.id || "current-user"}`)
+      if (savedHighlights) {
+        const parsedHighlights: unknown = JSON.parse(savedHighlights)
+        if (Array.isArray(parsedHighlights)) setHighlights(parsedHighlights.filter((value): value is string => typeof value === "string").slice(-20))
+      }
     } catch { /* optional local story preferences */ }
-  }, [])
+  }, [seenStorageKey, profile.id])
 
   const toggleHighlight = (storyId: string) => {
     setHighlights((previous) => {
       const next = previous.includes(storyId)
         ? previous.filter((id) => id !== storyId)
         : [...previous, storyId].slice(-20)
-      try { window.localStorage.setItem("ghc-story-highlights", JSON.stringify(next)) } catch { /* optional local preference */ }
-      addToast?.(next.includes(storyId) ? "Saved to this device’s story highlights" : "Removed from this device’s highlights", "success")
+      try { window.localStorage.setItem(`ghc-story-highlights:${profile.id || "current-user"}`, JSON.stringify(next)) } catch { /* optional local preference */ }
+      addToast?.(next.includes(storyId) ? "Saved to highlights on this device" : "Removed from this device’s highlights", "success")
       return next
     })
   }
@@ -353,17 +374,20 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
   const openStory = (story: StoryItem) => {
     setViewing(story)
+    setViewerPaused(false)
     setReplyText("")
     setViewersOpen(false)
     setViewerUsers([])
-    if (!isOwnStory(story)) {
-      void socialViewStory(String(story.id)).catch(() => undefined)
-      setSeenStoryIds((prev) => {
-        if (prev.includes(story.id)) return prev
-        const next = [...prev, story.id].slice(-120)
-        try { window.localStorage.setItem("ghc-story-seen", JSON.stringify(next)) } catch { /* optional */ }
-        return next
-      })
+    if (!isOwnStory(story) && !isStorySeen(story)) {
+      void socialViewStory(String(story.id)).then((result) => {
+        if (!result.ok || !result.durable) return
+        setSeenStoryIds((previous) => {
+          if (previous.includes(story.id)) return previous
+          const next = [...previous, story.id].slice(-200)
+          try { window.localStorage.setItem(seenStorageKey, JSON.stringify(next)) } catch { /* server ledger remains authoritative */ }
+          return next
+        })
+      }).catch(() => undefined)
     }
   }
 
@@ -374,6 +398,14 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     if (next) openStory(next)
     else setViewing(null)
   }
+
+  useEffect(() => {
+    if (!viewing || viewerPaused || viewing.media?.type === "video" || prefersReducedMotion()) return
+    const timer = window.setTimeout(() => navigateStory(1), 7000)
+    return () => window.clearTimeout(timer)
+    // The active story and pause state define this timer; navigation is intentionally stable per story.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewing?.id, viewerPaused])
 
   const loadViewers = async (story: StoryItem) => {
     setLoadingViewers(true)
@@ -457,7 +489,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         <button
           type="button"
           role="listitem"
-          onClick={() => (ownStory ? openStory(ownStory) : openCreator())}
+          onClick={() => (ownStory ? openStory(ownStories.find((story) => !isStorySeen(story)) || ownStories[0]) : openCreator())}
           onContextMenu={(e) => {
             if (!ownStory) return
             e.preventDefault()
@@ -487,7 +519,10 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               <Plus size={19} strokeWidth={2.7} aria-hidden />
             </span>
           ) : (
-            <span className="absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 via-teal-400 to-emerald-600 p-[2px] shadow-md"><span className="block h-full w-full overflow-hidden rounded-full border-2 border-card bg-card">{profileAvatar ? <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" /> : null}</span></span>
+            <>
+              <span className="absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-teal-300 to-emerald-600 p-[2px] shadow-md"><span className="block h-full w-full overflow-hidden rounded-full border-2 border-card bg-card">{profileAvatar ? <LazyImage src={profileAvatar} alt="" className="h-full w-full object-cover" /> : null}</span></span>
+              {ownStories.length > 1 ? <span className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/55 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">{ownStories.length}</span> : null}
+            </>
           )}
         </button>
 
@@ -498,17 +533,19 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
             <span className="mt-1 text-[9px] leading-snug text-muted-foreground">Share a moment with your community</span>
           </div>
         ) : null}
-        {otherStories.map((item) => {
+        {otherStoryGroups.map((group) => {
+          const item = group[group.length - 1]
+          const firstUnseen = group.find((story) => !isStorySeen(story))
           const label = String(item.name || item.ownerId || "Member").trim() || "Member"
           const thumb = item.media?.url && !String(item.media.url).startsWith("blob:") ? item.media.url : null
           const avatar = typeof item.photo === "string" && item.photo ? item.photo : null
-          const seen = seenStoryIds.includes(item.id)
+          const seen = group.every(isStorySeen)
           return (
             <button
-              key={item.id}
+              key={String(item.ownerId || item.id)}
               type="button"
               role="listitem"
-              onClick={() => openStory(item)}
+              onClick={() => openStory(firstUnseen || group[0])}
               className={`group relative h-[158px] w-[104px] shrink-0 snap-start overflow-hidden rounded-[14px] border text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${seen ? "border-border/50 bg-muted" : "border-emerald-500/70 bg-muted ring-2 ring-emerald-500/25"}`}
               aria-label={`View story from ${label}${seen ? " (seen)" : ""}`}
             >
@@ -522,7 +559,10 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
                 </span>
               )}
               <span className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/75" />
-              {item.media?.type === "video" ? <span className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white"><Video size={13} /></span> : null}
+              <span className="absolute right-2 top-2 flex items-center gap-1.5">
+                {group.length > 1 ? <span className="rounded-full border border-white/20 bg-black/55 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">{group.length}</span> : null}
+                {item.media?.type === "video" ? <span className="rounded-full bg-black/55 p-1.5 text-white backdrop-blur"><Video size={13} /></span> : null}
+              </span>
               <span className={`absolute left-2 top-2 h-9 w-9 overflow-hidden rounded-full border-[2.5px] bg-card ${seen ? "border-white/70 bg-muted-foreground/25" : "border-transparent bg-gradient-to-br from-pink-500 via-amber-400 to-emerald-500 p-[2px]"}`}>
                 {avatar ? <LazyImage src={avatar} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-xs font-bold text-foreground">{label.slice(0, 1).toUpperCase()}</span>}
               </span>
@@ -580,8 +620,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               <span key={item.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
                 <span
                   className={`block h-full rounded-full ${completed ? "w-full bg-white" : active && viewing.media?.type !== "video" ? "bg-white" : "bg-transparent"}`}
-                  style={active && viewing.media?.type !== "video" && !prefersReducedMotion() ? { animation: "gh-story-progress 7s linear forwards" } : active && viewing.media?.type !== "video" ? { width: "100%" } : undefined}
-                  onAnimationEnd={active && viewing.media?.type !== "video" ? () => navigateStory(1) : undefined}
+                  style={active && viewing.media?.type !== "video" && !prefersReducedMotion() ? { animation: "gh-story-progress 7s linear forwards", animationPlayState: viewerPaused ? "paused" : "running" } : active && viewing.media?.type !== "video" ? { width: "100%" } : undefined}
                 />
               </span>
             )
@@ -602,6 +641,11 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               {viewing.audience ? ` · ${viewing.audience}` : ""}
             </p>
           </div>
+          {viewing.media?.type !== "video" ? (
+            <button type="button" onClick={() => setViewerPaused((paused) => !paused)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label={viewerPaused ? "Resume story" : "Pause story"}>
+              {viewerPaused ? <Play size={17} /> : <Pause size={17} />}
+            </button>
+          ) : null}
           {viewing.media?.url ? (
             <button
               type="button"
@@ -621,8 +665,8 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         </div>
       </div>
       <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
-        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <DurableVideo key={viewing.id} src={viewing.media.url} controls autoPlay playsInline className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <DurableImage src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
-        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Highlighted" : "Highlight"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
+        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <DurableVideo key={viewing.id} src={viewing.media.url} controls autoPlay playsInline onEnded={() => navigateStory(1)} className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <DurableImage src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
+        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" title="Save a shortcut on this device" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Saved" : "Save"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
         {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
         {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}
         {viewing.media && viewing.text && <p className="absolute bottom-28 left-4 right-4 z-10 whitespace-pre-wrap rounded-2xl bg-black/35 px-4 py-3 text-sm leading-relaxed sm:bottom-32 sm:left-8 sm:right-8">{viewing.text}</p>}

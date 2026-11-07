@@ -42,6 +42,8 @@ export interface StoryItem {
   viewerReactions?: string[]
   reactionCount?: number
   replyCount?: number
+  /** Server-confirmed viewer state from the durable story-view ledger. */
+  viewerHasViewed?: boolean
 }
 
 export interface Profile {
@@ -110,7 +112,7 @@ export interface Profile {
       summary?: string
     }>
     services?: string[]
-    portfolio?: Array<{ title: string; url?: string; description?: string }>
+    portfolio?: Array<{ title: string; url?: string; mediaUrl?: string; description?: string }>
     locationLabel?: string
     professionalInterests?: string[]
     contactPreferences?: {
@@ -216,6 +218,8 @@ export interface Post {
   mentions?: string[] // @username references
   linkPreview?: LinkPreview | null
   bookmarkedBy?: string[] // user ids who bookmarked
+  /** Viewer-scoped save state from authenticated server hydration. */
+  savedByMe?: boolean
   collections?: string[] // collection names (e.g., "Read Later", "Favorites")
   viewCount?: number
   impressionRank?: number // algorithm rank for "why am I seeing this"
@@ -338,6 +342,10 @@ export interface Candidate {
   country?: string
   profession?: string
   education?: string
+  profileMode?: "social" | "professional" | "business"
+  professional?: Profile["professional"]
+  business?: Profile["business"]
+  skills?: string[]
   joinedAt?: number | string
   lastActiveAt?: number | string
   isOnline?: boolean

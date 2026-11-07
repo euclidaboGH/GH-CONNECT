@@ -33,7 +33,7 @@ test("withdrawals POST gated on requests flag + testnet", /PI_EARNINGS_PAYOUT_RE
 test("withdrawable includes walletAuthorization snapshot", /walletAuthorization/.test(withdrawable) && /getWalletAuthorization/.test(withdrawable))
 test("authorization POST never trusts client recipient body", /getByGhUserId/.test(authRoute) && /body:\s*"\{\}"/.test(dash) === false ? /JSON\.stringify\(\{\}\)/.test(dash) || /body:\s*"\{\}"/.test(authRoute) || true : true)
 test("authorization grant uses mapped piAppUid only", /mapping\.piAppUid/.test(authRoute))
-test("dashboard primary journey authorize→quote→withdraw", /onAuthorizeWallet/.test(dash) && /onPreviewFee/.test(dash) && /onRequestPayout/.test(dash))
+test("dashboard primary journey authorize(sheet)→quote→withdraw", /openWithdrawSheet/.test(dash) && /onPreviewFee/.test(dash) && /onRequestPayout/.test(dash))
 test("rewards does not host withdraw dashboard", !/UnifiedEarningsDashboard/.test(rewards))
 test("rewards deep-links wallet with focus", /gh-pi-earnings-tools/.test(rewards))
 test("settings+wallet deep-link focus wiring", /ghc\.wallet\.focus/.test(settings) && /ghc\.wallet\.focus/.test(wallet))

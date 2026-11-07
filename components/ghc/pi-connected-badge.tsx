@@ -101,7 +101,7 @@ export function PioneerIdentityStrip({ className = "", hideGreenHavenId = false 
       </p>
       {me.piOnlyCommerce ? (
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Commerce fees settle in π. GHC is earned (claims, referrals, missions) — not used for listing fees.
+          Commerce fees settle in π. Eligible GHC claims are separate; mission milestones unlock achievements, not GHC under current policy.
         </p>
       ) : null}
     </div>

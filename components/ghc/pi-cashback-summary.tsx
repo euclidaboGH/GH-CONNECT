@@ -24,14 +24,14 @@ type CashbackPayload = {
 }
 
 function formatPiAtomic(value: string | undefined): string {
-  if (!value || !/^\d{1,38}$/.test(value)) return "0.0000000 π"
+  if (typeof value !== "string" || !/^\d{1,38}$/.test(value)) return "—"
   try {
     const atomic = BigInt(value)
     const whole = atomic / BigInt(10000000)
     const fraction = (atomic % BigInt(10000000)).toString().padStart(7, "0")
     return `${whole.toLocaleString()}\u002e${fraction} π`
   } catch {
-    return "0.0000000 π"
+    return "—"
   }
 }
 

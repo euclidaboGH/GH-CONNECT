@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { WifiOff, Wifi } from "lucide-react"
 import { PendingQueueChip } from "./pending-queue-chip"
 
@@ -12,6 +12,7 @@ import { PendingQueueChip } from "./pending-queue-chip"
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false)
   const [justOnline, setJustOnline] = useState(false)
+  const onlineTimer = useRef<number | null>(null)
 
   useEffect(() => {
     const sync = () => {
@@ -19,7 +20,11 @@ export function OfflineBanner() {
       setOffline((wasOff) => {
         if (wasOff && !off) {
           setJustOnline(true)
-          window.setTimeout(() => setJustOnline(false), 2500)
+          if (onlineTimer.current !== null) window.clearTimeout(onlineTimer.current)
+          onlineTimer.current = window.setTimeout(() => {
+            onlineTimer.current = null
+            setJustOnline(false)
+          }, 2500)
         }
         return off
       })
@@ -30,6 +35,7 @@ export function OfflineBanner() {
     return () => {
       window.removeEventListener("online", sync)
       window.removeEventListener("offline", sync)
+      if (onlineTimer.current !== null) window.clearTimeout(onlineTimer.current)
     }
   }, [])
 

@@ -10,7 +10,10 @@ const checks = [
   }],
   ["earnings action callbacks have stable dependencies", () => {
     const source = read("components/ghc/unified-earnings-dashboard.tsx")
-    return source.includes("const onAuthorizeWallet = useCallback") &&
+    // Wallet consent now lives in the withdraw sheet (phase 28): the dashboard
+    // hands off via openWithdrawSheet and must not define onAuthorizeWallet.
+    return source.includes("const openWithdrawSheet = useCallback") &&
+      !source.includes("onAuthorizeWallet") &&
       source.includes("const onRequestPayout = useCallback") &&
       source.includes("const onPreviewFee = useCallback")
   }],

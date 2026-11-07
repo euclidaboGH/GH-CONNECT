@@ -1,19 +1,18 @@
 import type { PendingHold } from "./wallet-types"
 import { formatDateTime } from "@/lib/regional-context"
+import { formatGhcSafe } from "@/lib/wallet/ghc-amount"
 
 export function formatGhc(n: number): string {
-  if (!Number.isFinite(n)) return "₲ 0.00"
-  return `₲ ${n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+  return formatGhcSafe(n)
 }
 
 export function formatWhen(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return "—"
   return formatDateTime(ts, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 
 export function formatDay(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return "—"
   return formatDateTime(ts, { month: "short", day: "numeric", year: "numeric" })
 }
 
@@ -23,6 +22,11 @@ export function statusLabel(status?: string): { text: string; className: string 
       return { text: "Pending", className: "text-amber-700 dark:text-amber-400" }
     case "failed":
       return { text: "Failed", className: "text-red-600 dark:text-red-400" }
+    case "processing":
+    case "held":
+      return { text: "Processing", className: "text-sky-700 dark:text-sky-400" }
+    case "expired":
+      return { text: "Expired", className: "text-muted-foreground" }
     case "cancelled":
     case "canceled":
       return { text: "Cancelled", className: "text-muted-foreground" }
@@ -55,6 +59,7 @@ export function classifyPendingSource(
 }
 
 export function expectedClearWindow(createdAt: number, expiresAt?: number): string {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return "Clearing time unavailable · pull to refresh"
   if (expiresAt && expiresAt > Date.now()) {
     const h = Math.max(1, Math.round((expiresAt - Date.now()) / 3600000))
     if (h < 48) return `Usually clears within ~${h}h`

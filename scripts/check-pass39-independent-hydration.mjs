@@ -12,7 +12,7 @@ const manifest = read("VERIFIED_MANIFEST.txt")
 const checks = [
   ["social domain hydration uses independent settled requests", context.includes("const [feedResult, storiesResult, followsResult] = await Promise.allSettled(")],
   ["feed hydration accepts successful feed response independently", context.includes('const feed = feedResult.status === "fulfilled" ? feedResult.value : null') && context.includes("if (feed?.ok && Array.isArray(feed.posts)")],
-  ["stories hydration accepts successful stories response independently", context.includes('const stories = storiesResult.status === "fulfilled" ? storiesResult.value : null') && context.includes("if (stories?.ok && Array.isArray(stories.stories)")],
+  ["stories hydration accepts successful stories response independently", context.includes('const stories = storiesResult.status === "fulfilled" ? storiesResult.value : null') && context.includes("if (stories?.ok && stories.durable && Array.isArray(stories.stories)")],
   ["follow graph hydration accepts successful follows response independently", context.includes('const follows = followsResult.status === "fulfilled" ? followsResult.value : null') && context.includes("if (follows?.ok)")],
   ["cancelled hydration cannot commit late results", /if \(cancelled\) return\s*\n\s*const feed = feedResult/.test(context)],
   ["release metadata is synchronized", pkg.version === lock.version && lock.packages?.[""]?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],

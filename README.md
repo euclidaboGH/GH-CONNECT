@@ -1,15 +1,44 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.315.3`
+**Current source version:** `0.330.15`
 - Phase 23 (0.309.0): migration audit hardening separates reservation expiry cleanup from locked order snapshot reads. Application reads explicitly run cleanup and fail closed; transition RPC snapshots no longer sweep unrelated rows while holding an order lock. Added whole-migration SECURITY DEFINER search_path audit. No financial settlement behavior is added.
 
 GreenHaven is a Next.js + Supabase application with Pi-integrated wallet, marketplace, social/community, messaging, economy, identity, media and related utility surfaces.
 
+### 0.330.9 — Build-gate continuity (curation language + project truth)
+
+Synchronizes README, PROJECT_TRUTH, package, lockfile and APP_RELEASE_VERSION for Pass 43 / project-truth prebuild gates. Post card engagement toolbar uses concise **Community curation** language. Wallet withdrawal form stability from 0.330.5–0.330.8 retained. No new migrations or Mainnet A2U enablement.
+
+### 0.330.4 — Phase 3 Profile & Personal Dashboard architecture
+
+Social-first profile presentation is separated from professional identity, achievements and account tools. Dashboard modal lifecycle now supports Escape dismissal, background scroll locking and device safe-area scrolling. No database or financial authority changes.
+
+### 0.330.2 — Phase 26 cache-safe CI and release hygiene
+Moves TypeScript incremental build metadata into the ignored `.cache/` directory. The Phase 26 wallet-ledger gate now checks all nested TypeScript build-info files and verifies that generated caches are Git-ignored and untracked, so a normal cache created during CI cannot cause a false release failure. The root-level legacy cache path remains prohibited. Wallet request bounds, latest-request-wins cancellation, confirmed-ledger labeling and Pi/GHC separation are preserved. No database migration, financial authority or production approval change.
+
+### 0.330.1 — CI regression-contract repair
+Repairs stale source checks without weakening runtime behavior: the dual-asset wallet contract now verifies the implemented dedicated PI Withdraw action, the Stories contract validates the actual emerald own-story tile/avatar ring, and the legacy Phase 5 release-readiness check compares the manifest dynamically with the current package version instead of pinning 0.312.0. Retains the safe `.env.example` template and fail-closed payment defaults. No application, database, Pi, GHC, payment or entitlement authority changes.
+
+### 0.330.0 — Phase 10 navigation and media reliability
+Reduces the initial Settings route payload by lazy-loading security, compliance, Pi capability, passkey and account-data subsections. Removes generic image URL query mutation so signed storage/CDN URLs and private media facade identifiers remain byte-for-byte intact. Infinite-scroll request locking now lasts until the asynchronous page load settles, preventing duplicate pagination requests. Older embedded WebViews without IntersectionObserver receive visible content instead of hidden/unloaded sections. Adds runtime and source regression gates; no financial authority or migration behavior changes. Browser/device and supported-runtime acceptance remain open.
+
+### 0.329.0 — Phase 10 privacy-safe caching and adaptive media loading
+Restricts service-worker storage to an explicit allowlist of public static assets. Navigation documents, authenticated pages, Next.js RSC responses, all API routes and private media are network-only; the previous broad same-origin cache path and cached-homepage fallback are removed. Feed and Story media prefetch now respects device-local reduced-data preference, browser Data Saver and constrained network signals, rechecks eligibility immediately before work, and caps speculative media work. Reconnect feedback clears its timer on unmount. Added executable service-worker policy tests and 15 source resilience checks. Phase 9 acceptance remains open; no migration or financial operation is authorized.
+
+### 0.328.0 — Phase 10 Settings and platform performance
+Adds a dedicated Performance & data area in Settings with browser-reported device capability diagnostics, network and reduced-motion signals, and a device-local reduced-data preference. The preference suppresses optional prefetching; system Data Saver and constrained connections take priority. Shared async memoization now has bounded LRU eviction, TTL expiry and concurrent request deduplication. The UI explicitly avoids synthetic benchmark claims and does not change account, privacy, Pi, GHC, payment or entitlement authority. Phase 9 acceptance gates remain open; no production migration or financial operation is authorized.
+
 ## Current release baseline
 
 - Node: `24.15.0` / `^24.15.0`
-- Supabase migrations: **177 canonical SQL files**
+- Supabase migrations: **189 canonical SQL files**
 - Duplicate migration numeric prefixes: **0**
+- Phase 1 deep completion (0.315.6): canonical curation visibility, serialized daily vote limits, mandatory activity auditing, deterministic community pagination, and resilient community-board publishing; three related SQL migrations remain REVIEW_REQUIRED.
+- Phase 2 Stories (0.315.7): creator-grouped story sequences, server-confirmed seen-state hydration, account-scoped local preferences, pause/resume and reduced-motion playback, video end progression, and database-enforced audience/block checks for story views. One additive Stories migration is REVIEW_REQUIRED; see `docs/PHASE-2-STORIES-PREMIUM-REBUILD-0.315.7.md`.
+- Phase 3 Marketplace (0.315.8): product-type and delivery filters, currency-safe GHC/PI price sorting, upgraded listing cards, seller-centre inventory/status management, and authenticated durable listing-report intake. One additive report migration is REVIEW_REQUIRED; see `docs/PHASE-3-MARKETPLACE-PREMIUM-UPGRADE-0.315.8.md`.
+- Phase 4 Cart/Checkout (0.315.9): strict bounded cart-cache normalization, cross-tab synchronization, checkout edit locking and selective reserved-line cleanup. Server order/payment authority remains unchanged; see `docs/PHASE-4-CART-CHECKOUT-PREMIUM-UPGRADE-0.315.9.md`.
+- Phase 5 Discovery (0.316.0): batch-prepared ranking indexes, deterministic duplicate suppression, consistent activity-recency scoring, and accessible independent profile/follow actions. No database migration or financial authority change; see `docs/PHASE-5-DISCOVERY-PERFORMANCE-UPGRADE-0.316.0.md`.
+- Phase 6 Profile and Identity (0.318.0): per-domain relationship indexes, batch hydration, block-first safety, account-switch cache isolation and stale-response protection. Phase 7 (0.319.0) adds an editable creator/business identity and portfolio showcase, richer server-hydrated achievements, privacy-filtered professional discovery, HTTPS-only visual portfolio previews and project links, and server-side rejection of client-forged verification flags. Consolidated static checks pass 57/57; Node 24.15.0 typecheck, lint and production build remain pending. No migration or financial-authority change. Phase 7 Wallet source implementation is closed in 0.320.0; Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. Phase 8 Rewards (0.323.0) completes the source implementation with server-verified, idempotent non-financial mission achievements, authenticated GHC ledger history, daily-claim integrity and abuse-protection gates. Mission GHC issuance remains disabled by policy; the additive mission-verification migration requires operator-reviewed Testnet validation before production approval.
 - Static/source audit: **57/57** consolidated checks passing; dedicated i18n engine gate **11/11** and social localisation gate **12/12** (source-only; 2026-11-03)
 - Pass 41: marketplace loaders now protect against stale responses and preserve last-known data on transient failures; feed requests use latest-request-wins cancellation
 - Pass 42: marketplace API record normalization is centralized in runtime-tested domain mappers for listings, saved items and durable orders
@@ -103,3 +132,13 @@ The feed/profile composer now uses a simpler neutral layout with a single text e
 Comment photo attachments now open in a full-size, proportion-preserving viewer; video attachments open in an accessible playback surface, with download kept as a separate action. The comments sheet has a truthful loading skeleton, keyboard focus containment, body-scroll locking and focus restoration. Curation copy is more concise without changing vote semantics. No database, authentication, wallet, Pi, GHC or financial contracts changed.
 
 - Phase 27 (0.313.0): corrected nested-scroll direction detection and true in-flow bottom-navigation collapse; curation analytics now open in an accessible portal sheet and fetch lazily with bounded, cancellable, latest-request-wins requests. No financial or migration authority changed.
+
+
+
+### 0.327.0 — Phase 9 Membership Pi intent integrity
+
+Completed-payment membership grants and recovery now require exact durable Pi provider, PI currency, membership purpose, non-empty provider payment ID and COMPLETED/FULFILLED state. Missing or mismatched rail discriminators fail closed across activation, completion, fulfillment, recovery and history reconciliation. Production Pi grants use the row-locked idempotent renewal RPC and authoritative post-write confirmation; pending activation returns retryable status. Both generic and dedicated utility spend routes block boosts/tools until durable activation exists. An additive service-role-only SQL renewal guard is REVIEW_REQUIRED and unapplied. GHC/Pi separation and existing catalog/product/amount checks remain unchanged. See `docs/PHASE-9-MEMBERSHIP-PI-INTENT-SECURITY-0.327.0.md`.
+
+### 0.326.0 — Phase 9 Membership lifecycle and access control
+
+Membership status presentation now uses authoritative server state; protected premium messaging products enforce required VIP/VVIP entitlements before GHC debit; verified Pi renewal derives calendar duration and bonus month from the durable catalog-bound payment intent; a 72-hour renewal-continuity window does not grant access during expiry gaps; and authenticated lifecycle history plus operator-only expiry controls are included. Plans remain prepaid/non-recurring. The additive migration is REVIEW_REQUIRED and unapplied; Node 24.15.x build, disposable PostgreSQL/Testnet, browser/device and operator acceptance remain required.

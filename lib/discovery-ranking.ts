@@ -90,47 +90,85 @@ export function filterDiscoveryPool(
  * Score a single candidate using available public-ish signals.
  * Does not use private attributes (wallet, exact location coords, reports, etc.).
  */
-export function scoreDiscoveryCandidate(
+type PreparedRankContext = {
+  interests: Set<string>
+  following: Set<string>
+  friends: Set<string>
+  city: string
+  country: string
+  profession: string
+  education: string
+  mode: string
+  modeHints: string[]
+  now: number
+}
+
+const MODE_HINTS: Record<string, string[]> = {
+  friends: ["friend", "friendship", "social"],
+  professional: ["professional", "work", "career", "networking"],
+  collaborate: ["collaborate", "collaboration", "project"],
+  mentor: ["mentor", "mentorship", "coaching"],
+  learn: ["learn", "learning", "education"],
+  dating: ["dating", "relationship", "romance"],
+}
+
+function prepareRankContext(ctx: DiscoveryRankContext, now = Date.now()): PreparedRankContext {
+  const mode = normalizeText(ctx.connectionMode || "all")
+  return {
+    interests: new Set((ctx.interests || []).map(normalizeText).filter(Boolean)),
+    following: new Set((ctx.followingIds || []).map(normalizeId).filter(Boolean)),
+    friends: new Set((ctx.friendIds || []).map(normalizeId).filter(Boolean)),
+    city: normalizeText(ctx.city),
+    country: normalizeText(ctx.country),
+    profession: normalizeText(ctx.profession),
+    education: normalizeText(ctx.education),
+    mode,
+    modeHints: mode && mode !== "all" ? (MODE_HINTS[mode] || [mode]) : [],
+    now,
+  }
+}
+
+function scorePrepared(
   candidate: Candidate,
-  ctx: DiscoveryRankContext,
+  ctx: PreparedRankContext,
 ): { score: number; reasons: string[] } {
   let score = 0
   const reasons: string[] = []
-
-  const shared = sharedInterestCount(ctx.interests, candidate.interests)
-  if (shared.length) {
-    score += Math.min(shared.length * 12, 36)
-    reasons.push(
-      shared.length === 1 ? `Shared interest: ${shared[0]}` : `${shared.length} shared interests`,
-    )
-  }
-
-  const following = new Set((ctx.followingIds || []).map(normalizeId))
-  const friends = new Set((ctx.friendIds || []).map(normalizeId))
-  // Soft mutual proxy: candidate also followed by people you follow is not available offline;
-  // treat existing follow relationship as lower priority for "new discovery"
   const id = normalizeId(candidate.id)
-  if (friends.has(id)) {
-    score -= 20 // already connected — should usually be filtered, but deprioritize
-  } else if (following.has(id)) {
-    score -= 8
+
+  if (ctx.interests.size && candidate.interests?.length) {
+    const matched = new Map<string, string>()
+    for (const value of candidate.interests) {
+      const normalized = normalizeText(value)
+      const display = typeof value === "string" ? value.trim() : ""
+      if (normalized && display && ctx.interests.has(normalized) && !matched.has(normalized)) {
+        matched.set(normalized, display)
+      }
+    }
+    const shared = [...matched.values()]
+    if (shared.length) {
+      score += Math.min(shared.length * 12, 36)
+      reasons.push(shared.length === 1 ? `Shared interest: ${shared[0]}` : `${shared.length} shared interests`)
+    }
   }
+
+  if (ctx.friends.has(id)) score -= 20
+  else if (ctx.following.has(id)) score -= 8
 
   const loc = normalizeText(`${candidate.location || ""} ${candidate.city || ""} ${candidate.country || ""}`)
-  if (ctx.city && loc.includes(normalizeText(ctx.city))) {
+  if (ctx.city && loc.includes(ctx.city)) {
     score += 10
     reasons.push("Same city")
-  } else if (ctx.country && loc.includes(normalizeText(ctx.country))) {
+  } else if (ctx.country && loc.includes(ctx.country)) {
     score += 5
     reasons.push("Same country")
   }
 
-  if (ctx.profession && normalizeText(candidate.profession) === normalizeText(ctx.profession)) {
+  if (ctx.profession && normalizeText(candidate.profession) === ctx.profession) {
     score += 8
     reasons.push("Similar profession")
   }
-
-  if (ctx.education && normalizeText(candidate.education) === normalizeText(ctx.education)) {
+  if (ctx.education && normalizeText(candidate.education) === ctx.education) {
     score += 4
     reasons.push("Similar education")
   }
@@ -140,7 +178,7 @@ export function scoreDiscoveryCandidate(
     reasons.push("Active now")
   } else {
     const last = timestampOf(candidate.lastActiveAt)
-    const ageMs = last === null ? null : Date.now() - last
+    const ageMs = last === null ? null : ctx.now - last
     if (ageMs !== null && ageMs >= 0 && ageMs < 7 * 86400000) {
       score += 3
       reasons.push("Active this week")
@@ -152,57 +190,59 @@ export function scoreDiscoveryCandidate(
     reasons.push("Verified")
   }
 
-  // Intent / connection mode soft boost (user-selected preference)
-  const mode = (ctx.connectionMode || "all").toLowerCase()
-  const goals = [
-    ...(candidate.relationshipGoals || []),
-    candidate.primaryMode,
-    candidate.relationshipType,
-  ]
-    .flat()
-    .filter(Boolean)
-    .map((g) => normalizeText(g))
-
-  if (mode && mode !== "all") {
-    const modeHints: Record<string, string[]> = {
-      friends: ["friend", "friendship", "social"],
-      professional: ["professional", "work", "career", "networking"],
-      collaborate: ["collaborate", "collaboration", "project"],
-      mentor: ["mentor", "mentorship", "coaching"],
-      learn: ["learn", "learning", "education"],
-      dating: ["dating", "relationship", "romance"],
-    }
-    const hints = modeHints[mode] || [mode]
-    if (goals.some((g) => hints.some((h) => g.includes(h)))) {
+  if (ctx.modeHints.length) {
+    const goals = [
+      ...(candidate.relationshipGoals || []),
+      candidate.primaryMode,
+      candidate.relationshipType,
+    ].flat().filter(Boolean).map(normalizeText)
+    if (goals.some((goal) => ctx.modeHints.some((hint) => goal.includes(hint)))) {
       score += 14
       reasons.push("Matches your intent")
     } else {
-      score += 1 // soft — don't hard-exclude unless filters say so
+      score += 1
     }
   }
 
-  // Slight diversity: profiles with a photo rank a bit higher for UX quality
-  if (candidate.photo && !String(candidate.photo).includes("placeholder")) {
-    score += 2
-  }
-
+  if (candidate.photo && !String(candidate.photo).includes("placeholder")) score += 2
   return { score, reasons: reasons.slice(0, 4) }
 }
 
 /**
+ * Score a single candidate. Batch ranking uses a prepared context to avoid
+ * rebuilding normalized lookup sets for every candidate.
+ */
+export function scoreDiscoveryCandidate(
+  candidate: Candidate,
+  ctx: DiscoveryRankContext,
+): { score: number; reasons: string[] } {
+  return scorePrepared(candidate, prepareRankContext(ctx))
+}
+
+/**
  * Filter + rank discovery candidates. Highest score first.
- * Does not mutate input.
+ * Lookup indexes and the recency clock are prepared once per batch.
+ * Does not mutate input and collapses duplicate candidate identities.
  */
 export function rankDiscoveryCandidates(
   candidates: Candidate[] | null | undefined,
   ctx: DiscoveryRankContext,
 ): RankedCandidate[] {
   const pool = filterDiscoveryPool(candidates, ctx)
-  const ranked: RankedCandidate[] = pool.map((c) => {
-    const { score, reasons } = scoreDiscoveryCandidate(c, ctx)
-    return { ...c, _discoveryScore: score, _discoveryReasons: reasons }
-  })
-  ranked.sort((a, b) => (b._discoveryScore || 0) - (a._discoveryScore || 0) || normalizeId(a.id).localeCompare(normalizeId(b.id)))
+  const prepared = prepareRankContext(ctx)
+  const seen = new Set<string>()
+  const ranked: RankedCandidate[] = []
+  for (const candidate of pool) {
+    const id = normalizeId(candidate.id)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const { score, reasons } = scorePrepared(candidate, prepared)
+    ranked.push({ ...candidate, _discoveryScore: score, _discoveryReasons: reasons })
+  }
+  ranked.sort((a, b) =>
+    (b._discoveryScore || 0) - (a._discoveryScore || 0) ||
+    normalizeId(a.id).localeCompare(normalizeId(b.id)),
+  )
   return ranked
 }
 

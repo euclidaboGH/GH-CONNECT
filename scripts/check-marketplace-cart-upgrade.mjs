@@ -15,7 +15,7 @@ const checks = [
   ["Pi payment handoff preserved", /openPayForListing/.test(screen)],
   ["bottom navigation opens real cart", /bucket: "cart"/.test(app)],
   ["cart is distinct from Orders", /bucket === "cart"/.test(screen) && /bucket === "orders"/.test(screen)],
-  ["no fabricated marketplace inventory", /Only real listings/.test(screen)],
+  ["no fabricated marketplace inventory", /Only real seller listings/.test(screen)],
 ]
 
 let failed = 0

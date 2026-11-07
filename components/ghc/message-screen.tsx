@@ -956,11 +956,11 @@ export function MessageScreen() {
           </p>
         ) : null}
       </div>
-      <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
+      <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-1.5 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-[17px] font-bold tracking-tight text-foreground">{msg("messagesTitle")}</h1>
-            <p className="text-[11px] text-muted-foreground">
+            <h1 className="text-[16px] font-bold leading-tight tracking-tight text-foreground">{msg("messagesTitle")}</h1>
+            <p className="text-[11px] leading-tight text-muted-foreground">
               {msg("messagesSubtitle")}
             </p>
           </div>
@@ -994,7 +994,7 @@ export function MessageScreen() {
             </div>
           ) : null}
         </div>
-        <div className="mt-2.5">
+        <div className="mt-1.5">
           <ConversationSearchBar searchQuery={query} onSearchChange={setQuery} />
         </div>
 

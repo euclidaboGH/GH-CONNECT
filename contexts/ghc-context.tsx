@@ -1057,7 +1057,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               /* */
             }
           }
-          if (stories?.ok && Array.isArray(stories.stories) && stories.stories.length > 0) {
+          if (stories?.ok && stories.durable && Array.isArray(stories.stories)) {
             next.stories = stories.stories.map((st) => ({
               id: String(st.id),
               ownerId: st.ownerId ? String(st.ownerId) : undefined,
@@ -1070,6 +1070,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               expiresAt: st.expiresAt ? Number(st.expiresAt) : undefined,
               audience: st.audience as StoryItem["audience"],
               status: (st.status as StoryItem["status"]) || "published",
+              viewerHasViewed: st.viewerHasViewed === true,
+              reactionCounts: st.reactionCounts && typeof st.reactionCounts === "object" ? st.reactionCounts as Record<string, number> : {},
+              viewerReactions: Array.isArray(st.viewerReactions) ? st.viewerReactions.filter((value): value is string => typeof value === "string") : [],
+              reactionCount: Number.isFinite(Number(st.reactionCount)) ? Number(st.reactionCount) : 0,
             }))
           }
           // Phase 1: accept follow graph whenever API succeeds (durable preferred)

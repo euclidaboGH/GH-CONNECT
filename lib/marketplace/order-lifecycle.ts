@@ -102,17 +102,31 @@ export function orderRoleForViewer(order: { buyerId?: string; sellerId?: string 
 
 export type BrowseSort = "newest" | "price_asc" | "price_desc"
 
-export function sortMarketplaceListings<T extends { createdAt?: number; price?: number }>(
+/**
+ * Sort listings without comparing nominal amounts across different assets.
+ * GHC and PI remain separate price domains: price sorting is performed inside
+ * each currency group, while the first-seen currency-group order is preserved.
+ */
+export function sortMarketplaceListings<T extends { createdAt?: number; price?: number; currency?: string }>(
   items: T[],
   sort: BrowseSort,
 ): T[] {
-  const copy = [...items]
-  if (sort === "price_asc") {
-    copy.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0))
-  } else if (sort === "price_desc") {
-    copy.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
-  } else {
-    copy.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
+  if (sort === "newest") {
+    return [...items].sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
   }
-  return copy
+
+  const groups = new Map<string, T[]>()
+  for (const item of items) {
+    const currency = String(item.currency || "GHC").trim().toUpperCase() || "GHC"
+    const group = groups.get(currency) || []
+    group.push(item)
+    groups.set(currency, group)
+  }
+
+  return Array.from(groups.values()).flatMap((group) =>
+    group.sort((a, b) => {
+      const difference = (Number(a.price) || 0) - (Number(b.price) || 0)
+      return sort === "price_asc" ? difference : -difference
+    }),
+  )
 }

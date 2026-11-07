@@ -117,6 +117,19 @@ export async function socialGetPost(postId: string): Promise<{ ok: boolean; dura
   return json(`/api/social/posts/${encodeURIComponent(String(postId || "").trim())}`)
 }
 
+export async function socialListCommunityPosts(
+  communityId: string,
+  limit = 40,
+  cursor?: { before: number; beforeId: string },
+): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; error?: string }> {
+  const id = String(communityId || "").trim()
+  if (!id) return { ok: false, durable: false, posts: [], error: "COMMUNITY_REQUIRED" }
+  const query = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.floor(limit)))) })
+  if (cursor) { query.set("before", String(cursor.before)); query.set("beforeId", cursor.beforeId) }
+  const data = await json<{ posts?: Partial<Post>[]; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
+  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], error: data.error }
+}
+
 export async function socialCreatePost(
   post: Partial<Post> & { content: string }
 ): Promise<{ ok: boolean; durable: boolean; post?: Partial<Post>; error?: string }> {

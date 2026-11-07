@@ -11,7 +11,7 @@ const checks = [
   ['post detail rehydrates canonical author', /hydratePublicProfileIdentity\(\[post/.test(read('app/api/social/posts/[id]/route.ts'))],
   ['comments rehydrate canonical authors', /hydratePublicProfileIdentity\(hydratedComments/.test(read('app/api/social/posts/[id]/comments/route.ts'))],
   ['profile timeline rehydrates canonical authors', /hydratePublicProfileIdentity\(visiblePosts/.test(read('app/api/social/profile/[userId]/posts/route.ts'))],
-  ['stories rehydrate canonical owners', /hydratePublicProfileIdentity\(enrichedStories/.test(read('app/api/social/stories/route.ts'))],
+  ['stories rehydrate canonical owners', /hydratePublicProfileIdentity\(projectedStories/.test(read('app/api/social/stories/route.ts'))],
   ['identity helper uses no-store fetch', /cache:\s*"no-store"/.test(read('lib/server/identity/public-profile-hydration.ts'))],
   ['identity upstream request has a finite timeout', /signal:\s*AbortSignal\.timeout\(5000\)/.test(read('lib/server/identity/public-profile-hydration.ts'))],
   ['public photos reject protocol-relative and control-character URLs', /url\.startsWith\("\/\/"\)/.test(read('lib/server/identity/public-profile-hydration.ts')) && /\\u0000-\\u001f/.test(read('lib/server/identity/public-profile-hydration.ts'))],

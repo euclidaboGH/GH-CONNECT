@@ -34,7 +34,7 @@ const checks = [
   ['step-up token body is bounded before token verification', read('app/api/auth/step-up/route.ts').indexOf('readBoundedJson(request, 8 * 1024)') < read('app/api/auth/step-up/route.ts').indexOf('verifyPiAccessToken(accessToken)')],
   ['payment recovery body is bounded before provider lookup', read('app/api/payments/intents/[intentId]/recover/route.ts').indexOf('readBoundedJson(request, 4 * 1024)') < read('app/api/payments/intents/[intentId]/recover/route.ts').indexOf('piGetPayment(paymentId)')],
   ['new request-boundary suite is registered in static verification', read('scripts/verify-phase14-static.mjs').includes('check-phase1-12-request-boundary-expansion.mjs')],
-  ['release worklog records source-only verification limits', /source-level|source[- ]only/i.test(read('docs/UPGRADE-WORKLOG-0.157.14.md')) && /Node\.js 24\.15\.0/.test(read('docs/UPGRADE-WORKLOG-0.157.14.md'))],
+  ['release worklog records source-only verification limits', /source-level|source[- ]only/i.test(read('docs/UPGRADE-WORKLOG-0.330.1.md')) && /Node\.js 24\.15\.0/.test(read('docs/UPGRADE-WORKLOG-0.330.1.md'))],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

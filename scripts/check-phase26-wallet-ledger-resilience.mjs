@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const root = process.cwd()
 const read = (file) => readFileSync(join(root, file), 'utf8')
@@ -13,6 +14,31 @@ const balance = read('features/wallet/wallet-balance.tsx')
 const screen = read('features/wallet/wallet-screen.tsx')
 const context = read('docs/CURRENT_BUILD_CONTEXT.md')
 const gitignore = read('.gitignore')
+const tsconfig = JSON.parse(read('tsconfig.json'))
+
+function collectBuildInfoFiles(directory, found = []) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === 'node_modules') continue
+    const absolute = join(directory, entry.name)
+    if (entry.isDirectory()) collectBuildInfoFiles(absolute, found)
+    else if (entry.isFile() && entry.name.endsWith('.tsbuildinfo')) found.push(absolute)
+  }
+  return found
+}
+
+const cacheFiles = collectBuildInfoFiles(root).map((file) => relative(root, file).split(sep).join('/'))
+const gitRoot = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' })
+const insideGit = gitRoot.status === 0
+const cachePolicyValid =
+  gitignore.includes('*.tsbuildinfo') &&
+  gitignore.includes('.cache/') &&
+  tsconfig.compilerOptions?.tsBuildInfoFile === '.cache/tsconfig.tsbuildinfo' &&
+  cacheFiles.every((file) => {
+    if (!insideGit) return false
+    const ignored = spawnSync('git', ['check-ignore', '--quiet', '--no-index', file], { cwd: root }).status === 0
+    const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: root, stdio: 'ignore' }).status === 0
+    return ignored && !tracked
+  })
 const checks = [
   ['wallet summary fetch has a bounded timeout', /AbortSignal\.timeout\(10_000\)/.test(walletV2)],
   ['wallet provider aborts superseded requests', /activeRequest\.current\?\.abort\(\)/.test(provider)],
@@ -29,7 +55,7 @@ const checks = [
   ['package and lockfile versions match', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version],
   ['wallet release gate remains registered', (pkg.scripts['verify:static'] || '').includes('check-wallet-phase5-release-gate.mjs')],
   ['migration source manifest contains every canonical migration', existsSync(join(root, 'MIGRATION-SOURCE-MANIFEST.csv')) && read('MIGRATION-SOURCE-MANIFEST.csv').trim().split(/\r?\n/).length === Number((read('VERIFIED_MANIFEST.txt').match(/^canonical_migrations=(\d+)$/m) || [])[1]) + 1],
-  ['incremental build cache is excluded from source releases', !existsSync(join(root, 'tsconfig.tsbuildinfo')) && gitignore.includes('*.tsbuildinfo')],
+  ['incremental build cache is excluded from source releases', cachePolicyValid && !existsSync(join(root, 'tsconfig.tsbuildinfo'))],
   ['local secrets remain ignored while the example template is retained', gitignore.includes('.env.*') && gitignore.includes('!.env.example') && existsSync(join(root, '.env.example'))],
 ]
 let failures = 0

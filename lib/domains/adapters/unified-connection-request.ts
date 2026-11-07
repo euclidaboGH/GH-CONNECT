@@ -239,6 +239,12 @@ export async function sendUnifiedConnectionRequest(
     )
   } catch { /* */ }
 
+  // Mission proof is requested only after the connection request is confirmed
+  // durable by the server. It is non-financial and must not delay the request UI.
+  void import("@/lib/missions/progress")
+    .then(({ reportMissionProgress }) => reportMissionProgress("send_connection"))
+    .catch(() => undefined)
+
   return { ok: true, intents, durable, state: "outgoing_pending" }
 }
 

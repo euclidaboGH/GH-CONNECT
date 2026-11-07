@@ -1,4 +1,5 @@
-import { isOwnedByCurrentUser, idListIncludes } from "@/lib/identity/identity-match"
+import { isOwnedByCurrentUser } from "@/lib/identity/identity-match"
+import { createProfileRelationshipIndexCache, uniqueProfileIds, type ProfileRelationshipIndex } from "./profile-relationship-index"
 /**
  * ProfileDomain — Profile as digital identity presentation.
  *
@@ -122,8 +123,21 @@ export function createProfileDomain(deps: {
   getGraphSnapshot?: (me: string) => SocialGraphSnapshot | null
 }) {
   const me = deps.currentUserId || "current-user"
+  // Cache belongs to this domain instance (and therefore this authenticated identity).
+  // Canonical graph arrays are immutable: replacing an array invalidates its index.
+  const getRelationshipIndex = createProfileRelationshipIndexCache(() => ({
+    following: deps.getFollowing?.(),
+    followers: deps.getFollowers?.(),
+    friends: deps.getFriends?.(),
+    matches: deps.getMatches?.(),
+    blocked: deps.getBlockedUsers?.(),
+    muted: deps.getMutedUsers?.(),
+    restricted: deps.getRestrictedUsers?.(),
+    outgoingRequests: deps.getOutgoingRequestIds?.(),
+    incomingRequests: deps.getIncomingRequestIds?.(),
+  }))
 
-  function relationshipTo(userId: string): ProfileRelationshipState {
+  function relationshipTo(userId: string, index: ProfileRelationshipIndex = getRelationshipIndex()): ProfileRelationshipState {
     if (!userId || userId === me) {
       return {
         isSelf: true,
@@ -141,27 +155,17 @@ export function createProfileDomain(deps: {
       }
     }
 
-    const following = new Set(deps.getFollowing?.() || [])
-    const followers = new Set(deps.getFollowers?.() || [])
-    const friends = new Set(deps.getFriends?.() || [])
-    const matches = new Set((deps.getMatches?.() || []).map((m) => m.userId))
-    const blocked = new Set(deps.getBlockedUsers?.() || [])
-    const muted = new Set(deps.getMutedUsers?.() || [])
-    const restricted = new Set(deps.getRestrictedUsers?.() || [])
-    const outgoing = new Set(deps.getOutgoingRequestIds?.() || [])
-    const incoming = new Set(deps.getIncomingRequestIds?.() || [])
-
     const state: ProfileRelationshipState = {
-      isSelf: isOwnedByCurrentUser(userId),
-      isFollowing: following.has(userId) || idListIncludes([...following], userId),
-      isFollower: followers.has(userId),
-      isFriend: friends.has(userId),
-      isMatched: matches.has(userId),
-      isBlocked: blocked.has(userId),
-      isMuted: muted.has(userId),
-      isRestricted: restricted.has(userId),
-      outgoingRequest: outgoing.has(userId),
-      incomingRequest: incoming.has(userId),
+      isSelf: userId === me || isOwnedByCurrentUser(userId),
+      isFollowing: index.following.has(userId),
+      isFollower: index.followers.has(userId),
+      isFriend: index.friends.has(userId),
+      isMatched: index.matches.has(userId),
+      isBlocked: index.blocked.has(userId),
+      isMuted: index.muted.has(userId),
+      isRestricted: index.restricted.has(userId),
+      outgoingRequest: index.outgoingRequests.has(userId),
+      incomingRequest: index.incomingRequests.has(userId),
       actions: [],
       statusLabel: "",
     }
@@ -425,6 +429,16 @@ export function createProfileDomain(deps: {
     /** Derive actions from Social Graph — never hardcode */
     getRelationshipState(userId: string): ProfileRelationshipState {
       return relationshipTo(userId)
+    },
+
+    /** Hydrate a people/profile list with one shared relationship-index snapshot. */
+    getRelationshipStates(userIds: readonly unknown[]): Map<string, ProfileRelationshipState> {
+      const index = getRelationshipIndex()
+      const result = new Map<string, ProfileRelationshipState>()
+      for (const userId of uniqueProfileIds(userIds)) {
+        result.set(userId, relationshipTo(userId, index))
+      }
+      return result
     },
 
     /**

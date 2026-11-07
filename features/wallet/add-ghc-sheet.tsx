@@ -104,7 +104,7 @@ export function AddGhcSheet({
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold">Rewards</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  Daily claim, missions, and activity credits after validation
+                  Daily Claim and eligible server-approved credits. Mission milestones unlock achievements, not GHC, under current policy.
                 </span>
               </span>
             </button>

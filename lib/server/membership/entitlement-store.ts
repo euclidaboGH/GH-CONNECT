@@ -10,10 +10,13 @@ import { hasPrivilegedDatabase, readGhcServerEnv } from "@/lib/server/economy/en
 import { isDatabaseConfigured, allowMemoryServer } from "@/lib/server/economy/http"
 import { listIntentsForUserAsync } from "@/lib/server/payments/intent-store"
 import type { PaymentIntent } from "@/lib/server/payments/intent-types"
+import { parseMembershipEntitlementRow } from "@/lib/server/membership/entitlement-row"
+import { isVerifiedPiMembershipIntent } from "@/lib/server/membership/renewal-policy"
+import { renewMembershipFromVerifiedIntent } from "@/lib/server/membership/renewal-workflow"
 
 export type MembershipTier = "free" | "vip" | "vvip"
 export type BillingPeriod = "monthly" | "four_months" | "eight_months" | "yearly" | "comp"
-export type MembershipSource = "default" | "ghc" | "pi" | "external" | "comp"
+export type MembershipSource = "default" | "ghc" | "pi" | "external" | "comp" | "admin" | "verified_payment"
 
 export type ServerMembershipEntitlement = {
   userId: string
@@ -97,33 +100,7 @@ function applyExpiry(existing: ServerMembershipEntitlement): ServerMembershipEnt
 }
 
 function rowToEntitlement(row: Record<string, unknown>, userId: string): ServerMembershipEntitlement {
-  const started =
-    typeof row.started_at === "string"
-      ? Date.parse(row.started_at)
-      : Number(row.startedAt) || Date.now()
-  const expiresRaw = row.expires_at ?? row.expiresAt
-  const expiresAt =
-    expiresRaw == null || expiresRaw === ""
-      ? undefined
-      : typeof expiresRaw === "string"
-        ? Date.parse(expiresRaw)
-        : Number(expiresRaw)
-  const audit = Array.isArray(row.audit) ? (row.audit as ServerMembershipEntitlement["audit"]) : []
-  return applyExpiry({
-    userId,
-    tier: (String(row.tier || "free") as MembershipTier) || "free",
-    active: row.active !== false,
-    startedAt: started,
-    expiresAt: Number.isFinite(expiresAt as number) ? (expiresAt as number) : undefined,
-    billingPeriod: (row.billing_period || row.billingPeriod) as BillingPeriod | undefined,
-    source: (String(row.source || "default") as MembershipSource) || "default",
-    purchaseRef: (row.purchase_ref || row.purchaseRef) as string | undefined,
-    paymentIntentId: (row.payment_intent_id || row.paymentIntentId) as string | undefined,
-    updatedAt: row.updated_at
-      ? Date.parse(String(row.updated_at))
-      : Date.now(),
-    audit,
-  })
+  return parseMembershipEntitlementRow(row, userId) as ServerMembershipEntitlement
 }
 
 export type EntitlementLoadResult =
@@ -146,13 +123,21 @@ export async function loadEntitlementFromDb(
   const env = readGhcServerEnv()
   try {
     const url = `${env.supabaseUrl!.replace(/\/$/, "")}/rest/v1/ghc_membership_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey!,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey!}`,
-      },
-      cache: "no-store",
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8_000)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        headers: {
+          apikey: env.supabaseServiceRoleKey!,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey!}`,
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
     // Table missing / network / RLS misconfig → unavailable (not "free")
     if (res.status === 404 || res.status === 503 || res.status >= 500) {
       return { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
@@ -258,11 +243,7 @@ export async function reconcileMembershipFromPaymentHistory(userId: string): Pro
 
   const candidates = intents
     .filter((intent) => intent.userId === uid && (intent.status === 'COMPLETED' || intent.status === 'FULFILLED'))
-    .filter((intent) => intent.currency === 'PI')
-    .filter((intent) => {
-      const productId = String(intent.metadata?.productId || '').toLowerCase()
-      return intent.purpose === 'membership' || /^membership_(vip|vvip)_(monthly|four_months|eight_months|yearly)$/.test(productId)
-    })
+    .filter((intent) => intent.purpose === 'membership')
     .sort((a, b) => (b.completedAt || b.fulfilledAt || b.createdAt) - (a.completedAt || a.fulfilledAt || a.createdAt))
 
   for (const intent of candidates) {
@@ -271,6 +252,7 @@ export async function reconcileMembershipFromPaymentHistory(userId: string): Pro
       intent: {
         id: intent.id,
         userId: intent.userId,
+        provider: intent.provider,
         purpose: intent.purpose,
         status: intent.status,
         amount: intent.amount,
@@ -281,6 +263,12 @@ export async function reconcileMembershipFromPaymentHistory(userId: string): Pro
     })
     if (result.granted && result.entitlement) {
       return { ok: true, recovered: true, entitlement: result.entitlement, intentId: intent.id }
+    }
+    // A durable completed membership payment exists, so do not tell the user
+    // that no orphan exists when the grant authority is unavailable or rejects it.
+    return {
+      ok: false, recovered: false, entitlement: current.entitlement, intentId: intent.id,
+      error: result.error || "MEMBERSHIP_RECOVERY_PENDING",
     }
   }
 
@@ -366,6 +354,7 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
   intent: {
     id: string
     userId: string
+    provider?: string
     purpose?: string
     status: string
     amount: number
@@ -386,14 +375,16 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
   if (intent.status !== "COMPLETED" && intent.status !== "FULFILLED") {
     return { granted: false, error: "PAYMENT_NOT_COMPLETED" }
   }
-  if (intent.currency && intent.currency !== "PI") {
-    return { granted: false, error: "CURRENCY_MISMATCH", skipped: true }
+  // Require all three durable rail discriminators. A missing provider, currency
+  // or purpose must never be inferred from amount or client metadata.
+  if (!isVerifiedPiMembershipIntent(intent)) {
+    return { granted: false, error: "VERIFIED_PI_MEMBERSHIP_INTENT_REQUIRED", skipped: true }
   }
 
-  const purpose = String(intent.purpose || intent.metadata?.purpose || "")
+  const purpose = intent.purpose
   const productId = String(intent.metadata?.productId || "").toLowerCase()
-  if (purpose !== "membership" && !productId.startsWith("membership_")) {
-    return { granted: false, skipped: true }
+  if (purpose !== "membership") {
+    return { granted: false, error: "MEMBERSHIP_PURPOSE_REQUIRED", skipped: true }
   }
 
   let tier: "vip" | "vvip" | null = null
@@ -402,13 +393,6 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
   if (productMatch) {
     tier = productMatch[1] as "vip" | "vvip"
     period = productMatch[2] as BillingPeriod
-  } else {
-    const mTier = String(intent.metadata?.tier || intent.metadata?.membershipTier || "").toLowerCase()
-    const mPeriod = String(intent.metadata?.period || intent.metadata?.billingPeriod || "").toLowerCase()
-    if ((mTier === "vip" || mTier === "vvip") && (["monthly", "four_months", "eight_months", "yearly"].includes(mPeriod))) {
-      tier = mTier
-      period = mPeriod as BillingPeriod
-    }
   }
 
   if (!tier || !period) {
@@ -430,6 +414,30 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
     `pi:${intent.id}`
 
   try {
+    if (isDatabaseConfigured()) {
+      // Production Pi grants and renewals share one row-locked, idempotent RPC.
+      // If the reviewed migration is not deployed or the RPC is unavailable,
+      // keep the completed payment recoverable; never fall back to a blind upsert.
+      const renewal = await renewMembershipFromVerifiedIntent({
+        paymentIntentId: intent.id,
+        userId,
+      })
+      if (renewal.ok !== true) {
+        return { granted: false, error: String(renewal.error || "MEMBERSHIP_RENEWAL_AUTHORITY_UNAVAILABLE") }
+      }
+      const persisted = await tryGetEntitlementAuthoritative(userId)
+      if (!persisted.ok) return { granted: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+      const confirmed = persisted.entitlement
+      if (confirmed.userId !== userId || confirmed.tier !== tier || confirmed.active !== true
+          || confirmed.paymentIntentId !== intent.id
+          || !Number.isFinite(confirmed.expiresAt) || Number(confirmed.expiresAt) <= Date.now()) {
+        return { granted: false, error: "MEMBERSHIP_AUTHORITATIVE_CONFIRMATION_FAILED" }
+      }
+      return { granted: true, entitlement: confirmed }
+    }
+
+    // Process-memory grants are allowed only in the explicit non-production
+    // development/Studio mode; production database mode never reaches here.
     const entitlement = await grantEntitlement({
       userId,
       tier,

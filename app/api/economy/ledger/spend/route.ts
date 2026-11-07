@@ -22,6 +22,13 @@ import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
 
+// These catalog sinks must remain unavailable until a durable effect record and
+// its consumer are deployed atomically. A ledger debit alone is not a boost.
+const UNCONFIGURED_PREMIUM_EFFECTS = new Set([
+  "boost", "boost_post", "boost_profile", "boost_listing", "feed_spotlight",
+  "community_tools_month", "creator_studio_day",
+])
+
 async function rpcSpend(input: {
   userId: string
   amount: number
@@ -104,6 +111,13 @@ export async function POST(request: Request) {
 
   const purposeRaw = String(body.purpose || body.sourceEvent || "").trim()
   const purpose = purposeRaw.toLowerCase()
+  if (UNCONFIGURED_PREMIUM_EFFECTS.has(purpose)) {
+    return jsonErr(
+      "UTILITY_EFFECT_NOT_CONFIGURED",
+      "This premium utility is temporarily unavailable. No GHC was charged because its durable effect is not enabled.",
+      503,
+    )
+  }
   const clientAmount = Number(body.amount)
   const kind = (body.kind as "spent" | "purchased" | undefined) || "spent"
 

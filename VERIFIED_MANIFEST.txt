@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.315.3
+project_version=0.330.15
 manifest_format_version=1
-canonical_migrations=181
+canonical_migrations=191
 classification_required=117
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=61
+classification_review_required=69
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -203,3 +203,11 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=3248 path=supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql
 [REVIEW_REQUIRED] size=14831 path=supabase/migrations/20261105170001_phase3_earnings_ledger_integrity_hardening.sql
 [REQUIRED] size=1258 path=supabase/migrations/20261105200001_withdrawal_pin_security.sql
+[REVIEW_REQUIRED] size=5667 path=supabase/migrations/20261106080001_gh_reputation_intelligence_refresh_recovery.sql
+[REVIEW_REQUIRED] size=4361 path=supabase/migrations/20261106090001_gh_community_post_feed_canonical.sql
+[REVIEW_REQUIRED] size=11694 path=supabase/migrations/20261106110001_phase1_curation_community_guard_reconciliation.sql
+[REVIEW_REQUIRED] size=10906 path=supabase/migrations/20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql
+[REVIEW_REQUIRED] size=6107 path=supabase/migrations/20261106130001_gh_story_view_privacy_and_read_performance.sql
+[REVIEW_REQUIRED] size=7503 path=supabase/migrations/20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql
+[REVIEW_REQUIRED] size=6457 path=supabase/migrations/20261106150001_marketplace_listing_report_intake.sql
+[REVIEW_REQUIRED] size=5252 path=supabase/migrations/20261106170001_phase8_verified_mission_achievements.sql

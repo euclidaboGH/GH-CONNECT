@@ -79,14 +79,15 @@ export function RewardsJourneyHero({
 
   const walletBal = useMemo(() => {
     void tick
-    const avail = Number(walletRead?.snapshot?.availableGhc)
-    if (Number.isFinite(avail)) return avail
-    try {
-      return Number(getBoundDomainServices()?.economy?.getWallet?.()?.balance) || 0
-    } catch {
-      return 0
-    }
-  }, [tick, walletRead?.snapshot?.availableGhc])
+    const snapshot = walletRead?.snapshot
+    // Rewards journey must not turn a null/local session cache into a displayed
+    // zero. Only a fresh server-origin snapshot is a financial display value.
+    if (snapshot?.status !== "ready" || snapshot.source !== "server") return null
+    const available = snapshot.availableGhc
+    return typeof available === "number" && Number.isFinite(available) && available >= 0
+      ? available
+      : null
+  }, [tick, walletRead?.snapshot])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -235,7 +236,7 @@ export function RewardsJourneyHero({
               </div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available</p>
               <p className="mt-0.5 text-[13px] font-bold tabular-nums text-foreground">
-                {formatGhc(walletBal)}
+                {walletBal == null ? "—" : formatGhc(walletBal)}
               </p>
               <p className="text-[9px] text-muted-foreground">Wallet</p>
             </div>

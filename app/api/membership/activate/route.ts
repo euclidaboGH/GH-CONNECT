@@ -8,6 +8,7 @@ import {
   getEntitlement,
   tryGetEntitlementAuthoritative,
   grantEntitlement,
+  tryGrantMembershipFromCompletedIntent,
 } from "@/lib/server/membership/entitlement-store"
 import {
   loadPaymentIntent,
@@ -24,6 +25,7 @@ import { z } from "zod"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice, membershipPeriodForPaidMonths, paidMonthsForMembershipPeriod, type PaidMembershipMonths } from "@/lib/membership-pricing"
 import { queueReferralReward } from "@/lib/server/referral/referral-service"
+import { isVerifiedPiMembershipIntent } from "@/lib/server/membership/renewal-policy"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -104,8 +106,21 @@ export async function POST(request: Request) {
     )
   }
   const tier = parsed.data.tier
+  if (parsed.data.period && parsed.data.billingPeriod && parsed.data.period !== parsed.data.billingPeriod) {
+    return NextResponse.json(
+      { ok: false, error: "CONFLICTING_MEMBERSHIP_PERIODS" },
+      { status: 400, headers: { "x-request-id": reqCtx.requestId, "Cache-Control": "no-store" } },
+    )
+  }
   const requestedPeriod = parsed.data.period || parsed.data.billingPeriod
-  const requestedMonths = parsed.data.paidMonths || (requestedPeriod ? paidMonthsForMembershipPeriod(requestedPeriod) : 1)
+  const periodMonths = requestedPeriod ? paidMonthsForMembershipPeriod(requestedPeriod) : null
+  if (parsed.data.paidMonths && periodMonths && parsed.data.paidMonths !== periodMonths) {
+    return NextResponse.json(
+      { ok: false, error: "CONFLICTING_MEMBERSHIP_DURATION" },
+      { status: 400, headers: { "x-request-id": reqCtx.requestId, "Cache-Control": "no-store" } },
+    )
+  }
+  const requestedMonths = parsed.data.paidMonths || periodMonths || 1
   if (!requestedMonths) {
     return NextResponse.json({ ok: false, error: "UNSUPPORTED_MEMBERSHIP_DURATION" }, { status: 400 })
   }
@@ -181,8 +196,8 @@ export async function POST(request: Request) {
       )
     }
 
-    if (intent.currency && intent.currency !== "PI") {
-      return NextResponse.json({ ok: false, error: "CURRENCY_MISMATCH" }, { status: 409 })
+    if (!isVerifiedPiMembershipIntent(intent)) {
+      return NextResponse.json({ ok: false, error: "VERIFIED_PI_MEMBERSHIP_INTENT_REQUIRED" }, { status: 409 })
     }
 
     const expectedPi = getMembershipPiPrice(tier, paidMonths).chargePi
@@ -205,42 +220,39 @@ export async function POST(request: Request) {
       )
     }
 
-    const purchaseRef =
-      intent.providerPaymentId || paymentId || `pi:${intent.id}`
-
-    // Payment intent is durable; entitlement table may still be missing in production.
-    // Never report ok:true unless grantEntitlement persisted (or Studio memory path).
-    try {
-      const entitlement = await grantEntitlement({
-        userId: auth.userId,
-        tier,
-        billingPeriod: period,
-        source: "pi",
-        purchaseRef,
-        paymentIntentId: intent.id,
-      })
-      return NextResponse.json({ ok: true, entitlement })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "MEMBERSHIP_DURABLE_WRITE_FAILED"
-      const code =
-        msg.includes("MEMBERSHIP_STORE_UNAVAILABLE") || msg.includes("MEMBERSHIP_DURABLE")
-          ? msg.includes("STORE")
-            ? "MEMBERSHIP_STORE_UNAVAILABLE"
-            : "MEMBERSHIP_DURABLE_WRITE_FAILED"
-          : "MEMBERSHIP_DURABLE_WRITE_FAILED"
-      console.error("[membership/activate] grant after Pi payment failed", code)
+    const grant = await tryGrantMembershipFromCompletedIntent({
+      userId: auth.userId,
+      intent: {
+        id: intent.id,
+        userId: intent.userId,
+        provider: intent.provider,
+        purpose: intent.purpose,
+        status: intent.status,
+        amount: intent.amount,
+        currency: intent.currency,
+        providerPaymentId: intent.providerPaymentId,
+        metadata: intent.metadata,
+      },
+    })
+    if (!grant.granted || !grant.entitlement) {
+      const code = String(grant.error || "MEMBERSHIP_DURABLE_WRITE_FAILED")
+      console.error("[membership/activate] verified Pi grant pending", code)
       return NextResponse.json(
         {
           ok: false,
           error: code,
-          message:
-            "Payment was recorded, but membership entitlement could not be stored durably. Retry activation after ghc_membership_entitlements is available.",
+          paymentCompleted: true,
+          retryable: true,
+          message: "Payment is complete but membership activation is not yet confirmed. Refresh or recover the purchase; do not pay again.",
           paymentIntentId: intent.id,
-          purchaseRef,
         },
-        { status: 503 }
+        { status: 503, headers: { "Cache-Control": "no-store" } },
       )
     }
+    return NextResponse.json(
+      { ok: true, entitlement: grant.entitlement },
+      { headers: { "Cache-Control": "no-store" } },
+    )
   }
 
   // method === "ghc"

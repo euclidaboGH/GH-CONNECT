@@ -11,7 +11,7 @@ const checks = [
  ['PHASE 1 post actions use production-size touch targets', /h-11 min-h-11/.test(post)],
  ['PHASE 1 curation language is quality-first and does not imply minting', /Quality/.test(post) && /Voting does not create GHC/.test(post)],
  ['PHASE 1 profile reuses canonical EnhancedPostCard', /<EnhancedPostCard/.test(readFileSync('components/ghc/profile-components.tsx','utf8'))],
- ['PHASE 1 community curation uses organized action toolbar', /Community post actions/.test(community) && />Quality</.test(community)],
+ ['PHASE 1 community canonical posts reuse the Feed/Profile card and durable curation path', /CommunityCanonicalPostCard/.test(community) && /socialListCommunityPosts/.test(community) && /EnhancedPostCard/.test(readFileSync('components/ghc/community-canonical-post-card.tsx','utf8'))],
  ['PHASE 2 comments default to Top with Newest alternative', /useState<"top" \| "newest">\("top"\)/.test(comments) && /Top/.test(comments)],
  ['PHASE 2 Top comments rank pinned and engagement before recency', /qualityDelta/.test(comments) && /isPinned/.test(comments)],
  ['PHASE 2 reply composer retains explicit reply context', /Replying to/.test(comments) && /Cancel reply/.test(comments)],

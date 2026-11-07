@@ -97,6 +97,34 @@ export function projectPublicProfile<T extends Record<string, unknown>>(
     delete out.online
     delete out.isOnline
   }
+  const professional = out.professional && typeof out.professional === "object" && !Array.isArray(out.professional)
+    ? { ...(out.professional as Record<string, unknown>) }
+    : null
+  if (professional) {
+    const preferences = professional.contactPreferences && typeof professional.contactPreferences === "object"
+      ? professional.contactPreferences as Record<string, unknown>
+      : {}
+    delete professional.contactPreferences
+    delete professional.professionalVerified
+    if (preferences.showProfessionOnSocial === false) {
+      delete out.professional
+      delete out.profession
+      delete out.skills
+      if (out.profileMode === "professional") out.profileMode = out.business ? "business" : "social"
+    } else {
+      if (opts.showInterests === false) delete professional.professionalInterests
+      if (opts.showLocation === false) delete professional.locationLabel
+      out.professional = professional
+    }
+  }
+  const business = out.business && typeof out.business === "object" && !Array.isArray(out.business)
+    ? { ...(out.business as Record<string, unknown>) }
+    : null
+  if (business) {
+    delete business.businessVerified
+    if (opts.showLocation === false) delete business.locationLabel
+    out.business = business
+  }
   // Never expose wallet / private economy on public profile
   delete out.wallet
   delete out.ghcBalance

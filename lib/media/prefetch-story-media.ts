@@ -1,41 +1,30 @@
 /**
- * Phase 3 — idle prefetch for story media URLs (images only).
- * Never invents content; only warms cache for URLs already on the story item.
+ * Phase 10 — bounded idle prefetch for story media URLs.
+ * Only warms URLs already present on visible story items; never invents content.
  */
-export function prefetchStoryMediaUrls(urls: string[], limit = 6): void {
-  if (typeof window === "undefined") return
-  const unique = Array.from(
-    new Set(
-      urls
-        .map((u) => String(u || "").trim())
-        .filter((u) => u.startsWith("http") || u.startsWith("/api/media/")),
-    ),
-  ).slice(0, limit)
+import { shouldPrefetchNonCritical, scheduleNonCriticalWork } from "@/lib/mobile-performance"
 
-  const run = () => {
+export function prefetchStoryMediaUrls(urls: string[], limit = 3): void {
+  if (typeof window === "undefined" || !Array.isArray(urls) || urls.length === 0) return
+  if (!shouldPrefetchNonCritical()) return
+
+  const unique = Array.from(new Set(
+    urls.map((url) => String(url || "").trim())
+      .filter((url) => url.startsWith("https://") || url.startsWith("/api/media/")),
+  )).slice(0, Math.max(0, Math.min(3, limit)))
+  if (unique.length === 0) return
+
+  scheduleNonCriticalWork(() => {
+    if (!shouldPrefetchNonCritical()) return
     for (const url of unique) {
       try {
-        const img = new Image()
-        img.decoding = "async"
-        img.src = url
+        const image = new Image()
+        image.decoding = "async"
+        image.loading = "lazy"
+        image.src = url
       } catch {
-        /* ignore */
+        // Best effort only; visible story content remains independently loadable.
       }
     }
-  }
-
-  const scheduleFallback = () => globalThis.setTimeout(run, 400)
-
-  try {
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
-    }
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      idleWindow.requestIdleCallback(run, { timeout: 2500 })
-    } else {
-      scheduleFallback()
-    }
-  } catch {
-    scheduleFallback()
-  }
+  }, 1800)
 }

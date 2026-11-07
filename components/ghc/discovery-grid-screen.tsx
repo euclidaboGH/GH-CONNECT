@@ -9,6 +9,7 @@
 import { useMemo, useState, useCallback, useEffect, startTransition } from "react"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCDiscovery } from "@/contexts/ghc-context"
+import { getBoundDomainServices } from "@/lib/domains/compat"
 import { ConnectionModeBar } from "./discovery-components"
 import { UserCard } from "./user-card"
 import { EmptyState } from "./empty-state"
@@ -241,6 +242,14 @@ export function DiscoveryGridScreen() {
     graphSnap.outgoingFriendRequestIds,
     graphSnap.incomingFriendRequestIds,
   ])
+
+  // Prepare relationship state once for the visible people batch. Each UserCard
+  // consumes its pre-hydrated entry rather than rebuilding graph indexes on demand.
+  const relationshipStates = useMemo(() => {
+    const ids = adapted.list.filter(isPersonCandidate).map((candidate) => candidate.id)
+    const profileDomain = getBoundDomainServices()?.profile
+    return profileDomain?.getRelationshipStates?.(ids) ?? new Map()
+  }, [adapted.list])
 
   const discoveryOutcome = useMemo(() => buildDiscoveryOutcome({
     visiblePeople: adapted.list.length,
@@ -767,7 +776,7 @@ export function DiscoveryGridScreen() {
               const state = connectionStateFor(id)
               if (useModernCard) {
                 return (
-                  <div key={id} className={busyId === id ? "pointer-events-none opacity-60" : undefined}>
+                  <div key={id} className={`gh-discovery-card-slot ${busyId === id ? "pointer-events-none opacity-60" : ""}`}>
                     <DiscoveryObjectCard
                       candidate={candidate}
                       connectionState={isPersonCandidate(candidate) ? state : undefined}
@@ -800,7 +809,7 @@ export function DiscoveryGridScreen() {
               }
               if (!isPersonCandidate(candidate)) {
                 return (
-                  <div key={id}>
+                  <div key={id} className="gh-discovery-card-slot">
                     <DiscoveryObjectCard candidate={candidate} />
                   </div>
                 )
@@ -815,6 +824,11 @@ export function DiscoveryGridScreen() {
                 location: person?.locationLabel || "",
                 avatar: person?.avatarUrl || undefined,
                 photos: person?.avatarUrl ? [person.avatarUrl] : [],
+                profession: person?.profession,
+                profileMode: person?.profileMode,
+                professional: person?.professional,
+                business: person?.business,
+                skills: person?.skills,
                 _reason: formatReasonsForUi(candidate),
                 _sharedInterests: candidate.reasons
                   .filter((r) => r.code === "shared_interest")
@@ -822,9 +836,10 @@ export function DiscoveryGridScreen() {
                 _matchScore: candidate.rankScore,
               }
               return (
-                <div key={id} className={busyId === id ? "pointer-events-none opacity-60" : undefined}>
+                <div key={id} className={`gh-discovery-card-slot ${busyId === id ? "pointer-events-none opacity-60" : ""}`}>
                   <UserCard
                     candidate={legacy as any}
+                    relationshipState={relationshipStates.get(id)}
                     matchScore={undefined}
                     matchReason={legacy._reason}
                     mutualInterestNames={legacy._sharedInterests}

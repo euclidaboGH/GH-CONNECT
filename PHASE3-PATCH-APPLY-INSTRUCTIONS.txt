@@ -1,33 +1,29 @@
-GH-CONNECT 0.313.1 — PHASE 3 UNIFIED EARNINGS LEDGER HARDENING
+GH-CONNECT 0.330.4 — PHASE 3 PROFILE & PERSONAL DASHBOARD UPGRADE
 
-PATCH CONTENT
-- 8 updated/new project files plus this instruction file.
-- Includes the additive migration 20261105170001_phase3_earnings_ledger_integrity_hardening.sql.
-- Includes updated migration inventory and generated Testnet apply documentation.
+This is a complete repository release based on GH-CONNECT 0.330.3.
+The repository root contains app/, components/, lib/, supabase/ and package.json.
 
-APPLY
-1. Make a backup/commit of the current GH-CONNECT working tree.
-2. Extract this patch at the repository root, preserving folder paths and allowing overwrite.
-3. Confirm the new migration exists under supabase/migrations/.
-4. Run the verification commands below from the project root.
+PHASE 3 SCOPE
+- Separate social-first Profile presentation from personal identity/account management.
+- Move Action Hub, Discovery Signals, identity overview, professional identity,
+  achievements, pioneer identity and profile-completion tools into Personal Dashboard.
+- Keep Profile focused on profile identity, relationships, timeline, media and social tabs.
+- Add dashboard modal Escape handling, background scroll locking and safe-area scrolling.
+- Preserve existing identity services, public-profile hydration and reputation authority.
 
-VERIFY
-  node scripts/check-phase3-unified-earnings-ledger.mjs
-  node scripts/check-migration-source-manifest.mjs
-  node scripts/check-phase23-migration-integrity.mjs
-  node scripts/generate-migration-inventory.mjs --check
-  node scripts/check-phase2-wallet-authorization.mjs
-  node scripts/check-phase4-reward-adapters.mjs
-  node scripts/check-phase4-pi-withdrawal-boundary.mjs
-  node scripts/check-phase10-testnet-release-gate.mjs
+DATABASE / BLOCKCHAIN
+- No database migration is introduced by this UI architecture change.
+- No Pi payment, wallet, GHC issuance, GHPV settlement, payout or ledger behavior is changed.
+- Existing server-authoritative identity and reputation boundaries remain in force.
 
-IMPORTANT DATABASE / RELEASE SAFETY
-- Migration is classified REVIEW_REQUIRED. It is not auto-applied by this patch.
-- Reconcile the migration history of the TESTNET Supabase project first, then review and apply this single migration individually after testing on disposable PostgreSQL/Testnet. Do not bulk-push migrations.
-- Do not apply this migration to Mainnet/Production Supabase.
-- Keep PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=false. This patch does not enable payout execution or grant wallet consent.
-- Use the Testnet Vercel branch/Preview environment for the first deployment, not Production/main.
-- Verify the Node runtime is exactly compatible with the repository pin (.nvmrc: 24.15.0), then run npm ci --legacy-peer-deps, npm run typecheck, npm run lint, and npm run build.
+VERIFY (project requires Node 24.15.x; installed dependencies required)
+  node scripts/check-phase3-profile-dashboard.mjs
+  node scripts/check-phase3-profile-identity.mjs
+  node scripts/check-phase6-profile-performance.mjs
+  node scripts/check-phase7-premium-profile-experience.mjs
+  npm run typecheck
+  npm run lint
+  npm run build
 
-VERIFICATION LIMIT
-Static checks validate repository contracts only. They do not execute SQL against Supabase, prove database trigger behavior, or prove live Pi Testnet payment behavior. The current patch-preparation environment is Node 22.16.0 with no node_modules; the project requires Node 24.15.0, so a full TypeScript/lint/Next build has not been performed here.
+No live database, payment, Pi, GHC, payout, Testnet or production deployment
+operation is performed by source verification.

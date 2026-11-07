@@ -43,6 +43,16 @@ export interface PersonCandidate extends DiscoveryObjectBase {
   interests?: string[]
   intents?: ConnectionIntentId[]
   profession?: string
+  profileMode?: "social" | "professional" | "business"
+  professional?: {
+    title?: string; about?: string; skills?: string[]; services?: string[]
+    professionalInterests?: string[]
+    experience?: Array<{ role: string; organization?: string; from?: string; to?: string; summary?: string }>
+    portfolio?: Array<{ title: string; url?: string; description?: string }>
+    locationLabel?: string
+  }
+  business?: { businessName?: string; category?: string; about?: string; services?: string[]; locationLabel?: string; hours?: string }
+  skills?: string[]
 }
 
 export interface CommunityCandidate extends DiscoveryObjectBase {

@@ -8,8 +8,10 @@ import { confirmDialog } from "@/lib/ui/global-interactions"
  */
 
 import { formatCommunityRole, communityRoleBadgeClass } from "@/lib/community/role-labels"
-import { socialSetCuration } from "@/lib/social/client"
-import { useCallback, useMemo, useState, useEffect } from "react"
+import { socialListCommunityPosts } from "@/lib/social/client"
+import type { Post } from "@/lib/ghc-types"
+import { CommunityCanonicalPostCard } from "./community-canonical-post-card"
+import { useCallback, useMemo, useState, useEffect, useRef } from "react"
 import { onCloseTransientUI } from "@/lib/transient-ui"
 import {
   ArrowLeft,
@@ -31,9 +33,6 @@ import {
   Share2,
   RefreshCw,
   Search,
-  ThumbsUp,
-  ThumbsDown,
-  Loader2,
 } from "lucide-react"
 import { shareText } from "@/lib/pi-native"
 import { LazyImage } from "./lazy-image"
@@ -117,6 +116,37 @@ type CommunitySummary = {
   samplePosts?: { id: string; author: string; excerpt: string }[]
 }
 
+function toCanonicalCommunityPost(raw: Record<string, any>): Post {
+  const likes = Math.max(0, Number(raw.likes ?? raw.likeCount ?? 0) || 0)
+  const comments = Math.max(0, Number(raw.commentCount ?? raw.comments ?? 0) || 0)
+  const shares = Math.max(0, Number(raw.shares ?? 0) || 0)
+  return {
+    id: String(raw.id || ""),
+    authorId: String(raw.authorId || ""),
+    authorName: String(raw.authorName || raw.author || "Member"),
+    authorPhoto: String(raw.authorPhoto || raw.photo || ""),
+    content: String(raw.content ?? raw.body ?? raw.excerpt ?? ""),
+    images: Array.isArray(raw.images) ? raw.images.filter((value: unknown): value is string => typeof value === "string") : [],
+    video: typeof raw.video === "string" ? raw.video : null,
+    pdf: typeof raw.pdf === "string" ? raw.pdf : null,
+    pdfName: typeof raw.pdfName === "string" ? raw.pdfName : null,
+    likes,
+    comments: [],
+    createdAt: Math.max(0, Number(raw.createdAt || 0) || 0),
+    upvoteCount: Math.max(0, Number(raw.upvoteCount || 0) || 0),
+    downvoteCount: Math.max(0, Number(raw.downvoteCount || 0) || 0),
+    viewerCurationChoice: raw.viewerCurationChoice === "upvote" || raw.viewerCurationChoice === "downvote" ? raw.viewerCurationChoice : undefined,
+    reactionCounts: raw.reactionCounts && typeof raw.reactionCounts === "object" ? raw.reactionCounts : {},
+    viewerReactions: Array.isArray(raw.viewerReactions) ? raw.viewerReactions.filter((value: unknown): value is string => typeof value === "string") : [],
+    savedByMe: raw.savedByMe === true,
+    visibility: raw.visibility === "followers" || raw.visibility === "mutuals" || raw.visibility === "private" ? raw.visibility : "public",
+    communityId: typeof raw.communityId === "string" ? raw.communityId : undefined,
+    communityName: typeof raw.communityName === "string" ? raw.communityName : undefined,
+    shares,
+    engagement: { likes, comments, shares, views: 0, saves: 0, clicks: 0, avgEngagementTime: 0 },
+  }
+}
+
 const ROLE_BADGE: Record<string, string> = {
   owner: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
   admin: "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
@@ -152,7 +182,6 @@ export function PremiumCommunityHub({
   onMute,
   onPost,
   onReplyToPost,
-  onReactToPost,
   onCreateAnnouncement,
   onPinPost,
   onUnpinPost,
@@ -184,7 +213,7 @@ export function PremiumCommunityHub({
   onJoin?: () => void
   onLeave?: () => void
   onMute?: () => void
-  onPost?: (body: string, kind?: "text" | "question" | "resource") => void
+  onPost?: (body: string, kind?: "text" | "question" | "resource") => Promise<boolean>
   onReplyToPost?: (postId: string, body: string) => void
   onReactToPost?: (postId: string) => void
   onCreateAnnouncement?: (input: { title: string; content: string }) => void
@@ -249,11 +278,62 @@ export function PremiumCommunityHub({
   }
   const [slowMode, setSlowMode] = useState(false)
   const [composeBody, setComposeBody] = useState("")
+  const [boardPostBusy, setBoardPostBusy] = useState(false)
   const [boardSort, setBoardSort] = useState<"new" | "hot" | "top">("new")
   const [boardFilter, setBoardFilter] = useState<"all" | "mine">("all")
   const [boardQuery, setBoardQuery] = useState("")
   const [boardRefreshing, setBoardRefreshing] = useState(false)
-  const [curationState, setCurationState] = useState<Record<string, { choice: "upvote" | "downvote" | "neutral"; up: number; down: number; busy?: boolean }>>({})
+  const [canonicalBoardPosts, setCanonicalBoardPosts] = useState<Partial<Post>[]>([])
+  const [canonicalBoardStatus, setCanonicalBoardStatus] = useState<"loading" | "ready" | "unavailable">("loading")
+  const canonicalBoardRequestRef = useRef(0)
+  const hasCanonicalBoardSnapshotRef = useRef(false)
+  const canonicalBoardCommunityRef = useRef(community.id)
+  const loadCanonicalBoardPosts = useCallback(async () => {
+    const requestId = ++canonicalBoardRequestRef.current
+    if (!hasCanonicalBoardSnapshotRef.current) setCanonicalBoardStatus("loading")
+    try {
+      const result = await socialListCommunityPosts(community.id, 60)
+      if (requestId !== canonicalBoardRequestRef.current) return
+      if (result.ok && result.durable) {
+        setCanonicalBoardPosts(result.posts)
+        hasCanonicalBoardSnapshotRef.current = true
+        setCanonicalBoardStatus("ready")
+      } else {
+        // Preserve the last known-good durable snapshot during transient failures.
+        setCanonicalBoardStatus("unavailable")
+      }
+    } catch {
+      if (requestId === canonicalBoardRequestRef.current) setCanonicalBoardStatus("unavailable")
+    }
+  }, [community.id])
+  useEffect(() => {
+    if (canonicalBoardCommunityRef.current !== community.id) {
+      canonicalBoardCommunityRef.current = community.id
+      hasCanonicalBoardSnapshotRef.current = false
+      setCanonicalBoardPosts([])
+      setCanonicalBoardStatus("loading")
+    }
+    void loadCanonicalBoardPosts()
+    const refresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ communityId?: string; skipCanonicalReload?: boolean }>).detail
+      if (detail?.skipCanonicalReload) return
+      if (!detail?.communityId || detail.communityId === community.id) void loadCanonicalBoardPosts()
+    }
+    window.addEventListener("ghc:community-refresh", refresh)
+    return () => {
+      canonicalBoardRequestRef.current += 1
+      window.removeEventListener("ghc:community-refresh", refresh)
+    }
+  }, [community.id, loadCanonicalBoardPosts])
+  const renderedBoardPosts = useMemo(() => {
+    const byId = new Map<string, any>()
+    for (const post of boardPosts || []) byId.set(String(post.id), post)
+    for (const post of canonicalBoardPosts) {
+      const id = String(post.id || "")
+      if (id) byId.set(id, { ...(byId.get(id) || {}), ...post, body: post.content || "", durable: true })
+    }
+    return Array.from(byId.values()).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+  }, [boardPosts, canonicalBoardPosts])
   const effectiveCanChat = !!chatState?.chatMember || (canChat && !!chatState?.enabled)
 
   const upcoming = useMemo(() => getUpcomingEvents(events).slice(0, 5), [events])
@@ -341,46 +421,20 @@ export function PremiumCommunityHub({
 
 
   const refreshBoard = async () => {
+    if (boardRefreshing) return
     setBoardRefreshing(true)
     try {
-      // Parent owns the durable community snapshot. Request a remount so all
-      // board rows, membership state and server-backed social counts converge.
-      await new Promise((resolve) => window.setTimeout(resolve, 120))
-      window.dispatchEvent(new CustomEvent("ghc:community-refresh", { detail: { communityId: community.id } }))
+      await loadCanonicalBoardPosts()
+      // Parent owns the broader community snapshot; skip a duplicate canonical
+      // fetch in this hub while still refreshing membership and board metadata.
+      window.dispatchEvent(new CustomEvent("ghc:community-refresh", {
+        detail: { communityId: community.id, skipCanonicalReload: true, skipHubRemount: true },
+      }))
     } finally {
       setBoardRefreshing(false)
     }
   }
 
-  // Legacy isolation: Like legacy discussion rows remain outside the canonical social ledger.
-  const curateCommunityPost = async (postId: string, choice: "upvote" | "downvote") => {
-    const id = String(postId || "").trim()
-    if (!id || id.startsWith("bpost_") || id.startsWith("local_")) {
-      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This older community post is not yet linked to the social curation ledger.", type: "info" } }))
-      return
-    }
-    const current = curationState[id] || { choice: "neutral" as const, up: 0, down: 0 }
-    const nextChoice = current.choice === choice ? "neutral" : choice
-    setCurationState((s) => ({ ...s, [id]: { ...current, choice: nextChoice, busy: true } }))
-    try {
-      const result = await socialSetCuration(id, nextChoice)
-      if (!result.ok) throw new Error(result.error || "Curation unavailable")
-      setCurationState((s) => ({
-        ...s,
-        [id]: {
-          choice: (result.choice === "upvote" || result.choice === "downvote" ? result.choice : nextChoice) as "upvote" | "downvote" | "neutral",
-          up: Number(result.upvoteCount || 0),
-          down: Number(result.downvoteCount || 0),
-          busy: false,
-        },
-      }))
-      window.dispatchEvent(new CustomEvent("ghc:curation-updated", { detail: { postId: id, source: "community" } }))
-      window.dispatchEvent(new CustomEvent("ghc:post-engagement", { detail: { postId: id, source: "community-curation" } }))
-    } catch (error) {
-      setCurationState((s) => ({ ...s, [id]: { ...current, busy: false } }))
-      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Curation unavailable", type: "error" } }))
-    }
-  }
 
   const lifecycleSuggestion = suggestLifecycleTransition({
     lifecycle,
@@ -869,28 +923,37 @@ export function PremiumCommunityHub({
                     <button
                       key={prompt}
                       type="button"
+                      disabled={boardPostBusy}
                       onClick={() => setComposeBody((b) => b || prompt + ": ")}
-                      className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground"
+                      className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground disabled:opacity-50"
                     >
                       {prompt}
                     </button>
                   ))}
                   <button
                     type="button"
-                    disabled={!composeBody.trim()}
-                    onClick={() => {
-                      onPost(composeBody.trim(), "text")
-                      setComposeBody("")
+                    disabled={!composeBody.trim() || boardPostBusy || !onPost}
+                    onClick={async () => {
+                      if (!onPost || boardPostBusy) return
+                      const body = composeBody.trim()
+                      if (!body) return
+                      setBoardPostBusy(true)
+                      try {
+                        const posted = await onPost(body, "text")
+                        if (posted) setComposeBody((current) => current === body ? "" : current)
+                      } finally {
+                        setBoardPostBusy(false)
+                      }
                     }}
                     className="ml-auto min-h-9 rounded-xl bg-[var(--gh-green)] px-4 text-xs font-bold text-white disabled:opacity-40"
                   >
-                    Post
+                    {boardPostBusy ? "Publishing…" : "Post"}
                   </button>
                 </div>
               </div>
             )}
 
-            {(boardPosts?.length > 0 || (community.samplePosts?.length || 0) > 0) && (
+            {(renderedBoardPosts.length > 0 || canonicalBoardStatus !== "ready" || (canonicalBoardStatus === "ready" && renderedBoardPosts.length === 0)) && (
               <section>
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-xs font-bold text-foreground">Discussion</h2>
@@ -919,9 +982,16 @@ export function PremiumCommunityHub({
                   <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input value={boardQuery} onChange={(e) => setBoardQuery(e.target.value)} placeholder="Search community posts…" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-400" aria-label="Search community posts" />
                 </div>
+                {canonicalBoardStatus === "loading" && renderedBoardPosts.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground" role="status">Loading community posts…</p>
+                ) : canonicalBoardStatus === "unavailable" ? (
+                  <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-3 text-xs text-muted-foreground" role="status">Could not refresh community posts. Showing the last available posts where possible.</p>
+                ) : canonicalBoardStatus === "ready" && renderedBoardPosts.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-5 text-center text-xs text-muted-foreground">No discussions yet. Start the conversation with your community.</p>
+                ) : null}
                 <div className="space-y-2">
-                  {(boardPosts && boardPosts.length > 0
-                    ? [...boardPosts]
+                  {(renderedBoardPosts.length > 0
+                    ? [...renderedBoardPosts]
                         .filter((p: any) => boardFilter === "all" || String(p.authorId || "") === String(viewerId))
                         .filter((p: any) => {
                           const q = boardQuery.trim().toLowerCase()
@@ -933,7 +1003,18 @@ export function PremiumCommunityHub({
                             : (b.createdAt || 0) - (a.createdAt || 0)
                         )
                     : []
-                  ).map((p: any) => (
+                  ).map((p: any) => {
+                    const canonical = p.durable === true || canonicalBoardPosts.some((row) => String(row.id || "") === String(p.id))
+                    if (canonical) return (
+                      <CommunityCanonicalPostCard
+                        key={p.id}
+                        post={toCanonicalCommunityPost(p)}
+                        isMod={isMod}
+                        onPin={onPinPost}
+                        onHide={onHidePost}
+                      />
+                    )
+                    return (
                     <div key={p.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
                       <div className="flex items-center gap-2">
                         <p className="text-[11px] font-semibold text-foreground">{p.authorName || p.author}</p>
@@ -947,21 +1028,12 @@ export function PremiumCommunityHub({
                         )}
                       </div>
                       <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
-                      {(() => {
-                        const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
-                        const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
-                        return (
-                          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5" role="toolbar" aria-label="Community post actions">
-                            <span className="mr-1 text-[10px] font-semibold text-muted-foreground">Quality</span>
-                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition active:scale-[0.98] ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote community post"><ThumbsUp size={12} /> {c.up}</button>
-                            <button type="button" disabled={!linked || c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition active:scale-[0.98] ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote community post"><ThumbsDown size={12} /> {c.down}</button>
-                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
-                            {!linked ? <span className="text-[9px] text-muted-foreground">Legacy post</span> : null}
-                          </div>
-                        )
-                      })()}
+                      <div className="mt-3 border-t border-border/50 pt-2.5 text-[10px] text-muted-foreground">
+                        Archived community post · republish to enable current voting, reactions and sharing.
+                      </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </section>
             )}
@@ -1190,16 +1262,27 @@ export function PremiumCommunityHub({
             ) : (
               <p className="text-xs text-muted-foreground">Posting is unavailable right now.</p>
             )}
-            {(boardPosts?.length || 0) === 0 ? (
+            {renderedBoardPosts.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">No discussions yet.</p>
             ) : (
               <ul className="space-y-2" aria-label="Community discussions">
-                {[...(boardPosts || [])]
+                {[...renderedBoardPosts]
                   .filter((p: any) => !p.hidden)
                   .sort((a: any, b: any) => (Number(!!b.pinned) - Number(!!a.pinned)) || ((b.createdAt || 0) - (a.createdAt || 0)))
                   .map((p: any) => {
                     const replies = Array.isArray(p.replies) ? [...p.replies].sort((a: any, b: any) => a.createdAt - b.createdAt) : []
                     const open = !!expandedReplies[p.id]
+                    const canonical = p.durable === true || canonicalBoardPosts.some((row) => String(row.id || "") === String(p.id))
+                    if (canonical) return (
+                      <li key={p.id} className="list-none">
+                        <CommunityCanonicalPostCard
+                          post={toCanonicalCommunityPost(p)}
+                          isMod={isMod}
+                          onPin={onPinPost}
+                            onHide={onHidePost}
+                        />
+                      </li>
+                    )
                     return (
                     <li key={p.id} className="rounded-xl border border-border bg-card px-3 py-2.5">
                       <button
@@ -1220,18 +1303,7 @@ export function PremiumCommunityHub({
                       </button>
                       <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{p.body || p.excerpt}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {(() => {
-                          const linked = !String(p.id || "").startsWith("bpost_") && !String(p.id || "").startsWith("local_")
-                          const c = curationState[String(p.id)] || { choice: "neutral" as const, up: Number(p.upvoteCount || 0), down: Number(p.downvoteCount || 0) }
-                          if (!linked) return onReactToPost ? (
-                            <button type="button" onClick={() => onReactToPost(p.id)} className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-bold text-foreground" aria-label={`Like discussion, ${p.likes || 0} likes`}>♥ {p.likes || 0}</button>
-                          ) : <span className="text-[11px] text-muted-foreground">Legacy · ♥ {p.likes || 0}</span>
-                          return <>
-                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "upvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "upvote" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border text-foreground"}`} aria-label="Upvote discussion"><ThumbsUp size={12} /> {c.up}</button>
-                            <button type="button" disabled={c.busy} onClick={() => void curateCommunityPost(String(p.id), "downvote")} className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold ${c.choice === "downvote" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-border text-foreground"}`} aria-label="Downvote discussion"><ThumbsDown size={12} /> {c.down}</button>
-                            {c.busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
-                          </>
-                        })()}
+                        <span className="text-[10px] text-muted-foreground">Archived post · limited legacy interactions</span>
                         <button
                           type="button"
                           onClick={() => {
