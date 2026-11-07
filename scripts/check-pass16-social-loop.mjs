@@ -3,7 +3,7 @@ const read = p => fs.readFileSync(p, "utf8")
 const pkg = JSON.parse(read("package.json"))
 const release = read("lib/app-release.ts")
 const feed = read("components/ghc/enhanced-feed-screen.tsx")
-const post = read("components/ghc/enhanced-post-card.tsx")
+const post = read("components/ghc/enhanced-post-card.tsx") + "\n" + read("components/ghc/post-action-bar.tsx")
 const css = read("app/globals.css")
 const checks = [
   ["release 0.238.0", release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],

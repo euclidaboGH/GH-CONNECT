@@ -105,7 +105,7 @@ export function PostActionBar({
         onClick={(e) => vote(e, c)}
         {...pressProps(up ? "upvotes" : "downvotes")}
         title={`${up ? "Upvote" : "Downvote"} this post. Saved only after server confirmation. Long press or right-click to see voters.`}
-        className={`gh-pab-btn relative inline-flex h-11 min-w-[3.25rem] items-center justify-center gap-1.5 px-3 text-[13px] font-extrabold tabular-nums transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 ${
+        className={`gh-pab-btn relative inline-flex h-11 min-h-11 min-w-[3.25rem] items-center justify-center gap-1.5 px-3 text-[13px] font-extrabold tabular-nums transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 ${
           up ? "rounded-l-full focus-visible:ring-emerald-500" : "rounded-r-full focus-visible:ring-rose-500"
         } ${
           active
@@ -133,7 +133,7 @@ export function PostActionBar({
   }
 
   const soft =
-    "gh-pab-btn inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+    "gh-pab-btn inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
 
   return (
     <div className="px-3 pb-2.5 pt-2 sm:px-4" role="toolbar" aria-label="Community curation and engagement" data-pab-dock>
@@ -169,7 +169,7 @@ export function PostActionBar({
           aria-controls="gh-pab-panel"
           onClick={() => setPanel((p) => (p === "weight" ? null : "weight"))}
           className="gh-pab-btn inline-flex h-9 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 text-[11px] font-bold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          title="How strongly your vote counts toward curation. Voting never creates GHC."
+          title="How strongly your vote counts toward curation. Voting does not create GHC."
         >
           Weight <span className="tabular-nums text-foreground">{weight}%</span>
           <span className="hidden text-muted-foreground/80 sm:inline">· {WEIGHT_NAMES[weight] ?? "Custom"}</span>
@@ -189,7 +189,7 @@ export function PostActionBar({
 
         {/* 4 · respond actions */}
         <div className="ml-auto flex items-center gap-0.5" role="group" aria-label="Respond">
-          <button type="button" aria-label={`Comment, ${commentCount} comments`} onClick={onComment} className={soft}>
+          <button type="button" aria-label="Comment" title={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} onClick={onComment} className={soft}>
             <MessageCircle size={18} aria-hidden />
             <span className="tabular-nums">{fmt(commentCount)}</span>
             <span className="hidden sm:inline">Comment{commentCount === 1 ? "" : "s"}</span>
@@ -212,7 +212,7 @@ export function PostActionBar({
           </button>
           <button
             type="button"
-            aria-label={shared ? "Share started" : "Share"}
+            aria-label="Share"
             onClick={() => {
               buzz(6)
               setShared(true)
@@ -224,6 +224,7 @@ export function PostActionBar({
           >
             {shared ? <Check size={18} aria-hidden className="gh-pab-pop" /> : <Share2 size={18} aria-hidden />}
             <span className="hidden sm:inline">{shared ? "Sent" : "Share"}</span>
+            <span className="sr-only" role="status">{shared ? "Share started" : ""}</span>
           </button>
         </div>
       </div>

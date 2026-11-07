@@ -22,6 +22,8 @@ const proposals = new Set([
 ])
 const requiresApproval = new Set(['20261022010015_connection_request_intents.sql'])
 const reviewRequired = new Set([
+  '20261107120001_withdrawal_pin_recovery_questions.sql',
+  '20261107130001_wallet_security_hardening.sql',
   '20261106170001_phase8_verified_mission_achievements.sql',
   '20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql',
   '20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql',

@@ -7,7 +7,7 @@ const root = join(fileURLToPath(new URL("..", import.meta.url)))
 const read = (p) => readFileSync(join(root, p), "utf8")
 const bell = read("components/ghc/notification-bell.tsx")
 const feed = read("components/ghc/enhanced-feed-screen.tsx")
-const card = read("components/ghc/enhanced-post-card.tsx")
+const card = read("components/ghc/enhanced-post-card.tsx") + "\n" + read("components/ghc/post-action-bar.tsx")
 const prompt = read("components/ghc/daily-claim-prompt.tsx")
 const reward = read("components/ghc/daily-reward-experience.tsx")
 const checks = [
@@ -22,10 +22,10 @@ const checks = [
   ["feed rehydrates when profile identity becomes available or changes", /\[refreshFeed, profile\?\.id\]/.test(feed)],
   ["floating daily claim has a synchronous duplicate-submit guard", /claimInFlightRef = useRef\(false\)/.test(prompt) && /claimInFlightRef\.current = true/.test(prompt)],
   ["daily feed card and reward sheet both guard duplicate claim submissions", (reward.match(/claimInFlightRef = useRef\(false\)/g) || []).length === 2 && (reward.match(/claimInFlightRef\.current = true/g) || []).length === 2],
-  ["upvote tap submits an authoritative upvote directly", /onClick=\{\(e\) => \{[\s\S]*?void handleCuration\("upvote"\)/.test(card)],
-  ["downvote tap submits an authoritative downvote directly", /onClick=\{\(e\) => \{[\s\S]*?void handleCuration\("downvote"\)/.test(card)],
-  ["vote clicks do not open the reaction picker or bubble into post navigation", /setShowReactions\(false\)[\s\S]*?void handleCuration\("upvote"\)/.test(card) && /e\.stopPropagation\(\)/.test(card) && !/setCurationReactionKind\("positive"\)[\s\S]{0,100}setShowReactions\(\(visible\) => !visible\)/.test(card)],
-  ["long press still opens voter roster without submitting an accidental vote", /startCurationRosterLongPress\("upvotes"\)/.test(card) && /startCurationRosterLongPress\("downvotes"\)/.test(card) && /curationRosterLongPressRef\.current/.test(card)],
+  ["upvote tap submits an authoritative upvote directly", /voteBtn\("upvote"\)/.test(card) && /onVote=\{\(c\) => \{[\s\S]*?void handleCuration\(c\)/.test(card)],
+  ["downvote tap submits an authoritative downvote directly", /voteBtn\("downvote"\)/.test(card) && /onVote\(c\)/.test(card)],
+  ["vote clicks do not open the reaction picker or bubble into post navigation", /setShowReactions\(false\)[\s\S]*?void handleCuration\(c\)/.test(card) && /e\.stopPropagation\(\)/.test(card) && !/setCurationReactionKind\("positive"\)[\s\S]{0,100}setShowReactions\(\(visible\) => !visible\)/.test(card)],
+  ["long press still opens voter roster without submitting an accidental vote", /pressProps\(up \? "upvotes" : "downvotes"\)/.test(card) && /startCurationRosterLongPress\(kind\)/.test(card) && /curationRosterLongPressRef\.current/.test(card)],
   ["vote counts and selection reset from canonical props between post cards", /setUpvoteCount\(typeof propUp === "number"[\s\S]*?setDownvoteCount\(typeof propDown === "number"[\s\S]*?setCurationChoice\(propViewerChoice/.test(card)],
 ]
 let failed = 0

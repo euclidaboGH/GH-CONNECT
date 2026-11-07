@@ -1,7 +1,7 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 189 migrations.
+**Current source inventory:** 191 migrations.
 
 > **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
@@ -209,6 +209,8 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 187 | `20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 188 | `20261106150001_marketplace_listing_report_intake.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 189 | `20261106170001_phase8_verified_mission_achievements.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 190 | `20261107120001_withdrawal_pin_recovery_questions.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 191 | `20261107130001_wallet_security_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings
 

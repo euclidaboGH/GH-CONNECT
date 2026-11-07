@@ -8,7 +8,7 @@ canonical_migrations=191
 classification_required=117
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=69
+classification_review_required=71
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -211,3 +211,5 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=7503 path=supabase/migrations/20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql
 [REVIEW_REQUIRED] size=6457 path=supabase/migrations/20261106150001_marketplace_listing_report_intake.sql
 [REVIEW_REQUIRED] size=5252 path=supabase/migrations/20261106170001_phase8_verified_mission_achievements.sql
+[REVIEW_REQUIRED] size=1441 path=supabase/migrations/20261107120001_withdrawal_pin_recovery_questions.sql
+[REVIEW_REQUIRED] size=5426 path=supabase/migrations/20261107130001_wallet_security_hardening.sql
