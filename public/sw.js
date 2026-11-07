@@ -1,46 +1,62 @@
 /**
- * GreenHaven service worker — static assets only.
+ * GreenHaven service worker — explicitly allowlisted public static assets only.
  *
- * SECURITY: Never cache authenticated / personalized API responses.
- * Paths under /api/ are network-only (no put, no match fallback of user data).
+ * SECURITY: Never cache navigation documents, authenticated pages, RSC payloads,
+ * API responses, media facades, or user-specific data. Navigations and every
+ * /api/ request remain network-only. Only immutable Next static chunks and a
+ * short explicit list of public app assets may use Cache Storage.
  */
-const CACHE_NAME = "gh-connect-v2-static"
-const STATIC_ASSETS = ["/", "/manifest.json"]
-
-/** Path prefixes that must never be stored in Cache Storage */
-const API_NO_CACHE_PREFIXES = [
-  "/api/auth",
-  "/api/profile",
-  "/api/economy",
-  "/api/membership",
-  "/api/payments",
-  "/api/messaging",
-  "/api/messages",
-  "/api/sessions",
-  "/api/wallet",
-  "/api/notifications",
-  "/api/connections",
-  "/api/verification",
-  "/api/governance",
-  "/api/marketplace",
-  "/api/pi",
-  "/api/",
+const CACHE_NAME = "gh-connect-v3-public-static"
+const STATIC_ASSETS = [
+  "/manifest.json",
+  "/icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+  "/icon-dark-32x32.png",
+  "/icon-light-32x32.png",
+  "/apple-icon.png",
+  "/greenhaven-logo.png",
+  "/greenhaven-lockup.png",
+  "/greenhaven-mark.png",
+  "/ghc-coin-32.png",
+  "/ghc-coin-64.png",
+  "/ghc-coin-logo.png",
+  "/placeholder.svg",
 ]
+const STATIC_PREFIXES = ["/_next/static/"]
 
 function isApiRequest(pathname) {
-  return pathname.includes("/api/")
+  return pathname === "/api" || pathname.startsWith("/api/") || pathname.includes("/api/")
 }
 
-function isPersonalizedApi(pathname) {
-  return API_NO_CACHE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
+function isPublicStaticRequest(request, url) {
+  if (request.method !== "GET" || url.origin !== self.location.origin) return false
+  if (request.headers.has("authorization") || request.cache === "no-store") return false
+  if (STATIC_ASSETS.includes(url.pathname)) return true
+  return STATIC_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))
+}
+
+function isSafePublicStaticResponse(response) {
+  if (!response || response.status !== 200 || response.type !== "basic") return false
+  const cacheControl = response.headers.get("cache-control") || ""
+  const vary = response.headers.get("vary") || ""
+  if (/\b(private|no-store|no-cache)\b/i.test(cacheControl)) return false
+  if (vary.trim() === "*") return false
+  return true
 }
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        /* ignore partial static precache failures */
-      })
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.allSettled(STATIC_ASSETS.map(async (asset) => {
+        try {
+          const response = await fetch(asset, { credentials: "omit", cache: "reload" })
+          if (isSafePublicStaticResponse(response)) await cache.put(asset, response)
+        } catch {
+          // Installation remains available even if an optional icon is unavailable.
+        }
+      }))
     })
   )
   self.skipWaiting()
@@ -48,80 +64,56 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      )
-    })
+    caches.keys().then((cacheNames) => Promise.all(
+      cacheNames.filter((name) => name.startsWith("gh-connect-") && name !== CACHE_NAME)
+        .map((name) => caches.delete(name))
+    ))
   )
   self.clients.claim()
 })
 
 self.addEventListener("fetch", (event) => {
   const { request } = event
-  const url = new URL(request.url)
+  let url
+  try { url = new URL(request.url) } catch { return }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
+  // All APIs, including media and authenticated feeds: network-only, no cache fallback.
+  if (url.origin === self.location.origin && isApiRequest(url.pathname)) {
+    event.respondWith(fetch(request).catch(() => new Response(
+      JSON.stringify({ ok: false, error: "NETWORK_UNAVAILABLE", message: "API requires a network connection" }),
+      { status: 503, statusText: "Service Unavailable", headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }
+    )))
     return
   }
 
-  // All API traffic: network-only. Never write to cache. Never serve cached API bodies.
-  if (isApiRequest(url.pathname)) {
-    event.respondWith(
-      fetch(request).catch(() => {
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            error: "NETWORK_UNAVAILABLE",
-            message: "API requires a network connection",
-          }),
-          {
-            status: 503,
-            statusText: "Service Unavailable",
-            headers: { "Content-Type": "application/json" },
-          }
-        )
-      })
-    )
-    return
-  }
+  // Never intercept navigations/documents. This prevents account-specific HTML,
+  // Next RSC payloads and app state from leaking across sessions or going stale.
+  if (request.mode === "navigate" || request.destination === "document") return
+  if (!isPublicStaticRequest(request, url)) return
 
-  // Non-API: cache-first for static shell only (no credentials-bearing API)
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        fetch(request)
-          .then((response) => {
-            if (response && response.ok && request.method === "GET") {
-              const clone = response.clone()
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, clone)
-              })
-            }
-          })
-          .catch(() => {})
-        return cachedResponse
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    const cached = await cache.match(request)
+    if (cached) return cached
+    try {
+      const response = await fetch(request)
+      if (isSafePublicStaticResponse(response)) {
+        await cache.put(request, response.clone())
       }
-
-      return fetch(request)
-        .then((response) => {
-          if (response && response.ok && request.method === "GET" && !isPersonalizedApi(url.pathname)) {
-            const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, clone)
-            })
-          }
-          return response
-        })
-        .catch(() => caches.match("/").then((r) => r || new Response("Offline", { status: 503 })))
-    })
-  )
+      return response
+    } catch {
+      return new Response("Static asset unavailable offline", {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+      })
+    }
+  })())
 })
 
 self.addEventListener("push", (event) => {
-  const data = event.data ? event.data.json() : {}
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch { data = {} }
   const title = data.title || "GreenHaven"
   const options = {
     body: data.body || "You have a new notification",
@@ -136,15 +128,11 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
   event.waitUntil(
-    clients.matchAll({ type: "window" }).then((clientList) => {
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url === "/" && "focus" in client) {
-          return client.focus()
-        }
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) return client.focus()
       }
-      if (clients.openWindow) {
-        return clients.openWindow("/")
-      }
+      if (clients.openWindow) return clients.openWindow("/")
     })
   )
 })

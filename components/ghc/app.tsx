@@ -103,7 +103,7 @@ function TabScreenFallback({ label }: { label: string }) {
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-card/90 p-1.5" aria-hidden="true">
-            <img src="/gh-connect-logo.png" alt="" className="h-full w-full object-contain" width={36} height={36} />
+            <img src="/greenhaven-mark.png" alt="" className="h-full w-full object-contain" width={36} height={30} />
           </div>
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />
@@ -220,6 +220,7 @@ Toast.displayName = "Toast"
 /** Canonical primary shell navigation — secondary social surfaces remain reachable from Home/Profile. */
 const NAV_ITEMS = [
   { id: "home", icon: Newspaper, label: "Home" },
+  { id: "discover", icon: Compass, label: "Discover" },
   { id: "messages", icon: MessagesSquare, label: "Messages" },
   { id: "communities", icon: Users, label: "Communities" },
   { id: "cart", icon: ShoppingCart, label: "Cart" },
@@ -978,16 +979,30 @@ export function GHConnectApp() {
   // Keyboard navigation support (number keys 1-7 for tabs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (settingsOpen) return
-      const key = parseInt(e.key)
-      if (key >= 1 && key <= 6) {
-        if (NAV_IDS[key - 1]) startTransition(() => setTab(NAV_IDS[key - 1]))
+      // Number-key tab shortcuts are for the passive app shell only. In particular,
+      // never interpret digits entered into wallet amounts, withdrawal PINs, or forms
+      // as navigation commands. The wallet is a modal workflow over the shell and must
+      // remain mounted for the full financial interaction.
+      if (settingsOpen || walletOpen || e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return
+      const target = e.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (
+          target.isContentEditable ||
+          tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+          target.closest('[contenteditable="true"], [role="dialog"], [data-keyboard-shortcuts="off"]')
+        ) return
+      }
+      if (!/^[1-6]$/.test(e.key)) return
+      const destination = NAV_IDS[Number(e.key) - 1]
+      if (destination) {
+        startTransition(() => setTab(destination))
         e.preventDefault()
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [setTab, settingsOpen])
+  }, [setTab, settingsOpen, walletOpen])
 
   // Always mount ThemeApplier so appearance updates even on loading / onboarding shells
   const themeLayer = <ThemeApplier />
@@ -1001,7 +1016,7 @@ export function GHConnectApp() {
         <div className="relative z-10 flex flex-col items-center">
           <div className="relative">
             <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-            <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+            <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
           </div>
           <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
           <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
@@ -1071,7 +1086,7 @@ export function GHConnectApp() {
           <div className="relative z-10 flex flex-col items-center">
             <div className="relative">
               <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-              <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+              <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
             </div>
             <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
             <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
@@ -1341,7 +1356,7 @@ export function GHConnectApp() {
       >
         <div className="flex w-full items-stretch justify-between gap-0.5">
           {NAV_ITEMS.map(({ id, icon: Icon }) => {
-            const localizedLabel = getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
+            const localizedLabel = id === "discover" ? "Discover" : getShellMessage(id as "home" | "messages" | "communities" | "cart" | "profile", regional.locale)
             const isActive = id === "cart" ? marketplaceOpen : activeTab === id
             return (
               <button

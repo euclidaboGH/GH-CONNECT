@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
+import { issuePinProof, pinProofConfigured } from "@/lib/server/identity/withdrawal-pin-proof"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   getWithdrawalPinStatus,
   setWithdrawalPin,
   verifyWithdrawalPin,
   isValidPinFormat,
+  isWeakPin,
 } from "@/lib/server/identity/withdrawal-pin"
 
 export const runtime = "nodejs"
@@ -39,25 +41,29 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`withdrawal-pin:${auth.userId}`, 20, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  // Durable (shared across serverless instances); deny if the limiter is unavailable.
+  const limit = await checkDurableRateLimit(`withdrawal-pin:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
 
   const parsed = await readBoundedJson(request, 2 * 1024)
   if (!parsed.ok) {
     return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   }
-  const body = parsed.value as { action?: unknown; pin?: unknown; confirmPin?: unknown }
+  const body = parsed.value as { action?: unknown; pin?: unknown; confirmPin?: unknown; bindKey?: unknown }
   const action = typeof body.action === "string" ? body.action : ""
 
   if (action === "set") {
     if (!isValidPinFormat(body.pin) || !isValidPinFormat(body.confirmPin)) {
       return reply({ ok: false, error: "PIN_FORMAT_INVALID", message: "Use a 6-digit numeric PIN." }, 400)
     }
+    if (isWeakPin(body.pin)) {
+      return reply({ ok: false, error: "PIN_TOO_WEAK", message: "Choose a less guessable PIN (no repeated digits or simple sequences)." }, 400)
+    }
     if (body.pin !== body.confirmPin) {
       return reply({ ok: false, error: "PIN_MISMATCH" }, 400)
     }
     const result = await setWithdrawalPin({ userId: auth.userId, pin: body.pin })
-    if (!result.ok) return reply({ ok: false, error: result.error }, 503)
+    if (!result.ok) return reply({ ok: false, error: result.error }, result.error === "PIN_ALREADY_CONFIGURED" ? 409 : 503)
     return reply({ ok: true, configured: true, message: "Withdrawal PIN saved. It is never sent to Pi." })
   }
 
@@ -67,8 +73,14 @@ export async function POST(request: Request) {
     }
     const result = await verifyWithdrawalPin({ userId: auth.userId, pin: body.pin })
     if (!result.ok) {
-      const status = result.error === "PIN_LOCKED" ? 423 : result.error === "PIN_NOT_CONFIGURED" ? 409 : 401
+      const status = result.error === "PIN_LOCKED" || result.error === "PIN_COOLDOWN" ? 423 : result.error === "PIN_NOT_CONFIGURED" ? 409 : 401
       return reply({ ok: false, error: result.error }, status)
+    }
+    // Proof is bound to this user + idempotency key and required by the withdrawals route.
+    const bindKey = typeof body.bindKey === "string" ? body.bindKey.trim() : ""
+    if (bindKey) {
+      if (!pinProofConfigured()) return reply({ ok: false, error: "PIN_PROOF_SECRET_MISSING" }, 503)
+      return reply({ ok: true, verified: true, pinProof: issuePinProof(auth.userId, bindKey) })
     }
     return reply({ ok: true, verified: true })
   }

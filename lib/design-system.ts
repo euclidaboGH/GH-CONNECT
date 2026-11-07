@@ -171,7 +171,13 @@ export const motion = {
 
 /** Stable public asset paths. Keep these mapped to the owner-approved files in /public. */
 export const brandAssets = {
-  greenHavenLogo: "/gh-connect-logo.png",
+  /** Official GreenHaven logo (transparent PNGs). Dark variants have lifted greens + light wordmark for dark backgrounds. */
+  greenHavenLogo: "/greenhaven-logo.png",
+  greenHavenLogoDark: "/greenhaven-logo-dark.png",
+  greenHavenLockup: "/greenhaven-lockup.png",
+  greenHavenLockupDark: "/greenhaven-lockup-dark.png",
+  greenHavenMark: "/greenhaven-mark.png",
+  greenHavenMarkDark: "/greenhaven-mark-dark.png",
   ghcCoinLogo: "/ghc-coin-logo.png",
   ghcCoinLarge: "/ghc-coin-logo.png",
   ghcCoinMedium: "/ghc-coin-64.png",

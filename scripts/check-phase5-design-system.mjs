@@ -25,10 +25,10 @@ const checks = [
   ['canonical content width is not redeclared in the refinement layer', (css.match(/:root\s*\{[^}]*--gh-content-max:/s)?.[0].match(/--gh-content-max:/g) || []).length === 1],
   ['Phase 5 design system documentation exists', fs.existsSync(path.join(root, 'docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md'))],
 
-  ['official GreenHaven logo asset is unchanged', sha256('public/gh-connect-logo.png') === 'f0743efcc50fbdf98b5591c6b2c704c544c6adb38e3e5b611fc04d9d7ce8ca13'],
+  ['official GreenHaven logo asset is unchanged', sha256('public/greenhaven-logo.png') === 'a5857b0495a2511a1d1e6fdb447d1aedbc9fc01166f489a472b200aa9a30df70'],
   ['official GHC coin logo asset is unchanged', sha256('public/ghc-coin-logo.png') === 'fb9f896523aa41d2c9fc39c01bbbab514b76a2533f4c8c6802fbe37e69bd7d78'],
   ['official GHC responsive coin assets are unchanged', sha256('public/ghc-coin-64.png') === '3bd2fe1b4f83240a820085535c46eef0702a7ba26f360437475d91fc5e1e53d3' && sha256('public/ghc-coin-32.png') === 'd791fcf81044640d98d49221c8e80853a2afa1eacdcb94c893dc33982c2b6a4f'],
-  ['shared GreenHaven logo uses canonical brand asset constant', brandLogo.includes('src={brandAssets.greenHavenLogo}') && ds.includes('greenHavenLogo: "/gh-connect-logo.png"')],
+  ['shared GreenHaven logo uses canonical brand asset constant', brandLogo.includes('brandAssets.greenHavenLogo') && brandLogo.includes('brandAssets.greenHavenLockup') && ds.includes('greenHavenLogo: "/greenhaven-logo.png"')],
   ['shared GHC coin component uses canonical asset constants', coinLogo.includes('brandAssets.ghcCoinLogo') && coinLogo.includes('brandAssets.ghcCoinMedium') && ds.includes('ghcCoinSmall: "/ghc-coin-32.png"')],
   ['responsive gutters respect device safe areas', css.includes('env(safe-area-inset-left, 0px)') && css.includes('env(safe-area-inset-right, 0px)')],
   ['forced-colors mode preserves status and focus visibility', css.includes('@media (forced-colors: active)') && css.includes('outline: 2px solid Highlight')],

@@ -286,6 +286,8 @@ export type WithdrawalQuote = {
   recipientPiAppUid?: string
   recipientUsername?: string | null
   availableAtomic?: number
+  minPayoutAtomic?: number
+  maxSinglePayoutAtomic?: number
   destination?: string
   message?: string
 }
@@ -351,4 +353,16 @@ export function previewWithdrawalFeeAtomic(grossAtomic: number, feeBps = 300): {
   const fee = Math.floor((gross * feeBps + 9999) / 10000)
   const safeFee = Math.min(fee, Math.max(0, gross - 1))
   return { grossAtomic: gross, feeAtomic: safeFee, netAtomic: gross - safeFee }
+}
+
+
+/** Releases the user's payout reservations that never reached the provider back to Available. */
+export async function cancelUnstartedPayoutRequests(userId: string): Promise<{
+  ok: boolean; error?: string; released?: number; releasedAtomic?: number
+}> {
+  const result = await rpc<{ ok?: boolean; error?: string; released?: number; releasedAtomic?: number }>(
+    "gh_pi_earnings_payout_cancel_unstarted", { p_user_id: String(userId || "").trim() })
+  if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  if (result.ok !== true) return { ok: false, error: String(result.error || "CANCEL_FAILED") }
+  return { ok: true, released: Number(result.released || 0), releasedAtomic: Number(result.releasedAtomic || 0) }
 }

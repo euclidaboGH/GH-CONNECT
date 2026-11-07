@@ -96,7 +96,7 @@ export default function PiSignInCallbackPage() {
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#050a08] px-6">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.16)_0%,transparent_60%)]" />
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center text-center">
-        <BrandLogo size="hero" priority className="mb-6 drop-shadow-[0_0_40px_rgba(16,185,129,0.4)]" />
+        <BrandLogo onDark size="hero" priority className="mb-6 drop-shadow-[0_0_40px_rgba(16,185,129,0.4)]" />
         {!error ? (
           <div
             className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-400"

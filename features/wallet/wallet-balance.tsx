@@ -10,6 +10,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
+import { formatPiAmount } from "@/lib/wallet/pi-amount"
 
 export type WalletAssetRail = "pi" | "ghc"
 
@@ -57,6 +58,9 @@ export function WalletBalanceCard({
   } | null>(null)
   const [piLoading, setPiLoading] = useState(true)
   const [piFailed, setPiFailed] = useState(false)
+  const [releasing, setReleasing] = useState(false)
+  const [releaseMsg, setReleaseMsg] = useState<string | null>(null)
+  const lastPiFetchRef = useRef(0)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
   )
@@ -97,6 +101,7 @@ export function WalletBalanceCard({
       )
       if (!response.ok || !data || data.ok !== true || !validAmounts || typeof data.eligible !== "boolean") {
         if (requestId === piRequestIdRef.current) {
+          // Fail closed: never show an unconfirmed balance.
           setPiSnapshot(null)
           setPiFailed(true)
         }
@@ -119,6 +124,7 @@ export function WalletBalanceCard({
           reasons: Array.isArray(data.reasons) ? data.reasons.map(String) : [],
         })
         setPiFailed(false)
+        lastPiFetchRef.current = Date.now()
       }
     } catch {
       if (requestId === piRequestIdRef.current) {
@@ -140,7 +146,14 @@ export function WalletBalanceCard({
     window.addEventListener("ghc:wallet-refresh", onRefresh)
     window.addEventListener("ghc:earnings-refresh", onRefresh)
     window.addEventListener("ghc:wallet-synced", onRefresh)
-    const onOnline = () => setWalletOnline(true)
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastPiFetchRef.current > 30_000) void refreshPi()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    const onOnline = () => {
+      setWalletOnline(true)
+      void refreshPi()
+    }
     const onOffline = () => setWalletOnline(false)
     window.addEventListener("online", onOnline)
     window.addEventListener("offline", onOffline)
@@ -151,15 +164,38 @@ export function WalletBalanceCard({
       window.removeEventListener("ghc:wallet-refresh", onRefresh)
       window.removeEventListener("ghc:earnings-refresh", onRefresh)
       window.removeEventListener("ghc:wallet-synced", onRefresh)
+      document.removeEventListener("visibilitychange", onVisible)
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
+    }
+  }, [refreshPi])
+
+  const releaseReserved = useCallback(async () => {
+    setReleasing(true)
+    setReleaseMsg(null)
+    try {
+      const res = await fetch("/api/economy/earnings/withdrawals/cancel", {
+        method: "POST", credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+      })
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; released?: number } | null
+      if (res.ok && body?.ok) {
+        setReleaseMsg(body.released ? "Released back to your balance." : "Nothing to release — the request is already being processed.")
+        void refreshPi()
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
+      } else {
+        setReleaseMsg("Couldn't release right now. Try again shortly.")
+      }
+    } catch {
+      setReleaseMsg("Couldn't release right now. Check your connection.")
+    } finally {
+      setReleasing(false)
     }
   }, [refreshPi])
 
   const mask = (n: number) => (balanceVisible ? formatGhc(n) : "••••")
   const maskPi = (n: number) =>
     balanceVisible
-      ? `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} π`
+      ? `${formatPiAmount(n)} π`
       : "••••"
   const synced =
     lastSynced && Number.isFinite(lastSynced)
@@ -221,7 +257,7 @@ export function WalletBalanceCard({
             {piSelected ? (piLoading ? "Checking" : piFailed ? "Unavailable" : "Pi rail") : "GHC rail"}
           </span>
         </div>
-        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite">
+        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite" aria-label={balanceVisible ? undefined : "Balance hidden"}>
           {piSelected
             ? piSnapshot
               ? maskPi(piSnapshot.available)
@@ -357,29 +393,59 @@ export function WalletBalanceCard({
       {/* Meta strip for active rail */}
       <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5">
         {piSelected ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <span>
-              Withdrawable{" "}
-              <strong className="text-foreground">
-                {piSnapshot ? maskPi(piSnapshot.withdrawable) : "—"}
-              </strong>
-            </span>
-            <span>
-              Pending{" "}
-              <strong className="text-foreground">
-                {piSnapshot ? maskPi(piSnapshot.pending) : "—"}
-              </strong>
-            </span>
-            <span>withdrawable · fees and eligibility apply</span>
-            <button
-              type="button"
-              onClick={() => void refreshPi()}
-              disabled={piLoading}
-              className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Refresh PI balance"
-            >
-              {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
-            </button>
+          <div className="space-y-2.5 text-[11px] text-muted-foreground">
+            <dl className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Withdrawable", value: piSnapshot?.withdrawable, tone: "text-emerald-700 dark:text-emerald-300" },
+                { label: "Pending", value: piSnapshot?.pending, tone: "text-foreground" },
+                { label: "In requests", value: piSnapshot?.reserved, tone: "text-violet-700 dark:text-violet-300" },
+              ].map((row) => (
+                <div key={row.label} className="rounded-xl border border-border/60 bg-card/70 px-2.5 py-2">
+                  <dt className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dd className={`mt-0.5 truncate text-[13px] font-black tabular-nums ${row.tone}`}>
+                    {piSnapshot && typeof row.value === "number" ? maskPi(row.value) : "—"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {piSnapshot && piSnapshot.reserved > 0 ? (
+              <p
+                role="note"
+                className="rounded-xl border border-violet-300/50 bg-violet-50/80 px-3 py-2 leading-relaxed text-violet-950 dark:border-violet-400/30 dark:bg-violet-950/40 dark:text-violet-100"
+              >
+                <strong>Reserved {maskPi(piSnapshot.reserved)}</strong> is held for withdrawal requests in progress.
+                {piSnapshot.withdrawable <= 0
+                  ? " Nothing is withdrawable until a request completes or is released back to your balance."
+                  : " The rest of your balance stays withdrawable."}
+                <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <button
+                    type="button"
+                    onClick={() => void releaseReserved()}
+                    disabled={releasing}
+                    className="font-bold underline underline-offset-2 disabled:opacity-50"
+                  >
+                    {releasing ? "Releasing…" : "Release unprocessed request"}
+                  </button>
+                  {releaseMsg ? <span role="status">{releaseMsg}</span> : null}
+                </span>
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="flex flex-wrap gap-x-2">
+                <span>withdrawable · fees and eligibility apply</span>
+                <span className="font-semibold text-foreground/80">3% withdrawal fee</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void refreshPi()}
+                disabled={piLoading}
+                className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300"
+                aria-label="Refresh PI balance"
+                aria-busy={piLoading}
+              >
+                {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">

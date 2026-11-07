@@ -5,6 +5,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { quoteWithdrawal, createPiEarningsPayoutRequest } from "@/lib/server/earnings/unified-ledger"
+import { checkPinProof, pinProofConfigured } from "@/lib/server/identity/withdrawal-pin-proof"
 import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 
 export const runtime = "nodejs"
@@ -23,15 +24,36 @@ export async function POST(request: Request) {
   if (process.env.PI_EARNINGS_PAYOUT_REQUESTS_ENABLED !== "true" || process.env.PI_NETWORK !== "testnet") {
     return reply({ ok: false, error: "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED" }, 503)
   }
+  // Never reserve (lock) a user's available PI unless the Testnet executor that can
+  // settle or release that reservation is also enabled. Otherwise the requested
+  // amount is stranded in "reserved" and the user's genuinely earned balance
+  // (registration bonus, rewards, cashback) cannot be used.
+  if (
+    process.env.PI_EARNINGS_PAYOUT_EXECUTION_ENABLED !== "true" ||
+    process.env.PI_A2U_ENABLED !== "true" ||
+    process.env.PI_A2U_TESTNET_ONLY !== "true"
+  ) {
+    return reply({
+      ok: false,
+      error: "PI_EARNINGS_PAYOUT_EXECUTION_DISABLED",
+      message: "Withdrawals are not being processed yet. Your balance is untouched and stays available.",
+    }, 503)
+  }
   const parsed = await readBoundedJson(request, 8 * 1024)
   if (!parsed.ok) return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)
-  const body = parsed.value as { amountAtomic?: unknown; idempotencyKey?: unknown }
+  const body = parsed.value as { amountAtomic?: unknown; idempotencyKey?: unknown; pinProof?: unknown }
   if (typeof body.amountAtomic !== "number" || !Number.isSafeInteger(body.amountAtomic) || body.amountAtomic <= 0) {
     return reply({ ok: false, error: "INVALID_AMOUNT_ATOMIC" }, 400)
   }
   const key = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : ""
   if (key.length < 16 || key.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
     return reply({ ok: false, error: "IDEMPOTENCY_KEY_REQUIRED" }, 400)
+  }
+
+  // Server-enforced withdrawal PIN: no valid proof for this user + key, no reservation.
+  if (!pinProofConfigured()) return reply({ ok: false, error: "PIN_PROOF_SECRET_MISSING" }, 503)
+  if (!checkPinProof(auth.userId, key, body.pinProof)) {
+    return reply({ ok: false, error: "PIN_PROOF_REQUIRED", message: "Verify your withdrawal PIN to continue." }, 403)
   }
 
   const quote = await quoteWithdrawal({ userId: auth.userId, grossAtomic: body.amountAtomic })
