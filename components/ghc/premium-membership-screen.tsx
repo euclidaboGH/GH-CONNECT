@@ -721,18 +721,18 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div id="gh-membership-root" className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
+      <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
-          className="gh-icon-btn flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
+          className="gh-icon-btn flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
           aria-label="Back"
         >
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold tracking-tight text-foreground">Membership</h1>
-          <p className="text-[11px] text-muted-foreground">
+          <h1 className="text-[15px] font-bold leading-tight tracking-tight text-foreground">Membership</h1>
+          <p className="text-[11px] leading-tight text-muted-foreground">
             Current:{" "}
             <span className="font-semibold text-emerald-700 dark:text-emerald-300">
               {serverStatusState === "loading"

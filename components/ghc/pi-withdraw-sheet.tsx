@@ -106,6 +106,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   const [consentChecked, setConsentChecked] = useState(false)
   const [confirmCode, setConfirmCode] = useState("")
   const [pinConfigured, setPinConfigured] = useState<boolean | null>(null)
+  const [pinStatusError, setPinStatusError] = useState<string | null>(null)
   const [pinInput, setPinInput] = useState("")
   const [pinConfirm, setPinConfirm] = useState("")
   const [pinBusy, setPinBusy] = useState(false)
@@ -164,6 +165,8 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     setConfirmCode("")
     setPinInput("")
     setPinConfirm("")
+    setPinConfigured(null)
+    setPinStatusError(null)
     quoteSeq.current += 1
     intentRef.current = null
     const openingBalance = latestMaxPiRef.current
@@ -178,11 +181,21 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           headers: { Accept: "application/json" },
         })
         if (sessionAtOpen !== sessionIdRef.current) return
-        const body = (await res.json().catch(() => null)) as { configured?: boolean } | null
-        if (res.ok) setPinConfigured(body?.configured === true)
-        else setPinConfigured(false)
+        const body = (await res.json().catch(() => null)) as { ok?: boolean; configured?: boolean; error?: string } | null
+        if (res.ok && body?.ok === true && typeof body.configured === "boolean") {
+          setPinConfigured(body.configured)
+          setPinStatusError(null)
+        } else {
+          setPinConfigured(null)
+          setPinStatusError(body?.error === "PIN_TABLE_PENDING"
+            ? "Withdrawal PIN storage is not ready. Please contact support; no PIN was created."
+            : "Could not verify your withdrawal PIN status. Try again before continuing.")
+        }
       } catch {
-        if (sessionAtOpen === sessionIdRef.current) setPinConfigured(false)
+        if (sessionAtOpen === sessionIdRef.current) {
+          setPinConfigured(null)
+          setPinStatusError("Could not verify your withdrawal PIN status. Check your connection and reopen the withdrawal sheet.")
+        }
       }
     })()
   }, [open])
@@ -386,7 +399,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         if (!setRes.ok || !setBody?.ok) {
           setMsg(setBody?.error === "PIN_TABLE_PENDING" || setBody?.error === "PIN_PERSIST_FAILED"
             ? "PIN storage is not ready on the database yet. Operator must apply the withdrawal PIN migration."
-            : "Could not save withdrawal PIN.")
+            : setBody?.error === "PIN_ALREADY_CONFIGURED"
+              ? "A withdrawal PIN is already configured. Verify your existing PIN; setup cannot overwrite it."
+              : "Could not save withdrawal PIN.")
           return
         }
         setPinConfigured(true)
@@ -672,6 +687,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               <p className="text-[11px] font-medium text-muted-foreground">
                 Withdrawal PIN (6 digits — separate from login; never sent to Pi)
               </p>
+              {pinStatusError ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">{pinStatusError}</p>
+              ) : null}
               {pinConfigured === false ? (
                 <>
                   <input
@@ -731,7 +749,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           </button>
           <button
             type="button"
-            disabled={submitting || quoting || authLoading || authorizing || pinBusy || needsConsent || auth === null || amountPi <= 0}
+            disabled={submitting || quoting || authLoading || authorizing || pinBusy || needsConsent || auth === null || pinConfigured === null || amountPi <= 0}
             onClick={() => void onSubmit()}
             className="flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 text-[15px] font-bold text-white shadow-sm disabled:opacity-50"
             data-testid="pi-withdraw-submit"

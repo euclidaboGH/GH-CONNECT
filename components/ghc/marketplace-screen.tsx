@@ -471,11 +471,11 @@ function ListingDetail({
 
   return (
     <div className="gh-world-marketplace flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-2.5 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-2.5 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Back to listings"
         >
           <ArrowLeft size={18} />
@@ -486,7 +486,7 @@ function ListingDetail({
         <button
           type="button"
           onClick={() => void shareListing()}
-          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
+          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
           aria-label="Search marketplace"
         >
           <Search size={18} className="text-muted-foreground" />
@@ -2296,7 +2296,7 @@ export function MarketplaceScreen({
 
   return (
     <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
-      <header className="flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-2.5 pb-1.5 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
+      <header className="flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-2.5 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -2312,8 +2312,8 @@ export function MarketplaceScreen({
               {msg("buySellSubtitle")}
             </p>
           </div>
-          <span className="gh-icon-tile flex h-8 w-8 items-center justify-center rounded-xl" aria-hidden>
-            <ShoppingBag size={18} />
+          <span className="gh-icon-tile flex h-7 w-7 items-center justify-center rounded-lg" aria-hidden>
+            <ShoppingBag size={16} />
           </span>
         </div>
 

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       return reply({ ok: false, error: "PIN_MISMATCH" }, 400)
     }
     const result = await setWithdrawalPin({ userId: auth.userId, pin: body.pin })
-    if (!result.ok) return reply({ ok: false, error: result.error }, 503)
+    if (!result.ok) return reply({ ok: false, error: result.error }, result.error === "PIN_ALREADY_CONFIGURED" ? 409 : 503)
     return reply({ ok: true, configured: true, message: "Withdrawal PIN saved. It is never sent to Pi." })
   }
 

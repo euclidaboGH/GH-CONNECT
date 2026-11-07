@@ -54,11 +54,11 @@ export function CollapsingAppHeader({
         }`}
         aria-hidden={!compact || hidden}
       >
-        <div className="flex min-h-11 items-center gap-2.5 border-b border-border/50 bg-background/95 px-3 py-0.5 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
+        <div className="flex min-h-10 items-center gap-2 border-b border-border/50 bg-background/95 px-3 py-0.5 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--gh-green)] text-[11px] font-bold text-white">
               {(compactTitle || title).slice(0, 1)}
             </div>
           )}
@@ -72,7 +72,7 @@ export function CollapsingAppHeader({
               </p>
             ) : null}
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+          {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
         </div>
       </div>
 
@@ -85,13 +85,13 @@ export function CollapsingAppHeader({
             : "translate-y-0 opacity-100"
         } ${className}`}
       >
-        <div className="px-3 py-0 sm:px-4 sm:py-0.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
+        <div className="px-3 py-1 sm:px-4">
+          <div className="flex min-h-10 items-center justify-between gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {leading}
               <div className="min-w-0">
                 {title ? (
-                  <h2 className="truncate text-base font-bold tracking-tight text-foreground sm:text-lg">
+                  <h2 className="truncate text-[15px] font-bold leading-tight tracking-tight text-foreground sm:text-base">
                     {title}
                   </h2>
                 ) : null}
@@ -102,9 +102,9 @@ export function CollapsingAppHeader({
                 ) : null}
               </div>
             </div>
-            {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+            {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
           </div>
-          {secondary ? <div className="mt-1">{secondary}</div> : null}
+          {secondary ? <div className="mt-0.5 pb-1">{secondary}</div> : null}
         </div>
       </div>
     </>

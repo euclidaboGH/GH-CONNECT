@@ -979,16 +979,30 @@ export function GHConnectApp() {
   // Keyboard navigation support (number keys 1-7 for tabs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (settingsOpen) return
-      const key = parseInt(e.key)
-      if (key >= 1 && key <= 6) {
-        if (NAV_IDS[key - 1]) startTransition(() => setTab(NAV_IDS[key - 1]))
+      // Number-key tab shortcuts are for the passive app shell only. In particular,
+      // never interpret digits entered into wallet amounts, withdrawal PINs, or forms
+      // as navigation commands. The wallet is a modal workflow over the shell and must
+      // remain mounted for the full financial interaction.
+      if (settingsOpen || walletOpen || e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return
+      const target = e.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (
+          target.isContentEditable ||
+          tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+          target.closest('[contenteditable="true"], [role="dialog"], [data-keyboard-shortcuts="off"]')
+        ) return
+      }
+      if (!/^[1-6]$/.test(e.key)) return
+      const destination = NAV_IDS[Number(e.key) - 1]
+      if (destination) {
+        startTransition(() => setTab(destination))
         e.preventDefault()
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [setTab, settingsOpen])
+  }, [setTab, settingsOpen, walletOpen])
 
   // Always mount ThemeApplier so appearance updates even on loading / onboarding shells
   const themeLayer = <ThemeApplier />

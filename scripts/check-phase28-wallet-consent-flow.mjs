@@ -14,6 +14,11 @@ const quoteRoute = read("app/api/economy/earnings/quote/route.ts")
 const quoteSql = read("supabase/migrations/20261029010011_gh_earnings_withdrawal_fee_3pct.sql")
 const grantSql = read("supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql")
 const pkg = JSON.parse(read("package.json"))
+const app = read("components/ghc/app.tsx")
+const pinService = read("lib/server/identity/withdrawal-pin.ts")
+const pinSet = pinService.slice(pinService.indexOf("export async function setWithdrawalPin"), pinService.indexOf("export async function verifyWithdrawalPin"))
+const pinRoute = read("app/api/identity/withdrawal-pin/route.ts")
+const rewards = read("components/ghc/rewards-centre-screen.tsx")
 const results = []
 const test = (name, ok) => { results.push(Boolean(ok)); console.log(`${ok ? "PASS" : "FAIL"} ${name}`) }
 const postPost = route.slice(route.indexOf("export async function POST"), route.indexOf("export async function DELETE"))
@@ -40,6 +45,12 @@ test("quote route still delegates to the DB quote function (authorization check 
 test("DB quote function still enforces WALLET_AUTHORIZATION_REQUIRED", /WALLET_AUTHORIZATION_REQUIRED/.test(quoteSql) && /gh_pi_wallet_authorizations/.test(quoteSql))
 test("grant RPC remains service_role-only and user_explicit-only (no new grants to authenticated/anon)", /TO service_role/.test(grantSql) && /FROM PUBLIC, anon, authenticated/.test(grantSql) && !/GRANT EXECUTE[^;]*authenticated/.test(grantSql))
 test("client fee preview matches DB rounding (ceil bps, atomic scale 1e7)", /Math\.ceil\(\(grossAtomic \* 300\) \/ 10_000\)/.test(sheet) && /ceil_fee_bps_floor_net/.test(quoteSql) && /PI_SCALE = 10_000_000/.test(sheet))
+test("global number shortcuts ignore editable fields, dialogs and open Wallet", /settingsOpen \|\| walletOpen/.test(app) && /tag === "INPUT" \|\| tag === "TEXTAREA" \|\| tag === "SELECT"/.test(app) && /target\.closest\(.*role=\"dialog\"/.test(app))
+test("wallet keyboard-shortcut effect tracks walletOpen and does not navigate on typed digits", /\}, \[setTab, settingsOpen, walletOpen\]\)/.test(app) && /!\/\^\[1-6\]\$\//.test(app))
+test("PIN status fails closed when persistence is missing or unavailable", /res\.status === 404 \|\| res\.status === 400 \|\| res\.status === 406/.test(pinService) && /ok: false, configured: false, locked: false, error: "PIN_TABLE_PENDING"/.test(pinService) && /body\?\.ok === true/.test(sheet))
+test("PIN creation is insert-only and cannot overwrite an existing PIN", /resolution=ignore-duplicates,return=representation/.test(pinSet) && /PIN_ALREADY_CONFIGURED/.test(pinSet) && !/method: "PATCH"/.test(pinSet) && pinRoute.includes('result.error === "PIN_ALREADY_CONFIGURED" ? 409 : 503'))
+test("PIN controls stay unavailable until authoritative PIN status is known", /pinConfigured === null \|\| amountPi <= 0/.test(sheet) && /pinStatusError/.test(sheet))
+test("Rewards only offers redemption for server-eligible or approved holds, not pending validation", /const canClaim = status === "eligible" \|\| status === "approved"/.test(rewards) && /{canClaim &&/.test(rewards))
 test("phase 28 checks registered in prebuild and verify:static", ["prebuild", "verify:static"].every((k) => (pkg.scripts[k] || "").includes("check-phase28-wallet-consent-flow.mjs") && (pkg.scripts[k] || "").includes("test-phase28-wallet-consent.mjs")))
 
 const failed = results.filter((x) => !x).length

@@ -1169,7 +1169,7 @@ export function CommunitiesScreen() {
               // Canonical shell navigation — Home tab (no reload / no history hack)
               if (!navigateTo("home")) setTab?.("home")
             }}
-            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted active:scale-95"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground transition hover:bg-muted active:scale-95"
             aria-label="Back to Home"
           >
             <ArrowLeft size={18} strokeWidth={2.25} aria-hidden />
@@ -1193,7 +1193,7 @@ export function CommunitiesScreen() {
             <button
               type="button"
               onClick={openCreateCommunity}
-              className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[var(--gh-green)] px-3 text-[12px] font-bold text-white shadow-sm"
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-[var(--gh-green)] px-2.5 text-[12px] font-bold text-white shadow-sm"
               aria-label={msg("create") + " " + msg("communityTitle")}
             >
               <Plus size={16} strokeWidth={2.5} />

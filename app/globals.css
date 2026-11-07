@@ -3280,3 +3280,47 @@ img { height: auto; }
   content-visibility: auto;
   contain-intrinsic-size: auto 280px;
 }
+
+
+/* ================================================================
+   Header system v2 — slim, consistent section chrome.
+   Loaded last so it supersedes earlier stacked header rules
+   (previous min-height values of 3.75rem / 4.5rem reserved dead space).
+   Applies to Home, Feed, Discover, Communities, Messages, Cart/Marketplace,
+   Profile, Wallet, Rewards and Membership.
+   ================================================================ */
+:root {
+  --gh-header-slim: 2.75rem;
+  --gh-header-icon: 2.25rem;
+}
+.gh-page-header-slim,
+.gh-page-chrome {
+  min-height: 0 !important;
+  padding-block-end: 0.25rem;
+  box-shadow: none !important;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent) !important;
+}
+.gh-page-header-slim {
+  padding-block-start: max(0.25rem, env(safe-area-inset-top, 0px));
+}
+.gh-page-chrome { padding-block-start: 0.25rem; }
+#gh-main-header { min-height: 0; }
+#gh-main-header h2,
+.gh-page-header-slim h1,
+.gh-page-chrome h1 {
+  font-size: 0.9375rem;
+  line-height: 1.2;
+}
+.gh-page-header-slim .gh-icon-btn,
+.gh-page-chrome .gh-icon-btn {
+  min-height: var(--gh-header-icon);
+  min-width: var(--gh-header-icon);
+  height: var(--gh-header-icon);
+  width: var(--gh-header-icon);
+}
+/* Keep the official logo a restrained brand mark wherever it sits in chrome. */
+header img[alt="GreenHaven"],
+#gh-main-header img[alt="GreenHaven"] {
+  max-height: 1.75rem;
+  width: auto;
+}

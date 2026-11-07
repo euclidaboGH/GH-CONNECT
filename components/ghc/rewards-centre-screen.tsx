@@ -637,7 +637,7 @@ const claimPendingReward = useCallback(
   return (
     <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("rewardsTitle")}>
 
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1.5 backdrop-blur-md">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1 backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
@@ -654,7 +654,7 @@ const claimPendingReward = useCallback(
           <button
             type="button"
             onClick={onOpenWallet}
-            className="h-8 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+            className="h-7 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[10px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
           >
             Wallet
           </button>
@@ -662,7 +662,7 @@ const claimPendingReward = useCallback(
         <button
           type="button"
           onClick={refresh}
-          className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted"
+          className="h-7 rounded-full border border-border/70 bg-card px-2.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted"
           aria-label="Refresh rewards"
         >
           Refresh
@@ -1107,12 +1107,12 @@ const claimPendingReward = useCallback(
                 filteredLocalRewardRecords.map((r) => {
                   // Canonical RewardValidationStatus only (no legacy "pending")
                   const status = r.validationStatus
-                  const claimLabel =
-                    status === "eligible" ||
-                    status === "approved" ||
-                    status === "pending_validation"
-                      ? "Ready to claim"
-                      : "Under review"
+                  const canClaim = status === "eligible" || status === "approved"
+                  const claimLabel = canClaim
+                    ? "Ready to claim"
+                    : status === "pending_validation"
+                      ? "Under review"
+                      : "Not claimable"
                   return (
                     <div
                       key={r.id}
@@ -1165,9 +1165,7 @@ const claimPendingReward = useCallback(
                           {resolveRewardActivityTarget(r) ? (
                             <button type="button" onClick={() => navigateGhcActivityTarget(resolveRewardActivityTarget(r)!)} className="mt-2 inline-flex min-h-9 items-center rounded-full border border-border px-3 text-[11px] font-bold text-emerald-700 hover:bg-muted">Open source activity</button>
                           ) : null}
-                          {(status === "pending_validation" ||
-                            status === "eligible" ||
-                            status === "approved") && (
+                          {canClaim && (
                             <button
                               type="button"
                               onClick={() => void claimPendingReward(String(r.id))}

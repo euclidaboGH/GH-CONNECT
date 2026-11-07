@@ -47,13 +47,11 @@ export async function getWithdrawalPinStatus(userId: string): Promise<PinStatus>
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     })
-    if (res.status === 404 || res.status === 406) {
-      return { ok: true, configured: false, locked: false }
-    }
     if (!res.ok) {
-      // Table may not be applied yet
-      if (res.status === 404 || res.status === 400) {
-        return { ok: true, configured: false, locked: false, error: "PIN_TABLE_PENDING" }
+      // A missing table/schema is not the same as an unconfigured PIN. Fail closed
+      // so the UI never invites setup against unavailable persistence.
+      if (res.status === 404 || res.status === 400 || res.status === 406) {
+        return { ok: false, configured: false, locked: false, error: "PIN_TABLE_PENDING" }
       }
       return { ok: false, configured: false, locked: false, error: "PIN_SERVICE_UNAVAILABLE" }
     }
@@ -89,7 +87,9 @@ export async function setWithdrawalPin(input: {
       method: "POST",
       headers: {
         ...restHeaders(env.supabaseServiceRoleKey),
-        Prefer: "resolution=merge-duplicates,return=minimal",
+        // First PIN setup is insert-only. Never let a repeated setup request replace
+        // an existing credential; PIN changes need a separate verified flow.
+        Prefer: "resolution=ignore-duplicates,return=representation",
       },
       body: JSON.stringify({
         user_id: input.userId,
@@ -102,25 +102,10 @@ export async function setWithdrawalPin(input: {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) {
-      // upsert via PATCH if exists
-      const patch = await fetch(
-        `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`,
-        {
-          method: "PATCH",
-          headers: restHeaders(env.supabaseServiceRoleKey),
-          body: JSON.stringify({
-            pin_hash: pinHash,
-            pin_salt: salt,
-            failed_attempts: 0,
-            locked_until: null,
-            updated_at: new Date().toISOString(),
-          }),
-          cache: "no-store",
-          signal: AbortSignal.timeout(10_000),
-        },
-      )
-      if (!patch.ok) return { ok: false, error: "PIN_PERSIST_FAILED" }
+    if (!res.ok) return { ok: false, error: "PIN_PERSIST_FAILED" }
+    const inserted = (await res.json().catch(() => [])) as unknown
+    if (!Array.isArray(inserted) || inserted.length === 0) {
+      return { ok: false, error: "PIN_ALREADY_CONFIGURED" }
     }
     return { ok: true }
   } catch {
