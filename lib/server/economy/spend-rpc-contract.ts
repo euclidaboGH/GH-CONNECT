@@ -2,7 +2,7 @@
  * Typed wrapper around the pure JS spend RPC contract so TypeScript can narrow
  * success vs failure without relying on .mjs inference.
  */
-// @ts-expect-error pure JS module
+// Pure JS contract module (no types emitted).
 import { parseGhcSpendRpcResult as parseRaw } from "./spend-rpc-contract.mjs"
 
 export type GhcSpendRpcFailure = { ok: false; error: string }

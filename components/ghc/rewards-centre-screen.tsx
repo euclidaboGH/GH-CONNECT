@@ -288,8 +288,8 @@ export function RewardsCentreScreen({
       // become completed only when the same account has a durable server unlock.
       // Only durable server unlocks are presented as achievements. Browser-local
       // progress can guide a journey, but it is not proof of an unlocked milestone.
-      const achievements = (serverAchievements || []).filter((row) => Boolean(row?.id))
-      const durableMissionIds = new Set(achievements.map((row) => row.id))
+      const achievements = serverAchievements.filter((row) => Boolean(row?.id))
+      const durableMissionIds = new Set(achievements.map((row) => row.id)) as Set<string>
       const challenges = engine.getChallengeCards(signals).map((card) => {
         const missionCode = missionCodeForChallenge(card.challenge.id)
         if (!missionCode) {
