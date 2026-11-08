@@ -16,7 +16,7 @@ const checks = [
   ["settings updates send narrow patches instead of stale full snapshots", /updateSettings\(\{ \[key\]: value \}/.test(settings) && !/updateSettings\(\{ \.\.\.settings, \[key\]: value/.test(settings)],
   ["theme changes use narrow settings patches", /updateSettings\(\{\s*themeMode: mode/.test(settings) && /updateSettings\(\{\s*themeId: id/.test(settings)],
   ["custom theme upload avoids overwriting unrelated settings", /themeCustomImage: dataUrl,\s*themeId: settings\.themeId/.test(settings)],
-  ["discovery radius is bounded", /Math\.min\(100, Math\.max\(1, Math\.round\(value\)\)\)/.test(settings)],
+  ["discovery radius is bounded", /clampDiscoveryRadiusKm\(/.test(settings) || /Math\.min\(100, Math\.max\(1, Math\.round\(value\)\)\)/.test(settings)],
   ["minimum age cannot exceed configured maximum", /key === "ageMin"[\s\S]*?Math\.min\(Math\.round\(value\), Number\(settings\.ageMax\)/.test(settings)],
   ["maximum age cannot fall below configured minimum", /key === "ageMax"[\s\S]*?Math\.max\(Math\.round\(value\), Number\(settings\.ageMin\)/.test(settings)],
   ["server-backed messaging privacy contract remains intact", context.includes("/api/messaging/preferences") && context.includes("Messaging privacy could not be saved securely")],

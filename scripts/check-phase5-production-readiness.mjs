@@ -34,21 +34,32 @@ function exists(path) {
 
 console.log("Phase 5 production readiness gate\n")
 
-// 1. Version consistency
+// 1. Version consistency — must match package.json (no stale pin)
+let activeVersion = null
 try {
   const pkg = JSON.parse(read("package.json"))
-  if (pkg.version !== "0.330.15") fail(`package.json version expected 0.330.15, got ${pkg.version}`)
+  activeVersion = String(pkg.version || "")
+  if (!/^\d+\.\d+\.\d+/.test(activeVersion)) fail(`package.json version invalid: ${pkg.version}`)
   else ok(`package.json version ${pkg.version}`)
+  const lock = JSON.parse(read("package-lock.json"))
+  if (lock.version !== pkg.version) fail(`package-lock version ${lock.version} != package ${pkg.version}`)
+  else ok("package-lock version synchronized")
+  const release = read("lib/app-release.ts")
+  if (!release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)) fail("APP_RELEASE_VERSION does not match package.json")
+  else ok("APP_RELEASE_VERSION synchronized")
 } catch (e) {
-  fail(`package.json unreadable: ${e.message}`)
+  fail(`version metadata unreadable: ${e.message}`)
 }
 
 if (exists("VERIFIED_MANIFEST.txt")) {
   const m = read("VERIFIED_MANIFEST.txt")
-  if (!m.includes("project_version=0.330.15")) fail("VERIFIED_MANIFEST project_version not 0.330.15")
-  else ok("VERIFIED_MANIFEST project_version=0.330.15")
-  if (!m.includes("canonical_migrations=189")) warn("VERIFIED_MANIFEST canonical_migrations not 189")
-  else ok("canonical_migrations=189")
+  if (!activeVersion || !m.includes(`project_version=${activeVersion}`)) fail(`VERIFIED_MANIFEST project_version not ${activeVersion}`)
+  else ok(`VERIFIED_MANIFEST project_version=${activeVersion}`)
+  const migCount = readdirSync(join(root, "supabase/migrations")).filter((n) => n.endsWith(".sql")).length
+  const mm = m.match(/canonical_migrations=(\d+)/)
+  if (!mm) warn("VERIFIED_MANIFEST missing canonical_migrations")
+  else if (Number(mm[1]) !== migCount) warn(`VERIFIED_MANIFEST canonical_migrations=${mm[1]} vs disk ${migCount}`)
+  else ok(`canonical_migrations=${mm[1]} matches disk`)
 } else {
   fail("VERIFIED_MANIFEST.txt missing")
 }
