@@ -21,7 +21,7 @@ import {
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
-import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract.mjs"
+import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract"
 
 // These catalog sinks must remain unavailable until a durable effect record and
 // its consumer are deployed atomically. A ledger debit alone is not a boost.

@@ -26,7 +26,7 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
 import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
-import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract.mjs"
+import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

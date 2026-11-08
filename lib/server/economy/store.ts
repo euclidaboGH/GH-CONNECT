@@ -21,7 +21,7 @@ import { getServerEconomyLimits } from "./limits"
 import type { GhcTransferResult } from "@/lib/domains/economy-transfer-contract"
 import { mapTransferFailure } from "@/lib/domains/economy-transfer-contract"
 import { allowMemoryServer } from "./http"
-import { parseGhcSpendRpcResult } from "./spend-rpc-contract.mjs"
+import { parseGhcSpendRpcResult } from "./spend-rpc-contract"
 
 export type GhcLedgerRow = GhcTransaction
 

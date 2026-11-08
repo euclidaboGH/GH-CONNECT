@@ -404,7 +404,6 @@ export function CommunitiesScreen() {
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [directoryTick, setDirectoryTick] = useState(0)
-  const [directoryOffset, setDirectoryOffset] = useState(0)
   const [directoryHasMore, setDirectoryHasMore] = useState(false)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
 
@@ -1463,15 +1462,15 @@ export function CommunitiesScreen() {
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <button type="button" aria-pressed={communityAttentionFilter === "board"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "board" ? "all" : "board") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "board" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
+                <button type="button" aria-pressed={communityAttentionFilter === "board"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter(communityAttentionFilter === "board" ? "all" : "board") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "board" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.boardUnread}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Board updates</span>
                 </button>
-                <button type="button" aria-pressed={communityAttentionFilter === "chat"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "chat" ? "all" : "chat") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "chat" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
+                <button type="button" aria-pressed={communityAttentionFilter === "chat"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter(communityAttentionFilter === "chat" ? "all" : "chat") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "chat" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.chatUnread}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Chat unread</span>
                 </button>
-                <button type="button" aria-pressed={communityAttentionFilter === "requests"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "requests" ? "all" : "requests") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "requests" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
+                <button type="button" aria-pressed={communityAttentionFilter === "requests"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter(communityAttentionFilter === "requests" ? "all" : "requests") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "requests" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.requestsToReview}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Requests</span>
                 </button>
@@ -1665,7 +1664,7 @@ export function CommunitiesScreen() {
                     resolveJoinCta({
                       privacy: community.privacy,
                       viewerIsMember: joined,
-                      pendingRequest: membershipStatus === "pending" || membershipStatus === "requested",
+                      pendingRequest: membershipStatus === "pending" || (membershipStatus as string | undefined) === "requested",
                       isOwner: role === "owner",
                     }).label
                   }

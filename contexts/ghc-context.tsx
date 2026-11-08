@@ -6178,7 +6178,7 @@ const dismissMatchCelebration = useCallback(() => {
       const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
       const result = await apiSetConversationPrefs(conversationId, { mutedUntil: null })
       if (!result.httpOk || result.ok !== true) { addToast("Could not unmute this conversation.", "error"); return }
-      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: false, muteUntil: null } : c) }))
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: false, muteUntil: undefined } : c) }))
       addToast(result.durable === true ? "Conversation unmuted" : "Conversation unmuted on this device only", result.durable === true ? "success" : "info")
     } catch { addToast("Could not unmute this conversation.", "error") }
   }, [addToast])

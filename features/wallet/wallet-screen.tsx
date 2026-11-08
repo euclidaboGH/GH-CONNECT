@@ -1005,7 +1005,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [filteredTxs])
 
   const refresh = useCallback(async () => {
-    if (manualRefreshInFlight.current) return false
+    if (manualRefreshInFlight.current) return
     manualRefreshInFlight.current = true
     setRefreshing(true)
     setRefreshFailed(false)

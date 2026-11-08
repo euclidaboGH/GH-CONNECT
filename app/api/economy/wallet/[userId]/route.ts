@@ -87,7 +87,7 @@ function normalizeTransferRequests(
       note: row.note != null ? String(row.note) : undefined,
       createdAt,
       expiresAt,
-      direction: payerId === userId ? "incoming" : "outgoing",
+      direction: (payerId === userId ? "incoming" : "outgoing") as "incoming" | "outgoing",
     }
   }).filter((item) =>
     Boolean(item.id && item.referenceId && item.requesterId && item.payerId) &&

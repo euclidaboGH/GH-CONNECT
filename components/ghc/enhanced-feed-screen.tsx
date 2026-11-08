@@ -202,7 +202,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     reason: string
     category: string
   } | null>(null)
-  const feedPreferenceOwnerId = String(profile?.id || profile?.userId || "anonymous").trim() || "anonymous"
+  const feedPreferenceOwnerId = String(profile?.id || "anonymous").trim() || "anonymous"
   const feedPreferenceStorageKey = `ghc.not-interested-post-ids:${feedPreferenceOwnerId}`
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>(() => {
     try {
@@ -769,7 +769,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   }, [rankedPosts])
   const discoveryCreators = useMemo(() => {
     const seen = new Set<string>()
-    const ownId = String(profile?.id || profile?.userId || "")
+    const ownId = String(profile?.id || "")
     return rankedPosts.flatMap(({ post }) => {
       const id = String(post.authorId || "").trim()
       const name = String(post.authorName || "").trim()

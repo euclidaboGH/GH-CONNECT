@@ -37,7 +37,7 @@ export interface RewardChallenge {
   }
   enabled: boolean
   /** Optional CTA route hint for UI */
-  ctaHint?: "profile" | "communities" | "feed" | "marketplace" | "find"
+  ctaHint?: "profile" | "communities" | "feed" | "marketplace" | "find" | "connections"
 }
 
 export interface ChallengeProgress {
