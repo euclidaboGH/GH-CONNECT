@@ -18,13 +18,16 @@ export function atomicToPi(atomic: number | string): number {
   return n / PI_ATOMIC_SCALE
 }
 
-async function rpc<T extends Record<string, unknown>>(
+type RpcFailure = { ok: false; status: number; code: string; message: string }
+
+/** PostgREST call that preserves why it failed (never includes keys or request bodies). */
+async function rpcDetailed<T extends Record<string, unknown>>(
   name: string,
   body: Record<string, unknown>,
-): Promise<T | null> {
-  if (!hasPrivilegedDatabase()) return null
+): Promise<{ ok: true; data: T } | RpcFailure> {
+  if (!hasPrivilegedDatabase()) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Privileged database is not configured" }
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Supabase URL or service key missing" }
   try {
     const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
       method: "POST",
@@ -37,12 +40,28 @@ async function rpc<T extends Record<string, unknown>>(
       cache: "no-store",
       signal: AbortSignal.timeout(12_000),
     })
-    const result = (await response.json().catch(() => null)) as T | null
-    if (!response.ok || result === null) return null
-    return result
-  } catch {
-    return null
+    const parsed = (await response.json().catch(() => null)) as (T & { code?: string; message?: string }) | null
+    if (!response.ok || parsed === null) {
+      return {
+        ok: false,
+        status: response.status,
+        code: String(parsed?.code || `HTTP_${response.status}`).slice(0, 40),
+        message: String(parsed?.message || "").slice(0, 300),
+      }
+    }
+    return { ok: true, data: parsed }
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+    return { ok: false, status: 0, code: timeout ? "RPC_TIMEOUT" : "RPC_NETWORK_ERROR", message: "" }
   }
+}
+
+async function rpc<T extends Record<string, unknown>>(
+  name: string,
+  body: Record<string, unknown>,
+): Promise<T | null> {
+  const r = await rpcDetailed<T>(name, body)
+  return r.ok ? r.data : null
 }
 
 /** Direct registration-bonus status lookup; does not depend on a paginated statement. */
@@ -374,7 +393,7 @@ export async function cancelUnstartedPayoutRequests(userId: string): Promise<{
   items?: PiPayoutReservationExplanation[]
   message?: string
 }> {
-  const result = await rpc<{
+  const call = await rpcDetailed<{
     ok?: boolean
     error?: string
     released?: number
@@ -382,7 +401,15 @@ export async function cancelUnstartedPayoutRequests(userId: string): Promise<{
     items?: PiPayoutReservationExplanation[]
     message?: string
   }>("gh_pi_earnings_payout_cancel_unstarted", { p_user_id: String(userId || "").trim() })
-  if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  if (!call.ok) {
+    // Log the real cause server-side (no secrets) so operators can diagnose; return a precise, safe code.
+    console.error("[pi-earnings-cancel] rpc failed", { status: call.status, code: call.code, message: call.message })
+    const missing = call.status === 404 || call.code === "PGRST202" || call.code === "42883"
+    if (missing) return { ok: false, error: "PAYOUT_RECOVERY_MIGRATION_PENDING" }
+    if (call.message.startsWith("Release failed for")) return { ok: false, error: "RESERVATION_RELEASE_REJECTED" }
+    return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  }
+  const result = call.data
   if (result.ok !== true) return { ok: false, error: String(result.error || "CANCEL_FAILED") }
   return {
     ok: true,

@@ -29,6 +29,10 @@ export function WalletWithdrawalPinCard() {
   const [busy, setBusy] = useState(false)
   const [pin, setPin] = useState("")
   const [confirmPin, setConfirmPin] = useState("")
+  const [changing, setChanging] = useState(false)
+  const [currentPin, setCurrentPin] = useState("")
+  const [newPin, setNewPin] = useState("")
+  const [newPinConfirm, setNewPinConfirm] = useState("")
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -88,6 +92,44 @@ export function WalletWithdrawalPinCard() {
     }
   }
 
+  const changePin = async () => {
+    if (currentPin.length !== 6 || newPin.length !== 6 || newPinConfirm.length !== 6 || newPin !== newPinConfirm || busy) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const response = await fetch("/api/identity/withdrawal-pin", {
+        method: "POST", credentials: "include", cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "change", currentPin, newPin, confirmPin: newPinConfirm }),
+      })
+      const body = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (!response.ok || body?.ok !== true) {
+        const error = body?.error || "PIN_CHANGE_FAILED"
+        const copy: Record<string, string> = {
+          PIN_INVALID: "Your current PIN is incorrect.",
+          PIN_LOCKED: "PIN locked after too many attempts. Try again later or use Forgot PIN?.",
+          PIN_COOLDOWN: "PIN changes are paused for 24 hours after a PIN reset, for your protection.",
+          PIN_TOO_WEAK: "Choose a less predictable PIN. Avoid repeated digits or simple sequences.",
+          PIN_UNCHANGED: "Your new PIN must be different from the current one.",
+          PIN_MISMATCH: "The two new PIN entries do not match.",
+          PIN_FORMAT_INVALID: "Enter 6-digit numeric PINs.",
+          RATE_LIMITED: "Too many attempts. Wait before trying again.",
+          PIN_NOT_CONFIGURED: "No withdrawal PIN exists yet. Create one first.",
+          PIN_PERSIST_FAILED: "Your new PIN could not be saved. Your current PIN is unchanged.",
+        }
+        setMessage({ kind: "error", text: copy[error] || "PIN change could not be completed. Your current PIN is unchanged." })
+        return
+      }
+      setCurrentPin(""); setNewPin(""); setNewPinConfirm(""); setChanging(false)
+      setMessage({ kind: "success", text: "Your withdrawal PIN was changed. Use the new PIN for your next withdrawal." })
+      await refresh()
+    } catch {
+      setMessage({ kind: "error", text: "Connection interrupted. Your PIN may not have changed; try your current PIN on the next withdrawal." })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-emerald-200/70 bg-emerald-50/50 p-4 dark:border-emerald-900/70 dark:bg-emerald-950/20" aria-labelledby="wallet-withdrawal-pin-title">
       <div className="flex items-start gap-3">
@@ -108,6 +150,20 @@ export function WalletWithdrawalPinCard() {
       {!loading && status?.ok === true && status.configured === true ? (
         <div className="mt-3 space-y-2.5">
           <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-background/80 px-3 py-2 text-[11px] font-semibold text-emerald-800 dark:border-emerald-900 dark:text-emerald-200" role="status"><ShieldCheck size={14} /> Withdrawal PIN configured{status.locked ? " · temporarily locked after failed attempts" : ""}</p>
+          {changing ? (
+            <div className="space-y-2.5 rounded-xl border border-border/70 bg-background/80 p-3">
+              <label className="block space-y-1"><span className="text-[10px] font-bold text-muted-foreground">Current PIN</span><input type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} value={currentPin} onChange={(event) => setCurrentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} className={FIELD} placeholder="••••••" aria-label="Current six-digit withdrawal PIN" /></label>
+              <label className="block space-y-1"><span className="text-[10px] font-bold text-muted-foreground">New 6-digit PIN</span><input type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, "").slice(0, 6))} className={FIELD} placeholder="••••••" aria-label="New six-digit withdrawal PIN" /></label>
+              <label className="block space-y-1"><span className="text-[10px] font-bold text-muted-foreground">Confirm new PIN</span><input type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPinConfirm} onChange={(event) => setNewPinConfirm(event.target.value.replace(/\D/g, "").slice(0, 6))} className={FIELD} placeholder="••••••" aria-label="Confirm new six-digit withdrawal PIN" /></label>
+              {newPin.length === 6 && newPinConfirm.length === 6 && newPin !== newPinConfirm ? <p className="text-[11px] text-rose-700 dark:text-rose-300" role="alert">The new PIN entries do not match.</p> : null}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setChanging(false); setCurrentPin(""); setNewPin(""); setNewPinConfirm("") }} disabled={busy} className="min-h-11 flex-1 rounded-xl border border-border/70 px-4 text-xs font-bold text-foreground disabled:opacity-50">Cancel</button>
+                <button type="button" onClick={() => void changePin()} disabled={busy || currentPin.length !== 6 || newPin.length !== 6 || newPinConfirm.length !== 6 || newPin !== newPinConfirm} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-xs font-bold text-white disabled:opacity-50">{busy ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : "Save new PIN"}</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setChanging(true); setMessage(null) }} className="min-h-11 w-full rounded-xl border border-emerald-300/70 bg-background px-4 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:text-emerald-200">Change withdrawal PIN</button>
+          )}
           <PinRecoveryPanel onPinReset={() => { setMessage({ kind: "success", text: "Your withdrawal PIN was reset. Use your new PIN for the next withdrawal." }); void refresh() }} />
         </div>
       ) : null}
@@ -121,7 +177,7 @@ export function WalletWithdrawalPinCard() {
         </div>
       ) : null}
       {message ? <p className={`mt-3 rounded-xl px-3 py-2 text-[11px] leading-relaxed ${message.kind === "success" ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-100" : "bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100"}`} role="status" aria-live="polite">{message.text}</p> : null}
-      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">PINs are hashed and verified by GreenHaven's server. They are never stored in browser storage and are never sent to Pi. Recovery is available after setup.</p>
+      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">PINs are hashed and verified by GreenHaven's server. They are never stored in browser storage and are never sent to Pi. Change it here any time with your current PIN, or use Forgot PIN? if you cannot remember it.</p>
     </section>
   )
 }

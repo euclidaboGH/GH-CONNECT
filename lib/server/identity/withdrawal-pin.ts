@@ -112,7 +112,13 @@ export async function setWithdrawalPin(input: {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) return { ok: false, error: "PIN_PERSIST_FAILED" }
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => null)) as { code?: string; message?: string } | null
+      console.error("[withdrawal-pin] persist failed", { status: res.status, code: detail?.code, message: String(detail?.message || "").slice(0, 200) })
+      // 23503 = FK to auth.users, 22P02 = uuid column given a non-uuid id: storage predates the text-id repair migration.
+      if (detail?.code === "23503" || detail?.code === "22P02") return { ok: false, error: "PIN_STORAGE_MIGRATION_PENDING" }
+      return { ok: false, error: "PIN_PERSIST_FAILED" }
+    }
     const inserted = (await res.json().catch(() => [])) as unknown
     if (!Array.isArray(inserted) || inserted.length === 0) {
       return { ok: false, error: "PIN_ALREADY_CONFIGURED" }
@@ -149,6 +155,52 @@ export async function verifyWithdrawalPin(input: {
     const b = Buffer.from(String(begin.pinHash), "hex")
     if (!(a.length === b.length && timingSafeEqual(a, b))) return { ok: false, error: "PIN_INVALID" }
     await call("gh_withdrawal_pin_attempt_succeeded", { p_user_id: input.userId })
+    return { ok: true }
+  } catch (error) {
+    // Operators need the cause (e.g. RPC_404 = attempt-accounting function missing); never log the PIN.
+    console.error("[withdrawal-pin] verify unavailable", { cause: error instanceof Error ? error.message : "unknown" })
+    return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
+  }
+}
+
+/**
+ * Change an existing PIN. The CURRENT PIN is verified first (atomic attempt counting, lockout and
+ * post-reset cooldown all apply), then the hash is replaced. Forgotten PINs use the recovery flow instead.
+ */
+export async function changeWithdrawalPin(input: {
+  userId: string
+  currentPin: string
+  newPin: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isValidPinFormat(input.currentPin) || !isValidPinFormat(input.newPin)) return { ok: false, error: "PIN_FORMAT_INVALID" }
+  if (isWeakPin(input.newPin)) return { ok: false, error: "PIN_TOO_WEAK" }
+  if (input.currentPin === input.newPin) return { ok: false, error: "PIN_UNCHANGED" }
+  const env = readGhcServerEnv()
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
+  const verified = await verifyWithdrawalPin({ userId: input.userId, pin: input.currentPin })
+  if (!verified.ok) return verified
+  const salt = randomBytes(16).toString("hex")
+  try {
+    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: restHeaders(env.supabaseServiceRoleKey),
+      body: JSON.stringify({
+        pin_hash: hashPin(input.newPin, salt),
+        pin_salt: salt,
+        failed_attempts: 0,
+        locked_until: null,
+        updated_at: new Date().toISOString(),
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) {
+      console.error("[withdrawal-pin] change persist failed", { status: res.status })
+      return { ok: false, error: "PIN_PERSIST_FAILED" }
+    }
+    const rows = (await res.json().catch(() => [])) as unknown
+    if (!Array.isArray(rows) || rows.length !== 1) return { ok: false, error: "PIN_PERSIST_FAILED" }
     return { ok: true }
   } catch {
     return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }

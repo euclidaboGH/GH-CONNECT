@@ -2627,6 +2627,13 @@ const lowBalance = balance === 0 && displayPending === 0
         onClose={() => setPiWithdrawOpen(false)}
         availablePi={piWithdrawAvailable}
         linkedUsername={piWithdrawUser}
+        onSetupPin={() => {
+          setPiWithdrawOpen(false)
+          setTab("about")
+          window.setTimeout(() => {
+            document.getElementById("ghc-wallet-security")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }, 50)
+        }}
         onCompleted={() => {
           setPiWithdrawOpen(false)
           try {

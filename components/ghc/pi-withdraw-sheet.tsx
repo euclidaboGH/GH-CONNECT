@@ -70,6 +70,8 @@ type Props = {
   availablePi?: number | null
   linkedUsername?: string | null
   onCompleted?: () => void
+  /** Opens Wallet → Security & PIN, where the withdrawal PIN is created and changed. */
+  onSetupPin?: () => void
 }
 
 type AuthSnap = {
@@ -92,7 +94,7 @@ function formatPi(n: number): string {
   return formatPiAmount(n)
 }
 
-export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, onCompleted }: Props) {
+export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, onCompleted, onSetupPin }: Props) {
   const [amountStr, setAmountStr] = useState("")
   const [auth, setAuth] = useState<AuthSnap | null>(null)
   const quoteSeq = useRef(0)
@@ -118,7 +120,6 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   const [pinConfigured, setPinConfigured] = useState<boolean | null>(null)
   const [pinStatusError, setPinStatusError] = useState<string | null>(null)
   const [pinInput, setPinInput] = useState("")
-  const [pinConfirm, setPinConfirm] = useState("")
   const [pinBusy, setPinBusy] = useState(false)
 
   const maxPi = typeof availablePi === "number" && Number.isFinite(availablePi) ? Math.max(0, availablePi) : 0
@@ -174,7 +175,6 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     setConsentDone(false)
     setConfirmCode("")
     setPinInput("")
-    setPinConfirm("")
     setPinConfigured(null)
     setPinStatusError(null)
     quoteSeq.current += 1
@@ -407,29 +407,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
     setPinBusy(true)
     try {
       if (pinConfigured === false) {
-        if (pinInput !== pinConfirm) {
-          setMsg("PIN and confirmation do not match.")
-          return
-        }
-        const setRes = await fetch("/api/identity/withdrawal-pin", {
-          method: "POST",
-          credentials: "include",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "set", pin: pinInput, confirmPin: pinConfirm }),
-          cache: "no-store",
-        })
-        const setBody = (await setRes.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-        if (!setRes.ok || !setBody?.ok) {
-          setMsg(setBody?.error === "PIN_TABLE_PENDING" || setBody?.error === "PIN_PERSIST_FAILED"
-            ? "We couldn't save your PIN right now. Please try again shortly or contact support."
-            : setBody?.error === "PIN_TOO_WEAK"
-              ? "Choose a less guessable PIN (no repeated digits or simple sequences like 123456)."
-            : setBody?.error === "PIN_ALREADY_CONFIGURED"
-              ? "A withdrawal PIN is already configured. Verify your existing PIN; setup cannot overwrite it."
-              : "Could not save withdrawal PIN.")
-          return
-        }
-        setPinConfigured(true)
+        // PINs are created once in Wallet → Security & PIN, never in the middle of a transaction.
+        setMsg("Set up your withdrawal PIN in Security & PIN first, then return to withdraw.")
+        return
       }
       {
         const vRes = await fetch("/api/identity/withdrawal-pin", {
@@ -448,7 +428,15 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                 ? "Withdrawals are paused for 24 hours after a PIN reset, for your protection."
               : vBody?.error === "PIN_INVALID"
                 ? "Incorrect withdrawal PIN."
-                : "PIN verification failed.",
+              : vBody?.error === "PIN_NOT_CONFIGURED"
+                ? "No withdrawal PIN is set yet. Create one in Security & PIN."
+              : vBody?.error === "PIN_PROOF_SECRET_MISSING"
+                ? "Withdrawals are temporarily unavailable: the server's PIN signing key is not configured. Your PIN was correct and your funds are unchanged. (ref: PIN_PROOF_SECRET_MISSING)"
+              : vRes.status === 429 || vBody?.error === "RATE_LIMITED"
+                ? "Too many attempts. Wait a minute and try again."
+              : vRes.status === 401 && vBody?.error === "AUTH_REQUIRED"
+                ? "Your session expired. Sign in again."
+                : `PIN verification is temporarily unavailable. Nothing was changed; try again shortly.${vBody?.error ? ` (ref: ${vBody.error})` : ""}`,
           )
           return
         }
@@ -732,30 +720,13 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">{pinStatusError}</p>
               ) : null}
               {pinConfigured === false ? (
-                <>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    autoComplete="new-password"
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full rounded-2xl border border-border/70 bg-background px-4 py-2.5 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
-                    placeholder="Set 6-digit PIN"
-                    aria-label="Create withdrawal PIN"
-                  />
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    autoComplete="new-password"
-                    value={pinConfirm}
-                    onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full rounded-2xl border border-border/70 bg-background px-4 py-2.5 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
-                    placeholder="Confirm PIN"
-                    aria-label="Confirm withdrawal PIN"
-                  />
-                </>
+                <div className="space-y-2 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3 text-[12px] text-violet-950 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100" role="status">
+                  <p className="font-semibold">Set up your withdrawal PIN first</p>
+                  <p className="text-[11px] leading-relaxed">Your PIN is created once in Wallet → Security &amp; PIN, not during a withdrawal. Then come back and enter it here.</p>
+                  {onSetupPin ? (
+                    <button type="button" onClick={onSetupPin} className="min-h-10 w-full rounded-full bg-violet-700 px-4 text-[12px] font-bold text-white">Go to Security &amp; PIN</button>
+                  ) : null}
+                </div>
               ) : (
                 <input
                   type="password"

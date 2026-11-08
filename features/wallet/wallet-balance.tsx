@@ -208,7 +208,15 @@ export function WalletBalanceCard({
         void refreshPi()
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
       } else {
-        setReleaseMsg("Couldn't verify the reservation state, so no funds were changed. Try again shortly.")
+        const code = (body as { error?: string; retryAfterSec?: number } | null)?.error
+        const retry = (body as { retryAfterSec?: number } | null)?.retryAfterSec
+        const reason =
+          res.status === 401 || code === "AUTH_REQUIRED" ? "Your session has expired. Sign in again, then retry."
+          : res.status === 429 ? `Too many checks. Wait${retry ? ` ${retry} seconds` : " a moment"} and retry.`
+          : code === "PAYOUT_RECOVERY_MIGRATION_PENDING" ? "Reservation recovery is not enabled on the server yet. Your reserved Pi is safe and unchanged; support has been flagged by this check."
+          : code === "RESERVATION_RELEASE_REJECTED" ? "The server declined to release a reservation because its ledger record did not match. Nothing was changed; operator review is required."
+          : "Couldn't verify the reservation state, so no funds were changed. Try again shortly."
+        setReleaseMsg(code ? `${reason} (ref: ${code})` : reason)
         setReleaseItems([])
       }
     } catch {

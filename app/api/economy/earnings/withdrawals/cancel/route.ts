@@ -15,7 +15,10 @@ export async function POST(request: Request) {
   const rate = await checkDurableRateLimit(`pi-earnings-cancel:${auth.userId}`, 5, 60_000, { onUnavailable: "deny" })
   if (!rate.ok) return reply({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, durableRateLimitStatus(rate))
   const r = await cancelUnstartedPayoutRequests(auth.userId)
-  if (!r.ok) return reply({ ok: false, error: r.error }, r.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : 409)
+  if (!r.ok) {
+    const status = r.error === "EARNINGS_LEDGER_UNAVAILABLE" || r.error === "PAYOUT_RECOVERY_MIGRATION_PENDING" ? 503 : 409
+    return reply({ ok: false, error: r.error }, status)
+  }
   return reply({
     ok: true,
     released: r.released,
