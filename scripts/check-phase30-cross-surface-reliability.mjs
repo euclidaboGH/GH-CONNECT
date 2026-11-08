@@ -25,7 +25,7 @@ check(notification.includes('activeRefreshControllerRef.current?.abort()'), 'ide
 check((notification.match(/signal: controller\.signal/g) || []).length === 4, 'all durable notification sources share the cancellable request signal')
 check(notification.includes('setItems([])') && notification.includes('setUnread(0)'), 'previous-account notification rows and counts are cleared')
 check(notification.includes('generation === refreshGenerationRef.current'), 'superseded refresh cannot unlock a newer refresh')
-check(feed.includes('aria-selected={active}') && feed.includes('aria-pressed={active}'), 'feed filters expose selected state accessibly')
+check(feed.includes('role="tablist"') && feed.includes('role="tab"') && feed.includes('aria-selected={active}') && !feed.includes('aria-pressed={active}'), 'feed filters expose selected state accessibly (tab semantics, no invalid aria-pressed on tabs)')
 check(messages.includes('role="tab"') && messages.includes('aria-selected={filter === f.id}'), 'inbox filters expose tab selection state')
 check(communities.includes('aria-pressed={categoryFilter === cat}') && communities.includes('aria-pressed={privacyFilter === id}'), 'community category and access filters expose selected state')
 check(marketplace.includes('role="group" aria-label="Categories"') && marketplace.includes('aria-pressed={category === c}'), 'marketplace category controls use toggle semantics')

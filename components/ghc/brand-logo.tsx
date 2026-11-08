@@ -44,7 +44,6 @@ export function BrandLogo({
 }) {
   const s = SRC[size]
   const common = {
-    alt: "GreenHaven",
     width: s.w,
     height: s.h,
     decoding: "async" as const,

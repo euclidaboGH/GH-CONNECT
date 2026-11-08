@@ -4,7 +4,7 @@
 
 ## CURRENT BUILD CONTEXT
 
-- Current source release: **0.330.48**.
+- Current source release: **0.338.6** (lint / a11y / hooks hardening on top of the 0.330.49 Phase 3 baseline).
 - Current baseline: the complete repository root in release 0.330.33 as upgraded through 0.330.48; this latest complete project tree supersedes older archives, worklogs, mock-ups and copied third-party screens.
 - Product: GreenHaven social platform and ecosystem. Keep the existing product identity, routes, data contracts and security boundaries unless a reviewed implementation explicitly changes them.
 - Visual direction: premium, modern, calm and accessible; deep emerald / teal / navy with restrained gold accents; light-mode-first. Screenshots are design references, not sources of banking features, balances, licenses, logos or provider capabilities.
