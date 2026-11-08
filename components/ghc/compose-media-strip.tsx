@@ -59,8 +59,7 @@ export function ComposeMediaStrip({
                   onClick={() => setPreviewIndex(i)}
                   aria-label={`Preview attached photo ${i + 1} of ${images.length}`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <DurableImage
+                                    <DurableImage
                     src={src}
                     alt={`Attached photo ${i + 1}`}
                     loading="lazy"

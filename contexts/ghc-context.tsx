@@ -2250,7 +2250,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         window.removeEventListener("ghc:pi-identity-ready", onPiReady as EventListener)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate on profile id + after Pi identity ready
+
   }, [state.profile?.id])
 
   // Domain state and services are initialized before callbacks that depend on them.

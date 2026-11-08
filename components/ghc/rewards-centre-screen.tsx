@@ -246,10 +246,10 @@ export function RewardsCentreScreen({
   const userId = String(profile?.id || "").trim() || "current-user"
   const historyFilters = useAccountFilterState("rewards-history", userId, DEFAULT_REWARDS_HISTORY_FILTERS, validateRewardsHistoryFilters)
   const { query: historyQuery, status: historyStatus, from: historyFrom, to: historyTo } = historyFilters.value
-  const setHistoryQuery = useCallback((value: string) => { historyFilters.update("query", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
-  const setHistoryStatus = useCallback((value: RewardsHistoryFilters["status"]) => { historyFilters.update("status", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
-  const setHistoryFrom = useCallback((value: string) => { historyFilters.update("from", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
-  const setHistoryTo = useCallback((value: string) => { historyFilters.update("to", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
+  const setHistoryQuery = useCallback((value: string) => { historyFilters.update("query", value); setServerHistoryPageCursor(null) }, [historyFilters])
+  const setHistoryStatus = useCallback((value: RewardsHistoryFilters["status"]) => { historyFilters.update("status", value); setServerHistoryPageCursor(null) }, [historyFilters])
+  const setHistoryFrom = useCallback((value: string) => { historyFilters.update("from", value); setServerHistoryPageCursor(null) }, [historyFilters])
+  const setHistoryTo = useCallback((value: string) => { historyFilters.update("to", value); setServerHistoryPageCursor(null) }, [historyFilters])
 
   const signals = useMemo(() => {
     // tick: recompute after claim/refresh (external challenge/progress stores)

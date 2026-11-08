@@ -454,8 +454,7 @@ useEffect(() => {
                                   onContextMenu={(e) => { e.preventDefault(); if (m.url) void downloadMedia(m.url, { kind: "image" }) }}
                                   title="Open photo · right-click to download"
                                 >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <DurableImage src={m.url} alt={`Photo attached by ${c.authorName}`} loading="lazy" className="max-h-52 max-w-full rounded-xl object-contain transition-transform duration-200 group-hover:scale-[1.02]" />
+                                                                    <DurableImage src={m.url} alt={`Photo attached by ${c.authorName}`} loading="lazy" className="max-h-52 max-w-full rounded-xl object-contain transition-transform duration-200 group-hover:scale-[1.02]" />
                                   <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-semibold text-white">View</span>
                                 </button>
                               )

@@ -832,7 +832,6 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  aria-pressed={active}
                   title={t(filter.label)}
                   onClick={() => handleFeedFilterChange(filter.value)}
                   className={`relative inline-flex min-h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${

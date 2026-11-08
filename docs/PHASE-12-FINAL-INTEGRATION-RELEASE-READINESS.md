@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.338.5` (2026-11-08)
+Release: `0.338.6` (2026-11-08)
 
 The current 0.330.48 maintenance baseline preserves the 0.330.46 functional source and adds a 15-section / 150-essential project-wide maintenance register plus a corrected Wallet source-contract expectation. The current 0.330.46 functional source baseline preserves Priority 8, advances Priority 9 with true SKU variants and atomic inventory source paths (Phase 9.3), plus seller fulfilment for shipping, pickup and digital delivery, HTTPS tracking metadata, explicit dispatch-before-delivery, buyer receipt confirmation and a participant-only database-enforced append-only order event timeline (Phase 9.4). The new marketplace migrations are REVIEW_REQUIRED and unapplied. Priority 10.2 adds account-scoped filter state, database-side Marketplace filters, authenticated wallet date filtering and a held Community search migration. Priority 11 adds explainable notification ranking, account-scoped local cache/preferences, browser-alert preference wiring, read-state failure reconciliation, keyboard dialog focus management and standard notification actions. Phase 11.2.2 separates the authenticated server-backed inbox, local browser alerts and remote Web Push. Phase 11.2.4 establishes Web Push/VAPID subscription and outbox architecture; Phase 11.2.5 encrypts subscription secrets with AES-256-GCM, verifies VAPID keypair correspondence, returns ciphertext-only claim data and uses generic privacy-safe payloads. The proposal remains unapplied. The vetted sender package could not be installed because the npm registry is unavailable; no deployment VAPID keys, scheduled worker or real provider receipts exist, so remote delivery remains disabled. The source regression chain passes when run with the Node runtime gate excluded only for isolated source-contract diagnosis; the normal prebuild correctly stops under Node 22.16.0 because Node 24.15.0 is required. The 150-essential maintenance-register contract passes 22/22. These source checks do not prove PostgreSQL execution, row-lock concurrency, carrier tracking authenticity, Pi/GHC Testnet settlement, Node 24.15.x dependency-backed build, browser/device or operator acceptance. No migration is claimed applied and production remains NOT APPROVED.
 
@@ -311,4 +311,9 @@ Standards-based Web Push/VAPID is selected as the protocol, with no vendor-speci
 ## Current source baseline — 0.338.5 (2026-11-08)
 
 - Package / lock / APP_RELEASE synchronized at `0.338.5`.
+- Production status: **NOT APPROVED**.
+
+## Current source baseline — 0.338.6 (2026-11-08)
+
+- Package / lock / APP_RELEASE synchronized at `0.338.6`.
 - Production status: **NOT APPROVED**.

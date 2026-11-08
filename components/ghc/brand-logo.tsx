@@ -52,10 +52,10 @@ export function BrandLogo({
     ...(priority ? { fetchPriority: "high" as const } : { loading: "lazy" as const }),
   }
   const base = `${SIZES[size]} object-contain bg-transparent ${className}`
-  if (onDark) return <img src={s.dark} className={base} {...common} />
+  if (onDark) return <img src={s.dark} className={base} alt="GreenHaven" {...common} />
   return (
     <>
-      <img src={s.light} className={`${base} dark:hidden`} {...common} />
+      <img src={s.light} className={`${base} dark:hidden`} alt="GreenHaven" {...common} />
       <img src={s.dark} className={`${base} hidden dark:block`} {...common} aria-hidden="true" alt="" />
     </>
   )

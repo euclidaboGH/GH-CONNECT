@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import Link from "next/link"
 import { AlertTriangle, ArrowRight, RefreshCw, ShieldCheck } from "lucide-react"
 
 /** Recoverable route error. Never render raw server exceptions or request secrets. */
@@ -49,11 +50,11 @@ export default function Error({
           <ShieldCheck size={14} aria-hidden="true" /> Your account safety remains a priority
         </div>
               <p className="mt-6 text-xs text-muted-foreground">
-          <a href="/support" className="font-semibold text-primary underline-offset-2 hover:underline">Help & support</a>
+          <Link href="/support" className="font-semibold text-primary underline-offset-2 hover:underline">Help & support</Link>
           {" · "}
-          <a href="/privacy" className="underline-offset-2 hover:underline">Privacy</a>
+          <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link>
           {" · "}
-          <a href="/" className="underline-offset-2 hover:underline">Home</a>
+          <Link href="/" className="underline-offset-2 hover:underline">Home</Link>
         </p>
       </section>
     </main>

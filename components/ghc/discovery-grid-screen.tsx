@@ -226,7 +226,7 @@ export function DiscoveryGridScreen() {
   }, [
     ghc.candidates,
     selectedIntents,
-    profileIntents,
+
     query,
     onlineOnly,
     userInterests,

@@ -5,11 +5,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.338.5` (2026-11-08). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.338.6` (2026-11-08). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.338.5)
+## Current audit status (v0.338.6)
 
 - Current product roadmap: Priorities 1–9 have reached their current source transformation milestones; Marketplace (Priority 9) source work is at 0.330.38, and Filters (Priority 10) has its first coordinated source increment in 0.330.39. The current Marketplace increments harden server-authoritative checkout currency, inventory honesty and seller stock editing, durable delivery metadata and per-attempt checkout idempotency, plus durable SKU variants with independent pricing/stock, variant-bound buyer cart/order identity and database reservation/release/commit paths. Browser/device, Node 24.15.x build, disposable PostgreSQL concurrency, database and Testnet/operator acceptance remain open.
 

@@ -100,7 +100,7 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
       "This is a copy of the GHC ledger record, not an external bank or Pi settlement receipt.",
       "GHC is an in-app utility/reward credit; this record does not authorize or initiate balance changes.",
     ].join("\n")
-  }, [tx])
+  }, [tx, correlationReferences])
   useEffect(() => {
     if (!open) return
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose() }

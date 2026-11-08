@@ -667,8 +667,7 @@ function EnhancedPostCardInner({
                 <div className="mb-2 flex flex-wrap gap-2">
                   {draftImages.map((url) => (
                     <div key={url} className="relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border/60">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <DurableImage loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
+                                            <DurableImage loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
                         className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"

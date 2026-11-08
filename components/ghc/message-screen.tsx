@@ -594,7 +594,7 @@ export function MessageScreen() {
     } catch {
       /* */
     }
-  }, [stopTyping, rawConversations, selectedId])
+  }, [stopTyping, rawConversations])
 
   const closeThread = useCallback(() => {
     stopTyping()
@@ -1048,7 +1048,6 @@ export function MessageScreen() {
               type="button"
               role="tab"
               aria-selected={filter === f.id}
-              aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
               className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[11px] font-bold transition active:scale-[0.98] ${
                 filter === f.id

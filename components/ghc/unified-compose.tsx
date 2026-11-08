@@ -986,8 +986,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           {mode === "story" && storyMedia?.type === "image" && (
             <div className="relative mt-3 overflow-hidden rounded-2xl bg-black/5">
               <button type="button" onClick={() => setStoryPreviewOpen(true)} className="block w-full cursor-zoom-in" aria-label="Preview story photo full screen">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <DurableImage src={storyMedia.url} alt="Story photo preview" className="max-h-[min(62vh,34rem)] w-full object-contain" />
+                                <DurableImage src={storyMedia.url} alt="Story photo preview" className="max-h-[min(62vh,34rem)] w-full object-contain" />
                 <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white">Tap to preview</span>
               </button>
               <button
