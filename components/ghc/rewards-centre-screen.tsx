@@ -286,7 +286,10 @@ export function RewardsCentreScreen({
       const engine = createChallengeEngine(userId)
       // Client-derived journey progress is guidance only. Supported missions
       // become completed only when the same account has a durable server unlock.
-      const durableMissionIds = new Set((serverAchievements || []).filter((row: any) => Boolean(row?.id)).map((row: any) => row.id as string))
+      // Only durable server unlocks are presented as achievements. Browser-local
+      // progress can guide a journey, but it is not proof of an unlocked milestone.
+      const achievements = (serverAchievements || []).filter((row) => Boolean(row?.id))
+      const durableMissionIds = new Set(achievements.map((row) => row.id))
       const challenges = engine.getChallengeCards(signals).map((card) => {
         const missionCode = missionCodeForChallenge(card.challenge.id)
         if (!missionCode) {
@@ -304,7 +307,7 @@ export function RewardsCentreScreen({
             ...card.progress,
             status: "completed" as const,
             progress: card.progress.target,
-            completedAt: (serverAchievements || []).find((row: any) => row?.id === missionCode)?.unlockedAt || card.progress.completedAt,
+            completedAt: achievements.find((row) => String(row.id) === String(missionCode))?.unlockedAt || card.progress.completedAt,
           }
           return {
             ...card,
@@ -326,9 +329,6 @@ export function RewardsCentreScreen({
         return card
       })
       const streak = engine.getQualityStreak()
-      // Only durable server unlocks are presented as achievements. Browser-local
-      // progress can guide a journey, but it is not proof of an unlocked milestone.
-      const achievements = serverAchievements.filter((row) => Boolean(row?.id))
       return { wallet, rewards, rules, pending, challenges, achievements, streak }
     } catch {
       return {
